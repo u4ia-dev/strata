@@ -1,0 +1,435 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2026 brandonmbarone
+     STRATA's workbench: the synth's DSP in the browser (web/strata/strata_web.c as WebAssembly, played in an
+     AudioWorklet). Every control comes from the engine's own parameter table; values read as the FM-1 will show them.
+     web/strata/build.sh puts the module and the worklet into this page (@WASM_B64@, @WORKLET_SRC@). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata workbench</title>
+<style>
+:root {
+  --bg: #f4f2ee; --panel: #ffffff; --ink: #1d1c1a; --dim: #6c6862; --line: #d9d4cc; --accent: #c2410c;
+  --accent-ink: #ffffff; --key-w: #ffffff; --key-b: #2a2826; --key-on: #f59e0b; --scope: #c2410c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151413; --panel: #1f1e1c; --ink: #ece8e1; --dim: #9a948b; --line: #34312d; --accent: #fb923c;
+    --accent-ink: #1a1208; --key-w: #d8d3cb; --key-b: #0d0c0b; --key-on: #fb923c; --scope: #fb923c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151413; --panel: #1f1e1c; --ink: #ece8e1; --dim: #9a948b; --line: #34312d; --accent: #fb923c;
+  --accent-ink: #1a1208; --key-w: #d8d3cb; --key-b: #0d0c0b; --key-on: #fb923c; --scope: #fb923c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line);
+         background: var(--panel); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0 6px 0 0; letter-spacing: 0.08em; }
+button, select, input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); }
+#status { color: var(--dim); min-width: 12ch; }
+#meter { width: 90px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+#meter > div { height: 100%; width: 0; background: var(--accent); }
+main { padding: 12px 16px 120px; }
+#play { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+.wheels { display: flex; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.wheel { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 11px; }
+.wheel input { writing-mode: vertical-lr; direction: rtl; height: 120px; width: 22px; }
+#kbdwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; overflow-x: auto; }
+#kbdbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; color: var(--dim); font-size: 12px; }
+#kbd { position: relative; height: 120px; min-width: 520px; user-select: none; touch-action: none; }
+.wk, .bk { position: absolute; top: 0; border: 1px solid var(--line); border-radius: 0 0 5px 5px; }
+.wk { background: var(--key-w); height: 100%; }
+.bk { background: var(--key-b); height: 62%; z-index: 2; }
+.wk.on, .bk.on { background: var(--key-on); }
+#scope { width: 100%; height: 70px; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+#cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; }
+.card h2 { font-size: 12px; letter-spacing: 0.1em; margin: 2px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+.row { display: grid; grid-template-columns: 74px 1fr 72px; gap: 6px; align-items: center; min-height: 26px; }
+.row .nm { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; white-space: nowrap; }
+.row input[type=range] { width: 100%; accent-color: var(--accent); }
+.row select { width: 100%; padding: 2px 4px; }
+.mrow { display: grid; grid-template-columns: 1fr 1fr 70px 52px; gap: 4px; align-items: center; margin-bottom: 4px; }
+.mrow select { padding: 2px 4px; font-size: 12px; }
+.mrow .val { font-size: 12px; text-align: right; }
+#codebox { display: none; gap: 6px; margin: 0 0 12px; }
+#codebox.open { display: flex; }
+#codebox textarea { flex: 1; min-height: 52px; font: 12px ui-monospace, monospace; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.note { color: var(--dim); font-size: 12px; }
+@media (max-width: 640px) {
+  #play { grid-template-columns: 1fr; }
+  .wheels { justify-content: center; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>STRATA</h1>
+  <button id="start" class="primary">Start audio</button>
+  <label class="inline">Sound <select id="sound"></select></label>
+  <span id="pname" class="note"></span>
+  <button id="code">Patch code</button>
+  <label class="inline">MIDI in <select id="midi"><option value="">none</option></select></label>
+  <label class="inline">Tempo <input id="tempo" type="number" min="20" max="300" value="120" style="width:5.5em"></label>
+  <button id="panic" title="all sound off">Panic</button>
+  <div id="meter" title="output peak"><div></div></div>
+  <span id="status">not started</span>
+</header>
+<main>
+  <div id="codebox"><textarea id="codetext" spellcheck="false" placeholder="STRATA:..."></textarea>
+    <div style="display:flex;flex-direction:column;gap:6px"><button id="copycode">Copy</button><button id="loadcode">Load</button></div></div>
+  <div id="play">
+    <div class="wheels">
+      <div class="wheel"><input id="bend" type="range" min="0" max="16383" value="8192">BEND</div>
+      <div class="wheel"><input id="wheel" type="range" min="0" max="127" value="0">MOD</div>
+    </div>
+    <div id="kbdwrap">
+      <div id="kbdbar"><button id="octdn">OCT −</button><span id="oct">C3</span><button id="octup">OCT +</button>
+        <label class="inline">Velocity <input id="vel" type="range" min="1" max="127" value="100"></label>
+        <span>Keys: A W S E D F T G Y H U J K · Z / X octave · space: sustain</span></div>
+      <div id="kbd"></div>
+    </div>
+  </div>
+  <canvas id="scope" width="1024" height="140"></canvas>
+  <div id="cards"></div>
+  <p class="note">Values change as on the FM-1 (continuous ones glide over 10 ms). Double-click a slider: its default.
+    A sound loads with a short fade, its wavetables rebuilt as on the device.</p>
+</main>
+<script>
+"use strict";
+const WASM_B64 = "@WASM_B64@";
+const WORKLET_SRC = @WORKLET_SRC@;
+const KIND = { SLIDER: 0, LIST: 1, SWITCH: 2 };       // strata_web.c sw_param_kind
+const $ = (id) => document.getElementById(id);
+const bytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+
+let meta, node = null, ctx = null, octave = 4, sustain = false, rateNote = "";
+const vals = [], ctl = [];                          // the values the page shows; each parameter's control
+const latin1 = new TextDecoder("windows-1252");
+
+function cstr(ex, p) {
+  const m = new Uint8Array(ex.memory.buffer);
+  let e = p;
+  while (m[e]) e++;
+  return latin1.decode(m.subarray(p, e));
+}
+
+async function boot() {
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const ex = instance.exports;
+  if (ex._initialize) ex._initialize();
+  meta = ex;
+  const n = ex.sw_param_count();
+  for (let id = 0; id < n; id++) vals[id] = ex.sw_param_def(id);
+  for (let k = 0; k < ex.sw_sound_count(); k++) $("sound").add(new Option(cstr(ex, ex.sw_sound_name(k)), k));
+  $("sound").add(new Option("INIT", ex.sw_sound_count()));
+  $("sound").value = ex.sw_sound_count();
+  buildCards();
+  buildKeys();
+  setSound(+$("sound").value, false);
+}
+
+function text(id, v) { return cstr(meta, meta.sw_text(id, v)); }
+function send(m) { if (node) node.port.postMessage(m); }
+
+// ---------------------------------------------------------------------------------------------- controls --
+function buildCards() {
+  const ex = meta, n = ex.sw_param_count(), cards = $("cards"), bySec = [];
+  for (let id = 0; id < n; id++) (bySec[ex.sw_param_section(id)] ||= []).push(id);
+  for (let s = 0; s < ex.sw_section_count(); s++) {
+    const ids = bySec[s] || [], card = document.createElement("div"), h = document.createElement("h2");
+    card.className = "card";
+    h.textContent = cstr(ex, ex.sw_section_name(s));
+    card.append(h);
+    if (cstr(ex, ex.sw_section_name(s)) === "MATRIX") buildMatrix(card, ids);
+    else for (const id of ids) {
+      if (ex.sw_param_kind(id) === KIND.SWITCH && cstr(ex, ex.sw_param_name(id)) === "ON") {
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.title = "on / off";
+        cb.onchange = () => setValue(id, cb.checked ? 1 : 0);
+        ctl[id] = { show: (v) => { cb.checked = !!v; } };
+        h.append(cb);
+      } else card.append(control(id));
+    }
+    cards.append(card);
+  }
+}
+
+function control(id) {
+  const ex = meta, kind = ex.sw_param_kind(id), dst = ex.sw_param_dst(id), lo = ex.sw_param_lo(id), hi = ex.sw_param_hi(id);
+  const row = document.createElement("div"), nm = document.createElement("span"), val = document.createElement("span");
+  row.className = "row";
+  nm.className = "nm";
+  nm.textContent = cstr(ex, ex.sw_param_name(id));
+  val.className = "val";
+  if (kind !== KIND.SLIDER) {
+    const sel = document.createElement("select");
+    for (let v = lo; v <= hi; v++)
+      if (!dst || v === 0 || ex.sw_param_mod(v)) sel.add(new Option(text(id, v), v));
+    sel.onchange = () => setValue(id, +sel.value);
+    sel.style.gridColumn = "2 / 4";
+    row.append(nm, sel);
+    ctl[id] = { show: (v) => { sel.value = v; } };
+  } else {
+    const r = document.createElement("input");
+    r.type = "range";
+    r.min = lo;
+    r.max = hi;
+    r.step = 1;
+    r.oninput = () => setValue(id, +r.value);
+    r.ondblclick = () => setValue(id, ex.sw_param_def(id));
+    row.append(nm, r, val);
+    ctl[id] = { show: (v) => { r.value = v; val.textContent = text(id, v); } };
+  }
+  return row;
+}
+
+function buildMatrix(card, ids) {
+  for (let i = 0; i + 2 < ids.length; i += 3) {
+    const row = document.createElement("div");
+    row.className = "mrow";
+    for (const id of ids.slice(i, i + 3)) {
+      const c = control(id), inner = [...c.children].filter((e) => e.tagName !== "SPAN" || e.className === "val");
+      for (const e of inner) {
+        e.style.gridColumn = "";
+        row.append(e);
+      }
+    }
+    card.append(row);
+  }
+}
+
+function setValue(id, v, quiet) {
+  v = meta.sw_clamp(id, v);
+  vals[id] = v;
+  if (ctl[id]) ctl[id].show(v);
+  if (!quiet) send({ type: "set", id, value: v });
+}
+
+function showAll() { for (let id = 0; id < vals.length; id++) if (ctl[id]) ctl[id].show(vals[id]); }
+
+// ----------------------------------------------------------------------------------------------- patches --
+function readPatch() {
+  const ex = meta, a = new Int16Array(ex.memory.buffer, ex.sw_values(), ex.sw_param_count());
+  for (let id = 0; id < a.length; id++) vals[id] = a[id];
+  $("pname").textContent = cstr(ex, ex.sw_patch_name());
+  showAll();
+}
+
+function writePatch() {
+  const ex = meta, a = new Int16Array(ex.memory.buffer, ex.sw_values(), ex.sw_param_count()), nb = new Uint8Array(ex.memory.buffer, ex.sw_patch_name(), 17);
+  a.set(vals);
+  nb.fill(0);
+  const name = $("pname").textContent.slice(0, 16);
+  for (let i = 0; i < name.length; i++) nb[i] = name.charCodeAt(i) & 0xff;
+}
+
+function loadPlaying() { send({ type: "patch", values: vals.slice(), name: $("pname").textContent }); }
+
+function setSound(k, play = true) {
+  meta.sw_sound(k);
+  readPatch();
+  if (play) loadPlaying();
+}
+
+function patchCode() {
+  writePatch();
+  const n = meta.sw_pack(), b = new Uint8Array(meta.memory.buffer, meta.sw_code_buf(), n);
+  return "STRATA:" + btoa(String.fromCharCode(...b));
+}
+
+function loadCode(s) {
+  const m = /STRATA:([A-Za-z0-9+/=]+)/.exec(s.replace(/\s+/g, ""));
+  if (!m) return false;
+  const b = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
+  if (b.length > meta.sw_code_size()) return false;
+  new Uint8Array(meta.memory.buffer, meta.sw_code_buf(), b.length).set(b);
+  if (!meta.sw_unpack(b.length)) return false;
+  readPatch();
+  loadPlaying();
+  return true;
+}
+
+// ------------------------------------------------------------------------------------------------- keys --
+const KEYMAP = "awsedftgyhujkolp;'";                  // C .. F of the next octave
+const keyEls = new Map(), down = new Map();
+function noteName(n) { return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + (Math.floor(n / 12) - 1); }
+
+function buildKeys() {
+  const kbd = $("kbd");
+  kbd.innerHTML = "";
+  keyEls.clear();
+  const base = octave * 12, whites = [], W = 100 / 15;
+  let w = 0;
+  for (let i = 0; i < 25; i++) {
+    const n = base + i, black = [1, 3, 6, 8, 10].includes(i % 12), el = document.createElement("div");
+    el.className = black ? "bk" : "wk";
+    if (black) { el.style.left = `calc(${w * W}% - ${W * 0.3}%)`; el.style.width = `${W * 0.6}%`; }
+    else { el.style.left = `${w * W}%`; el.style.width = `${W}%`; w++; whites.push(el); }
+    el.dataset.note = n;
+    kbd.append(el);
+    keyEls.set(n, el);
+  }
+  $("oct").textContent = noteName(base);
+}
+
+function noteOn(n, src) {
+  if (down.has(src)) noteOff(src);
+  down.set(src, n);
+  send({ type: "note", note: n, vel: +$("vel").value });
+  keyEls.get(n)?.classList.add("on");
+}
+function noteOff(src) {
+  const n = down.get(src);
+  if (n === undefined) return;
+  down.delete(src);
+  if (![...down.values()].includes(n)) {
+    send({ type: "note", note: n, vel: 0 });
+    keyEls.get(n)?.classList.remove("on");
+  }
+}
+
+$("kbd").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest("[data-note]");
+  if (!el) return;
+  e.target.setPointerCapture?.(e.pointerId);
+  noteOn(+el.dataset.note, "p" + e.pointerId);
+});
+for (const t of ["pointerup", "pointercancel"]) $("kbd").addEventListener(t, (e) => noteOff("p" + e.pointerId));
+
+addEventListener("keydown", (e) => {
+  if (e.repeat || e.target.closest("input[type=text],input[type=number],textarea,select")) return;
+  const k = e.key.toLowerCase(), i = KEYMAP.indexOf(k);
+  if (i >= 0) { noteOn(octave * 12 + i, "k" + k); e.preventDefault(); }
+  else if (k === "z" && octave > 1) { octave--; buildKeys(); }
+  else if (k === "x" && octave < 8) { octave++; buildKeys(); }
+  else if (k === " ") { sustain = true; send({ type: "cc", cc: 64, value: 127 }); e.preventDefault(); }
+});
+addEventListener("keyup", (e) => {
+  const k = e.key.toLowerCase();
+  if (KEYMAP.includes(k)) noteOff("k" + k);
+  else if (k === " ") { sustain = false; send({ type: "cc", cc: 64, value: 0 }); }
+});
+$("octdn").onclick = () => { if (octave > 1) { octave--; buildKeys(); } };
+$("octup").onclick = () => { if (octave < 8) { octave++; buildKeys(); } };
+$("bend").oninput = () => send({ type: "bend", value: +$("bend").value });
+for (const t of ["pointerup", "pointercancel", "change"]) $("bend").addEventListener(t, () => {
+  $("bend").value = 8192;
+  send({ type: "bend", value: 8192 });
+});
+$("wheel").oninput = () => send({ type: "cc", cc: 1, value: +$("wheel").value });
+
+// ------------------------------------------------------------------------------------------------- MIDI --
+async function initMidi() {
+  if (!navigator.requestMIDIAccess) { $("midi").disabled = true; return; }
+  try {
+    const acc = await navigator.requestMIDIAccess();
+    const fill = () => {
+      const keep = $("midi").value;
+      $("midi").length = 1;
+      for (const inp of acc.inputs.values()) $("midi").add(new Option(inp.name, inp.id));
+      $("midi").value = keep;
+    };
+    fill();
+    acc.onstatechange = fill;
+    $("midi").onchange = () => {
+      for (const inp of acc.inputs.values()) inp.onmidimessage = inp.id === $("midi").value ? onMidi : null;
+    };
+  } catch { $("midi").disabled = true; }
+}
+
+function onMidi(e) {
+  const [st, a, b] = e.data, t = st & 0xf0;
+  if (t === 0x90 && b) noteOnMidi(a, b);
+  else if (t === 0x80 || (t === 0x90 && !b)) { send({ type: "note", note: a, vel: 0 }); keyEls.get(a)?.classList.remove("on"); }
+  else if (t === 0xe0) send({ type: "bend", value: a | (b << 7) });
+  else if (t === 0xb0) {
+    const id = vals.findIndex((_, i) => meta.sw_param_cc(i) === a);
+    if (id >= 0) setValue(id, Math.round(meta.sw_param_lo(id) + (meta.sw_param_hi(id) - meta.sw_param_lo(id)) * b / 127));
+    else send({ type: "cc", cc: a, value: b });
+  }
+}
+function noteOnMidi(n, v) { send({ type: "note", note: n, vel: v }); keyEls.get(n)?.classList.add("on"); }
+
+// ------------------------------------------------------------------------------------------------ audio --
+async function start() {
+  if (node) return;
+  $("status").textContent = "starting…";
+  try {
+    ctx = new AudioContext({ sampleRate: 44118, latencyHint: "interactive" });   // the FM-1's rate (44,117.6 Hz)
+  } catch {
+    ctx = new AudioContext({ latencyHint: "interactive" });
+  }
+  const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: "text/javascript" }));
+  await ctx.audioWorklet.addModule(url);
+  node = new AudioWorkletNode(ctx, "strata", { numberOfInputs: 0, outputChannelCount: [2] });
+  node.connect(ctx.destination);
+  node.port.onmessage = (e) => onWorklet(e.data);
+  node.port.postMessage({ type: "load", wasm: bytes });
+  await ctx.resume();
+}
+
+function onWorklet(m) {
+  if (m.type === "ready") {
+    rateNote = Math.abs(ctx.sampleRate - 44118) > 1 ? ` · plays at ${ctx.sampleRate} Hz: pitch off` : "";
+    $("status").textContent = `${ctx.sampleRate} Hz`;
+    $("start").textContent = "Audio on";
+    $("start").disabled = true;
+    send({ type: "tempo", bpm: +$("tempo").value });
+    loadPlaying();
+  } else if (m.type === "error") {
+    $("status").textContent = "error: " + m.message;
+  } else if (m.type === "frame") {
+    $("meter").firstElementChild.style.width = Math.min(100, 100 * m.peak) + "%";
+    $("status").textContent = `${m.voices} voices · ${m.instances} osc` + rateNote;
+    drawScope(m.scope);
+    if (m.values) {                              // a load has swapped: what plays now
+      for (let id = 0; id < m.values.length; id++) vals[id] = m.values[id];
+      showAll();
+    }
+  }
+}
+
+function drawScope(s) {
+  const c = $("scope"), g = c.getContext("2d"), css = getComputedStyle(document.documentElement);
+  g.clearRect(0, 0, c.width, c.height);
+  g.strokeStyle = css.getPropertyValue("--line");
+  g.beginPath();
+  g.moveTo(0, c.height / 2);
+  g.lineTo(c.width, c.height / 2);
+  g.stroke();
+  g.strokeStyle = css.getPropertyValue("--scope");
+  g.lineWidth = 2;
+  g.beginPath();
+  for (let i = 0; i < s.length; i++) {
+    const y = c.height / 2 - s[i] * c.height * 0.45;
+    if (i) g.lineTo(i, y); else g.moveTo(i, y);
+  }
+  g.stroke();
+}
+
+$("start").onclick = () => start().catch((e) => { $("status").textContent = "error: " + e.message; });
+$("sound").onchange = () => setSound(+$("sound").value);
+$("panic").onclick = () => send({ type: "panic" });
+$("tempo").onchange = () => send({ type: "tempo", bpm: +$("tempo").value });
+$("code").onclick = () => { $("codebox").classList.toggle("open"); $("codetext").value = patchCode(); };
+$("copycode").onclick = () => { $("codetext").value = patchCode(); navigator.clipboard?.writeText($("codetext").value); };
+$("loadcode").onclick = () => { if (!loadCode($("codetext").value)) $("codetext").value += "  (not a Strata patch code)"; };
+
+boot().then(initMidi).catch((e) => { $("status").textContent = "error: " + e.message; });
+</script>
+</body>
+</html>
