@@ -19,6 +19,7 @@ void *memcpy(void *d, const void *s, unsigned n);
 #include "../../firmware/src/sy_voice.c"
 #include "../../firmware/src/sy_fx.c"
 #include "../../firmware/src/sy_engine.c"
+#include "../../firmware/src/sy_text.c"
 
 uint32_t probe_osc(uint32_t k, uint32_t g, uint32_t f, int32_t *lr, const osc_job_t *j)
 {

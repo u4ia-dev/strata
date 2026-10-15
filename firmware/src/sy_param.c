@@ -26,7 +26,8 @@ enum {                           /* units: the display and the DSP's reading of 
     U_TABLE,                     /* a factory wavetable (WT_NAMES) */
     U_SRC, U_DST,                /* a modulation source (SRC_*), a destination (a parameter id) */
     U_SYNC,                      /* a note value (SYNC_*), 0 = free */
-    U_MS                         /* the delay's time: 0..1000 = 10 .. 900 ms, exponential */
+    U_MS,                        /* the delay's time: 0..1000 = 10 .. 750 ms, exponential */
+    U_DBX                        /* a level in 0.1 dB (the OTT's bands: -24.0 .. +24.0) */
 };
 
 #define F_MOD 1u                 /* a modulation destination */
@@ -163,9 +164,9 @@ enum {                           /* units: the display and the DSP's reading of 
     X(OT_TIME, "TIME", SEC_OTT, 0, 1000, 500, U_PCT, FMG, 0)                                              \
     X(OT_UP, "UPWARD", SEC_OTT, 0, 1000, 1000, U_PCT, FMG, 0)                                             \
     X(OT_DOWN, "DOWNWARD", SEC_OTT, 0, 1000, 1000, U_PCT, FMG, 0)                                         \
-    X(OT_LOW, "LOW", SEC_OTT, -240, 240, 0, U_INT, FMG, 0)                                                \
-    X(OT_MID, "MID", SEC_OTT, -240, 240, 0, U_INT, FMG, 0)                                                \
-    X(OT_HIGH, "HIGH", SEC_OTT, -240, 240, 0, U_INT, FMG, 0)
+    X(OT_LOW, "LOW", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                                \
+    X(OT_MID, "MID", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                                \
+    X(OT_HIGH, "HIGH", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,

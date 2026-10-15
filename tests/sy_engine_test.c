@@ -27,6 +27,7 @@
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
 #define SY_ENGINE 1
 #include "sy_host.h"
+#include "sy_sounds.h"
 
 #define MAXS (12u * 44118u)
 static float L[MAXS], R[MAXS];
@@ -162,6 +163,41 @@ static void t_params(void)
             }
         check("values read as stored (GLIDE, VEL AMP, STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change "
               "at once, without a patch load", ok && tested >= 8u);
+    }
+    {                                                     /* every value as text (sy_text.c) */
+        static const struct {
+            uint16_t id;
+            int16_t v;
+            const char *t;
+        } SPOT[] = {{SP_F_CUT, 1000, "20.0 kHz"}, {SP_F_CUT, 0, "20.0 Hz"}, {SP_E1_ATK, 0, "1.0 ms"},
+                    {SP_E1_ATK, 1000, "30.0 s"}, {SP_E1_HOLD, 0, "OFF"}, {SP_V_VOL, 600, "0.0 dB"}, {SP_V_VOL, 0, "OFF"},
+                    {SP_A_POS, 750, "75.0%"}, {SP_A_PAN, -250, "-25.0%"}, {SP_A_WARP, WARP_SYNC, "SYNC"},
+                    {SP_F_TYPE, FT_LP24, "LP 24"}, {SP_L1_RATE, 0, "0.01 Hz"}, {SP_DL_TIME, 1000, "750 ms"},
+                    {SP_DL_TIME, 0, "10 ms"}, {SP_OT_LOW, 30, "+3.0 dB"}, {SP_M1_DST, SP_F_CUT, "FLT CUTOFF"},
+                    {SP_M1_DST, SP_A_ON, "NONE"}, {SP_A_FINE, -7, "-7 ct"}, {SP_V_BUP, 12, "12 st"}};
+        char t[SP_TEXT_N + 4u];
+        uint32_t id, k, nl;
+        int lists = 1, fits = 1, spot = 1;
+        int32_t v;
+        for (id = 0; id < SP_COUNT; id++) {
+            if (SP[id].unit == U_LIST)
+                lists &= sp_list(id, &nl) != 0 && SP[id].lo == 0 && nl == (uint32_t)SP[id].hi + 1u;
+            for (v = SP[id].lo; v <= SP[id].hi; v++) {
+                memset(t, 0x55, sizeof t);
+                sp_text(id, v, t);
+                fits &= t[0] != 0 && strlen(t) < SP_TEXT_N && !strchr(t, '?') && (uint8_t)t[SP_TEXT_N] == 0x55u;
+            }
+        }
+        for (k = 0; k < sizeof SPOT / sizeof SPOT[0]; k++) {
+            sp_text(SPOT[k].id, SPOT[k].v, t);
+            if (strcmp(t, SPOT[k].t)) {
+                spot = 0;
+                printf("engine: %s %d as \"%s\", not \"%s\"\n", SP[SPOT[k].id].name, SPOT[k].v, t, SPOT[k].t);
+            }
+        }
+        check("every list parameter names each of its values", lists);
+        check("every value of every parameter as text: set, under 16 characters, no unknown", fits);
+        check("values as text: cutoff, times, levels, lists, destinations as expected", spot);
     }
 }
 
@@ -732,36 +768,7 @@ static void t_dc_sources(void)
 }
 
 /* ------------------------------------------------------------------------------------- 7 golden --- */
-typedef struct {
-    const char *name;
-    int16_t kv[24][2];                                    /* parameter, value pairs (-1 ends) */
-} test_sound_t;
-
-static const test_sound_t SOUNDS[8] = {
-    {"supersaw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_UNI, 7}, {SP_A_DETUNE, 350}, {SP_A_UMODE, 1},
-                  {SP_F_ON, 1}, {SP_F_TYPE, FT_LP24}, {SP_F_CUT, 820}, {SP_E1_REL, 400}, {SP_CH_ON, 1}, {SP_RV_ON, 1},
-                  {-1, 0}}},
-    {"pluck", {{SP_A_TABLE, 45}, {SP_A_POS, 600}, {SP_F_ON, 1}, {SP_F_TYPE, FT_LP12}, {SP_F_CUT, 350}, {SP_F_RES, 400},
-               {SP_E1_DEC, 500}, {SP_E1_SUS, 0}, {SP_E2_DEC, 400}, {SP_M1_SRC, SRC_ENV2}, {SP_M1_DST, SP_F_CUT},
-               {SP_M1_AMT, 500}, {SP_DL_ON, 1}, {-1, 0}}},
-    {"pad", {{SP_A_TABLE, 27}, {SP_A_UNI, 4}, {SP_B_ON, 1}, {SP_B_TABLE, 31}, {SP_B_UNI, 3}, {SP_E1_ATK, 600},
-             {SP_E1_REL, 650}, {SP_L1_RATE, 350}, {SP_M1_SRC, SRC_LFO1}, {SP_M1_DST, SP_A_POS}, {SP_M1_AMT, 400},
-             {SP_RV_ON, 1}, {SP_RV_MIX, 400}, {SP_CH_ON, 1}, {-1, 0}}},
-    {"fm keys", {{SP_A_TABLE, 37}, {SP_A_POS, 500}, {SP_B_ON, 1}, {SP_B_TABLE, 5}, {SP_A_WARP, WARP_FM},
-                 {SP_A_WAMT, 400}, {SP_B_LEVEL, 0}, {SP_E1_DEC, 560}, {SP_E1_SUS, 300}, {-1, 0}}},
-    {"sync lead", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_SYNC}, {SP_A_WAMT, 450}, {SP_V_MODE, 1},
-                   {SP_V_GLIDE, 350}, {SP_L1_RATE, 650}, {SP_M1_SRC, SRC_LFO1}, {SP_M1_DST, SP_A_WAMT},
-                   {SP_M1_AMT, 200}, {SP_DR_ON, 1}, {SP_DL_ON, 1}, {-1, 0}}},
-    {"ladder bass", {{SP_A_TABLE, 2}, {SP_A_POS, 1000}, {SP_SUB_ON, 1}, {SP_SUB_OCT, -1}, {SP_F_ON, 1},
-                     {SP_F_TYPE, FT_LADDER}, {SP_F_CUT, 450}, {SP_F_RES, 600}, {SP_F_DRIVE, 400}, {SP_E2_DEC, 450},
-                     {SP_M1_SRC, SRC_ENV2}, {SP_M1_DST, SP_F_CUT}, {SP_M1_AMT, 450}, {SP_V_MODE, 2}, {-1, 0}}},
-    {"vowel pad", {{SP_A_TABLE, 28}, {SP_A_UNI, 5}, {SP_A_DETUNE, 200}, {SP_F_ON, 1}, {SP_F_TYPE, FT_FORMANT},
-                   {SP_L2_RATE, 300}, {SP_M2_SRC, SRC_LFO2}, {SP_M2_DST, SP_F_CUT}, {SP_M2_AMT, 300},
-                   {SP_NZ_ON, 1}, {SP_NZ_TYPE, 1}, {SP_NZ_LEVEL, 150}, {SP_OT_ON, 1}, {-1, 0}}},
-    {"ott growl", {{SP_A_TABLE, 41}, {SP_A_POS, 700}, {SP_A_WARP, WARP_BENDP}, {SP_A_WAMT, 500}, {SP_B_ON, 1},
-                   {SP_B_TABLE, 47}, {SP_B_OCT, -1}, {SP_F_ON, 1}, {SP_F_TYPE, FT_BP12}, {SP_F_CUT, 600},
-                   {SP_OT_ON, 1}, {SP_DR_ON, 1}, {SP_DR_TYPE, DRV_TUBE}, {-1, 0}}},
-};
+/* the test sounds: tests/sy_sounds.h (the workbench plays them too) */
 
 /* a sound plays a phrase: a chord, a line, a release; returns the frames */
 static uint32_t play(const test_sound_t *ts)
