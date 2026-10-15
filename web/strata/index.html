@@ -1,111 +1,125 @@
-<!doctype html>
+<title>Strata Workbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2026 brandonmbarone
      STRATA's workbench: the synth's DSP in the browser (web/strata/strata_web.c as WebAssembly, played in an
      AudioWorklet). Every control comes from the engine's own parameter table; values read as the FM-1 will show them.
-     web/strata/build.sh puts the module and the worklet into this page (@WASM_B64@, @WORKLET_SRC@). -->
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Strata workbench</title>
+     web/strata/make_page.py puts the module and the worklet in (@WASM_B64@, @WORKLET_SRC@), and writes this page
+     whole (a document of its own, to open locally) and as its content alone (to publish). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600;700&display=swap">
 <style>
+/* Layout: a sticky transport bar; the play strip (wheels, keys); the scope; the synth's sections as panels in a
+   flowing grid, in the FM-1's order. Type: the FM-1's own UI face for labels and values, a mono for readouts. */
 :root {
-  --bg: #f4f2ee; --panel: #ffffff; --ink: #1d1c1a; --dim: #6c6862; --line: #d9d4cc; --accent: #c2410c;
-  --accent-ink: #ffffff; --key-w: #ffffff; --key-b: #2a2826; --key-on: #f59e0b; --scope: #c2410c;
-  color-scheme: light;
+  --bg: #e8ebef;
+  --panel: #f7f8fa;
+  --ink: #15181c;
+  --dim: #5a6370;
+  --line: #ccd3db;
+  --accent: #2549a8;
+  --accent-ink: #ffffff;
+  --key-w: #ffffff;
+  --key-b: #23272d;
+  --key-on: #3c68dc;
+  --font-ui: "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #151413; --panel: #1f1e1c; --ink: #ece8e1; --dim: #9a948b; --line: #34312d; --accent: #fb923c;
-    --accent-ink: #1a1208; --key-w: #d8d3cb; --key-b: #0d0c0b; --key-on: #fb923c; --scope: #fb923c;
-    color-scheme: dark;
+    --bg: #101317; --panel: #181c21; --ink: #e5e8ed; --dim: #8e97a3; --line: #2b3139; --accent: #7fa3ff;
+    --accent-ink: #0a0f1f; --key-w: #c8cdd5; --key-b: #090b0e; --key-on: #7fa3ff; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #151413; --panel: #1f1e1c; --ink: #ece8e1; --dim: #9a948b; --line: #34312d; --accent: #fb923c;
-  --accent-ink: #1a1208; --key-w: #d8d3cb; --key-b: #0d0c0b; --key-on: #fb923c; --scope: #fb923c; color-scheme: dark;
+  --bg: #101317; --panel: #181c21; --ink: #e5e8ed; --dim: #8e97a3; --line: #2b3139; --accent: #7fa3ff;
+  --accent-ink: #0a0f1f; --key-w: #c8cdd5; --key-b: #090b0e; --key-on: #7fa3ff; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line);
-         background: var(--panel); position: sticky; top: 0; z-index: 5; }
-header h1 { font-size: 16px; margin: 0 6px 0 0; letter-spacing: 0.08em; }
-button, select, input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--bg);
-  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 var(--font-ui); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+header .wrap { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-block: 10px; }
+.brand { display: flex; align-items: baseline; gap: 8px; margin-right: 4px; }
+.brand h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.16em; margin: 0; }
+.brand span { color: var(--dim); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+button, select, input[type=number] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 9px; }
 button { cursor: pointer; }
+button:hover { border-color: var(--dim); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
-label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); }
-#status { color: var(--dim); min-width: 12ch; }
+button:disabled { opacity: 0.75; cursor: default; }
+label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); font-size: 13px; }
+#status, #pname { font: 12px var(--font-data); color: var(--dim); }
+#pname { color: var(--ink); letter-spacing: 0.04em; }
 #meter { width: 90px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
 #meter > div { height: 100%; width: 0; background: var(--accent); }
-main { padding: 12px 16px 120px; }
-#play { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: stretch; margin-bottom: 12px; }
-.wheels { display: flex; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
-.wheel { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 11px; }
-.wheel input { writing-mode: vertical-lr; direction: rtl; height: 120px; width: 22px; }
-#kbdwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; overflow-x: auto; }
-#kbdbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; color: var(--dim); font-size: 12px; }
-#kbd { position: relative; height: 120px; min-width: 520px; user-select: none; touch-action: none; }
+main.wrap { padding-block: 14px 48px; display: grid; gap: 12px; }
+#play { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.wheels { display: flex; gap: 12px; justify-content: center; }
+.wheel { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 11px;
+  letter-spacing: 0.08em; }
+.wheel input { writing-mode: vertical-lr; direction: rtl; height: 118px; width: 22px; accent-color: var(--accent); }
+#kbdwrap { min-width: 0; }
+#kbdbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 6px; color: var(--dim); font-size: 12px; }
+#oct { font: 12px var(--font-data); min-width: 3ch; color: var(--ink); }
+#kbdscroll { overflow-x: auto; }
+#kbd { position: relative; height: 118px; min-width: 520px; user-select: none; touch-action: none; }
 .wk, .bk { position: absolute; top: 0; border: 1px solid var(--line); border-radius: 0 0 5px 5px; }
 .wk { background: var(--key-w); height: 100%; }
 .bk { background: var(--key-b); height: 62%; z-index: 2; }
 .wk.on, .bk.on { background: var(--key-on); }
-#scope { width: 100%; height: 70px; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
-#cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; }
-.card h2 { font-size: 12px; letter-spacing: 0.1em; margin: 2px 0 8px; display: flex; justify-content: space-between; align-items: center; }
-.row { display: grid; grid-template-columns: 74px 1fr 72px; gap: 6px; align-items: center; min-height: 26px; }
+#scope { width: 100%; height: 72px; display: block; }
+#cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr)); gap: 12px; align-items: start; }
+.card h2 { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; margin: 2px 0 8px; display: flex;
+  justify-content: space-between; align-items: center; }
+.row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 76px; gap: 6px; align-items: center; min-height: 26px; }
 .row .nm { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .val { font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; white-space: nowrap; }
-.row input[type=range] { width: 100%; accent-color: var(--accent); }
-.row select { width: 100%; padding: 2px 4px; }
-.mrow { display: grid; grid-template-columns: 1fr 1fr 70px 52px; gap: 4px; align-items: center; margin-bottom: 4px; }
-.mrow select { padding: 2px 4px; font-size: 12px; }
-.mrow .val { font-size: 12px; text-align: right; }
-#codebox { display: none; gap: 6px; margin: 0 0 12px; }
-#codebox.open { display: flex; }
-#codebox textarea { flex: 1; min-height: 52px; font: 12px ui-monospace, monospace; color: var(--ink); background: var(--panel);
-  border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
-.note { color: var(--dim); font-size: 12px; }
-@media (max-width: 640px) {
-  #play { grid-template-columns: 1fr; }
-  .wheels { justify-content: center; }
-}
+.val { font: 12px var(--font-data); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.row input[type=range], .mrow input[type=range] { width: 100%; accent-color: var(--accent); }
+.row select { width: 100%; padding: 2px 4px; grid-column: 2 / 4; }
+.mrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px 56px; gap: 4px; align-items: center; margin-bottom: 4px; }
+.mrow select { padding: 2px 4px; font-size: 12px; min-width: 0; }
+#codebox { display: flex; gap: 8px; }
+#codebox textarea { flex: 1; min-width: 0; min-height: 54px; font: 12px var(--font-data); color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.btns { display: flex; flex-direction: column; gap: 6px; }
+.note { color: var(--dim); font-size: 12px; max-width: 70ch; margin: 0; }
+@media (max-width: 640px) { #play { grid-template-columns: minmax(0, 1fr); } }
 </style>
-</head>
-<body>
-<header>
-  <h1>STRATA</h1>
+
+<header><div class="wrap">
+  <div class="brand"><h1>STRATA</h1><span>workbench</span></div>
   <button id="start" class="primary">Start audio</button>
   <label class="inline">Sound <select id="sound"></select></label>
-  <span id="pname" class="note"></span>
+  <span id="pname"></span>
   <button id="code">Patch code</button>
   <label class="inline">MIDI in <select id="midi"><option value="">none</option></select></label>
   <label class="inline">Tempo <input id="tempo" type="number" min="20" max="300" value="120" style="width:5.5em"></label>
-  <button id="panic" title="all sound off">Panic</button>
-  <div id="meter" title="output peak"><div></div></div>
-  <span id="status">not started</span>
-</header>
-<main>
-  <div id="codebox"><textarea id="codetext" spellcheck="false" placeholder="STRATA:..."></textarea>
-    <div style="display:flex;flex-direction:column;gap:6px"><button id="copycode">Copy</button><button id="loadcode">Load</button></div></div>
+  <button id="panic" title="Stop every voice at once">Panic</button>
+  <div id="meter" title="Output peak"><div></div></div>
+  <span id="status">audio off</span>
+</div></header>
+<main class="wrap">
+  <div id="codebox" hidden><textarea id="codetext" spellcheck="false" placeholder="Paste a STRATA: patch code here"></textarea>
+    <div class="btns"><button id="copycode">Copy</button><button id="loadcode">Load</button></div></div>
   <div id="play">
-    <div class="wheels">
-      <div class="wheel"><input id="bend" type="range" min="0" max="16383" value="8192">BEND</div>
-      <div class="wheel"><input id="wheel" type="range" min="0" max="127" value="0">MOD</div>
+    <div class="box wheels">
+      <div class="wheel"><input id="bend" type="range" min="0" max="16383" value="8192" aria-label="Pitch bend">BEND</div>
+      <div class="wheel"><input id="wheel" type="range" min="0" max="127" value="0" aria-label="Mod wheel">MOD</div>
     </div>
-    <div id="kbdwrap">
-      <div id="kbdbar"><button id="octdn">OCT −</button><span id="oct">C3</span><button id="octup">OCT +</button>
+    <div class="box" id="kbdwrap">
+      <div id="kbdbar"><button id="octdn" aria-label="Octave down">OCT −</button><span id="oct">C3</span>
+        <button id="octup" aria-label="Octave up">OCT +</button>
         <label class="inline">Velocity <input id="vel" type="range" min="1" max="127" value="100"></label>
-        <span>Keys: A W S E D F T G Y H U J K · Z / X octave · space: sustain</span></div>
-      <div id="kbd"></div>
+        <span>Keys A W S E D F T G Y H U J K · Z X octave · Space sustain</span></div>
+      <div id="kbdscroll"><div id="kbd"></div></div>
     </div>
   </div>
-  <canvas id="scope" width="1024" height="140"></canvas>
+  <div class="box"><canvas id="scope" width="1024" height="144" aria-label="Output scope"></canvas></div>
   <div id="cards"></div>
-  <p class="note">Values change as on the FM-1 (continuous ones glide over 10 ms). Double-click a slider: its default.
-    A sound loads with a short fade, its wavetables rebuilt as on the device.</p>
+  <p class="note">Values change as on the FM-1: continuous ones glide over 10 ms, and a sound loads with a short fade
+    while its wavetables are built. Double-click a slider for its default. Every reading is the FM-1's own text for it.</p>
 </main>
 <script>
 "use strict";
@@ -115,7 +129,7 @@ const KIND = { SLIDER: 0, LIST: 1, SWITCH: 2 };       // strata_web.c sw_param_k
 const $ = (id) => document.getElementById(id);
 const bytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
 
-let meta, node = null, ctx = null, octave = 4, sustain = false, rateNote = "";
+let meta, node = null, ctx = null, octave = 4, rateNote = "";
 const vals = [], ctl = [];                          // the values the page shows; each parameter's control
 const latin1 = new TextDecoder("windows-1252");
 
@@ -131,11 +145,10 @@ async function boot() {
   const ex = instance.exports;
   if (ex._initialize) ex._initialize();
   meta = ex;
-  const n = ex.sw_param_count();
-  for (let id = 0; id < n; id++) vals[id] = ex.sw_param_def(id);
+  for (let id = 0; id < ex.sw_param_count(); id++) vals[id] = ex.sw_param_def(id);
   for (let k = 0; k < ex.sw_sound_count(); k++) $("sound").add(new Option(cstr(ex, ex.sw_sound_name(k)), k));
   $("sound").add(new Option("INIT", ex.sw_sound_count()));
-  $("sound").value = ex.sw_sound_count();
+  $("sound").value = 0;
   buildCards();
   buildKeys();
   setSound(+$("sound").value, false);
@@ -146,19 +159,21 @@ function send(m) { if (node) node.port.postMessage(m); }
 
 // ---------------------------------------------------------------------------------------------- controls --
 function buildCards() {
-  const ex = meta, n = ex.sw_param_count(), cards = $("cards"), bySec = [];
-  for (let id = 0; id < n; id++) (bySec[ex.sw_param_section(id)] ||= []).push(id);
+  const ex = meta, cards = $("cards"), bySec = [];
+  for (let id = 0; id < ex.sw_param_count(); id++) (bySec[ex.sw_param_section(id)] ||= []).push(id);
   for (let s = 0; s < ex.sw_section_count(); s++) {
     const ids = bySec[s] || [], card = document.createElement("div"), h = document.createElement("h2");
-    card.className = "card";
-    h.textContent = cstr(ex, ex.sw_section_name(s));
+    const title = cstr(ex, ex.sw_section_name(s));
+    card.className = "box card";
+    h.textContent = title;
     card.append(h);
-    if (cstr(ex, ex.sw_section_name(s)) === "MATRIX") buildMatrix(card, ids);
+    if (title === "MATRIX") buildMatrix(card, ids);
     else for (const id of ids) {
       if (ex.sw_param_kind(id) === KIND.SWITCH && cstr(ex, ex.sw_param_name(id)) === "ON") {
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.title = "on / off";
+        cb.id = "p" + id;
+        cb.setAttribute("aria-label", title + " on");
         cb.onchange = () => setValue(id, cb.checked ? 1 : 0);
         ctl[id] = { show: (v) => { cb.checked = !!v; } };
         h.append(cb);
@@ -171,21 +186,25 @@ function buildCards() {
 function control(id) {
   const ex = meta, kind = ex.sw_param_kind(id), dst = ex.sw_param_dst(id), lo = ex.sw_param_lo(id), hi = ex.sw_param_hi(id);
   const row = document.createElement("div"), nm = document.createElement("span"), val = document.createElement("span");
+  const name = cstr(ex, ex.sw_param_name(id));
   row.className = "row";
   nm.className = "nm";
-  nm.textContent = cstr(ex, ex.sw_param_name(id));
+  nm.textContent = name;
   val.className = "val";
   if (kind !== KIND.SLIDER) {
     const sel = document.createElement("select");
+    sel.id = "p" + id;
+    sel.setAttribute("aria-label", name);
     for (let v = lo; v <= hi; v++)
       if (!dst || v === 0 || ex.sw_param_mod(v)) sel.add(new Option(text(id, v), v));
     sel.onchange = () => setValue(id, +sel.value);
-    sel.style.gridColumn = "2 / 4";
     row.append(nm, sel);
     ctl[id] = { show: (v) => { sel.value = v; } };
   } else {
     const r = document.createElement("input");
     r.type = "range";
+    r.id = "p" + id;
+    r.setAttribute("aria-label", name);
     r.min = lo;
     r.max = hi;
     r.step = 1;
@@ -201,13 +220,8 @@ function buildMatrix(card, ids) {
   for (let i = 0; i + 2 < ids.length; i += 3) {
     const row = document.createElement("div");
     row.className = "mrow";
-    for (const id of ids.slice(i, i + 3)) {
-      const c = control(id), inner = [...c.children].filter((e) => e.tagName !== "SPAN" || e.className === "val");
-      for (const e of inner) {
-        e.style.gridColumn = "";
-        row.append(e);
-      }
-    }
+    for (const id of ids.slice(i, i + 3))
+      for (const e of [...control(id).children]) if (!e.classList.contains("nm")) row.append(e);
     card.append(row);
   }
 }
@@ -230,10 +244,10 @@ function readPatch() {
 }
 
 function writePatch() {
-  const ex = meta, a = new Int16Array(ex.memory.buffer, ex.sw_values(), ex.sw_param_count()), nb = new Uint8Array(ex.memory.buffer, ex.sw_patch_name(), 17);
+  const ex = meta, a = new Int16Array(ex.memory.buffer, ex.sw_values(), ex.sw_param_count());
+  const nb = new Uint8Array(ex.memory.buffer, ex.sw_patch_name(), 17), name = $("pname").textContent.slice(0, 16);
   a.set(vals);
   nb.fill(0);
-  const name = $("pname").textContent.slice(0, 16);
   for (let i = 0; i < name.length; i++) nb[i] = name.charCodeAt(i) & 0xff;
 }
 
@@ -269,17 +283,17 @@ const keyEls = new Map(), down = new Map();
 function noteName(n) { return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + (Math.floor(n / 12) - 1); }
 
 function buildKeys() {
-  const kbd = $("kbd");
-  kbd.innerHTML = "";
+  const kbd = $("kbd"), base = octave * 12, W = 100 / 15;
+  kbd.textContent = "";
   keyEls.clear();
-  const base = octave * 12, whites = [], W = 100 / 15;
   let w = 0;
   for (let i = 0; i < 25; i++) {
     const n = base + i, black = [1, 3, 6, 8, 10].includes(i % 12), el = document.createElement("div");
     el.className = black ? "bk" : "wk";
     if (black) { el.style.left = `calc(${w * W}% - ${W * 0.3}%)`; el.style.width = `${W * 0.6}%`; }
-    else { el.style.left = `${w * W}%`; el.style.width = `${W}%`; w++; whites.push(el); }
+    else { el.style.left = `${w * W}%`; el.style.width = `${W}%`; w++; }
     el.dataset.note = n;
+    if ([...down.values()].includes(n)) el.classList.add("on");
     kbd.append(el);
     keyEls.set(n, el);
   }
@@ -311,17 +325,17 @@ $("kbd").addEventListener("pointerdown", (e) => {
 for (const t of ["pointerup", "pointercancel"]) $("kbd").addEventListener(t, (e) => noteOff("p" + e.pointerId));
 
 addEventListener("keydown", (e) => {
-  if (e.repeat || e.target.closest("input[type=text],input[type=number],textarea,select")) return;
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input[type=number],textarea,select")) return;
   const k = e.key.toLowerCase(), i = KEYMAP.indexOf(k);
   if (i >= 0) { noteOn(octave * 12 + i, "k" + k); e.preventDefault(); }
   else if (k === "z" && octave > 1) { octave--; buildKeys(); }
   else if (k === "x" && octave < 8) { octave++; buildKeys(); }
-  else if (k === " ") { sustain = true; send({ type: "cc", cc: 64, value: 127 }); e.preventDefault(); }
+  else if (k === " ") { send({ type: "cc", cc: 64, value: 127 }); e.preventDefault(); }
 });
 addEventListener("keyup", (e) => {
   const k = e.key.toLowerCase();
   if (KEYMAP.includes(k)) noteOff("k" + k);
-  else if (k === " ") { sustain = false; send({ type: "cc", cc: 64, value: 0 }); }
+  else if (k === " ") send({ type: "cc", cc: 64, value: 0 });
 });
 $("octdn").onclick = () => { if (octave > 1) { octave--; buildKeys(); } };
 $("octup").onclick = () => { if (octave < 8) { octave++; buildKeys(); } };
@@ -353,7 +367,7 @@ async function initMidi() {
 
 function onMidi(e) {
   const [st, a, b] = e.data, t = st & 0xf0;
-  if (t === 0x90 && b) noteOnMidi(a, b);
+  if (t === 0x90 && b) { send({ type: "note", note: a, vel: b }); keyEls.get(a)?.classList.add("on"); }
   else if (t === 0x80 || (t === 0x90 && !b)) { send({ type: "note", note: a, vel: 0 }); keyEls.get(a)?.classList.remove("on"); }
   else if (t === 0xe0) send({ type: "bend", value: a | (b << 7) });
   else if (t === 0xb0) {
@@ -362,12 +376,11 @@ function onMidi(e) {
     else send({ type: "cc", cc: a, value: b });
   }
 }
-function noteOnMidi(n, v) { send({ type: "note", note: n, vel: v }); keyEls.get(n)?.classList.add("on"); }
 
 // ------------------------------------------------------------------------------------------------ audio --
 async function start() {
   if (node) return;
-  $("status").textContent = "starting…";
+  $("status").textContent = "starting";
   try {
     ctx = new AudioContext({ sampleRate: 44118, latencyHint: "interactive" });   // the FM-1's rate (44,117.6 Hz)
   } catch {
@@ -384,14 +397,13 @@ async function start() {
 
 function onWorklet(m) {
   if (m.type === "ready") {
-    rateNote = Math.abs(ctx.sampleRate - 44118) > 1 ? ` · plays at ${ctx.sampleRate} Hz: pitch off` : "";
-    $("status").textContent = `${ctx.sampleRate} Hz`;
+    rateNote = Math.abs(ctx.sampleRate - 44118) > 1 ? ` · ${ctx.sampleRate} Hz: pitch off` : "";
     $("start").textContent = "Audio on";
     $("start").disabled = true;
     send({ type: "tempo", bpm: +$("tempo").value });
     loadPlaying();
   } else if (m.type === "error") {
-    $("status").textContent = "error: " + m.message;
+    $("status").textContent = "The engine did not start: " + m.message;
   } else if (m.type === "frame") {
     $("meter").firstElementChild.style.width = Math.min(100, 100 * m.peak) + "%";
     $("status").textContent = `${m.voices} voices · ${m.instances} osc` + rateNote;
@@ -407,11 +419,12 @@ function drawScope(s) {
   const c = $("scope"), g = c.getContext("2d"), css = getComputedStyle(document.documentElement);
   g.clearRect(0, 0, c.width, c.height);
   g.strokeStyle = css.getPropertyValue("--line");
+  g.lineWidth = 1;
   g.beginPath();
   g.moveTo(0, c.height / 2);
   g.lineTo(c.width, c.height / 2);
   g.stroke();
-  g.strokeStyle = css.getPropertyValue("--scope");
+  g.strokeStyle = css.getPropertyValue("--accent");
   g.lineWidth = 2;
   g.beginPath();
   for (let i = 0; i < s.length; i++) {
@@ -421,15 +434,22 @@ function drawScope(s) {
   g.stroke();
 }
 
-$("start").onclick = () => start().catch((e) => { $("status").textContent = "error: " + e.message; });
+$("start").onclick = () => start().catch((e) => { $("status").textContent = "Audio did not start: " + e.message; });
 $("sound").onchange = () => setSound(+$("sound").value);
 $("panic").onclick = () => send({ type: "panic" });
 $("tempo").onchange = () => send({ type: "tempo", bpm: +$("tempo").value });
-$("code").onclick = () => { $("codebox").classList.toggle("open"); $("codetext").value = patchCode(); };
-$("copycode").onclick = () => { $("codetext").value = patchCode(); navigator.clipboard?.writeText($("codetext").value); };
-$("loadcode").onclick = () => { if (!loadCode($("codetext").value)) $("codetext").value += "  (not a Strata patch code)"; };
+$("code").onclick = () => { $("codebox").hidden = !$("codebox").hidden; $("codetext").value = patchCode(); };
+$("copycode").onclick = () => {
+  const t = $("codetext");
+  t.value = patchCode();
+  const pick = () => { t.focus(); t.select(); };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(t.value).then(() => { $("copycode").textContent = "Copied"; }, pick);
+  else pick();
+};
+$("loadcode").onclick = () => {
+  if (!loadCode($("codetext").value)) $("codetext").value = "That is not a Strata patch code: it starts with STRATA:";
+};
 
-boot().then(initMidi).catch((e) => { $("status").textContent = "error: " + e.message; });
+boot().then(initMidi).catch((e) => { $("status").textContent = "The engine did not load: " + e.message; });
 </script>
-</body>
-</html>
