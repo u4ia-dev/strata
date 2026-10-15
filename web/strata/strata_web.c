@@ -22,7 +22,7 @@
 #include "../../firmware/src/sy_fx.c"
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
-#include "../../tests/sy_sounds.h"
+#include "../../firmware/src/sy_sounds.h"
 
 #define EXPORT __attribute__((used, visibility("default")))
 #define SW_QUANTUM 128u                  /* the worklet's render quantum */

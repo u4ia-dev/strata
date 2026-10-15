@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
-/* STRATA's eight test sounds: parameter, value pairs over the defaults. The engine test plays a phrase on each for
- * its golden renders (tests/sy_engine_test.c); the browser workbench offers them as starting points
- * (web/strata). Not the factory presets (Phase 5). Needs sy_param.c, sy_osc.c, sy_filter.c, sy_mod.c, sy_fx.c. */
+/* STRATA's eight starter sounds: parameter, value pairs over the defaults. The engine test plays a phrase on each for
+ * its golden renders (tests/sy_engine_test.c); the app (sy_app.c, until Phase 5's factory presets) and the browser
+ * workbench (web/strata) offer them. Needs sy_param.c, sy_osc.c, sy_filter.c, sy_mod.c, sy_fx.c. */
 #ifndef SY_SOUNDS_H
 #define SY_SOUNDS_H
 typedef struct {

@@ -27,7 +27,7 @@
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
 #define SY_ENGINE 1
 #include "sy_host.h"
-#include "sy_sounds.h"
+#include "../firmware/src/sy_sounds.h"
 
 #define MAXS (12u * 44118u)
 static float L[MAXS], R[MAXS];
@@ -768,7 +768,7 @@ static void t_dc_sources(void)
 }
 
 /* ------------------------------------------------------------------------------------- 7 golden --- */
-/* the test sounds: tests/sy_sounds.h (the workbench plays them too) */
+/* the test sounds: firmware/src/sy_sounds.h (the app and the workbench offer them too) */
 
 /* a sound plays a phrase: a chord, a line, a release; returns the frames */
 static uint32_t play(const test_sound_t *ts)
