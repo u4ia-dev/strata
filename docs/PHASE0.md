@@ -92,12 +92,9 @@ in the fork, with compile-time asserts added for every new object Strata stores.
 | Wheels, pads, faders | **none** on the panel (FM-1-RE finds wheel-calibration code in the stock firmware, inherited from other models; Felucca reads no wheel) |
 | LEDs | one under every key and button (41), three levels (lit, glow, breathing/mid) [repo] |
 | Display | 240 × 240 RGB565, SPI at 12 MHz: a 240 × 40 strip takes 12.8 ms, the full screen ~77 ms, so animated graphics must redraw only what changes [repo, ChoralRoot `docs/EDITOR.md`] |
-| MIDI | USB-MIDI in/out (class compliant), TRS MIDI **in** (UART1 RX on PH8, verified on hardware by Felucca). TRS MIDI **out**: not in Felucca's HAL; the stock firmware has a UART TX DMA path but whether the FM-1's jack carries TX is **unverified** |
+| MIDI | USB-MIDI in/out (class compliant), TRS MIDI **in** (UART1 RX on PH8, verified on hardware by Felucca). TRS MIDI **out: none** (resolved after Phase 0, see the update at the end) |
 | Other | battery, speaker and headphones (codec), USB-C |
 
-TRS MIDI OUT check (safe, no flashing): with the **stock** firmware, connect the TRS jack to a MIDI interface through a TRS
-adapter and play keys with a MIDI monitor open. Any traffic means the line is wired; silence means it is not or the stock
-firmware does not send there. If it is wired, Strata adds a TX driver; if not, MIDI out stays USB only.
 
 ### Felucca's existing load
 
@@ -258,3 +255,16 @@ hyper/dimension, EQ, arpeggiator, preset morphing, 8 macros, the second core as 
   or the other repositories; MvaveFM1Unbricker and mvave-fm1-open-firmware could not be found. FLASHING.md will be built on
   FM-1 Transporter (full 1 MiB dump in ~3 s, sector-verified writes), kagaimiq's jl-uboot-tool (yours) and Felucca's
   recovery notes. If you have that document, please share it.
+
+## Update after the checkpoint
+
+- **TRS MIDI out does not exist on the FM-1.** Its only MIDI jack is an input: PCB photos show the receive
+  optocoupler (`PC1`) at the jack's pads and no TX pin is known (ip2k/mvave-fm1-open-firmware `docs/01-hardware.md`);
+  CTL-1, a MIDI controller firmware, states "the FM-1 has no MIDI out jack" (charlesvestal/fm1-ctl `docs/MANUAL.md`);
+  Felucca's HAL has RX only. MIDI out is USB; a USB-MIDI host adapter gives DIN/TRS out without a computer.
+- **Recovery tools found** (via aroum/fm1-custom-fw): Quixotic7/MvaveFM1Unbricker (jl-uboot-tool backup/restore that
+  refuses to touch `< 0x4000` and verifies SHA-256), ip2k/mvave-fm1-open-firmware (`docs/07-recovery-and-risk.md`,
+  the USB_KEY dongle), merthsoft/flipper-fm1-recovery. FLASHING.md will build on them.
+- **The stock VM store** (`0x94000–0xE8FFF`: the stock firmware's settings, a copy of the Bluetooth MAC, wheel
+  calibration it inherited) contains Felucca's user store. Felucca-family firmwares overwrite that part; the stock
+  firmware rebuilds its settings when it returns. Only a full flash backup restores the original contents.
