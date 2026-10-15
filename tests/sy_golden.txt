@@ -1,0 +1,8 @@
+supersaw 62625b76a0c2600d
+pluck 5e8cb85f2ca26ebe
+pad 20d1f64690247dcd
+fm keys b8b5deed19ea0f65
+sync lead 01ce873e29c039dc
+ladder bass b3d82b1228f79695
+vowel pad b55fa95ea15d09b7
+ott growl 1e3c1391b5f4c389

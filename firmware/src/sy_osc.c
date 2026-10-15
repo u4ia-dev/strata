@@ -129,6 +129,8 @@ typedef struct {                           /* an oscillator of a voice */
     float pos;                             /* the position at the end of the last block (frames) */
     uint32_t map[OSC_NMAP + 1u];           /* the warp map */
     float mslope;                          /* its steepest slope */
+    float c_dc, c_dcpos;                   /* the warped cycle's mean (int16 units), for this position .. */
+    uint8_t c_dclv;                        /* .. and level (0xFF: to be worked out) */
     float slope;                           /* this block's harmonic stretch (the level's) */
     uint8_t fresh;                         /* the first block of a note: no ramps from old values */
 } osc_v_t;
@@ -239,6 +241,7 @@ static void osc_warp_map(osc_v_t *o, uint32_t mode, float amt)
         o->map[i] = osc_phase(q);
     }
     o->mslope = slope;
+    o->c_dclv = 0xFF;
     o->c_wmode = (uint8_t)mode;
     o->c_wamt = amt;
 }
@@ -328,6 +331,48 @@ static float osc_amt_cap(uint32_t mode, float amt, uint32_t inc)
     return sy_clampf(sy_minf(amt, cap), 0.0f, 1.0f);
 }
 
+/* the mean of a warped cycle (int16 units): a warp spends more time on some parts of the wave than others, and
+ * its output takes an offset an envelope would turn into a thump. BEND ASYM MIRROR: the 64 map phases read on a
+ * coarse level (6 or above: a few harmonics, whose warped copy stays under 64 harmonics, so a 64-point mean is
+ * close); SYNC: 1/r of the cycle's integral up to frac(r). The frames crossfaded at pos. Kept until the map, the
+ * position (by 1/64 frame) or the level changes: a warp that is not moving costs nothing here */
+static float osc_warp_dc(osc_v_t *o, const wt_table_t *t, uint32_t mode, float pos, uint32_t lv)
+{
+    uint32_t nf = t->n, i, bits;
+    int32_t kf;
+    float xf, s = 0.0f;
+    const int16_t *fa, *fb;
+    if (lv < 6u)
+        lv = 6u;
+    if (lv >= WT_NLEV)
+        lv = WT_NLEV - 1u;
+    if (o->c_dclv == lv && sy_absf(pos - o->c_dcpos) < 0.015625f)
+        return o->c_dc;
+    kf = nf >= 2u ? sy_clampi(sy_floori(pos), 0, (int32_t)nf - 2) : 0;
+    xf = nf >= 2u ? pos - (float)kf : 0.0f;
+    fa = wt_frame(t, (uint32_t)kf, lv);
+    fb = nf >= 2u ? wt_frame(t, (uint32_t)kf + 1u, lv) : fa;
+    bits = WT_BITS[lv];
+    if (mode == WARP_SYNC) {
+        uint32_t n = 1u << bits, end = (uint32_t)((o->mslope - (float)sy_floori(o->mslope)) * (float)n);
+        for (i = 0; i < end; i++)
+            s += (float)fa[i] + (float)(fb[i] - fa[i]) * xf;
+        s /= (float)n * o->mslope;
+    } else {
+        for (i = 0; i < OSC_NMAP; i++) {
+            uint32_t q = o->map[i], ix = q >> (32u - bits);
+            float fr = (float)((q << bits) >> 8) * (1.0f / 16777216.0f);
+            float a = (float)fa[ix] + (float)(fa[ix + 1u] - fa[ix]) * fr, b = (float)fb[ix] + (float)(fb[ix + 1u] - fb[ix]) * fr;
+            s += a + (b - a) * xf;
+        }
+        s *= 1.0f / (float)OSC_NMAP;
+    }
+    o->c_dc = s;
+    o->c_dcpos = pos;
+    o->c_dclv = (uint8_t)lv;
+    return s;
+}
+
 /* the kernel and its settings for a block of an oscillator */
 static osc_kernel_t osc_setup(osc_v_t *o, const osc_par_t *pp, osc_job_t *jb)
 {
@@ -366,16 +411,22 @@ static osc_kernel_t osc_setup(osc_v_t *o, const osc_par_t *pp, osc_job_t *jb)
 /* one block of an oscillator of a voice, added into l / r (Q15 in int32) */
 static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *l, int32_t *r)
 {
-    uint32_t n = pp->nuni, nold = o->fresh ? n : o->n, nmax = n > nold ? n : nold, j, nf = t->n;
+    uint32_t n = pp->nuni, nold = o->fresh ? n : o->n, nmax = n > nold ? n : nold, j, i, nf = t->n;
     osc_job_t jb;
     osc_kernel_t k;
     float pos1 = pp->pos * (float)(nf - 1u), pos0 = o->fresh ? pos1 : o->pos, sp = pp->spread * 0.5f * (float)(nf - 1u);
+    float dc[4] = {0.0f, 0.0f, 0.0f, 0.0f}, hold, wdc = 0.0f;   /* a warp's offset: left and right, start and end */
     uint32_t inc0 = o->fresh ? pp->inc0 : o->inc;
     if (nmax != o->c_n || pp->umode != o->c_mode || sy_absf(pp->det - o->c_det) > 1e-5f)
         osc_uni_detune(o, nmax, pp->umode, pp->det);    /* (voices leaving keep their places this block) */
     if (nmax != o->c_gn || sy_absf(pp->blend - o->c_blend) > 1e-4f || sy_absf(pp->width - o->c_width) > 1e-4f)
         osc_uni_gains(o, nmax, pp->blend, pp->width);
     k = osc_setup(o, pp, &jb);
+    hold = pp->warp == WARP_PWM ? (1.0f - 1.0f / OSC_SMAX) * o->c_wamt : 0.0f;   /* the share of the cycle held */
+    if (pp->warp != WARP_OFF && pp->warp != WARP_FM && pp->warp != WARP_PWM) {  /* the others' offset: the centre */
+        uint32_t c = (nmax - 1u) / 2u, ic = (uint32_t)(((uint64_t)pp->inc1 * o->ratio[c]) >> 30);   /* voice's */
+        wdc = osc_warp_dc(o, t, pp->warp, pos1, osc_level(ic, o->slope));
+    }
     for (j = 0; j < nmax; j++) {
         uint32_t ia = (uint32_t)(((uint64_t)inc0 * o->ratio[j]) >> 30);
         uint32_t ib = (uint32_t)(((uint64_t)pp->inc1 * o->ratio[j]) >> 30), im = ia > ib ? ia : ib;
@@ -427,10 +478,29 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
             jb.dgr = tr / (int32_t)SY_BLK;
             o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, l, r);
         }
+        if ((hold > 0.0f || wdc != 0.0f) && lv < WT_NLEV) {   /* PWM holds the cycle's first sample: its share is */
+            float v0 = wdc;                                   /* an offset; the other warps': wdc */
+            if (hold > 0.0f) {
+                int32_t kf = sy_clampi(sy_floori(p1), 0, nf >= 2u ? (int32_t)nf - 2 : 0);
+                const int16_t *fa = wt_frame(t, (uint32_t)kf, lv), *fb = wt_frame(t, nf >= 2u ? (uint32_t)kf + 1u : 0u, lv);
+                v0 = hold * ((float)fa[0] + (float)(fb[0] - fa[0]) * (p1 - (float)kf));
+            }
+            v0 *= 1.0f / 32768.0f;
+            dc[0] += v0 * (float)g0l;
+            dc[1] += v0 * (float)tl;
+            dc[2] += v0 * (float)g0r;
+            dc[3] += v0 * (float)tr;
+        }
         o->lev[j] = (uint8_t)lv;
         o->gl[j] = (int16_t)tl;
         o->gr[j] = (int16_t)tr;
     }
+    if (hold > 0.0f || wdc != 0.0f)                   /* ... taken out, ramped as the gains are: a warp adds no DC */
+        for (i = 0; i < SY_BLK; i++) {
+            float a = (float)i * (1.0f / (float)SY_BLK);
+            l[i] -= (int32_t)(dc[0] + (dc[1] - dc[0]) * a);
+            r[i] -= (int32_t)(dc[2] + (dc[3] - dc[2]) * a);
+        }
     if (nmax > n)                                     /* the voices that faded out are gone */
         osc_uni_detune(o, n, pp->umode, pp->det);
     o->n = (uint8_t)n;

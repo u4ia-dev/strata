@@ -41,7 +41,7 @@ enum {                           /* units: the display and the DSP's reading of 
  * SUPER), SPREAD (unison position spread), ROUTE (FILTER / DIRECT) */
 #define SP_OSC(X, O, S, on, tab, ccpos, ccw)                                                              \
     X(O##_ON, "ON", S, 0, 1, on, U_ONOFF, 0, 0)                                                           \
-    X(O##_TABLE, "TABLE", S, 0, 63, tab, U_TABLE, F_TABLE, 0)                                             \
+    X(O##_TABLE, "TABLE", S, 0, WT_NFACT - 1, tab, U_TABLE, F_TABLE, 0)                                   \
     X(O##_POS, "POS", S, 0, 1000, 0, U_PCT, FMV, ccpos)                                                   \
     X(O##_WARP, "WARP", S, 0, 8, 0, U_LIST, 0, 0)                                                         \
     X(O##_WAMT, "AMOUNT", S, 0, 1000, 0, U_PCT, FMV, ccw)                                                 \

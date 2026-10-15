@@ -12,6 +12,15 @@
 #             regression limits), the warps', pitch (0.05 cent), unison power and symmetry, level hysteresis, cost.
 #             QUICK=1: every 4th note.
 #   SMOKE     (tests/sy_smoke.c) the whole engine's first sound: a chord through the default patch.
+#   FILTER    (tests/sy_filter_test.c) every type's response against its design (cutoff, slopes, resonance, notch,
+#             peak, ladder, formant, stereo spread), stability at every corner with the cutoff jumping, no denormal
+#             state, exact silence after the input stops, MIX 0 bit for bit, cost.
+#   ENGINE    (tests/sy_engine_test.c) the parameter table and the preset format, the matrix, voices (POLY steals,
+#             VOICES, MONO / LEGATO, glide, sustain, the unison budget, the CPU guard), envelope and LFO times,
+#             clicks (17 events against the steady signal), health (40 random patches), DC (the blockers, every
+#             source's mean), determinism and golden renders (tests/sy_golden.txt; GOLDEN_UPDATE=1 rewrites it, for
+#             an intended change of sound only), effects (OTT sums back, the synced delay, extremes bounded), cost.
+#             Demos (the test sounds as WAV) in build/sy_demo/.
 set -e
 cd "$(dirname "$0")/.."
 OUT=build/host
@@ -30,6 +39,13 @@ run "oscillator: aliasing of every table and warp, pitch, unison, level hysteres
 
 $CC -Ibuild/gen -o "$OUT/sy_smoke" tests/sy_smoke.c -lm
 run "engine: a chord through the default patch" "$OUT/sy_smoke"
+
+$CC -Ibuild/gen -o "$OUT/sy_filter_test" tests/sy_filter_test.c -lm
+run "filter: responses, stability at the corners, no denormals, silence, cost" "$OUT/sy_filter_test"
+
+$CC -Ibuild/gen -o "$OUT/sy_engine_test" tests/sy_engine_test.c -lm
+run "engine: parameters, matrix, voices, timing, clicks, health, DC, golden renders, effects, cost" \
+    "$OUT/sy_engine_test" tests/sy_golden.txt build/sy_demo
 
 [ $fail = 0 ] && echo "sy_tests: all passed" || echo "sy_tests: FAILED"
 exit $fail

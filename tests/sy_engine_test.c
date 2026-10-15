@@ -1,0 +1,978 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 brandonmbarone */
+/* The whole engine (src/sy_engine.c and everything under it) through sy_block, as the audio ISR will run it:
+ *   build/host/sy_engine_test tests/sy_golden.txt [DEMODIR]       GOLDEN_UPDATE=1 rewrites the golden file
+ * 1. parameters: every row's range, default and name; the lists' names match their ranges; MIDI CCs unique;
+ *    a patch packed and unpacked is the same; an older patch (fewer values) takes the defaults of the rest; values
+ *    out of range are clamped; a foreign blob is refused;
+ * 2. matrix: a slot moves its destination by amount x source over the whole range; two slots on one destination
+ *    add; a slot into a parameter that is not a destination does nothing; macros feed macros; global destinations
+ *    take the newest voice's sources;
+ * 3. voices: POLY's eight voices, the ninth note steals (not the newest, not the lowest), its fade, then the new
+ *    note; VOICES limits them; the same note takes its own voice again; releases end; sustain holds and lets go;
+ *    MONO's stack (back to the held note, no restart), LEGATO (no restart while held), MONO restarts; glide's
+ *    time; the unison budget trims the oldest voice; the CPU guard steps the budget down and back, sheds a voice;
+ * 4. envelopes and LFOs: attack and release times; a FREE LFO's rate; a synced LFO at 120 BPM;
+ * 5. clicks: a sine patch, every event that could step the output (note on / off, steal, retrigger, MONO, table
+ *    swap, patch change, knob and CC jumps, unison count, sources and the filter switched, filter type and warp
+ *    changed, bend jumps): the largest step between samples near the event against the steady sine's (<= 2x);
+ * 6. health: 40 random patches, notes and knob changes for 3 s each: finite, no denormal filter state (a held
+ *    chord's windowed DC printed: slow envelopes and LFOs pass the blockers as slow movement); TUBE drive on a held
+ *    chord: no DC at the output (-80 dBFS); offsets: the pulse sub's mean, PWM's, ASYM's and SYNC's over whole
+ *    cycles taken out, and the infrasonic thump of a note's attack and release printed for each;
+ * 7. determinism and golden renders: eight test sounds play a phrase; the same twice in a run, and as recorded
+ *    in tests/sy_golden.txt (a change must be intended: GOLDEN_UPDATE=1); WAVs into DEMODIR;
+ * 8. effects: OTT's bands sum back to the input; the synced delay's echo at 1/4 of 120 BPM; every module bounded
+ *    and finite on full-scale noise; the limiter holds peaks under 1;
+ * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
+#define SY_ENGINE 1
+#include "sy_host.h"
+
+#define MAXS (12u * 44118u)
+static float L[MAXS], R[MAXS];
+static const char *demo;
+
+static void eng_reset(void)
+{
+    sy_init();
+    sy_tables_now();
+}
+
+/* n blocks into L / R from offset at; the main loop's service between blocks */
+static uint32_t run(uint32_t nb, uint32_t at)
+{
+    int32_t out[2u * SY_BLK];
+    uint32_t b, i;
+    for (b = 0; b < nb; b++) {
+        sy_block(out);
+        sy_service();
+        for (i = 0; i < SY_BLK && at < MAXS; i++, at++) {
+            L[at] = (float)out[2u * i] * (1.0f / 32768.0f);
+            R[at] = (float)out[2u * i + 1u] * (1.0f / 32768.0f);
+        }
+    }
+    return at;
+}
+
+static uint32_t blocks(float secs) { return (uint32_t)(secs * SY_FS) / SY_BLK; }
+static void set(uint32_t id, int32_t v) { sy_patch.p[id] = sp_clamp(id, v); }
+static void snap(void) { sp_snap(); }
+
+static uint32_t nvoices(void)
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < SY_NVOICE; i++)
+        n += sy_v[i].on;
+    return n;
+}
+
+/* the DC of n samples (n a power of two), Blackman-Harris windowed: an infrasonic tone does not leak into it */
+#define DC_N 131072u
+static double dc_est(const float *x, uint32_t n)
+{
+    double s = 0, w = 0;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        double h = 0.35875 - 0.48829 * cos(2 * M_PI * i / n) + 0.14128 * cos(4 * M_PI * i / n) -
+                   0.01168 * cos(6 * M_PI * i / n);
+        s += (double)x[i] * h;
+        w += h;
+    }
+    return s / w;
+}
+
+static uint64_t hash_out(uint32_t n)
+{
+    uint64_t h = 1469598103934665603ull;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        int32_t a = (int32_t)(L[i] * 32768.0f), b = (int32_t)(R[i] * 32768.0f);
+        h = (h ^ (uint32_t)a) * 1099511628211ull;
+        h = (h ^ (uint32_t)b) * 1099511628211ull;
+    }
+    return h;
+}
+
+/* ------------------------------------------------------------------------------------- 1 parameters --- */
+static void t_params(void)
+{
+    uint32_t i, j;
+    int ok = 1, lists = 1, ccs = 1;
+    static uint8_t buf[SP_PACK_MAX];
+    sy_patch_t a, b;
+    printf("engine: %u parameters, a patch packs into %u bytes\n", (unsigned)SP_COUNT, (unsigned)SP_PACK_MAX);
+    for (i = 0; i < SP_COUNT; i++) {
+        const sp_desc_t *d = &SP[i];
+        if (!(d->lo < d->hi) || d->def < d->lo || d->def > d->hi || strlen(d->name) > 8u || d->sec >= SEC_COUNT) {
+            printf("engine: parameter %u (%s) malformed\n", i, d->name);
+            ok = 0;
+        }
+        for (j = 0; j < i; j++)
+            if (d->cc && SP[j].cc == d->cc)
+                ccs = 0;
+    }
+    lists &= SP[SP_A_WARP].hi == WARP_COUNT - 1 && SP[SP_B_WARP].hi == WARP_COUNT - 1;
+    lists &= SP[SP_SUB_SHAPE].hi == SUB_NSHAPE - 1 && SP[SP_NZ_TYPE].hi == 2 && SP[SP_F_TYPE].hi == FT_COUNT - 1;
+    lists &= SP[SP_L1_SHAPE].hi == LFO_NSHAPE - 1 && SP[SP_L1_SYNC].hi == 17 && SP[SP_DR_TYPE].hi == 3;
+    lists &= SP[SP_M1_SRC].hi == SRC_COUNT - 1 && SP[SP_A_TABLE].hi == (int16_t)(WT_NFACT - 1);
+    check("every parameter: lo < hi, default in range, name <= 8, a section", ok);
+    check("list parameters span their lists (warps, shapes, types, sources, tables)", lists);
+    check("default MIDI CCs: each on one parameter", ccs);
+    {
+        uint32_t s = 7;
+        int same = 1;
+        sp_defaults(&a);
+        for (i = 0; i < SP_COUNT; i++)
+            a.p[i] = sp_clamp(i, SP[i].lo + (int32_t)(sy_rand(&s) % (uint32_t)(SP[i].hi - SP[i].lo + 1)));
+        memcpy(a.name, "TEST PATCH 12345", 17);
+        a.cat = CAT_PAD;
+        j = sp_pack(&a, buf);
+        same = sp_unpack(&b, buf, j) && !memcmp(a.p, b.p, sizeof a.p) && !memcmp(a.name, b.name, 16) && a.cat == b.cat;
+        check("a patch packed and unpacked is the same", same);
+        buf[4] = (uint8_t)(SP_COUNT - 10u);               /* an older build: 10 values fewer */
+        memmove(buf + 6u + 2u * (SP_COUNT - 10u), buf + 6u + 2u * SP_COUNT, 49u);
+        same = sp_unpack(&b, buf, j - 20u);
+        for (i = SP_COUNT - 10u; i < SP_COUNT; i++)
+            same &= b.p[i] == SP[i].def;
+        for (i = 0; i < SP_COUNT - 10u; i++)
+            same &= b.p[i] == a.p[i];
+        check("a patch with fewer values: the rest take their defaults", same);
+        j = sp_pack(&a, buf);
+        buf[6] = 0xFF;                                    /* A ON = 32767 */
+        buf[7] = 0x7F;
+        same = sp_unpack(&b, buf, j) && b.p[0] == SP[0].hi;
+        check("values out of range are clamped", same);
+        buf[0] = 'X';
+        check("a foreign blob is refused", !sp_unpack(&b, buf, j));
+    }
+}
+
+/* ----------------------------------------------------------------------------------------- 2 matrix --- */
+static void t_matrix(void)
+{
+    float vs[SRC_VOICE_LAST + 1u] = {0}, off[NSLOT];
+    eng_reset();
+    set(SP_M1_SRC, SRC_LFO1);
+    set(SP_M1_DST, SP_F_CUT);
+    set(SP_M1_AMT, 500);
+    set(SP_M2_SRC, SRC_ENV2);
+    set(SP_M2_DST, SP_F_CUT);
+    set(SP_M2_AMT, -250);
+    set(SP_M3_SRC, SRC_LFO1);
+    set(SP_M3_DST, SP_A_UNI);                             /* not a destination: refused by sp_clamp -> 0 */
+    set(SP_M3_AMT, 1000);
+    snap();
+    mod_map();
+    vs[SRC_LFO1] = 0.4f;
+    vs[SRC_ENV2] = 1.0f;
+    mod_offsets(off, vs, 0);
+    check("matrix: 50 % of LFO 0.4 and -25 % of ENV 1.0 add on the cutoff",
+          fabsf(mod_get(off, SP_F_CUT) - sy_clampf(sp_n[SP_F_CUT] + 0.2f - 0.25f, 0.0f, 1.0f)) < 1e-6f);
+    check("matrix: a slot into a parameter that is not a destination does nothing",
+          sy_patch.p[SP_M3_DST] == 0 && mod_idx[SP_A_UNI] == 0xFF);
+    vs[SRC_LFO1] = 1.0f;
+    vs[SRC_ENV2] = 0.0f;
+    set(SP_M1_AMT, 1000);
+    mod_map();
+    mod_offsets(off, vs, 0);
+    check("matrix: 100 % moves across the whole range (clamped at the top)", mod_get(off, SP_F_CUT) == 1.0f);
+    eng_reset();
+    set(SP_MAC1, 1000);
+    set(SP_M1_SRC, SRC_MAC1);
+    set(SP_M1_DST, SP_MAC2);
+    set(SP_M1_AMT, 500);
+    set(SP_M2_SRC, SRC_MAC2);
+    set(SP_M2_DST, SP_DL_MIX);
+    set(SP_M2_AMT, 400);
+    snap();
+    run(2, 0);
+    check("matrix: MACRO 1 -> MACRO 2 (50 %) -> DELAY MIX (40 %): +0.2", fabsf(mod_get(sy_goff, SP_DL_MIX) -
+          sy_clampf(sp_n[SP_DL_MIX] + 0.2f, 0.0f, 1.0f)) < 1e-5f);
+    eng_reset();
+    set(SP_M1_SRC, SRC_VEL);
+    set(SP_M1_DST, SP_RV_MIX);
+    set(SP_M1_AMT, 1000);
+    snap();
+    sy_note_on(60, 127);
+    run(1, 0);
+    sy_note_on(64, 32);
+    run(2, 0);
+    check("matrix: a global destination takes the newest voice's sources (velocity 32)",
+          fabsf(mod_get(sy_goff, SP_RV_MIX) - sy_clampf(sp_n[SP_RV_MIX] + 32.0f / 127.0f, 0.0f, 1.0f)) < 1e-5f);
+}
+
+/* ----------------------------------------------------------------------------------------- 3 voices --- */
+static void t_voices(void)
+{
+    uint32_t i, k;
+    int ok;
+    eng_reset();
+    set(SP_E1_REL, 300);
+    snap();
+    for (i = 0; i < 8u; i++) {
+        sy_note_on(48 + 3 * i, 100);
+        run(1, 0);
+    }
+    check("POLY: eight notes, eight voices", nvoices() == 8u);
+    sy_note_on(80, 100);
+    {
+        sy_voice_t *st = 0;
+        for (i = 0; i < SY_NVOICE; i++)
+            if (sy_v[i].steal)
+                st = &sy_v[i];
+        check("the ninth note steals a voice: the oldest that is not the lowest note (49 -> the second oldest)",
+              st && st->note == 51);
+        run(VOICE_STEAL_BLKS + 1u, 0);
+        ok = 0;
+        for (i = 0; i < SY_NVOICE; i++)
+            ok |= sy_v[i].on && sy_v[i].note == 80;
+        check("after the steal's fade the new note plays", ok && nvoices() == 8u);
+    }
+    eng_reset();
+    set(SP_V_POLY, 4);
+    snap();
+    for (i = 0; i < 6u; i++) {
+        sy_note_on(60 + i, 100);
+        run(VOICE_STEAL_BLKS + 2u, 0);
+    }
+    ok = 1;
+    for (i = 4; i < SY_NVOICE; i++)
+        ok &= !sy_v[i].on;
+    check("VOICES 4: four voices at most", ok && nvoices() == 4u);
+    eng_reset();
+    sy_note_on(60, 100);
+    run(2, 0);
+    sy_note_on(60, 100);
+    run(2, 0);
+    check("the same note again takes its own voice", nvoices() == 1u);
+    sy_note_off(60);
+    run(blocks(0.6f), 0);
+    check("a release ends (the default 15 ms)", nvoices() == 0u);
+    eng_reset();
+    sy_note_on(60, 100);
+    run(2, 0);
+    sy_cc(64, 127);
+    sy_note_off(60);
+    run(blocks(0.5f), 0);
+    check("sustain holds a released note", nvoices() == 1u && sy_v[0].gate);
+    sy_cc(64, 0);
+    run(blocks(0.5f), 0);
+    check("sustain off lets it go", nvoices() == 0u);
+
+    eng_reset();
+    set(SP_V_MODE, 1);                                    /* MONO */
+    snap();
+    sy_note_on(60, 100);
+    run(blocks(0.3f), 0);
+    sy_note_on(64, 100);
+    run(1, 0);
+    check("MONO: the new note restarts the envelope", sy_v[0].env[0].st == ENV_ATK || sy_v[0].env[0].st == ENV_DEC);
+    run(blocks(0.3f), 0);
+    sy_note_off(64);
+    run(2, 0);
+    check("MONO: back to the note still held, without a restart",
+          sy_v[0].target == 60.0f && sy_v[0].env[0].st != ENV_ATK && sy_v[0].env[0].st != ENV_IDLE);
+    sy_note_off(60);
+    run(blocks(0.5f), 0);
+    check("MONO: the last note off releases", nvoices() == 0u);
+    eng_reset();
+    set(SP_V_MODE, 2);                                    /* LEGATO */
+    snap();
+    sy_note_on(60, 100);
+    run(blocks(0.3f), 0);
+    sy_note_on(64, 100);
+    run(1, 0);
+    check("LEGATO: a note while one is held moves the pitch only",
+          sy_v[0].target == 64.0f && sy_v[0].env[0].st != ENV_ATK && sy_v[0].env[0].st != ENV_IDLE);
+    eng_reset();
+    set(SP_V_MODE, 1);
+    set(SP_V_GLIDE, 447);                                 /* 100 ms */
+    snap();
+    sy_note_on(60, 100);
+    run(blocks(0.2f), 0);
+    sy_note_on(72, 100);
+    for (k = 0; k < blocks(0.5f) && sy_v[0].pitch < 71.76f; k++)
+        run(1, 0);
+    printf("engine: glide 100 ms: 98 %% of an octave in %.0f ms\n", (double)k * SY_BLK * 1000.0 / (double)SY_FS);
+    check("glide: 98 % of the way in GLIDE's time (+-30 %)", k * SY_BLK > 0.07 * (double)SY_FS && k * SY_BLK < 0.13 * (double)SY_FS);
+
+    eng_reset();
+    set(SP_A_UNI, 16);
+    set(SP_B_ON, 1);
+    set(SP_B_UNI, 16);
+    snap();
+    sy_note_on(60, 100);
+    run(2, 0);
+    sy_note_on(64, 100);
+    run(2, 0);
+    printf("engine: unison 2 x 16 on two voices: %u instances (budget %u), the older voice capped at %u\n",
+           sy_instances(), sy_uni_budget, sy_v[0].uni_cap);
+    check("unison budget: two voices of 2 x 16 stay within 48 instances, the older voice gives way",
+          sy_instances() <= 48u && sy_v[0].uni_cap < 16u && sy_v[1].uni_cap == 16u);
+
+    eng_reset();
+    for (i = 0; i < 4u; i++) {
+        sy_note_on(60 + i, 100);
+        run(1, 0);
+    }
+    k = (uint32_t)sy_cpu(250) + (uint32_t)sy_cpu(250);
+    run(1, 0);
+    ok = 0;
+    for (i = 0; i < SY_NVOICE; i++)
+        ok |= sy_v[i].steal != 0;
+    check("CPU guard: two halves over 85 % shed a voice (faded)", k == 1u && (ok || nvoices() < 4u));
+    for (i = 0; i < 20u; i++)
+        sy_cpu(190);
+    check("CPU guard: over 70 % the unison budget steps down to 16", sy_uni_budget == 16u);
+    for (i = 0; i < 20u; i++)
+        sy_cpu(210);
+    check("CPU guard: over 78 % the effects get cheaper", fx_lo == 1);
+    for (i = 0; i < 345u * 6u; i++)
+        sy_cpu(100);
+    check("CPU guard: under 55 % for a second, one step back at a time, all the way", sy_uni_budget == 48u && !fx_lo);
+}
+
+/* ------------------------------------------------------------------------------- 4 envelopes, LFOs --- */
+static void t_env_lfo(void)
+{
+    uint32_t k;
+    eng_reset();
+    set(SP_E1_ATK, 447);                                  /* 100 ms */
+    set(SP_E1_REL, 447);
+    snap();
+    sy_note_on(60, 127);
+    for (k = 0; k < blocks(1.0f) && sy_v[0].src[SRC_ENV1] < 1.0f; k++)
+        run(1, 0);
+    printf("engine: ATTACK 100 ms: at the top in %.1f ms\n", (double)k * SY_BLK * 1000.0 / (double)SY_FS);
+    check("attack 100 ms reaches 1 in 100 ms (+-2 blocks)", fabs(k * SY_BLK - 0.1 * (double)SY_FS) <= 2.0 * SY_BLK);
+    sy_note_off(60);
+    for (k = 0; k < blocks(1.0f) && sy_v[0].on; k++)
+        run(1, 0);
+    printf("engine: RELEASE 100 ms: silent in %.1f ms\n", (double)k * SY_BLK * 1000.0 / (double)SY_FS);
+    check("release 100 ms ends in 100 ms (+-2 blocks)", fabs(k * SY_BLK - 0.1 * (double)SY_FS) <= 2.0 * SY_BLK);
+    {
+        uint32_t cyc = 0, b;
+        float last = 0.0f, hz;
+        eng_reset();
+        set(SP_L1_MODE, LFOM_FREE);
+        set(SP_L1_SHAPE, LFO_SAWUP);
+        set(SP_L1_RATE, 600);                             /* 0.01 * 4000^0.6 = 1.45 Hz */
+        snap();
+        for (b = 0; b < blocks(10.0f); b++) {
+            run(1, 0);
+            if (sy_glfo_v[0] < last - 1.0f)
+                cyc++;
+            last = sy_glfo_v[0];
+        }
+        hz = sp_lfo_hz(0.6f);
+        printf("engine: LFO at %.3f Hz: %u cycles in 10 s\n", (double)hz, cyc);
+        check("a FREE LFO's rate (cycles in 10 s, +-1)", fabs(cyc - 10.0 * (double)hz) <= 1.0);
+        eng_reset();
+        set(SP_L1_MODE, LFOM_FREE);
+        set(SP_L1_SHAPE, LFO_SAWUP);
+        set(SP_L1_SYNC, 9);                               /* 1/4 */
+        snap();
+        cyc = 0;
+        last = 0.0f;
+        for (b = 0; b < blocks(10.0f); b++) {
+            run(1, 0);
+            if (sy_glfo_v[0] < last - 1.0f)
+                cyc++;
+            last = sy_glfo_v[0];
+        }
+        check("a synced LFO (1/4 at 120 BPM: 2 Hz): 20 cycles in 10 s (+-1)", cyc >= 19u && cyc <= 21u);
+    }
+}
+
+/* ----------------------------------------------------------------------------------------- 5 clicks --- */
+static double steady_step;
+static void click_patch(void)
+{
+    eng_reset();
+    set(SP_A_TABLE, 5);                                   /* SINE TO TRI at 0: a sine */
+    set(SP_A_POS, 0);
+    set(SP_E1_ATK, 186);                                  /* 10 ms */
+    set(SP_E1_REL, 334);                                  /* 50 ms */
+    set(SP_A_RAND, 0);
+    set(SP_A_LEVEL, 700);
+    snap();
+    sy_tables_now();
+}
+
+/* the largest sample step from a to b against the steady signal's: the larger of the 0.2 s before (up to s) and
+ * the 0.15 s after (from e), never under the plain sine's */
+static double click_ratio(uint32_t a, uint32_t b, uint32_t s, uint32_t e, uint32_t end)
+{
+    double m = fmax(max_step(L + a, b - a), max_step(R + a, b - a)), ref = steady_step;
+    uint32_t w = (uint32_t)(0.2 * (double)SY_FS);
+    if (s > w)
+        ref = fmax(ref, fmax(max_step(L + s - w, w), max_step(R + s - w, w)));
+    if (end > e)
+        ref = fmax(ref, fmax(max_step(L + e, end - e), max_step(R + e, end - e)));
+    return m / ref;
+}
+
+static void t_clicks(void)
+{
+    uint32_t at, ev, i;
+    double worst = 0;
+    const char *wname = "";
+    int ok = 1;
+    click_patch();
+    sy_note_on(57, 100);
+    at = run(blocks(0.5f), 0);
+    steady_step = fmax(max_step(L + at / 2, at / 2), max_step(R + at / 2, at / 2));
+    printf("engine: clicks: the steady sine (220 Hz) steps %.5f a sample at most\n", steady_step);
+    for (ev = 0; ev < 17u; ev++) {
+        static const char *const NAMES[17] = {"note on", "note off", "steal", "retrigger", "MONO note",
+                                              "table swap", "patch change", "cutoff jump", "macro jump",
+                                              "unison 1 -> 7", "OSC B on / off", "SUB on / off", "filter on / off",
+                                              "filter type", "warp change", "bend jump", "level jump"};
+        double r;
+        uint32_t e0;
+        click_patch();
+        if (ev == 4u)
+            set(SP_V_MODE, 1), snap();
+        if (ev == 7u || ev == 12u || ev == 13u)
+            set(SP_F_ON, 1), set(SP_F_CUT, 400), snap();
+        if (ev == 8u)
+            set(SP_M1_SRC, SRC_MAC1), set(SP_M1_DST, SP_A_LEVEL), set(SP_M1_AMT, -1000), snap();
+        if (ev == 10u)
+            set(SP_B_TABLE, 5), snap(), sy_tables_now();
+        if (ev == 11u)
+            set(SP_SUB_SHAPE, SUB_SINE), set(SP_SUB_LEVEL, 500), snap();
+        if (ev == 14u)
+            set(SP_A_WAMT, 500), snap();
+        if (ev == 2u) {                                   /* eight voices sounding, then a ninth note */
+            for (i = 0; i < 8u; i++)
+                sy_note_on(45 + 2 * i, 100);
+        } else if (ev != 0u) {
+            sy_note_on(57, 100);
+        }
+        at = run(blocks(0.3f), 0);
+        e0 = at;
+        switch (ev) {
+        case 0: sy_note_on(57, 100); break;
+        case 1: sy_note_off(57); break;
+        case 2: sy_note_on(70, 100); break;
+        case 3: sy_note_on(57, 100); break;
+        case 4: sy_note_on(60, 100); break;
+        case 5: set(SP_A_TABLE, 36); break;              /* FM 1:1 at 0: a sine too */
+        case 6: {
+            static sy_patch_t np;
+            np = sy_patch;
+            np.p[SP_A_TABLE] = 36;
+            sy_patch_load(&np);
+            break;
+        }
+        case 7: set(SP_F_CUT, 1000); break;
+        case 8: sy_patch.p[SP_MAC1] = 1000; break;
+        case 9: set(SP_A_UNI, 7); break;
+        case 10: set(SP_B_ON, 1); break;
+        case 11: set(SP_SUB_ON, 1); break;
+        case 12: set(SP_F_ON, 0); break;
+        case 13: set(SP_F_TYPE, FT_HP12); break;
+        case 14: set(SP_A_WARP, WARP_BENDP); break;
+        case 15: sy_bend(16383); break;
+        case 16: set(SP_A_LEVEL, 100); break;
+        }
+        at = run(blocks(0.3f), at);
+        {
+            uint32_t w5 = (uint32_t)(0.05 * (double)SY_FS), w15 = (uint32_t)(0.15 * (double)SY_FS);
+            r = click_ratio(e0 > 64u ? e0 - 64u : 0u, e0 + w5, e0 > 64u ? e0 - 64u : 0u, e0 + w15, at);
+            if (ev == 10u || ev == 11u || ev == 12u) {    /* and back */
+                uint32_t e1 = at;
+                if (ev == 10u)
+                    set(SP_B_ON, 0);
+                if (ev == 11u)
+                    set(SP_SUB_ON, 0);
+                if (ev == 12u)
+                    set(SP_F_ON, 1);
+                at = run(blocks(0.3f), at);
+                r = fmax(r, click_ratio(e1 - 64u, e1 + w5, e1 - 64u, e1 + w15, at));
+            }
+        }
+        printf("engine:   %-16s largest step %.2f x the steady sine's\n", NAMES[ev], r);
+        if (r > worst)
+            worst = r, wname = NAMES[ev];
+        ok &= r <= 2.0;
+        if (demo && ev == 6u) {
+            char path[256];
+            snprintf(path, sizeof path, "%s/click_patch_change.wav", demo);
+            wav_write(path, L, R, at);
+        }
+    }
+    printf("engine: clicks: the worst %s at %.2f x\n", wname, worst);
+    check("clicks: no event steps the output more than twice the steady sine", ok);
+}
+
+/* ----------------------------------------------------------------------------------------- 6 health --- */
+static void t_health(void)
+{
+    uint32_t p, i, b, s = 12345, at = 0, denorm = 0;
+    int finite = 1;
+    double dc = 0, dcw = 0;
+    uint64_t n = 0;
+    for (p = 0; p < 40u; p++) {
+        eng_reset();
+        for (i = 0; i < SP_COUNT; i++) {
+            if (i == SP_V_VOL)
+                continue;
+            set(i, SP[i].lo + (int32_t)(sy_rand(&s) % (uint32_t)(SP[i].hi - SP[i].lo + 1)));
+        }
+        snap();
+        for (b = 0; b < blocks(3.0f); b++) {
+            int32_t out[2u * SY_BLK];
+            uint32_t r = sy_rand(&s);
+            if ((r & 63u) == 0u)
+                sy_note_on(36 + (r >> 8) % 60u, 1 + (r >> 16) % 127u);
+            if ((r & 63u) == 1u)
+                sy_note_off(36 + (r >> 8) % 60u);
+            if ((r & 127u) == 2u) {                       /* a knob */
+                uint32_t id = (r >> 8) % SP_COUNT;
+                if (id != SP_V_VOL)
+                    set(id, SP[id].lo + (int32_t)((r >> 12) % (uint32_t)(SP[id].hi - SP[id].lo + 1)));
+            }
+            if ((r & 255u) == 3u)
+                sy_bend((int32_t)((r >> 8) & 16383u));
+            sy_block(out);
+            sy_service();
+            for (i = 0; i < 2u * SY_BLK; i++) {
+                float x = (float)out[i] * (1.0f / 32768.0f);
+                dc += (double)x;
+                n++;
+            }
+            for (i = 0; i < SY_NVOICE; i++) {
+                uint32_t c, k;
+                const sy_voice_t *v = &sy_v[i];
+                if (!isfinite(v->amp) || !isfinite(v->pitch))
+                    finite = 0;
+                for (c = 0; c < 2u; c++)
+                    for (k = 0; k < 6u; k++) {
+                        if (!isfinite(v->flt.s[c][k]))
+                            finite = 0;
+                        if (fpclassify(v->flt.s[c][k]) == FP_SUBNORMAL)
+                            denorm++;
+                    }
+            }
+            if (!isfinite(fx.dly_lp[0]) || !isfinite(fx.rv_lp[0]) || !isfinite(fx.ott_env[0]) || !isfinite(fx.lim_g))
+                finite = 0;
+        }
+        sy_all_notes_off();                               /* then a chord held 4 s, without the noise (its mean */
+        set(SP_NZ_ON, 0);                                 /* over a window is not an offset): the last 3 s's DC, */
+        run(blocks(0.5f), 0);                             /* windowed (no infrasonic tone leaks into it) */
+        sy_note_on(48, 100);
+        sy_note_on(55, 100);
+        sy_note_on(64, 100);
+        at = run(blocks(4.0f), 0);
+        {
+            double d = fmax(fabs(dc_est(L + at - DC_N, DC_N)), fabs(dc_est(R + at - DC_N, DC_N)));
+            if (d > 1e-3 || getenv("VERBOSE"))
+                printf("engine:   patch %2u: offset %.2e (A %s oct %d semi %d warp %s, B %s oct %d warp %s, SUB %s %s oct %d, "
+                       "NOISE %s, filter %s %s, LFO1 %.2f Hz)\n", p, d, sy_patch.p[SP_A_ON] ? "on" : "off",
+                       sy_patch.p[SP_A_OCT], sy_patch.p[SP_A_SEMI], WARP_NAMES[sy_patch.p[SP_A_WARP]],
+                       sy_patch.p[SP_B_ON] ? "on" : "off", sy_patch.p[SP_B_OCT], WARP_NAMES[sy_patch.p[SP_B_WARP]],
+                       sy_patch.p[SP_SUB_ON] ? "on" : "off", SUB_NAMES[sy_patch.p[SP_SUB_SHAPE]], sy_patch.p[SP_SUB_OCT],
+                       sy_patch.p[SP_NZ_ON] ? "on" : "off", sy_patch.p[SP_F_ON] ? "on" : "off",
+                       FT_NAMES[sy_patch.p[SP_F_TYPE]], (double)sp_lfo_hz(sp_n[SP_L1_RATE]));
+            dcw = fmax(dcw, d);
+        }
+    }
+    dc /= (double)n;
+    printf("engine: health: 40 random patches x 3 s: the output's mean %.2e; a held chord's worst DC %.2e\n", dc, dcw);
+    check("health: every state finite through random patches, notes and knobs", finite);
+    check("health: no denormal filter state", denorm == 0);
+    (void)dcw;                                            /* (slow envelopes and LFOs move through the blockers: */
+}                                                         /* printed, not held to a limit) */
+
+/* the DC blockers: TUBE drive (asymmetric, an offset by design) on a held chord: no DC at the output */
+static void t_dc_block(void)
+{
+    uint32_t at;
+    double d;
+    eng_reset();
+    set(SP_A_TABLE, 1);
+    set(SP_A_POS, 1000);
+    set(SP_DR_ON, 1);
+    set(SP_DR_TYPE, DRV_TUBE);
+    set(SP_DR_AMT, 1000);
+    snap();
+    sy_tables_now();
+    sy_note_on(48, 100);
+    sy_note_on(55, 100);
+    sy_note_on(64, 100);
+    at = run(blocks(4.0f), 0);
+    d = fmax(fabs(dc_est(L + at - DC_N, DC_N)), fabs(dc_est(R + at - DC_N, DC_N)));
+    printf("engine: TUBE drive at 100 %% on a held chord: DC at the output %.2e\n", d);
+    check("no DC at the output: TUBE drive's offset taken out (held chord, windowed: under 1e-4, -80 dBFS)", d < 1e-4);
+}
+
+/* the infrasonic part of a note's life (four one-poles at 20 Hz: its fundamental, 262 Hz, under -80 dB): the
+ * thump an offset makes when the envelope opens and closes on it */
+static double thump(uint32_t n)
+{
+    double s[2][4] = {{0}}, a = 1.0 - exp(-2.0 * M_PI * 20.0 / (double)SY_FS), top = 0;
+    uint32_t i, c, k;
+    for (i = 0; i < n; i++)
+        for (c = 0; c < 2u; c++) {
+            double x = c ? (double)R[i] : (double)L[i];
+            for (k = 0; k < 4u; k++)
+                x = s[c][k] += (x - s[c][k]) * a;
+            top = fmax(top, fabs(x));
+        }
+    return top;
+}
+
+/* the sources that would carry an offset: a narrow pulse sub, PWM's hold (both taken out at the source), the
+ * other warps (not yet: printed) */
+static void t_dc_sources(void)
+{
+    static const struct { const char *name; int16_t kv[8][2]; } C[6] = {
+        {"plain saw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {-1, 0}}},
+        {"SUB PULSE 5 %", {{SP_A_ON, 0}, {SP_SUB_ON, 1}, {SP_SUB_SHAPE, SUB_PULSE}, {SP_SUB_PW, 1000}, {SP_SUB_OCT, 0}, {-1, 0}}},
+        {"PWM 80 % on a pulse", {{SP_A_TABLE, 0}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_PWM}, {SP_A_WAMT, 800}, {-1, 0}}},
+        {"ASYM+ 100 % on a saw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_ASYMP}, {SP_A_WAMT, 1000}, {-1, 0}}},
+        {"MIRROR 60 % on a saw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_MIRROR}, {SP_A_WAMT, 600}, {-1, 0}}},
+        {"SYNC 45 % on a saw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_SYNC}, {SP_A_WAMT, 450}, {-1, 0}}},
+    };
+    uint32_t c, i, at;
+    double t[6];
+    for (c = 0; c < 6u; c++) {
+        eng_reset();
+        for (i = 0; C[c].kv[i][0] >= 0; i++)
+            set((uint32_t)C[c].kv[i][0], C[c].kv[i][1]);
+        snap();
+        sy_tables_now();
+        at = run(blocks(0.2f), 0);
+        sy_note_on(60, 127);
+        at = run(blocks(0.5f), at);
+        sy_note_off(60);
+        at = run(blocks(0.5f), at);
+        t[c] = thump(at);
+        printf("engine: offsets: %-22s infrasonic peak %.4f (%.0f dBFS) over a note's attack and release\n", C[c].name,
+               t[c], db(t[c]));
+    }
+    {                                                     /* the sources' own means, over whole cycles */
+        static int32_t il[SY_BLK], ir[SY_BLK];
+        static float x[SY_BLK];
+        double m, pk;
+        uint32_t b, w;
+        sy_voice_t *v = &sy_v[0];
+        eng_reset();
+        m = 0;
+        for (b = 0; b < 400u; b++) {                      /* the pulse sub, 5 %: 128 samples a cycle */
+            voice_sub(v, 1u << 25, SUB_PULSE, 1.0f, x);
+            for (i = 0; i < SY_BLK; i++)
+                m += (double)x[i];
+        }
+        m /= 400.0 * SY_BLK;
+        printf("engine: offsets: the pulse sub at 5 %%: mean %.2e over 100 cycles\n", m);
+        check("offsets: the pulse sub's mean is taken out (under 1e-4 over whole cycles)", fabs(m) < 1e-4);
+        for (w = 0; w < 3u; w++) {                        /* PWM, ASYM+, SYNC alone: 128 samples a cycle */
+            static const uint8_t WM[3] = {WARP_PWM, WARP_ASYMP, WARP_SYNC};
+            static const uint8_t TB[3] = {0, 1, 1};
+            static const float AM[3] = {0.8f, 1.0f, 0.45f};
+            osc_par_t p;
+            static uint32_t seed = 3;
+            osc_v_t *o = &v->osc[0];
+            uint32_t id = TB[w];
+            wg_begin(id, wt_pool[0]);
+            while (!wg_step())
+                ;
+            wt_tab[0].f = wt_pool[0];
+            wt_tab[0].n = wg.n;
+            memset(o, 0, sizeof *o);
+            osc_note(o, 1, 0.0f, 0.0f, &seed);
+            memset(&p, 0, sizeof p);
+            p.inc0 = p.inc1 = 1u << 25;
+            p.pos = 1.0f;
+            p.warp = WM[w];
+            p.wamt = AM[w];
+            p.nuni = 1;
+            p.blend = 1.0f;
+            m = 0;
+            pk = 0;
+            for (b = 0; b < 404u; b++) {
+                memset(il, 0, sizeof il);
+                memset(ir, 0, sizeof ir);
+                osc_block(o, &wt_tab[0], &p, il, ir);
+                if (b >= 4u)
+                    for (i = 0; i < SY_BLK; i++) {
+                        m += (double)il[i];
+                        pk = fmax(pk, fabs((double)il[i]));
+                    }
+            }
+            m /= 400.0 * SY_BLK;
+            printf("engine: offsets: %-6s %3.0f %% alone: mean %.4f of its peak over 100 cycles\n", WARP_NAMES[WM[w]],
+                   (double)(AM[w] * 100.0f), fabs(m) / pk);
+            check(w == 0u ? "offsets: PWM's hold is taken out (mean under 1 % of the peak)"
+                          : w == 1u ? "offsets: ASYM's offset is taken out (mean under 2 % of the peak)"
+                                    : "offsets: SYNC's offset is taken out (mean under 2 % of the peak)",
+                  fabs(m) / pk < (w == 0u ? 0.01 : 0.02));
+        }
+    }
+    (void)t;
+}
+
+/* ------------------------------------------------------------------------------------- 7 golden --- */
+typedef struct {
+    const char *name;
+    int16_t kv[24][2];                                    /* parameter, value pairs (-1 ends) */
+} test_sound_t;
+
+static const test_sound_t SOUNDS[8] = {
+    {"supersaw", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_UNI, 7}, {SP_A_DETUNE, 350}, {SP_A_UMODE, 1},
+                  {SP_F_ON, 1}, {SP_F_TYPE, FT_LP24}, {SP_F_CUT, 820}, {SP_E1_REL, 400}, {SP_CH_ON, 1}, {SP_RV_ON, 1},
+                  {-1, 0}}},
+    {"pluck", {{SP_A_TABLE, 45}, {SP_A_POS, 600}, {SP_F_ON, 1}, {SP_F_TYPE, FT_LP12}, {SP_F_CUT, 350}, {SP_F_RES, 400},
+               {SP_E1_DEC, 500}, {SP_E1_SUS, 0}, {SP_E2_DEC, 400}, {SP_M1_SRC, SRC_ENV2}, {SP_M1_DST, SP_F_CUT},
+               {SP_M1_AMT, 500}, {SP_DL_ON, 1}, {-1, 0}}},
+    {"pad", {{SP_A_TABLE, 27}, {SP_A_UNI, 4}, {SP_B_ON, 1}, {SP_B_TABLE, 31}, {SP_B_UNI, 3}, {SP_E1_ATK, 600},
+             {SP_E1_REL, 650}, {SP_L1_RATE, 350}, {SP_M1_SRC, SRC_LFO1}, {SP_M1_DST, SP_A_POS}, {SP_M1_AMT, 400},
+             {SP_RV_ON, 1}, {SP_RV_MIX, 400}, {SP_CH_ON, 1}, {-1, 0}}},
+    {"fm keys", {{SP_A_TABLE, 37}, {SP_A_POS, 500}, {SP_B_ON, 1}, {SP_B_TABLE, 5}, {SP_A_WARP, WARP_FM},
+                 {SP_A_WAMT, 400}, {SP_B_LEVEL, 0}, {SP_E1_DEC, 560}, {SP_E1_SUS, 300}, {-1, 0}}},
+    {"sync lead", {{SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_A_WARP, WARP_SYNC}, {SP_A_WAMT, 450}, {SP_V_MODE, 1},
+                   {SP_V_GLIDE, 350}, {SP_L1_RATE, 650}, {SP_M1_SRC, SRC_LFO1}, {SP_M1_DST, SP_A_WAMT},
+                   {SP_M1_AMT, 200}, {SP_DR_ON, 1}, {SP_DL_ON, 1}, {-1, 0}}},
+    {"ladder bass", {{SP_A_TABLE, 2}, {SP_A_POS, 1000}, {SP_SUB_ON, 1}, {SP_SUB_OCT, -1}, {SP_F_ON, 1},
+                     {SP_F_TYPE, FT_LADDER}, {SP_F_CUT, 450}, {SP_F_RES, 600}, {SP_F_DRIVE, 400}, {SP_E2_DEC, 450},
+                     {SP_M1_SRC, SRC_ENV2}, {SP_M1_DST, SP_F_CUT}, {SP_M1_AMT, 450}, {SP_V_MODE, 2}, {-1, 0}}},
+    {"vowel pad", {{SP_A_TABLE, 28}, {SP_A_UNI, 5}, {SP_A_DETUNE, 200}, {SP_F_ON, 1}, {SP_F_TYPE, FT_FORMANT},
+                   {SP_L2_RATE, 300}, {SP_M2_SRC, SRC_LFO2}, {SP_M2_DST, SP_F_CUT}, {SP_M2_AMT, 300},
+                   {SP_NZ_ON, 1}, {SP_NZ_TYPE, 1}, {SP_NZ_LEVEL, 150}, {SP_OT_ON, 1}, {-1, 0}}},
+    {"ott growl", {{SP_A_TABLE, 41}, {SP_A_POS, 700}, {SP_A_WARP, WARP_BENDP}, {SP_A_WAMT, 500}, {SP_B_ON, 1},
+                   {SP_B_TABLE, 47}, {SP_B_OCT, -1}, {SP_F_ON, 1}, {SP_F_TYPE, FT_BP12}, {SP_F_CUT, 600},
+                   {SP_OT_ON, 1}, {SP_DR_ON, 1}, {SP_DR_TYPE, DRV_TUBE}, {-1, 0}}},
+};
+
+/* a sound plays a phrase: a chord, a line, a release; returns the frames */
+static uint32_t play(const test_sound_t *ts)
+{
+    static const uint8_t LINE[8] = {48, 55, 60, 63, 67, 72, 70, 67};
+    uint32_t i, at = 0;
+    eng_reset();
+    for (i = 0; ts->kv[i][0] >= 0; i++)
+        set((uint32_t)ts->kv[i][0], ts->kv[i][1]);
+    snap();
+    sy_tables_now();
+    sy_note_on(48, 100);
+    sy_note_on(55, 90);
+    sy_note_on(63, 80);
+    at = run(blocks(0.8f), at);
+    sy_note_off(48);
+    sy_note_off(55);
+    sy_note_off(63);
+    for (i = 0; i < 8u; i++) {
+        sy_note_on(LINE[i], 70 + 7 * i);
+        at = run(blocks(0.15f), at);
+        sy_note_off(LINE[i]);
+        at = run(blocks(0.05f), at);
+    }
+    sy_bend(12000);
+    sy_note_on(60, 100);
+    at = run(blocks(0.3f), at);
+    sy_note_off(60);
+    sy_bend(8192);
+    return run(blocks(1.0f), at);
+}
+
+static void t_golden(const char *gpath)
+{
+    uint32_t i;
+    int upd = getenv("GOLDEN_UPDATE") != 0, same = 1, match = 1, found = 0;
+    FILE *g = upd ? 0 : fopen(gpath, "r"), *w = upd ? fopen(gpath, "w") : 0;
+    char line[256];
+    for (i = 0; i < 8u; i++) {
+        uint32_t n = play(&SOUNDS[i]);
+        uint64_t h = hash_out(n), h2;
+        double pk = fmax(peak(L, n), peak(R, n)), rm = rms(L, n);
+        if (demo) {
+            char path[256];
+            snprintf(path, sizeof path, "%s/%s.wav", demo, SOUNDS[i].name);
+            for (char *c = path + strlen(demo); *c; c++)
+                if (*c == ' ')
+                    *c = '_';
+            wav_write(path, L, R, n);
+        }
+        n = play(&SOUNDS[i]);
+        h2 = hash_out(n);
+        same &= h == h2;
+        printf("engine:   %-12s %016llx  peak %.3f  rms %.3f%s\n", SOUNDS[i].name, (unsigned long long)h, pk, rm,
+               h == h2 ? "" : "  <- differs run to run");
+        if (w)
+            fprintf(w, "%s %016llx\n", SOUNDS[i].name, (unsigned long long)h);
+        if (g) {
+            int hit = 0;
+            rewind(g);
+            while (fgets(line, sizeof line, g)) {
+                char nm[64];
+                unsigned long long gh;
+                char *sp = strrchr(line, ' ');
+                if (!sp)
+                    continue;
+                memcpy(nm, line, (size_t)(sp - line));
+                nm[sp - line] = 0;
+                gh = strtoull(sp + 1, 0, 16);
+                if (!strcmp(nm, SOUNDS[i].name)) {
+                    hit = 1;
+                    found++;
+                    if (gh != h) {
+                        match = 0;
+                        printf("engine:   %-12s differs from tests/sy_golden.txt\n", SOUNDS[i].name);
+                    }
+                }
+            }
+            if (!hit)
+                match = 0;
+        }
+        if (pk > 1.0 || !(rm > 1e-4))
+            match = 0, printf("engine:   %-12s level out of bounds\n", SOUNDS[i].name);
+    }
+    if (w)
+        fclose(w), printf("engine: golden renders written to %s\n", gpath);
+    if (g)
+        fclose(g);
+    check("determinism: every test sound twice in a run, bit for bit", same);
+    check(upd ? "golden renders recorded (GOLDEN_UPDATE)" : "golden renders as recorded in tests/sy_golden.txt",
+          upd ? 1 : g && match && found == 8);
+}
+
+/* -------------------------------------------------------------------------------------- 8 effects --- */
+static void t_fx(void)
+{
+    uint32_t i, b, s = 99;
+    float l[SY_BLK], r[SY_BLK], x[SY_BLK];
+    double err = 0, top = 0;
+    int finite = 1;
+    eng_reset();
+    set(SP_OT_ON, 1);
+    set(SP_OT_UP, 0);
+    set(SP_OT_DOWN, 0);
+    snap();
+    run(2, 0);
+    for (b = 0; b < 200u; b++) {
+        for (i = 0; i < SY_BLK; i++)
+            x[i] = l[i] = r[i] = 0.3f * sy_randf(sy_rand(&s));
+        mod_offsets(sy_goff, 0, 0);
+        fx_ott(l, r);
+        if (b > 4u)
+            for (i = 0; i < SY_BLK; i++)
+                err = fmax(err, fabs((double)l[i] - (double)x[i]));
+    }
+    printf("engine: OTT flat (no compression): the bands sum back within %.2e\n", err);
+    check("OTT: the three bands sum back to the input", err < 1e-5);
+    {
+        uint32_t at, k, best = 0;
+        float bp = 0.0f;
+        eng_reset();
+        set(SP_DL_ON, 1);
+        set(SP_DL_SYNC, 9);                               /* 1/4 at 120 BPM: 0.5 s */
+        set(SP_DL_MIX, 1000);
+        set(SP_DL_FDBK, 0);
+        set(SP_DL_LP, 1000);
+        set(SP_DL_HP, 0);
+        set(SP_DL_MODE, 0);
+        snap();
+        memset(L, 0, sizeof L);
+        for (b = 0; b < blocks(1.0f); b++) {
+            for (i = 0; i < SY_BLK; i++)
+                l[i] = r[i] = (b == 10u && i == 0u) ? 1.0f : 0.0f;
+            mod_offsets(sy_goff, 0, 0);
+            sp_block();
+            fx_delay(l, r);
+            for (i = 0; i < SY_BLK; i++)
+                L[b * SY_BLK + i] = l[i];
+        }
+        at = 10u * SY_BLK;
+        for (k = at + 1000u; k < blocks(1.0f) * SY_BLK; k++)
+            if (fabsf(L[k]) > bp)
+                bp = fabsf(L[k]), best = k;
+        printf("engine: delay 1/4 at 120 BPM: the echo %.2f ms after the impulse\n", (double)(best - at) * 1000.0 / (double)SY_FS);
+        check("delay synced: the echo at 500 ms (+-1 ms)", fabs((best - at) * 1000.0 / (double)SY_FS - 500.0) < 1.0);
+    }
+    eng_reset();
+    set(SP_DR_ON, 1);
+    set(SP_DR_AMT, 1000);
+    set(SP_CH_ON, 1);
+    set(SP_CH_FDBK, 1000);
+    set(SP_DL_ON, 1);
+    set(SP_DL_FDBK, 1000);
+    set(SP_RV_ON, 1);
+    set(SP_RV_DECAY, 1000);
+    set(SP_RV_SIZE, 1000);
+    set(SP_OT_ON, 1);
+    snap();
+    for (b = 0; b < blocks(10.0f); b++) {
+        for (i = 0; i < SY_BLK; i++)
+            l[i] = r[i] = b < blocks(5.0f) ? sy_randf(sy_rand(&s)) : 0.0f;
+        mod_offsets(sy_goff, 0, 0);
+        sp_block();
+        fx_block(l, r);
+        for (i = 0; i < SY_BLK; i++) {
+            if (!isfinite(l[i]) || !isfinite(r[i]))
+                finite = 0;
+            top = fmax(top, fmax(fabs((double)l[i]), fabs((double)r[i])));
+        }
+    }
+    printf("engine: every effect at its extremes on full-scale noise: largest output %.3f\n", top);
+    check("effects at their extremes: finite, and the limiter holds the peaks under 1", finite && top < 1.0);
+}
+
+/* ----------------------------------------------------------------------------------------- 9 cost --- */
+static void t_cost(void)
+{
+    static const char *const NAMES[3] = {"1 voice, OSC A, no unison, no filter, no effects",
+                                         "8 voices, A + B x 3 unison, LP24, every effect",
+                                         "8 voices, A + B x 16 unison (budget 48), LADDER, every effect"};
+    uint32_t c, i, b;
+    for (c = 0; c < 3u; c++) {
+        uint64_t t0;
+        double us;
+        eng_reset();
+        if (c) {
+            set(SP_B_ON, 1);
+            set(SP_A_UNI, c == 1u ? 3 : 16);
+            set(SP_B_UNI, c == 1u ? 3 : 16);
+            set(SP_F_ON, 1);
+            set(SP_F_TYPE, c == 1u ? FT_LP24 : FT_LADDER);
+            set(SP_DR_ON, 1);
+            set(SP_CH_ON, 1);
+            set(SP_DL_ON, 1);
+            set(SP_RV_ON, 1);
+            set(SP_OT_ON, 1);
+            snap();
+            for (i = 0; i < 8u; i++)
+                sy_note_on(48 + 4 * i, 100);
+        } else {
+            sy_note_on(60, 100);
+        }
+        run(4, 0);
+        t0 = t_now_ns();
+        for (b = 0; b < 4000u; b++) {
+            int32_t out[2u * SY_BLK];
+            sy_block(out);
+        }
+        us = (double)(t_now_ns() - t0) / 1000.0 / 1000.0;     /* us a half (4 blocks) */
+        printf("engine: host cost, %-62s %7.1f us a half (%.1f %% of real time)\n", NAMES[c], us,
+               us / (128.0 / (double)SY_FS * 1e6) * 100.0);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    t_name = "engine";
+    demo = argc > 2 ? argv[2] : 0;
+    t_params();
+    t_matrix();
+    t_voices();
+    t_env_lfo();
+    t_clicks();
+    t_health();
+    t_dc_block();
+    t_dc_sources();
+    t_golden(argc > 1 ? argv[1] : "tests/sy_golden.txt");
+    t_fx();
+    t_cost();
+    return t_done();
+}

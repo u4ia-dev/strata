@@ -4,8 +4,9 @@
  * amp (ENV 1 x velocity) into the mix. Once a block: the matrix's offsets (from the last block's sources), the
  * envelopes, the LFOs, the pitch (glide, bend), each source's settings. Then the audio: the oscillators into
  * int32 (Q15), turned into float on the way into their bus with their level and pan ramped across the block, the
- * sub and the noise, the filter, the amp ramped across the block. A source switched on or off fades in or out
- * over a block, the filter too (its MIX from or to 0): nothing a knob or a switch does steps the output.
+ * sub and the noise, the filter, the amp ramped across the block. A source switched on or off, or changing kind
+ * (warp, shape, type, route), fades out over 4 blocks (2.9 ms), changes while silent and fades back in; the filter
+ * too (its MIX from or to 0): nothing a knob or a switch does steps the output.
  * SUB: sine, triangle, saw, square, pulse (polyBLEP edges) or a rounded square, OCT below the note. NOISE: white,
  * pink (three one-poles fitted to -3 dB / octave within 0.4 dB from 30 Hz to 18 kHz) or brown, COLOR tilts it,
  * STEREO decorrelates left and right. */
@@ -14,6 +15,7 @@ static const char *const SUB_NAMES[SUB_NSHAPE] = {"SINE", "TRIANGLE", "SAW", "SQ
 static const char *const NZ_NAMES[3] = {"WHITE", "PINK", "BROWN"};
 #define SY_INC_A4 (440.0f / SY_FS * 4294967296.0f)
 #define VOICE_STEAL_BLKS 4u                /* a stolen voice fades out over 4 blocks (2.9 ms) */
+#define VOICE_FADE 0.25f                   /* a switch's fade a block: over 4 blocks */
 enum { VS_A, VS_B, VS_SUB, VS_NZ };        /* the sources */
 
 typedef struct {
@@ -30,7 +32,11 @@ typedef struct {
     float pitch, target;                   /* semitones: where the glide is, where it goes */
     float amp;                             /* the amp at the end of the last block (envelope x velocity) */
     float fade;                            /* steal fade at the end of the last block, 1..0 */
-    float fmix;                            /* the filter's MIX at the end of the last block (0: off) */
+    float fmix;                            /* the filter's MIX x its switch fade at the end of the last block */
+    float fon;                             /* the filter's switch fade, 0..1 */
+    uint8_t ftype;                         /* the filter type playing */
+    float son[4];                          /* each source's switch fade, 0..1 */
+    uint8_t kind[4];                       /* the kind each source plays: warp / shape / type, route << 7 */
     float rnd;                             /* note-on random 0..1 */
     float g[4][2];                         /* each source's level x pan at the end of the last block */
     env_t env[2];
@@ -93,8 +99,8 @@ static void voice_sub(sy_voice_t *v, uint32_t inc, uint32_t shape, float pw, flo
         case SUB_PULSE: {
             float u = t + 1.0f - w;
             u -= (float)sy_floori(u);
-            y = (t < w ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt);
-            break;
+            y = (t < w ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt) - (2.0f * w - 1.0f);
+            break;                                         /* (less its mean: no DC) */
         }
         default: {                                         /* SQUARE, ROUND */
             float u = t + 0.5f;
@@ -323,90 +329,124 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
     }
     pitch = v->pitch + sy_bend_v * (float)(sy_bend_v > 0.0f ? sy_patch.p[SP_V_BUP] : sy_patch.p[SP_V_BDN]);
 
-    /* each source's settings and target gains (off: 0); a table being swapped fades its oscillator */
-    for (o = 0; o < SY_NOSC; o++) {
-        uint32_t b = o ? SP_B_ON - SP_A_ON : 0u;
-        voice_osc_par(v, o, pitch, &op[o]);
-        voice_bal(sp_lin(SP_A_PAN + b, mod_get(off, SP_A_PAN + b)) * 0.001f,
-                  sy_patch.p[SP_A_ON + b] && wt_tab[o].n ? mod_get(off, SP_A_LEVEL + b) : 0.0f, g[o]);
-    }
-    voice_bal(sp_lin(SP_SUB_PAN, mod_get(off, SP_SUB_PAN)) * 0.001f,
-              sy_patch.p[SP_SUB_ON] ? mod_get(off, SP_SUB_LEVEL) : 0.0f, g[VS_SUB]);
-    voice_bal(sp_lin(SP_NZ_PAN, mod_get(off, SP_NZ_PAN)) * 0.001f,
-              sy_patch.p[SP_NZ_ON] ? mod_get(off, SP_NZ_LEVEL) : 0.0f, g[VS_NZ]);
-    for (k = 0; k < 4u; k++) {
-        if (v->fresh)
-            v->g[k][0] = g[k][0], v->g[k][1] = g[k][1];        /* a new note: its envelope fades it in */
-        else if (!(v->ran & (1u << k)))
-            v->g[k][0] = v->g[k][1] = 0.0f;                    /* switched on: from 0 */
-        on[k] = g[k][0] + g[k][1] > 0.0f || v->g[k][0] + v->g[k][1] > 0.0f;
-    }
-    for (o = 0; o < SY_NOSC; o++)
-        if (on[o] && !(v->ran & (1u << o)) && !v->fresh)
-            v->osc[o].fresh = 1;                               /* no pitch or position ramps from long ago */
-
-    /* FM: each oscillator's modulator from the other's block-start state, before either runs; a table being
-     * swapped takes its modulation down with its own fade */
-    for (o = 0; o < SY_NOSC; o++) {
-        uint32_t m = o ^ 1u;
-        if (op[o].warp == WARP_FM && on[o] && wt_tab[m].n && (wt_g[m][0] > 0.0f || wt_g[m][1] > 0.0f)) {
-            float s = wt_g[m][0], ds = (wt_g[m][1] - s) * (1.0f / (float)SY_BLK);
-            osc_modulator(&v->osc[m], &wt_tab[m], &op[m], pm[o], !on[m]);
-            if (s < 1.0f || ds != 0.0f)
-                for (i = 0; i < SY_BLK; i++, s += ds)
-                    pm[o][i] = (int32_t)((float)pm[o][i] * s);
-            op[o].pm = pm[o];
-            op[o].pm_inc = op[m].inc1;
-        }
-    }
-
-    /* audio: the sources into the FILTER bus (fl fr) or DIRECT (dl dr) */
-    for (i = 0; i < SY_BLK; i++)
-        fl[i] = fr[i] = dl[i] = dr[i] = 0.0f;
-    for (o = 0; o < SY_NOSC; o++) {
-        uint32_t b = o ? SP_B_ON - SP_A_ON : 0u;
-        float s0 = wt_g[o][0] * (1.0f / 32768.0f), s1 = wt_g[o][1] * (1.0f / 32768.0f), g0[2], g1[2];
-        int dir = sy_patch.p[SP_A_ROUTE + b] != 0;
-        if (!on[o] || (s0 <= 0.0f && s1 <= 0.0f) || !wt_tab[o].n)
-            continue;
-        for (i = 0; i < SY_BLK; i++)
-            ol[i] = orr[i] = 0;
-        osc_block(&v->osc[o], &wt_tab[o], &op[o], ol, orr);
-        for (i = 0; i < SY_BLK; i++) {                         /* (int32 -> float once, the gains next) */
-            x[i] = (float)ol[i];
-            y[i] = (float)orr[i];
-        }
-        g0[0] = v->g[o][0] * s0;
-        g0[1] = v->g[o][1] * s0;
-        g1[0] = g[o][0] * s1;
-        g1[1] = g[o][1] * s1;
-        voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, g0, g1);
-        ran |= 1u << o;
-    }
-    if (on[VS_SUB]) {
-        int dir = sy_patch.p[SP_SUB_ROUTE] != 0;
-        voice_sub(v, voice_inc(pitch + 12.0f * (float)sy_patch.p[SP_SUB_OCT]), (uint32_t)sy_patch.p[SP_SUB_SHAPE],
-                  mod_get(off, SP_SUB_PW), x);
-        voice_mix(dir ? dl : fl, dir ? dr : fr, x, x, v->g[VS_SUB], g[VS_SUB]);
-        ran |= 1u << VS_SUB;
-    }
-    if (on[VS_NZ]) {
-        int dir = sy_patch.p[SP_NZ_ROUTE] != 0;
-        voice_noise(v, (uint32_t)sy_patch.p[SP_NZ_TYPE], sp_lin(SP_NZ_COLOR, mod_get(off, SP_NZ_COLOR)) * 0.001f,
-                    sp_n[SP_NZ_STEREO], x, y);
-        voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, v->g[VS_NZ], g[VS_NZ]);
-        ran |= 1u << VS_NZ;
-    }
-    memcpy(v->g, g, sizeof g);
-    v->ran = (uint8_t)ran;
-
-    /* the filter: off is MIX 0, a switch ramps it over a block */
+    /* each source's settings; its switch fade: switched on or off, or its kind changed (a warp, a shape, a type,
+     * the route), it fades out over 4 blocks, takes the new kind while silent, and fades in; a table being swapped
+     * fades its oscillator (wt_g) */
     {
-        float m1 = sy_patch.p[SP_F_ON] ? mod_get(off, SP_F_MIX) : 0.0f, m0 = v->fresh ? m1 : v->fmix;
+        uint8_t want[4];
+        int won[4];
+        for (o = 0; o < SY_NOSC; o++) {
+            uint32_t b = o ? SP_B_ON - SP_A_ON : 0u;
+            voice_osc_par(v, o, pitch, &op[o]);
+            want[o] = (uint8_t)(op[o].warp | (sy_patch.p[SP_A_ROUTE + b] != 0) << 7);
+            won[o] = sy_patch.p[SP_A_ON + b] && wt_tab[o].n;
+            voice_bal(sp_lin(SP_A_PAN + b, mod_get(off, SP_A_PAN + b)) * 0.001f, mod_get(off, SP_A_LEVEL + b), g[o]);
+        }
+        want[VS_SUB] = (uint8_t)(sy_patch.p[SP_SUB_SHAPE] | (sy_patch.p[SP_SUB_ROUTE] != 0) << 7);
+        won[VS_SUB] = sy_patch.p[SP_SUB_ON] != 0;
+        voice_bal(sp_lin(SP_SUB_PAN, mod_get(off, SP_SUB_PAN)) * 0.001f, mod_get(off, SP_SUB_LEVEL), g[VS_SUB]);
+        want[VS_NZ] = (uint8_t)(sy_patch.p[SP_NZ_TYPE] | (sy_patch.p[SP_NZ_ROUTE] != 0) << 7);
+        won[VS_NZ] = sy_patch.p[SP_NZ_ON] != 0;
+        voice_bal(sp_lin(SP_NZ_PAN, mod_get(off, SP_NZ_PAN)) * 0.001f, mod_get(off, SP_NZ_LEVEL), g[VS_NZ]);
+        for (k = 0; k < 4u; k++) {
+            float s0, s1, t;
+            if (v->fresh) {
+                v->kind[k] = want[k];
+                v->son[k] = won[k] ? 1.0f : 0.0f;
+            }
+            s0 = v->son[k];
+            t = v->kind[k] == want[k] && won[k] ? 1.0f : 0.0f;
+            s1 = s0 < t ? sy_minf(t, s0 + VOICE_FADE) : sy_maxf(t, s0 - VOICE_FADE);
+            g[k][0] *= s1;
+            g[k][1] *= s1;
+            if (v->fresh)
+                v->g[k][0] = g[k][0], v->g[k][1] = g[k][1];    /* a new note: its envelope fades it in */
+            else if (!(v->ran & (1u << k)))
+                v->g[k][0] = v->g[k][1] = 0.0f;                /* (was not running: from 0) */
+            on[k] = s0 > 0.0f || s1 > 0.0f;
+            v->son[k] = s1;
+        }
+        for (o = 0; o < SY_NOSC; o++) {
+            op[o].warp = (uint8_t)(v->kind[o] & 0x7Fu);        /* the kind playing, until it has faded */
+            if (on[o] && !(v->ran & (1u << o)) && !v->fresh)
+                v->osc[o].fresh = 1;                           /* no pitch or position ramps from long ago */
+        }
+
+        /* FM: each oscillator's modulator from the other's block-start state, before either runs; a table being
+         * swapped takes its modulation down with its own fade */
+        for (o = 0; o < SY_NOSC; o++) {
+            uint32_t m = o ^ 1u;
+            if (op[o].warp == WARP_FM && on[o] && wt_tab[m].n && (wt_g[m][0] > 0.0f || wt_g[m][1] > 0.0f)) {
+                float s = wt_g[m][0], ds = (wt_g[m][1] - s) * (1.0f / (float)SY_BLK);
+                osc_modulator(&v->osc[m], &wt_tab[m], &op[m], pm[o], !on[m]);
+                if (s < 1.0f || ds != 0.0f)
+                    for (i = 0; i < SY_BLK; i++, s += ds)
+                        pm[o][i] = (int32_t)((float)pm[o][i] * s);
+                op[o].pm = pm[o];
+                op[o].pm_inc = op[m].inc1;
+            }
+        }
+
+        /* audio: the sources into the FILTER bus (fl fr) or DIRECT (dl dr), by the route playing */
+        for (i = 0; i < SY_BLK; i++)
+            fl[i] = fr[i] = dl[i] = dr[i] = 0.0f;
+        for (o = 0; o < SY_NOSC; o++) {
+            float s0 = wt_g[o][0] * (1.0f / 32768.0f), s1 = wt_g[o][1] * (1.0f / 32768.0f), g0[2], g1[2];
+            int dir = v->kind[o] >> 7;
+            if (!on[o] || (s0 <= 0.0f && s1 <= 0.0f) || !wt_tab[o].n)
+                continue;
+            for (i = 0; i < SY_BLK; i++)
+                ol[i] = orr[i] = 0;
+            osc_block(&v->osc[o], &wt_tab[o], &op[o], ol, orr);
+            for (i = 0; i < SY_BLK; i++) {                     /* (int32 -> float once, the gains next) */
+                x[i] = (float)ol[i];
+                y[i] = (float)orr[i];
+            }
+            g0[0] = v->g[o][0] * s0;
+            g0[1] = v->g[o][1] * s0;
+            g1[0] = g[o][0] * s1;
+            g1[1] = g[o][1] * s1;
+            voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, g0, g1);
+            ran |= 1u << o;
+        }
+        if (on[VS_SUB]) {
+            int dir = v->kind[VS_SUB] >> 7;
+            voice_sub(v, voice_inc(pitch + 12.0f * (float)sy_patch.p[SP_SUB_OCT]), v->kind[VS_SUB] & 0x7Fu,
+                      mod_get(off, SP_SUB_PW), x);
+            voice_mix(dir ? dl : fl, dir ? dr : fr, x, x, v->g[VS_SUB], g[VS_SUB]);
+            ran |= 1u << VS_SUB;
+        }
+        if (on[VS_NZ]) {
+            int dir = v->kind[VS_NZ] >> 7;
+            voice_noise(v, v->kind[VS_NZ] & 0x7Fu, sp_lin(SP_NZ_COLOR, mod_get(off, SP_NZ_COLOR)) * 0.001f,
+                        sp_n[SP_NZ_STEREO], x, y);
+            voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, v->g[VS_NZ], g[VS_NZ]);
+            ran |= 1u << VS_NZ;
+        }
+        memcpy(v->g, g, sizeof g);
+        v->ran = (uint8_t)ran;
+        for (k = 0; k < 4u; k++)                               /* a kind change takes effect once faded out */
+            if (v->son[k] <= 0.0f)
+                v->kind[k] = want[k];
+    }
+
+    /* the filter: off is MIX 0; switching it, or its type, fades it over 4 blocks the same way */
+    {
+        uint8_t wt = (uint8_t)sy_patch.p[SP_F_TYPE];
+        float f0, f1, t, m0, m1;
+        if (v->fresh) {
+            v->ftype = wt;
+            v->fon = sy_patch.p[SP_F_ON] ? 1.0f : 0.0f;
+        }
+        f0 = v->fon;
+        t = v->ftype == wt && sy_patch.p[SP_F_ON] ? 1.0f : 0.0f;
+        f1 = f0 < t ? sy_minf(t, f0 + VOICE_FADE) : sy_maxf(t, f0 - VOICE_FADE);
+        m0 = v->fresh ? mod_get(off, SP_F_MIX) * f1 : v->fmix;
+        m1 = mod_get(off, SP_F_MIX) * f1;
         if (m0 > 0.0f || m1 > 0.0f) {
             flt_par_t fp;
             float kt = mod_get(off, SP_F_KEY), wet[2][SY_BLK], dm = (m1 - m0) * (1.0f / (float)SY_BLK), m = m0;
-            fp.type = (uint8_t)sy_patch.p[SP_F_TYPE];
+            fp.type = v->ftype;
             fp.hz = sp_cut_hz(mod_get(off, SP_F_CUT)) * sy_exp2f(kt * (v->pitch - 60.0f) * (1.0f / 12.0f));
             fp.res = mod_get(off, SP_F_RES);
             fp.drive = mod_get(off, SP_F_DRIVE);
@@ -414,7 +454,7 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             fp.mix = 1.0f;
             memcpy(wet[0], fl, sizeof fl);
             memcpy(wet[1], fr, sizeof fr);
-            if (v->fmix <= 0.0f && !v->fresh)
+            if (f0 <= 0.0f && !v->fresh)
                 flt_note(&v->flt);                             /* switched on: from rest */
             flt_block(&v->flt, &fp, wet[0], wet[1]);
             for (i = 0; i < SY_BLK; i++, m += dm) {
@@ -422,6 +462,9 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
                 fr[i] += (wet[1][i] - fr[i]) * m;
             }
         }
+        if (f1 <= 0.0f)
+            v->ftype = wt;
+        v->fon = f1;
         v->fmix = m1;
     }
 

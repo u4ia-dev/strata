@@ -21,7 +21,7 @@ static volatile uint8_t sy_next_st;          /* 1: asked for; 2: the voices are 
 
 static float sy_mix_l[SY_BLK], sy_mix_r[SY_BLK];
 static float sy_vol;                         /* the volume at the end of the last block */
-static float sy_dc[2][2];                    /* the master's DC blocker: last input, last output */
+static float sy_dc[4][2];                    /* DC blockers, before and after the effects: last input, last output */
 static uint8_t sy_stack[SY_STACK], sy_nstack;   /* MONO / LEGATO: notes held, the last on top */
 static uint8_t sy_sustain;
 static uint32_t sy_uni_budget = SY_UNI_BUDGET;
@@ -68,19 +68,20 @@ static void sy_service(void)
     }
 }
 
-/* audio side, each block: a busy table's oscillator fades to 0 over a block, then lets go (quiet); a ready one
+/* audio side, each block: a busy table's oscillator fades to 0 over 4 blocks, then lets go (quiet); a ready one
  * fades back in */
 static void sy_table_fades(void)
 {
     uint32_t o;
     for (o = 0; o < SY_NOSC; o++) {
-        wt_g[o][0] = wt_g[o][1];
+        float g = wt_g[o][1];
+        wt_g[o][0] = g;
         if (wt_tab[o].busy) {
-            if (wt_g[o][0] <= 0.0f)
+            if (g <= 0.0f)
                 wt_tab[o].quiet = 1;
-            wt_g[o][1] = 0.0f;
+            wt_g[o][1] = sy_maxf(0.0f, g - VOICE_FADE);
         } else {
-            wt_g[o][1] = wt_tab[o].n ? 1.0f : 0.0f;
+            wt_g[o][1] = wt_tab[o].n ? sy_minf(1.0f, g + VOICE_FADE) : 0.0f;
         }
     }
 }
@@ -266,7 +267,7 @@ static void sy_all_sound_off(void)
     sy_all_notes_off();
     for (i = 0; i < SY_NVOICE; i++)
         if (sy_v[i].on && !sy_v[i].steal)
-            sy_v[i].steal = 1;
+            sy_v[i].steal = VOICE_STEAL_BLKS;
 }
 
 static void sy_bend(int32_t v14)                     /* 0..16383, 8192 centre */
@@ -369,6 +370,22 @@ static int sy_cpu(uint32_t load_q8)
 }
 
 /* ------------------------------------------------------------------------------------- the block --- */
+/* a 5 Hz DC blocker over a block, in place: y = x - x1 + R y1 (st: last input, last output) */
+static void sy_dcblock(float *x, float *st)
+{
+    float x1 = st[0], y1 = st[1];
+    uint32_t i;
+    for (i = 0; i < SY_BLK; i++) {
+        float y = x[i] - x1 + 0.99929f * y1;
+        x1 = x[i];
+        x[i] = y1 = y;
+    }
+    SY_FLUSH(x1);
+    SY_FLUSH(y1);
+    st[0] = x1;
+    st[1] = y1;
+}
+
 /* 32 frames of the synth: interleaved Q15 (int32) for audio.c */
 static void sy_patch_swap(void);
 static void sy_block(int32_t *out)
@@ -424,20 +441,14 @@ static void sy_block(int32_t *out)
         sy_mix_r[i] *= vol0;
     }
     sy_vol = vol1;
+    sy_dcblock(sy_mix_l, sy_dc[0]);                  /* no DC into the effects (warps, sync, FM make some) */
+    sy_dcblock(sy_mix_r, sy_dc[1]);
     fx_block(sy_mix_l, sy_mix_r);
-    for (i = 0; i < SY_BLK; i++) {                   /* the master: 5 Hz DC blocker, then Q15 */
-        float l = sy_mix_l[i], r = sy_mix_r[i];
-        float yl = l - sy_dc[0][0] + 0.99929f * sy_dc[0][1], yr = r - sy_dc[1][0] + 0.99929f * sy_dc[1][1];
-        sy_dc[0][0] = l;
-        sy_dc[0][1] = yl;
-        sy_dc[1][0] = r;
-        sy_dc[1][1] = yr;
-        out[2u * i] = (int32_t)(sy_clampf(yl, -1.0f, 1.0f) * 32767.0f);
-        out[2u * i + 1u] = (int32_t)(sy_clampf(yr, -1.0f, 1.0f) * 32767.0f);
-    }
-    for (k = 0; k < 2u; k++) {
-        SY_FLUSH(sy_dc[k][0]);
-        SY_FLUSH(sy_dc[k][1]);
+    sy_dcblock(sy_mix_l, sy_dc[2]);                  /* the master: none out of them either (TUBE makes some) */
+    sy_dcblock(sy_mix_r, sy_dc[3]);
+    for (i = 0; i < SY_BLK; i++) {
+        out[2u * i] = (int32_t)(sy_clampf(sy_mix_l[i], -1.0f, 1.0f) * 32767.0f);
+        out[2u * i + 1u] = (int32_t)(sy_clampf(sy_mix_r[i], -1.0f, 1.0f) * 32767.0f);
     }
 }
 
@@ -482,6 +493,24 @@ static void sy_init(void)
     sp_snap();
     for (i = 0; i < SY_NVOICE; i++)
         voice_init(&sy_v[i], i);
+    sy_last_pitch = 60.0f;                           /* (everything from scratch: the same events give the */
+    sy_age = 0;                                      /* same sound, run after run) */
+    sy_rseed = 0x2545F491u;
+    sy_alt = 0;
+    sy_bend_v = 0.0f;
+    sy_wheel = sy_at = 0;
+    sy_expr = 127;
+    sy_sustain = 0;
+    sy_nstack = 0;
+    sy_uni_budget = SY_UNI_BUDGET;
+    memset(&sy_g, 0, sizeof sy_g);
+    memset(sy_dc, 0, sizeof sy_dc);
+    memset(sy_glfo, 0, sizeof sy_glfo);
+    sy_glfo_v[0] = sy_glfo_v[1] = 0.0f;
+    sy_next_st = 0;
+    wt_build_o = 0xFF;
+    fx_lo = 0;
+    sy_tempo = 120.0f;
     for (i = 0; i < SY_NOSC; i++) {
         memset(&wt_tab[i], 0, sizeof wt_tab[i]);
         wt_tab[i].f = wt_pool[i * SY_NFRAME];

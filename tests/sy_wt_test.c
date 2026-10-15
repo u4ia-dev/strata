@@ -24,6 +24,8 @@ int main(int argc, char **argv)
     int worst = 0, all_bl = 1, all_dc = 1, all_guard = 1, all_peak = 1, all_lev = 1;
     double worst_rms = 0, worst_bl = 0, worst_lev = 0, ms_total = 0, ms_max = 0;
     t_name = "wt";
+    (void)wt_tab;                                  /* (the oscillators' tables: not used here) */
+    (void)wt_pool;
     if (argc < 2 || !(f = fopen(argv[1], "rb"))) {
         fprintf(stderr, "usage: sy_wt_test build/gen/strata_wt_ref.bin\n");
         return 2;
