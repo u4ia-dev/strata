@@ -66,10 +66,20 @@ static void wav_write(const char *path, const float *l, const float *r, uint32_t
 }
 
 /* ------------------------------------------------------------------------------------------- FFT --- */
-/* in-place complex FFT (double), n a power of two; re / im separate */
+/* in-place complex FFT (double), n a power of two up to 2^20; re / im separate */
+#define T_FFT_MAX (1u << 20)
 static void dfft(double *re, double *im, uint32_t n)
 {
+    static double *tc, *ts;
     uint32_t i, j, k, len;
+    if (!tc) {                                   /* twiddles of the largest size; smaller ones stride */
+        tc = malloc(T_FFT_MAX / 2 * sizeof *tc);
+        ts = malloc(T_FFT_MAX / 2 * sizeof *ts);
+        for (i = 0; i < T_FFT_MAX / 2; i++) {
+            tc[i] = cos(-2.0 * M_PI * i / T_FFT_MAX);
+            ts[i] = sin(-2.0 * M_PI * i / T_FFT_MAX);
+        }
+    }
     for (i = 1, j = 0; i < n; i++) {
         uint32_t bit = n >> 1;
         for (; j & bit; bit >>= 1)
@@ -81,16 +91,15 @@ static void dfft(double *re, double *im, uint32_t n)
         }
     }
     for (len = 2; len <= n; len <<= 1) {
-        double a = -2.0 * M_PI / len;
-        for (k = 0; k < len / 2; k++) {
-            double c = cos(a * k), s = sin(a * k);
-            for (i = k; i < n; i += len) {
-                double *ar = re + i, *ai = im + i, *br = re + i + len / 2, *bi = im + i + len / 2;
+        uint32_t st = T_FFT_MAX / len, h = len / 2;
+        for (i = 0; i < n; i += len)
+            for (k = 0; k < h; k++) {
+                double c = tc[k * st], s = ts[k * st];
+                double *ar = re + i + k, *ai = im + i + k, *br = re + i + k + h, *bi = im + i + k + h;
                 double tr = *br * c - *bi * s, ti = *br * s + *bi * c;
                 *br = *ar - tr; *bi = *ai - ti;
                 *ar += tr; *ai += ti;
             }
-        }
     }
 }
 

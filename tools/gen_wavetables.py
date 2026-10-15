@@ -17,8 +17,10 @@ builds each table itself when it is loaded (firmware/src/sy_wtgen.c), from what 
 
 The math is the C generator's, written once more here; docs/ARCHITECTURE.md §6 has the format:
   a frame is a single cycle given by its harmonics 1..256 (cosine and sine amplitudes A_k, B_k, no DC);
-  level L keeps harmonics 1..256 >> L and is rendered at max(32, 4 * (256 >> L)) samples, plus a guard sample
-  (a copy of sample 0); a table is normalised so its largest sample over all frames and levels is 0.95 of
+  level L keeps harmonics 1..256 >> L and is rendered at LEV_N[L] samples (4x oversampled at levels 0 and 1, 8x at
+  2 and 3, 16x at 4 and 5, 32x above: the images of linear interpolation fall with the oversampling, and the
+  small levels, where few harmonics make each one loud, can afford more), plus a guard sample (a copy of sample
+  0); a table is normalised so its largest sample over all frames and levels is 0.95 of
   full scale (each frame is first stored at its own full scale, then scaled down by its peak / the table's).
 Families either give the harmonics directly (spectral) or render the cycle at 2048 points, each the mean of 4
 sub-samples, and take them from its FFT (time domain).
@@ -34,7 +36,7 @@ import numpy as np
 
 NH = 256                                  # harmonics at level 0
 NLEV = 9
-LEV_N = [max(32, 4 * (NH >> lv)) for lv in range(NLEV)]          # 1024 512 256 128 64 32 32 32 32
+LEV_N = [1024, 512, 512, 256, 256, 128, 128, 64, 32]               # 4x 4x 8x 8x 16x 16x 32x 32x 32x
 LEV_OFF = [sum(n + 1 for n in LEV_N[:lv]) for lv in range(NLEV)]
 FRAME = sum(n + 1 for n in LEV_N)                                  # 2121 int16
 NT = 2048                                 # time-domain render: points a cycle
@@ -44,7 +46,8 @@ SR = 44117.647                            # the FM-1's rate (docs WAVs)
 
 # families (sy_wtgen.c WTF_*)
 ANALOG, PWM, ADDITIVE, BANDS, FORMANT, CHAOS, SYNC, FM, FOLD, PD, DIGITAL, KEYS = range(12)
-TAPER = 1                                 # flag: the top octave of every level tapered (bright tables)
+TAPER = 1                                 # flag: the top octave of every level tapered to -12 dB: the bright tables
+                                          # (flat spectra up to the top alias most; tests/sy_osc_test.c classes them)
 
 CATS = ["ANALOG", "ADDITIV", "VOCAL", "SPECTRL", "SYNC", "FM", "FOLD", "PHASE", "DIGITAL"]
 
@@ -163,21 +166,21 @@ TABLES = [
     T("TRI TO SAW", "ANALOG", ANALOG, p0=sweep(64, 128), p1=fixed(255)),
     T("SAW TO SQR", "ANALOG", ANALOG, p0=sweep(128, 191), p1=fixed(255)),
     T("SINE TO TRI", "ANALOG", ANALOG, p0=sweep(0, 64), p1=fixed(255)),
-    T("PULSE WIDTH", "ANALOG", PWM, p0=sweep(0, 250), p1=fixed(255)),
+    T("PULSE WIDTH", "ANALOG", PWM, p0=sweep(0, 250), p1=fixed(255), flags=TAPER),
     T("SOFT PULSE", "ANALOG", PWM, p0=sweep(0, 220), p1=fixed(150)),
     T("DARK SAW", "ANALOG", ANALOG, p0=fixed(128), p1=sweep(0, 150)),
     # ADDITIVE: harmonic series with tilt, odd / even balance and comb notches (organs, keys, pads)
-    T("ODD TILT", "ADDITIV", ADDITIVE, p0=sweep(255, 0), p1=fixed(0)),
-    T("ALL TILT", "ADDITIV", ADDITIVE, p0=sweep(255, 0), p1=fixed(128)),
+    T("ODD TILT", "ADDITIV", ADDITIVE, p0=sweep(255, 40), p1=fixed(0), flags=TAPER),
+    T("ALL TILT", "ADDITIV", ADDITIVE, p0=sweep(255, 40), p1=fixed(128), flags=TAPER),
     T("ODD TO EVEN", "ADDITIV", ADDITIVE, p0=fixed(90), p1=sweep(0, 255)),
-    T("COMB SWEEP", "ADDITIV", ADDITIVE, p0=fixed(60), p1=fixed(128), p2=fixed(255), p3=sweep(0, 255)),
-    T("COMB DEPTH", "ADDITIV", ADDITIVE, a1=1, p0=fixed(40), p1=fixed(128), p2=sweep(0, 255), p3=fixed(60)),
-    T("PHASED SAW", "ADDITIV", ADDITIVE, a1=2, p0=sweep(160, 0), p1=fixed(128)),
+    T("COMB SWEEP", "ADDITIV", ADDITIVE, p0=fixed(60), p1=fixed(128), p2=fixed(255), p3=sweep(0, 255), flags=TAPER),
+    T("COMB DEPTH", "ADDITIV", ADDITIVE, a1=1, p0=fixed(40), p1=fixed(128), p2=sweep(0, 255), p3=fixed(60), flags=TAPER),
+    T("PHASED SAW", "ADDITIV", ADDITIVE, a1=2, p0=sweep(160, 40), p1=fixed(128), flags=TAPER),
     # SPECTRAL: bands of harmonics, seeded spectra and designed keyframes (pads, textures)
-    T("BAND SWEEP", "SPECTRL", BANDS, a1=2, p0=sweep(0, 255), p1=fixed(40), p2=fixed(180)),
-    T("TWIN BANDS", "SPECTRL", BANDS, a1=2, a0=1, p0=sweep(60, 220), p1=fixed(30), p2=fixed(120), p3=fixed(160)),
-    T("WIDE BAND", "SPECTRL", BANDS, a1=2, a0=2, p0=sweep(40, 200), p1=fixed(160), p2=fixed(255)),
-    T("BAND SPREAD", "SPECTRL", BANDS, a1=2, a0=3, p0=fixed(150), p1=fixed(50), p2=fixed(200), p3=sweep(0, 255)),
+    T("BAND SWEEP", "SPECTRL", BANDS, a1=2, p0=sweep(0, 200), p1=fixed(40), p2=fixed(180), flags=TAPER),
+    T("TWIN BANDS", "SPECTRL", BANDS, a1=2, a0=1, p0=sweep(40, 180), p1=fixed(30), p2=fixed(120), p3=fixed(160), flags=TAPER),
+    T("WIDE BAND", "SPECTRL", BANDS, a1=2, a0=2, p0=sweep(40, 160), p1=fixed(160), p2=fixed(255), flags=TAPER),
+    T("BAND SPREAD", "SPECTRL", BANDS, a1=2, a0=3, p0=fixed(130), p1=fixed(50), p2=fixed(200), p3=sweep(0, 255), flags=TAPER),
     T("CHAOS A", "SPECTRL", CHAOS, a0=1, p0=sweep(0, 255), p1=fixed(100), p2=fixed(200)),
     T("CHAOS B", "SPECTRL", CHAOS, a0=2, p0=sweep(0, 255), p1=fixed(40), p2=fixed(255)),
     T("DUST", "SPECTRL", CHAOS, a0=3, p0=sweep(0, 255), p1=fixed(30), p2=sweep(20, 90), flags=TAPER),
@@ -185,9 +188,9 @@ TABLES = [
                                          ((8, 8, 8, 0, 0, 0, 0), (8, 6, 8, 4, 0, 0, 0), (8, 8, 8, 8, 6, 4, 4),
                                           (6, 8, 4, 8, 8, 6, 8))]),
     T("BELLS", "SPECTRL", KEYS, keys=[kf_bell(s) for s in (1.0, 0.6, 0.3, 0.0)]),
-    T("GLASS", "SPECTRL", KEYS, keys=[kf_glass(n) for n in range(4)]),
+    T("GLASS", "SPECTRL", KEYS, keys=[kf_glass(n) for n in range(4)], flags=TAPER),
     T("STRINGS", "SPECTRL", KEYS, keys=[kf_strings(b) for b in (0.0, 0.3, 0.7, 1.0)]),
-    T("HOLLOW", "SPECTRL", KEYS, keys=[kf_hollow(c) for c in (1.0, 2.5, 4.0, 5.5)]),
+    T("HOLLOW", "SPECTRL", KEYS, keys=[kf_hollow(c) for c in (1.0, 2.5, 4.0, 5.5)], flags=TAPER),
     # VOCAL: formant envelopes over a buzz, A E I O U (talking basses, choirs)
     T("VOWELS", "VOCAL", FORMANT, p0=sweep(0, 255), p1=fixed(128), p2=fixed(160)),
     T("VOWEL SHIFT", "VOCAL", FORMANT, p0=fixed(0), p1=sweep(0, 255), p2=fixed(160)),
@@ -195,16 +198,16 @@ TABLES = [
     T("BRIGHT A-I", "VOCAL", FORMANT, p0=sweep(0, 128), p1=fixed(170), p2=fixed(230)),
     T("CHOIR", "VOCAL", KEYS, keys=[kf_formant(v, 1.2, 11 + v, 0.15) for v in (4, 3, 0, 1)]),
     # SYNC: hard sync, the slave's ratio swept 1 .. 16 (sync leads)
-    T("SYNC SAW", "SYNC", SYNC, a0=0, p0=sweep(0, 255)),
-    T("SYNC SQUARE", "SYNC", SYNC, a0=1, p0=sweep(0, 255)),
+    T("SYNC SAW", "SYNC", SYNC, a0=0, p0=sweep(0, 255), flags=TAPER),
+    T("SYNC SQUARE", "SYNC", SYNC, a0=1, p0=sweep(0, 255), flags=TAPER),
     T("SYNC SINE", "SYNC", SYNC, a0=2, p0=sweep(0, 255)),
     T("SYNC TRI", "SYNC", SYNC, a0=3, p0=sweep(0, 255)),
     # FM: one modulator, the index swept (keys, bells, basses)
     T("FM 1:1", "FM", FM, a0=1, a1=1, p0=sweep(0, 255)),
     T("FM 1:2", "FM", FM, a0=1, a1=2, p0=sweep(0, 255)),
-    T("FM 1:3", "FM", FM, a0=1, a1=3, p0=sweep(0, 255)),
-    T("FM 2:7", "FM", FM, a0=2, a1=7, p0=sweep(0, 200)),
-    T("FM 1:5 BELL", "FM", FM, a0=1, a1=5, p0=sweep(0, 160)),
+    T("FM 1:3", "FM", FM, a0=1, a1=3, p0=sweep(0, 255), flags=TAPER),
+    T("FM 2:7", "FM", FM, a0=2, a1=7, p0=sweep(0, 200), flags=TAPER),
+    T("FM 1:5 BELL", "FM", FM, a0=1, a1=5, p0=sweep(0, 160), flags=TAPER),
     # FOLD: wavefolders driven harder across the table (aggressive basses and leads)
     T("FOLD SINE", "FOLD", FOLD, a0=0, a1=0, p0=sweep(0, 255)),
     T("FOLD TRI", "FOLD", FOLD, a0=1, a1=1, p0=sweep(0, 255), flags=TAPER),
@@ -213,9 +216,9 @@ TABLES = [
     # PHASE: phase distortion, bent cosines and resonant windows (plucks, keys, basses)
     T("PD SAW", "PHASE", PD, a0=0, p0=sweep(0, 255)),
     T("PD SQUARE", "PHASE", PD, a0=1, p0=sweep(0, 255)),
-    T("RESO SAW", "PHASE", PD, a0=2, p0=sweep(0, 255)),
-    T("RESO TRI", "PHASE", PD, a0=3, p0=sweep(0, 255)),
-    T("RESO TRAP", "PHASE", PD, a0=4, p0=sweep(0, 255)),
+    T("RESO SAW", "PHASE", PD, a0=2, p0=sweep(0, 255), flags=TAPER),
+    T("RESO TRI", "PHASE", PD, a0=3, p0=sweep(0, 255), flags=TAPER),
+    T("RESO TRAP", "PHASE", PD, a0=4, p0=sweep(0, 255), flags=TAPER),
     # DIGITAL: amplitude and time quantised (lo-fi, arps)
     T("CRUSH SINE", "DIGITAL", DIGITAL, a0=0, p0=sweep(0, 255), flags=TAPER),
     T("CRUSH SAW", "DIGITAL", DIGITAL, a0=1, p0=sweep(0, 230), flags=TAPER),

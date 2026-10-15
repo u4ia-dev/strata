@@ -8,7 +8,7 @@
  * Each level is then the inverse FFT of its harmonics at its own size. A frame is first stored at its own full
  * scale (0.95), and when the last one is done every frame is scaled by its peak / the table's peak: the table's
  * largest sample over all frames and levels is 0.95 of full scale and the frames keep their relative levels.
- * Main loop only (12.5 KiB of pool scratch). One frame a call of wg_step: the UI stays responsive. */
+ * Main loop only (15.7 KiB of pool scratch). One frame a call of wg_step: the UI stays responsive. */
 typedef struct {
     uint8_t family, frames, a0, a1;   /* family (WTF_*), frames 1..16, two options */
     uint8_t p[4][2];                  /* four parameters, start and end across the frames, 0..255 */
