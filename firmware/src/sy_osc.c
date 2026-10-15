@@ -207,49 +207,57 @@ static void osc_uni_gains(osc_v_t *o, uint32_t n, float blend, float width)
 }
 
 /* ---------------------------------------------------------------------------------------- warps --- */
+/* the phase a warp reads at output phase p (0..1), and its steepest slope: what the oscillators' map holds
+ * (osc_warp_map) and what the screen's 2D view draws (sy_ui_graph.c). FM is no map (q = p) */
+static float osc_warp_q(uint32_t mode, float amt, float p, float *slope)
+{
+    switch (mode) {
+    case WARP_SYNC: {                                  /* the slave at r times the master: 1 .. 15 */
+        float r = sy_exp2f(3.9069f * amt), x = p * r;
+        *slope = r;
+        return x - (float)sy_floori(x);
+    }
+    case WARP_BENDP:
+    case WARP_BENDM: {                                 /* symmetric about the centre: slow there, fast at the ends */
+        float g = sy_exp2f(3.0f * amt), k = mode == WARP_BENDP ? g : 1.0f / g;
+        float u = sy_absf(2.0f * p - 1.0f), v = u / (u + (1.0f - u) * k);
+        *slope = g;
+        return 0.5f + (p < 0.5f ? -0.5f : 0.5f) * v;
+    }
+    case WARP_PWM: {                                   /* the cycle squeezed into w, its last sample held */
+        float w = 1.0f - (1.0f - 1.0f / OSC_SMAX) * amt;
+        *slope = 1.0f / w;
+        return sy_minf(p / w, 1.0f);
+    }
+    case WARP_ASYMP:
+    case WARP_ASYMM: {
+        float g = sy_exp2f(3.0f * amt), k = mode == WARP_ASYMP ? g : 1.0f / g;
+        *slope = g;
+        return p / (p + (1.0f - p) * k);
+    }
+    case WARP_MIRROR: {                                /* forward to the fold point, back after it */
+        float m = 0.5f - (0.5f - 1.0f / OSC_SMAX) * amt;
+        *slope = 1.0f / m;
+        return p < m ? p / m : (1.0f - p) / (1.0f - m);
+    }
+    }
+    *slope = 1.0f;
+    return p;
+}
+
 static void osc_warp_map(osc_v_t *o, uint32_t mode, float amt)
 {
     uint32_t i;
     float slope = 1.0f;
     for (i = 0; i <= OSC_NMAP; i++) {
-        float p = (float)i * (1.0f / (float)OSC_NMAP), q = p;
-        switch (mode) {
-        case WARP_SYNC: {                              /* the slave at r times the master: 1 .. 15 */
+        if (mode == WARP_SYNC) {                       /* (in fixed point: the wraps exact) */
             float r = sy_exp2f(3.9069f * amt);
             uint32_t rq = (uint32_t)(r * 65536.0f);
             o->map[i] = (uint32_t)(((uint64_t)i << 26) * rq >> 16);
             slope = r;
             continue;
         }
-        case WARP_BENDP:
-        case WARP_BENDM: {                             /* symmetric about the centre: slow there, fast at the ends */
-            float g = sy_exp2f(3.0f * amt), k = mode == WARP_BENDP ? g : 1.0f / g;
-            float u = sy_absf(2.0f * p - 1.0f), v = u / (u + (1.0f - u) * k);
-            q = 0.5f + (p < 0.5f ? -0.5f : 0.5f) * v;
-            slope = g;
-            break;
-        }
-        case WARP_PWM: {                               /* the cycle squeezed into w, its last sample held */
-            float w = 1.0f - (1.0f - 1.0f / OSC_SMAX) * amt;
-            q = sy_minf(p / w, 1.0f);
-            slope = 1.0f / w;
-            break;
-        }
-        case WARP_ASYMP:
-        case WARP_ASYMM: {
-            float g = sy_exp2f(3.0f * amt), k = mode == WARP_ASYMP ? g : 1.0f / g;
-            q = p / (p + (1.0f - p) * k);
-            slope = g;
-            break;
-        }
-        case WARP_MIRROR: {                            /* forward to the fold point, back after it */
-            float m = 0.5f - (0.5f - 1.0f / OSC_SMAX) * amt;
-            q = p < m ? p / m : (1.0f - p) / (1.0f - m);
-            slope = 1.0f / m;
-            break;
-        }
-        }
-        o->map[i] = osc_phase(q);
+        o->map[i] = osc_phase(osc_warp_q(mode, amt, (float)i * (1.0f / (float)OSC_NMAP), &slope));
     }
     o->mslope = slope;
     o->c_dclv = 0xFF;
