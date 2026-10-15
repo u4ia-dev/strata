@@ -16,10 +16,14 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 | `GOLDEN_RAW=DIR build/host/sy_engine_test`, then `tests/sy_golden_diff.py A B` | the golden renders as float before (A) and after (B) a change, and how far it moved them (dB against the sound) |
 | `tools/costprobe/sy_cost.sh` | the target compiler's instructions in each kernel's inner loop (§4.1); needs the JieLi toolchain |
 | `tools/costprobe/sy_dyn.sh` | the cost model: the whole engine's instructions a sample on the target in nine scenarios, and the CPU budget (§4.2) |
+| `tests/sy_wasm.sh` | the host tests built as WebAssembly and run under Node (§6.1); needs Emscripten (`~/emsdk`) and Node 18 |
+| `web/strata/build.sh`, then `node web/strata/wb_test.mjs` | the workbench page into `build/strata/`, and its test (§6.2) |
+| `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` | Strata on the simulated FM-1 into `build/emu_strata/`, and its test (§6.3); `node web/emu/strata_shot.mjs` writes the screen as PNG into `build/emu_strata/shots/` |
+| `python3 -m http.server -d build/emu_strata 8000` | the emulator in a browser, at `http://localhost:8000` |
 
 ## 2. Verified on host
 
-78 checks in five programs (`tests/sy_*.c`), all passing.
+81 checks in five programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -56,11 +60,14 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 49 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 52 checks; `sy_smoke`, 2)
 
 - **Parameters and presets**: 166 parameters; a patch packs into 387 bytes and back unchanged; an older patch (fewer
   values) loads with defaults; out-of-range values clamp; a foreign blob is refused; the values read as stored
   (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change at once, without a patch load.
+- **Values as text** (`sy_text.c`, what the knob cards and the workbench show): every list parameter names each of its
+  values; every value of every parameter formats, in under 16 characters, with nothing unknown; spot values (the
+  cutoff, times, levels, lists, destinations) read as expected.
 - **Matrix**: offsets add, 100 % spans the range, a macro can drive a macro, global destinations take the newest voice's
   sources.
 - **Voices**: POLY steals the oldest note that is not the lowest, VOICES limits, sustain, MONO (retrigger, back to the
@@ -215,7 +222,53 @@ of those sounds).
   CC changed nothing until the next preset. The smoother now refreshes every changed value (the smoothed ones glide);
   a test changes them while playing.
 
-## 6. Needs hardware test
+## 6. In WebAssembly and in the emulator (Phase 3)
+
+The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. Nothing here has
+been opened in a browser: the pages are **not browser-tested** until someone plays them.
+
+### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
+
+The five host programs (§2) built with `emcc` and run under Node: 81 checks, all passing, the golden renders included.
+The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
+multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
+workbench and the emulator sound as the host-verified engine does.
+
+### 6.2 The workbench (`web/strata`, `wb_test.mjs`, 5 checks)
+
+One HTML file: the DSP in an AudioWorklet, every control built from the parameter table and shown with `sp_text`, the
+on-screen keys, the computer keyboard and Web MIDI, the test sounds and INIT, a patch as a copyable code, a scope. The
+test drives its module's exports as the page does: no imports; every test sound plays the engine test's phrase bit for
+bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT) and a foreign one is refused; a load is
+taken, a second one held while it fades (2 quanta), then played as sent; values as text.
+
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 12 checks)
+
+`sy_app.c` with the engine, Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after
+Felucca's): the clock, the audio halves as the DMA asks for them, the key matrix and its LEDs, the 240 × 240 screen,
+an erased flash image. Not simulated: USB, TRS MIDI, the console, the battery, and time within an audio half (the clock
+moves a millisecond at a time, so the screen shows `cpu --` there rather than a load). **Verified in emulator**, under
+Node:
+
+| Check | Result |
+| --- | --- |
+| The module | no imports (the worklet gives it none) |
+| Boot | draws (79 colours), silent before a key; the first page OSC A, the sound SUPERSAW |
+| A key | plays (peak 0.101, one voice); its release ends it (no voice after 1.5 s) |
+| LEDs | the key held and the page's family button (EDIT) lit |
+| KNOB 2 | turns the page's second parameter, the table (1 → 4 for three detents) |
+| FX, twice | DRIVE, then CHORUS (a family button cycles its sections) |
+| SELECT, PRESETS | the next page; the next sound (PLUCK) |
+| Web MIDI | a note plays and its note-off ends it |
+| MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
+| Determinism | the same input twice: the same sound, bit for bit |
+
+The screen was checked by eye from `strata_shot.mjs`'s PNGs (the header, the four knob cards with their values and
+gauges, the footer). **A bug the test found**: the table's CC 0 means "no CC", so a CC 0 message (bank select) set
+the first parameter without one (OSC A's ON); the lookup now skips CC 0, and the lookup before the fix fails the
+check.
+
+## 7. Needs hardware test
 
 - The instruction rate of this engine's float code, the cost of a float divide, the instruction cache's effect: the
   BENCH page (first integration build) times each kernel and the whole engine with the 24 MHz timer.
@@ -223,3 +276,7 @@ of those sounds).
 - A table's build time (§2.1) and the gap it leaves when a table or a preset changes.
 - The codec's output: levels, the −6 dBFS ceiling, DC at the jack.
 - Everything the CPU guard does under a real load.
+- The app on the device (after integration): the audio interrupt with its event rings, the load it reports, and the
+  keys' latency while the screen redraws. The skeleton redraws the whole screen on any change (~77 ms on the panel by
+  Phase 0's figure) and reads the keys in the main loop, so a key could wait that long; the UI phase draws only what
+  changed.

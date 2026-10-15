@@ -2,7 +2,7 @@
 // Copyright (C) 2026 brandonmbarone
 // STRATA on the simulated FM-1 (build/emu_strata/strata.wasm, web/emu/strata_web.c) in Node, driven as the page and
 // the worklet drive it: no imports; it boots and draws; a key plays and its release ends; a knob turns its parameter
-// on the page; a family button shows its section; PRESETS changes the sound (faded, named); Web MIDI plays, and a
+// on the page; a family button shows its section; PRESETS changes the sound (its name); Web MIDI plays, and a
 // CC sets the parameter it is the default of (CC 0 none); the LEDs show the key held and the page's button; the same
 // input twice gives the same sound.
 //   node web/emu/strata_emu_test.mjs [build/emu_strata/strata.wasm]      (from the repo root, after build_strata.sh)

@@ -10,10 +10,17 @@ The numbers behind every choice are in [PHASE0.md](PHASE0.md). Status words used
 **verified in emulator**, **needs hardware test**. Nothing in this document has run on an FM-1 yet.
 
 **After Phase 2** (the DSP core and its host harness): the engine described in §4–§14 is written (`firmware/src/sy_*`)
-and **verified on host** (78 checks, [TESTING.md](TESTING.md)). Where the build differs from the plan below, the text
+and **verified on host** (81 checks, [TESTING.md](TESTING.md)). Where the build differs from the plan below, the text
 says so. Two findings change the plan: the whole engine costs well over what Phase 0 assumed (after an optimisation
 pass, eight voices of two oscillators and a filter fit one core at 205 instructions a µs, unison with every effect does
 not: §13, TESTING.md §4), and the delay went to 750 ms a side so that the pool fits beside the screen's canvas (§20).
+
+**After Phase 3** (the emulator and WebAssembly): the engine built as WebAssembly passes the same 81 checks under Node
+and plays the test sounds bit for bit as the host build does; a browser workbench plays the DSP with every parameter
+(`web/strata`); and the app skeleton `sy_app.c` runs on Felucca's simulated FM-1 (`web/emu`), **verified in emulator**
+(12 checks): the audio interrupt with its event rings, MIDI in, the parameters four to a page, the family buttons, the
+starter sounds, the LEDs and a placeholder screen (TESTING.md §6). Nothing is built for the FM-1 yet: that is
+integration (Phase 6).
 
 Contents: 1 constraints, 2 source layout, 3 real-time model, 4 signal flow, 5 number formats, 6 wavetables,
 7 oscillators, 8 sub and noise, 9 filter, 10 envelopes and LFOs, 11 modulation, 12 parameters, 13 voices and the
@@ -39,7 +46,12 @@ The DSP files carry the prefix `sy_` (Felucca's `storage.c` already uses `st_`);
 and Phase 2 built: `sy_core.h` (sizes, rate, math), `sy_wt.c`, `sy_wtgen.c`, `sy_param.c` (the parameter table and
 the preset format), `sy_osc.c`, `sy_env.c`, `sy_lfo.c`, `sy_mod.c`, `sy_filter.c`, `sy_voice.c` (sources, routing, a
 voice's block), `sy_fx.c` and `sy_engine.c` (notes, allocation, the unison budget, the CPU guard, the block, patch
-changes, table builds); tests in `tests/sy_*`.
+changes, table builds); tests in `tests/sy_*`. Phase 3 added `sy_text.c` (a value as its unit shows it, for the knob
+cards and the workbench), `sy_sounds.h` (the eight starter sounds, until Phase 5's factory presets) and `sy_app.c`
+(the app around the engine on Felucca's HAL, `panel.c` and `gfx.c`: the audio interrupt, the event rings, MIDI in, the
+pages, the LEDs, a placeholder screen); `strata.c`, the unit that includes Felucca's platform and `sy_app.c`, comes
+with integration. In the browser: `web/strata` (the workbench: the DSP alone) and `web/emu/strata_web.c` (the app on
+the simulated FM-1).
 
 | Kept from Felucca (unchanged where possible, so upstream fixes merge) | Replaced or new in Strata |
 | --- | --- |
@@ -57,8 +69,8 @@ the performance FX layer, the SAMPLE/GRAIN sample sets (the stretch tier may bri
 (Strata's own editor is stretch). Copyright headers of moved code stay as they are; new files carry Strata's.
 
 The DSP files (`st_wt`, `st_wtgen`, `st_osc`, `st_voice`, `st_env`, `st_lfo`, `st_mod`, `st_alloc`, `st_fx`, `st_param`,
-`st_patch`) use no HAL and no globals of the UI. The same sources build three ways: the FM-1 image (JieLi clang), the
-host harness (gcc, `tests/`) and the browser emulator (emcc, `web/emu`).
+`st_patch`) use no HAL and no globals of the UI. The same sources build four ways: the FM-1 image (JieLi clang), the
+host harness (gcc, `tests/`), the browser emulator (emcc, `web/emu`) and the workbench (emcc, `web/strata`).
 
 ## 3. Real-time model
 
@@ -73,7 +85,8 @@ main loop  (~60 frames/s)     UI input and drawing, wavetable builds, storage, U
 ```
 
 - **Events** reach the voices only at block starts (0.73 ms granularity), as in Felucca. Panel keys and MIDI share one
-  path.
+  path: two rings with one producer each (the panel's from the main loop, MIDI's), which the audio interrupt drains
+  before each block (`sy_app.c`).
 - **Main loop to ISR.** The UI never touches voice state. It writes the patch's parameter values (16-bit stores, atomic on
   this core) and posts commands (note panic, patch swap, table swap) into a small single-producer ring the ISR drains at
   a block start. A parameter written mid-block is picked up at the next block and smoothed (§12).
@@ -414,6 +427,10 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
 
 ## 17. User interface (draft; CONTROLS.md is the reference once the UI phase is done)
 
+Phase 3's skeleton (`sy_app.c`) is a placeholder for testing, not this design: the parameter table four to a page (a
+header, four knob cards with a value and a gauge, a footer), the family buttons cycling their sections, SELECT the
+pages, PRESETS the starter sounds, OCT− / OCT+. Phase 4 builds what follows.
+
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
 ghosted, the filter's response curve with the cutoff and resonance, the envelope's shape with a moving dot per voice, the
@@ -462,8 +479,10 @@ what it found: [TESTING.md](TESTING.md). The plan:
 | Cost | per-kernel listing counts from the target build (`tools/costprobe/sy_cost.sh`), and the whole engine's on the target by the cost model (`sy_dyn.sh`: the listing weighed by the host's line counts) |
 | Units | parameter table, matrix, allocation and stealing, glide, storage round trip and migration, flash allow-list |
 
-The emulator (`web/emu`, extended from Felucca's) runs the whole firmware in a browser for the UI. Felucca's
-platform tests (storage, OTA, loader, USB, MIDI parser, input) keep running.
+The emulator (`web/emu`: Felucca's page and worklet, with Strata's glue `strata_web.c`) runs the app on a simulated
+FM-1 in a browser; `strata_emu_test.mjs` drives it under Node and `strata_shot.mjs` writes its screen as PNG. The engine
+also builds as WebAssembly for the host tests (`tests/sy_wasm.sh`) and for the workbench (`web/strata`, `wb_test.mjs`).
+Felucca's platform tests (storage, OTA, loader, USB, MIDI parser, input) keep running.
 
 **On the device** (needs your go-ahead, after a full backup): a BENCH page times each kernel with TIMER4 and reports
 the clock and instructions/µs, replacing the Phase 0 assumptions in this document.
