@@ -6,7 +6,9 @@ source line) weighed by how often the host ran that line (gcov, tools/costprobe/
 work, not a measurement of the device's time (the BENCH page will be that):
 
   * an instruction counts its line's executions; one outside every loop of its target function at most once a call
-    of that function (code the target hoisted, unrolled or set up before a loop);
+    of that function (code the target hoisted, unrolled or set up before a loop), one inside a loop at most as often
+    as that loop's back edge (a loop's set-up code carries the loop's line). The listing is best compiled with
+    -fno-unroll-loops (sy_dyn.sh does): an unrolled loop's copies would each take the whole loop's count;
   * code inlined from a function called in several places (the call sites read from the sources, a macro's use
     one): gcov counts its lines over every site, so each inlined copy takes its share through the nearest
     instruction before it of a function that calls it: that one's weight x (this line's count / the function's
@@ -15,7 +17,9 @@ work, not a measurement of the device's time (the BENCH page will be that):
     keeps what the inlined ones do not account for;
   * calls the listing makes to code it does not show (memset, memcpy) are counted apart.
 
-  sy_dyncount.py LISTING_G.s GCOV.json BLOCKS [--top N] [--json OUT]       (tools/costprobe/sy_dyn.sh runs it)
+  sy_dyncount.py LISTING_G.s GCOV.json BLOCKS [--top N] [--json OUT] [--lines [FUNC]]
+      (tools/costprobe/sy_dyn.sh runs it; --lines: the heaviest source lines, of FUNC if given; DYN_DEBUG=FUNC in
+      the environment prints FUNC's weighed instructions)
 """
 import json
 import os
@@ -30,6 +34,7 @@ IDENT_CALL = re.compile(r"\b([A-Za-z_][A-Za-z_0-9]*)\s*\(")
 # target functions that are the probe's wrappers of an engine function (sy_probe.c): their calls are its calls
 ALIAS = {"probe_engine": "sy_block", "probe_voice": "voice_block", "probe_fx": "fx_block"}
 DEBUG = os.environ.get("DYN_DEBUG")                   # a source function: each of its weighed instructions
+LINES = {}                                            # (file, line, source function, target function): weight
 
 
 def parse_listing(path):
@@ -200,6 +205,7 @@ def weigh(funcs, counts, owner, calls, callers, sites):
     tot = slots = 0.0
     unmapped = 0
     weights = {}
+    LINES.clear()
     for tf, items in funcs.items():
         if tf.startswith("probe_") and tf not in ALIAS:
             continue
@@ -231,6 +237,8 @@ def weigh(funcs, counts, owner, calls, callers, sites):
             tot += w
             slots += 0.0 if text.endswith("#") else w
             per_src[src] = per_src.get(src, 0.0) + w
+            lk = (it[3], it[4], src, tf)
+            LINES[lk] = LINES.get(lk, 0.0) + w
             per_tgt[tf] = per_tgt.get(tf, 0.0) + w
             m = re.match(r"call\s+([A-Za-z_][A-Za-z_0-9]*)$", text)
             if m and (m.group(1) in ("memset", "memcpy", "memcmp") or m.group(1).startswith("__")):
@@ -255,6 +263,11 @@ def main(argv):
     print(f"  {tot / n:8.1f} instructions a sample ({slots / n:.1f} issue slots), {tot / blocks:.0f} a block")
     for name, w in sorted(per_src.items(), key=lambda x: -x[1])[:top]:
         print(f"      {w / n:8.1f}  {name}")
+    if "--lines" in argv:                             # the heaviest source lines (of one function, or all)
+        only = argv[argv.index("--lines") + 1] if argv.index("--lines") + 1 < len(argv) else ""
+        rows = [(w, k) for k, w in LINES.items() if not only or only in (k[2], k[3])]
+        for w, (fl, ln, src, tf) in sorted(rows, reverse=True)[:top]:
+            print(f"      {w / n:8.1f}  {fl}:{ln}  ({src} in {tf})")
     for name, w in sorted(libcalls.items(), key=lambda x: -x[1]):
         print(f"      calls to {name}: {w / blocks:.2f} a block (their bodies not counted)")
     if out:

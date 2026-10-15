@@ -20,7 +20,10 @@ void *memcpy(void *d, const void *s, unsigned n);
 #include "../../firmware/src/sy_fx.c"
 #include "../../firmware/src/sy_engine.c"
 
-uint32_t probe_osc(uint32_t k, uint32_t g, int32_t *lr, const osc_job_t *j) { return OSC_KS[k][g](lr, SY_BLK, j); }
+uint32_t probe_osc(uint32_t k, uint32_t g, uint32_t f, int32_t *lr, const osc_job_t *j)
+{
+    return OSC_KS[k][g][f](lr, SY_BLK, j);
+}
 void probe_svf(uint32_t rs, float *x, float *st, const float *c0, const float *c1) { FLT_SVF[rs](x, st, c0, c1); }
 void probe_ladder(float *x, float *st) { flt_ladder(x, st, 0.1f, 0.2f, 1.0f, 2.0f); }
 void probe_sub(sy_voice_t *v, uint32_t shape, float *x) { voice_sub(v, 1u << 25, shape, 0.3f, x); }
@@ -29,7 +32,6 @@ void probe_mix(float *bl, float *br, const float *x, const float *y, const float
 {
     voice_mix(bl, br, x, y, g0, g1);
 }
-void probe_dcblock(float *x, float *st) { sy_dcblock(x, st); }
 void probe_fx(float *l, float *r) { fx_block(l, r); }
 void probe_voice(sy_voice_t *v, float *l, float *r) { voice_block(v, l, r); }
 void probe_engine(int32_t *out) { sy_block(out); }

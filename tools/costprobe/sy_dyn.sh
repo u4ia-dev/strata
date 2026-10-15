@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 brandonmbarone
-# The target cost model: the JieLi clang listing with each instruction's source line (sy_probe.c, -O2 -g), the
+# The target cost model: the JieLi clang listing with each instruction's source line (sy_probe.c, -O2 -g, and
+# -fno-unroll-loops: an unrolled loop's copies would each be weighed by all of its passes), the
 # engine on the host with coverage playing each scenario of tools/costprobe/sy_profile.c, and sy_dyncount.py
 # weighing the one by the other; then budget.py: voices and unison against the audio's time. An estimate until
 # the BENCH page times the engine on an FM-1.
@@ -13,8 +14,8 @@ TC="${JIELI_TOOLCHAIN:-$HOME/.jieli/toolchain}"
 OUT=build/cost
 P=$OUT/prof
 mkdir -p "$P"
-"$TC/pi32v2/bin/clang" -target pi32v2 -mcpu=r3 -mfprev1 -ffp-contract=off -O2 -g -fno-builtin -Wall \
-    -Wno-unused-function -Ibuild/gen -S tools/costprobe/sy_probe.c -o "$OUT/sy_g.s"
+"$TC/pi32v2/bin/clang" -target pi32v2 -mcpu=r3 -mfprev1 -ffp-contract=off -O2 -fno-unroll-loops -g -fno-builtin \
+    -Wall -Wno-unused-function -Ibuild/gen -S tools/costprobe/sy_probe.c -o "$OUT/sy_g.s"
 cc -O0 --coverage -Wall -Wno-unused-function -Wno-unused-parameter -Ibuild/gen -c tools/costprobe/sy_profile.c \
     -o "$P/sy_profile.o"
 cc --coverage -o "$P/sy_profile" "$P/sy_profile.o" -lm
