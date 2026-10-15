@@ -19,7 +19,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-76 checks in five programs (`tests/sy_*.c`), all passing.
+78 checks in five programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -56,10 +56,11 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 47 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 49 checks; `sy_smoke`, 2)
 
 - **Parameters and presets**: 166 parameters; a patch packs into 387 bytes and back unchanged; an older patch (fewer
-  values) loads with defaults; out-of-range values clamp; a foreign blob is refused.
+  values) loads with defaults; out-of-range values clamp; a foreign blob is refused; the values read as stored
+  (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change at once, without a patch load.
 - **Matrix**: offsets add, 100 % spans the range, a macro can drive a macro, global destinations take the newest voice's
   sources.
 - **Voices**: POLY steals the oldest note that is not the lowest, VOICES limits, sustain, MONO (retrigger, back to the
@@ -75,9 +76,12 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   pulse sub's, PWM's, ASYM's and SYNC's offsets are taken out (means under 2 % of the peak), the infrasonic thump of a
   note's attack and release −41 (ASYM 100 %) to −68 dBFS.
 - **Effects**: the OTT's three bands sum back to the input within 3 × 10⁻⁸; a synced delay (1/4 at 120 BPM) lands at
-  500.00 ms; every effect at its extremes on full-scale noise stays finite and under 1.0 (the limiter).
+  500.00 ms; every effect at its extremes on full-scale noise stays finite and under 1.0 (the limiter); the chorus on
+  a 1 kHz sine is as clean after 10 minutes of running as at the start (−81 / −88 dB away from the tone; the old
+  chorus fell to −20 dB, §5.1).
 - **Determinism and golden renders**: eight test sounds (supersaw, pluck, pad, FM keys, sync lead, ladder bass, vowel pad,
-  OTT growl) play the same twice in a run, bit for bit, and as recorded in `tests/sy_golden.txt`.
+  OTT growl) play the same twice in a run, bit for bit, and as recorded in `tests/sy_golden.txt` (recorded again after
+  the optimisation pass, §5).
 
 ## 3. Known gaps (targets not met)
 
@@ -87,8 +91,10 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   scratch), cubic interpolation for these tables only (+50 % for their oscillators).
 - **Aliasing of warps** at high amounts and high notes: PWM 100 % reaches −6 dBc at C7, SYNC / MIRROR −15 dBc. The
   remedy is a polyBLEP / polyBLAMP correction at the warps' corners. Not done yet.
-- **The oscillator kernel**: 35 listing instructions a sample against the ≤ 28 ARCHITECTURE.md hoped for.
-- **The CPU budget**: see §4.3. As built, eight voices with unison and every effect do not fit on one core.
+- **The oscillator kernel**: 35 listing instructions a sample while the position moves between frames, against the
+  ≤ 28 ARCHITECTURE.md hoped for; 21 with the position on a frame (§4.1).
+- **The CPU budget**: see §4.3. Eight voices of two oscillators and a filter fit one core at 205 instructions a µs
+  with room to spare; with unison and every effect on, they do not, and the guard trims.
 
 ## 4. Cost on the target (estimate)
 
@@ -99,15 +105,17 @@ counted from the compiler's listing:
 
 | Kernel | Listing instructions a sample |
 | --- | --- |
-| Oscillator, one unison voice (held gains / ramping) | plain 35 / 39, warp map 46 / 49, SYNC 62 / 65, FM 40 / 44 |
+| Oscillator, one unison voice, the position between frames (gains held / ramping) | plain 35 / 39, warp map 46 / 49, SYNC 62 / 65, FM 40 / 44 |
+| The same, the position on a frame (either end, a keyframe, a table of one frame) | plain 21 / 23, warp map 31 / 33, SYNC 45 / 48, FM 24 / 28 |
 | Filter, a channel | SVF LP 19, BP 22, NOTCH 23, HP 24, PEAK 24 (24 dB: twice); LADDER 62 and two float divides |
 | Sub | triangle 13, saw 25, sine 36, square / pulse / round 57–60 (both edge corrections counted) |
 | Noise, a channel | white 21, brown 18, pink 41 |
-| Mixing a source into its bus (stereo) | 14 |
 
-Tuning in Phase 2 took the oscillator from 42 to 35 (7 stack reloads to 2) and the LP filter from 29 to 19, with the
-sound unchanged bit for bit. The ladder keeps its two divides: Newton steps in their place cost as many instructions and
-were up to −18 dB off exact division with the cutoff jumping. What a divide costs on the device is not known.
+Tuning in Phase 2 took the oscillator from 42 to 35 (7 stack reloads to 2), added the one-frame kernels (what a
+crossfade of exactly 0 or 1 gives, bit for bit, without reading the second frame) and took the LP filter from 29 to
+19, the sound unchanged bit for bit. The ladder keeps its two divides: Newton steps in their place cost as many
+instructions and were up to −18 dB off exact division with the cutoff jumping. What a divide costs on the device is
+not known.
 
 ### 4.2 The whole engine: the cost model (`tools/costprobe/sy_dyn.sh`)
 
@@ -115,60 +123,99 @@ Inner loops are not all of the cost: envelopes, LFOs, the matrix, coefficients a
 a block, and the effects and the master section run on top. The cost model counts all of it: the engine plays each
 scenario on the host with coverage on, and every instruction of the target's listing (compiled with `-g`, so each
 carries its source line) is weighed by how often the host ran that line. Code inlined from a function called in several
-places takes its call site's share; a loop's set-up code counts once per loop, not per pass. Checks against the
-listing: 48 unison instances come to 48 × 35.6 instructions, the filters and the OTT's crossovers to within a few
-instructions of their loops.
+places takes its call site's share; code outside a loop counts once a call at most, and inside one at most as often as
+the loop goes round. The listing for the model is compiled with `-fno-unroll-loops`: an unrolled loop's copies would
+each carry the whole loop's count (a first version overcounted the filter's state flush six times that way). Without
+unrolling the loops cost a little more than in the firmware, so the model errs high. Checks against the listing: 48
+unison instances come to 48 × 35.6 instructions, the filters and the OTT's crossovers to within a few instructions of
+their loops.
 
-| Scenario | Instructions a sample | One core at 150 / 205 / 300 instructions a µs |
-| --- | --- | --- |
-| idle: no voice, no effect | 292 | 9 / 6 / 4 % |
-| 1 voice: A × 1 | 480 | 14 / 10 / 7 % |
-| 1 voice: A × 16 | 1,205 | 35 / 26 / 18 % |
-| 8 voices: A × 1 | 1,794 | 53 / 39 / 26 % |
-| 8 voices: A + B × 1, LP12 | 3,558 | 105 / 77 / 52 % |
-| 8 voices: A + B × 3, LP24, every effect | 7,023 | 207 / 151 / 103 % |
-| 8 voices: A + B × 16 (budget 48), LADDER, every effect | 7,371 | 217 / 159 / 108 % |
-| 8 voices: A BEND+ / B SYNC × 1, LP12, SUB, pink NOISE | 5,346 | 157 / 115 / 79 % |
-| 1 voice: A × 1, every effect | 2,033 | 60 / 44 / 30 % |
+| Scenario | Before the pass | After | One core at 150 / 205 / 300 instructions a µs (after) |
+| --- | --- | --- | --- |
+| idle: no voice, no effect | 270 | 176 | 5 / 4 / 3 % |
+| 1 voice: A × 1 | 458 | 342 | 10 / 7 / 5 % |
+| 1 voice: A × 16 | 1,190 | 859 | 25 / 18 / 13 % |
+| 8 voices: A × 1 | 1,783 | 1,525 | 45 / 33 / 22 % |
+| 8 voices: A + B × 1, LP12 | 3,333 | 2,386 | 70 / 51 / 35 % |
+| 8 voices: A + B × 3, LP24, every effect | 6,756 | 4,908 | 144 / 106 / 72 % |
+| 8 voices: A + B × 16 (budget 48), LADDER, every effect | 7,100 | 5,227 | 154 / 112 / 77 % |
+| 8 voices: A BEND+ / B SYNC × 1, LP12, SUB, pink NOISE | 5,138 | 4,155 | 122 / 89 / 61 % |
+| 1 voice: A × 1, every effect | 1,950 | 1,436 | 42 / 31 / 21 % |
 
-The parts: the engine idle 292 instructions a sample; a voice of A + B with LP12, 408; each unison instance more, 48;
-every effect together, 1,552. The rate is the open question: 205 instructions a µs was measured on integer code
-(ChoralRoot); this engine's float code has no device figure. Hence three columns.
+Listing instructions a sample. The parts after the pass: the engine idle 176; a voice of A + B with LP12, 276; each
+unison instance more, 34 with the position on a frame (as in these scenarios; ~48 while it moves); every effect
+together, 1,094 (reverb ~440, chorus ~165, delay ~100, the lines' int16 conversions ~90, OTT ~170, drive ~50). The
+rate is the open question: 205 instructions a µs was measured on integer code (ChoralRoot); this engine's float code
+has no device figure. Hence three columns.
 
 ### 4.3 What fits
 
-At the planned 75 % of a core (less 8 % for the system) and 205 instructions a µs: about 7 voices of A + B with LP12
-and no effects, about 3 with every effect on. At 300 a µs, about 10 and 6. The 8-voice, 48-instance design
-does not fit one core as built. Where the cost is:
+At the planned 75 % of a core (less 8 % for the system):
 
-| Part | Instructions a sample | Notes |
-| --- | --- | --- |
-| Effects | ~1,550 | chorus ~520 (four sines and four floor conversions a sample), reverb ~420, OTT ~260, the lines' int16 conversions ~85, wet/dry blends ~75, delay ~75, drive ~35 |
-| Per-voice control and mixing | ~260 a voice | ~45 parameter reads with clamps a block, coefficient and gain work, buffer clearing, the source mixes |
-| Engine overhead | ~290 | the smoother walking all 166 parameters every block (~78), the master section (DC blockers, limiter, clamps, the Q15 conversion: ~160) |
-| Oscillators and filters | as §4.1 | already lean |
+| Voices of A + B with LP12 that fit | 150 / µs | 205 / µs | 300 / µs |
+| --- | --- | --- | --- |
+| no effects, no unison | 7.6 | 10.6 | 15.9 |
+| no effects, 3 unison each | 5.1 | 7.1 | 10.6 |
+| every effect, no unison | 3.6 | 6.7 | 11.9 |
+| every effect, 3 unison each | 2.4 | 4.5 | 7.9 |
 
-These are the targets of the optimisation pass and the decisions in the Phase 2 checkpoint (cheaper effects, cheaper
-control, the second core, fewer voices or a smaller unison budget). The guard (ARCHITECTURE.md §13) keeps the audio
-running whatever the patch: it trims unison, then the effects' quality, then voices.
+(The position on a frame; a moving one costs ~14 instructions more an instance.) So at 205 a µs: eight voices of two
+oscillators and a filter fit; unison and the full rack together do not, and the guard (ARCHITECTURE.md §13) trims
+unison, then the effects' quality, then voices. The unison budget's default (48 instances) is set from the BENCH
+page's rate at integration; the second core (ARCHITECTURE.md §19) doubles the room.
 
 ### 4.4 RAM on the target
 
-From the probe object (`build/cost/sy.o`), the engine without the UI:
+From the probe object (`build/cost/sy.o`), the engine without the UI, after the delay went to 750 ms a side:
 
 | Section | Bytes | Largest |
 | --- | --- | --- |
-| `.pool` | 309,334 | wavetables 186,944 (32 frames × 5,842 B); delay lines 79,872; reverb 20,412; generator scratch 11,684; chorus 4,096 |
-| `.bss` | ~19,000 | voices 14,208 (8 × 1,776) |
-| `.text` | ~52,000 | code (with the probe's wrappers) |
+| `.pool` | 295,638 | wavetables 186,944 (32 frames × 5,842 B); delay lines 66,176; reverb 20,412; generator scratch 11,684; chorus 4,096 |
+| `.bss` | ~20,300 | voices 14,208 (8 × 1,776) |
+| `.text` | ~56,700 | code (with the probe's wrappers) |
 
-Felucca's pool is 368,640 B and its screen canvas takes 59,520 B of it: the two together are over by about 200 B,
-before the 8 KiB margin `tools/build.py` asks for. Integration has to free at least 8.2 KiB of pool (more if
-Felucca's platform keeps other pool buffers): shortening the delay
-(905 → 750 ms a side frees 13.4 KiB) or moving the generator scratch (11.4 KiB) to `.bss` are the candidates
-(ARCHITECTURE.md §20).
+Felucca's pool is 368,640 B and its screen canvas takes 59,520 B: with the engine, 13,482 B stay free, over the
+8 KiB margin `tools/build.py` asks for (if Felucca's platform keeps no other pool buffers: integration confirms).
 
-## 5. Needs hardware test
+## 5. The optimisation pass (end of Phase 2)
+
+Each change measured with the cost model, and the golden renders before and after it (`tests/sy_golden_diff.py`).
+
+**Bit for bit** (the renders unchanged): the delay and reverb read their lines without floors or divisions; the
+effects' wet/dry blends run inside their loops; the drive has a loop for each curve; the OTT's three bands are
+written out; the limiter at rest skips a block under its knee; the master's volume, DC blockers and Q15 conversion
+are two loops, not six; the smoother looks for changed values two at a time and only works on what changed or still
+glides; the level choice is a binary search; the SVF kernels and the ladder are kept whole (one copy each); the filter
+flushes only the states its type uses; the oscillator has its one-frame kernels; zeroing and copying go four words a
+turn; the DIRECT bus is cleared and mixed only when a source takes it.
+
+**Not bit for bit** (each measured against the sound, over the whole test phrase):
+
+| Change | The renders moved |
+| --- | --- |
+| The chorus's read position (a bug fix, §5.1) | supersaw −76 dB, pad −72 dB |
+| The chorus's LFO a rotating sine pair (set from the phase each block) and its DELAY / DEPTH ramped | −80 / −72 dB |
+| The reverb's drift worked out at the block's ends and drawn straight between (0.27 Hz: under 10⁻⁶ samples off) | −81 / −73 dB |
+| The oscillators added straight into an integer bus a route, their level, pan and fades in the unison gains (rounded to 1/32768); the filter in place when it is all wet | −71 to −90 dB, every sound |
+
+Altogether, against the renders recorded before the pass: −71 dB (pad) to −90 dB (ladder bass), the largest sample
+difference 2.4 × 10⁻⁴. The reverb's and the chorus's lines are int16: any difference, however small, turns some of their
+roundings and goes round the reverb, so the sounds with reverb move at the level of its own rounding noise (−70 dB
+of those sounds).
+
+### 5.1 Two bugs found
+
+- **The chorus lost precision the longer it ran.** Its read position was `(float)(count + N) − delay`, the count being
+  every sample since power-on: a float has 24 bits, so the fraction that interpolates the line was a 256th of a sample
+  after one second, an eighth after 24 s, and the whole position was off after six minutes. The short test renders
+  never showed it. The position now comes from the write index (0..1023); a test runs the chorus for 10 minutes and
+  checks it is as clean as at the start (the old one: −72 dB to −20 dB).
+- **Values read as stored ignored a change until a patch load.** GLIDE (MIDI CC 5), VEL AMP, NOISE STEREO, PREDELAY
+  and the LFOs' DELAY, RISE and SMOOTH are not smoothed, and the smoother only refreshed the smoothed ones: a knob or a
+  CC changed nothing until the next preset. The smoother now refreshes every changed value (the smoothed ones glide);
+  a test changes them while playing.
+
+## 6. Needs hardware test
 
 - The instruction rate of this engine's float code, the cost of a float divide, the instruction cache's effect: the
   BENCH page (first integration build) times each kernel and the whole engine with the 24 MHz timer.

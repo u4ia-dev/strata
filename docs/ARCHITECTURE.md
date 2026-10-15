@@ -10,9 +10,10 @@ The numbers behind every choice are in [PHASE0.md](PHASE0.md). Status words used
 **verified in emulator**, **needs hardware test**. Nothing in this document has run on an FM-1 yet.
 
 **After Phase 2** (the DSP core and its host harness): the engine described in §4–§14 is written (`firmware/src/sy_*`)
-and **verified on host** (76 checks, [TESTING.md](TESTING.md)). Where the build differs from the plan below, the text
-says so. Two findings change the plan: the CPU cost of the whole engine on the target is about twice what Phase 0
-assumed (§13, TESTING.md §4), and the pool is at least ~8 KiB short with the screen's canvas (§20).
+and **verified on host** (78 checks, [TESTING.md](TESTING.md)). Where the build differs from the plan below, the text
+says so. Two findings change the plan: the whole engine costs well over what Phase 0 assumed (after an optimisation
+pass, eight voices of two oscillators and a filter fit one core at 205 instructions a µs, unison with every effect does
+not: §13, TESTING.md §4), and the delay went to 750 ms a side so that the pool fits beside the screen's canvas (§20).
 
 Contents: 1 constraints, 2 source layout, 3 real-time model, 4 signal flow, 5 number formats, 6 wavetables,
 7 oscillators, 8 sub and noise, 9 filter, 10 envelopes and LFOs, 11 modulation, 12 parameters, 13 voices and the
@@ -214,8 +215,11 @@ the unison voice's Q15 pan gains. Increments, frame pointers, crossfade and gain
 the crossfade ramp linearly across the block, so pitch and position modulation are smooth. Each warp mode has its own
 loop (no per-sample switch). Phase 0 cost: 37 listing instructions per instance as compiled C; the target after tuning
 for this core was ≤ 28. Built (Phase 2): the kernels are integer, write left and right interleaved through one
-pointer, read frame k + 1 at a fixed offset from frame k, and come in two forms, gains held (the usual block) and gains
-ramping: 35 instructions a sample plain, 46 through a warp map, 62 for SYNC, 40 for FM (TESTING.md §4.1).
+pointer, read frame k + 1 at a fixed offset from frame k, and come in four forms: gains held (the usual block) or
+ramping, two frames crossfaded or one (the position on a frame: either end, a keyframe, a table of one frame, which a
+crossfade of exactly 0 or 1 gives bit for bit): 35 instructions a sample plain (21 on a frame), 46 through a warp map
+(31), 62 for SYNC (45), 40 for FM (24) (TESTING.md §4.1). An oscillator adds into its route's integer bus with the
+source's level, pan and fades in its unison voices' gains; the bus becomes float once.
 
 ### 7.3 Warp modes
 
@@ -351,12 +355,12 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
   one oldest-voice step per half; above 78 % the costly FX quality steps down (OTT upward compression off, reverb
   density halved); two halves above 85 % shed a voice, as Felucca's `shed_voice` does, faded. Below 55 % for a second,
   the steps undo in reverse order. The load, the budget and the shed count are on the INFO page and the console.
-- **Cost** (Phase 2, TESTING.md §4): the target cost model puts a voice of A + B with LP12 at ~408 listing instructions
-  a sample, each unison instance at ~48, every effect together at ~1,550 and the engine's overhead at ~290. At the
-  205 instructions a µs measured on integer code, one core holds about 7 such voices without effects and about 3 with
-  every effect: the 8-voice, 48-instance plan does not fit one core as built. The optimisation pass (effects, control
-  rate, overhead), the second core (§19) and the defaults of the budget are the Phase 2 checkpoint's decisions; the
-  BENCH page gives the real rate.
+- **Cost** (Phase 2, after its optimisation pass, TESTING.md §4): the target cost model puts a voice of A + B with
+  LP12 at ~276 listing instructions a sample, each unison instance at ~34 (the position on a frame; ~48 moving), every
+  effect together at ~1,100 and the engine's overhead at ~180. At the 205 instructions a µs measured on integer code,
+  one core holds about 10 such voices without effects and about 6–7 with every effect, 7 and 4–5 at 3 unison each:
+  eight voices fit; unison with the whole rack does not, and the guard trims. The budget's default (48 instances) is set
+  from the BENCH page's real rate at integration; the second core (§19) doubles the room.
 
 ## 14. Effects
 
@@ -366,7 +370,7 @@ Global, stereo, float, fixed order, each with ON and MIX:
 | --- | --- | --- |
 | DRIVE | soft clip, tube-like asymmetric, hard clip, sine fold; pre-gain, tone (tilt), level compensation | no oversampling (cost) |
 | CHORUS | two modulated taps per side on one 4 KiB int16 line (23 ms a side), delay 2–15 ms, depth up to 3 ms, linear interpolation | RATE (Hz/sync), DEPTH, DELAY, FEEDBACK, tone |
-| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 905 ms a side | TIME (ms or synced, dotted/triplet), FEEDBACK, LP/HP in the loop, OFFSET L/R |
+| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 750 ms a side (so the pool fits, §20) | TIME (10–750 ms or synced, dotted/triplet; a synced time longer than the line stops at it), FEEDBACK, LP/HP in the loop, OFFSET L/R |
 | REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
 | LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
@@ -475,11 +479,11 @@ whether Strata needs that is decided by the device test.
 
 | Risk | Mitigation |
 | --- | --- |
-| CPU: the engine costs about twice Phase 0's estimate (§13, TESTING.md §4) | an optimisation pass on the effects (the chorus alone ~520 instructions a sample), the control rate and the overhead; the second core; the budget's defaults; decided with the BENCH page's real rate |
+| CPU: the engine costs well over Phase 0's estimate; after the optimisation pass eight voices fit, unison with every effect does not (§13, TESTING.md §4) | the guard trims; the budget's default and the second core decided with the BENCH page's real rate |
 | FPU slower than assumed | kernels isolated; fixed-point filter/FX fallback; decided by the BENCH page |
 | I-cache misses (code runs from flash; 32 KB cache shared) | hot loops are small; if the BENCH page shows UI-dependent load, the oscillator and filter loops move to `.ram_text` (24 KiB) |
 | Aliasing of bright tables with linear interpolation | per-table taper; cubic interpolation for the few that need it |
 | Brightness steps at mip boundaries on glides | measured; crossfade the levels in boundary blocks |
 | Table build gap (~20 ms) on table/preset change | faded; documented; preset changes are silent between the old sound's fade and the new one |
-| RAM: the engine's pool is 309,334 B; with the screen's canvas (59,520 B) that is 214 B over Felucca's pool and before the 8 KiB margin it must keep (TESTING.md §4.4) | shorten the delay (905 → 750 ms a side frees 13.4 KiB), or move the generator's scratch (11.4 KiB) to `.bss` if it has room once Felucca's sequencer is gone |
+| RAM: the engine's pool was 214 B over Felucca's beside the screen's canvas, before the 8 KiB margin | the delay went to 750 ms a side: 295,638 B, 13,482 B free (TESTING.md §4.4); the generator's scratch (11.4 KiB) could move to `.bss` if more is needed |
 | TRS MIDI out | not possible on stock hardware; dropped (§15) |
