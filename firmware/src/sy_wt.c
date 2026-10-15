@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 brandonmbarone */
+/* STRATA wavetables: the frame layout, the pool, the level an increment plays, and the swap of a table under
+ * the oscillators (docs/ARCHITECTURE.md §6).
+ * A frame is one single cycle as nine band-limited mip levels: level L keeps harmonics 1 .. 256 >> L and is
+ * WT_N(L) = max(32, 4 * (256 >> L)) samples (four times oversampled down to the 32-sample floor), plus one guard
+ * sample (a copy of sample 0: the interpolation reads i + 1 without a mask). 2,121 int16 a frame. The pool holds
+ * 32 frames: OSC A's 16 and OSC B's 16, each oscillator's table in its own half (two oscillators on the same
+ * table each build it). Tables are built in the main loop (sy_wtgen.c), never in the audio ISR: while one is
+ * rebuilt its oscillator fades out over a block, stays silent, and fades back in over a block. */
+#define WT_NLEV 9u
+#define WT_FRAME 2121u
+#define WT_POOL (SY_NOSC * SY_NFRAME)
+#define WT_N(l) ((l) < 5u ? 1024u >> (l) : 32u)
+static const uint16_t WT_OFF[WT_NLEV] = {0, 1025, 1538, 1795, 1924, 1989, 2022, 2055, 2088};
+static const uint8_t WT_BITS[WT_NLEV] = {10, 9, 8, 7, 6, 5, 5, 5, 5};
+_Static_assert(2088u + 32u + 1u == WT_FRAME, "WT_OFF: nine levels and their guards");
+
+/* the largest increment level 0 plays: its 256th harmonic at or under 21 kHz (0.476 fs: 21000 / 44117.647);
+ * each level doubles it. Above level 8's (a sine at 21 kHz) the oscillator is silent */
+#define WT_INC_L0 7985954u
+
+static int16_t wt_pool[WT_POOL][WT_FRAME] SY_POOL;
+
+typedef struct {
+    const int16_t *f;                /* frame 0; frame k at f + k * WT_FRAME */
+    uint8_t n;                       /* frames, 1 .. 16 */
+    uint8_t id;                      /* the factory table in it */
+    volatile uint8_t busy;           /* main loop: being rebuilt; the oscillators fade out and stop reading it */
+    volatile uint8_t quiet;          /* audio: nothing reads it any more (set while busy) */
+} wt_table_t;
+static wt_table_t wt_tab[SY_NOSC];
+
+/* the level for an increment (2^32 = one cycle a sample): the lowest whose top harmonic stays <= 21 kHz;
+ * WT_NLEV = too high to play */
+static uint32_t wt_level(uint32_t inc)
+{
+    uint32_t l = 0, lim = WT_INC_L0;
+    while (inc > lim && l < WT_NLEV) {
+        lim <<= 1;
+        l++;
+    }
+    return l;
+}
+
+/* a level of frame k of a table */
+static inline const int16_t *wt_frame(const wt_table_t *t, uint32_t k, uint32_t l)
+{
+    return t->f + k * WT_FRAME + WT_OFF[l];
+}
