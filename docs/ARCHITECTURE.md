@@ -9,6 +9,11 @@ instrument (four tracks, engines, sequencer, song, projects) is replaced by one 
 The numbers behind every choice are in [PHASE0.md](PHASE0.md). Status words used below: **verified on host**,
 **verified in emulator**, **needs hardware test**. Nothing in this document has run on an FM-1 yet.
 
+**After Phase 2** (the DSP core and its host harness): the engine described in §4–§14 is written (`firmware/src/sy_*`)
+and **verified on host** (76 checks, [TESTING.md](TESTING.md)). Where the build differs from the plan below, the text
+says so. Two findings change the plan: the CPU cost of the whole engine on the target is about twice what Phase 0
+assumed (§13, TESTING.md §4), and the pool is at least ~8 KiB short with the screen's canvas (§20).
+
 Contents: 1 constraints, 2 source layout, 3 real-time model, 4 signal flow, 5 number formats, 6 wavetables,
 7 oscillators, 8 sub and noise, 9 filter, 10 envelopes and LFOs, 11 modulation, 12 parameters, 13 voices and the
 CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 testing, 19 the second core, 20 risks.
@@ -29,6 +34,11 @@ CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 te
 
 Felucca builds the app as one compilation unit (`firmware/src/felucca.c` includes every `.c`), so the compiler sees
 everything and nothing is exported. Strata keeps that: `firmware/src/strata.c` is the unit, `tools/build.py` compiles it.
+The DSP files carry the prefix `sy_` (Felucca's `storage.c` already uses `st_`); the table below gives the plan's names,
+and Phase 2 built: `sy_core.h` (sizes, rate, math), `sy_wt.c`, `sy_wtgen.c`, `sy_param.c` (the parameter table and
+the preset format), `sy_osc.c`, `sy_env.c`, `sy_lfo.c`, `sy_mod.c`, `sy_filter.c`, `sy_voice.c` (sources, routing, a
+voice's block), `sy_fx.c` and `sy_engine.c` (notes, allocation, the unison budget, the CPU guard, the block, patch
+changes, table builds); tests in `tests/sy_*`.
 
 | Kept from Felucca (unchanged where possible, so upstream fixes merge) | Replaced or new in Strata |
 | --- | --- |
@@ -107,7 +117,9 @@ move to fixed point (the kernels are isolated, the harness compares the two bit-
 **Denormals and DC.** The pi32v2 FPU's denormal behaviour is unknown, and x86 builds of the harness slow down on them.
 Every recursive float state (filter integrators, one-poles, delay/reverb feedback, envelope followers) is flushed to
 exact zero below 1e-15 at the block end (a compare per state per block, not per sample). Wavetables have no DC (bin 0 is
-zeroed at build time); the master has a 5 Hz DC blocker; the harness fails on any NaN, Inf or denormal in any state.
+zeroed at build time); 5 Hz DC blockers sit before and after the effects (the drive's asymmetric curves make DC);
+sources with an offset take it out themselves (the pulse sub, PWM's hold, the BEND / ASYM / MIRROR / SYNC warps'
+mean); the harness fails on any NaN, Inf or denormal in any state.
 
 ## 6. Wavetables
 
@@ -115,33 +127,35 @@ zeroed at build time); the master has a 5 Hz DC blocker; the harness fails on an
 
 A **frame** is one single-cycle wave, stored as nine band-limited **mip levels**:
 
-| Level | Samples | Harmonics kept | Used for fundamentals up to ≈ |
-| --- | --- | --- | --- |
-| 0 | 1,024 | 256 | 82 Hz (E2); lower notes keep 256 harmonics |
-| 1 | 512 | 128 | 164 Hz |
-| 2 | 256 | 64 | 328 Hz |
-| 3 | 128 | 32 | 656 Hz |
-| 4 | 64 | 16 | 1.31 kHz |
-| 5 | 32 | 8 | 2.63 kHz |
-| 6 | 32 | 4 | 5.25 kHz |
-| 7 | 32 | 2 | 10.5 kHz |
-| 8 | 32 | 1 (sine) | above |
+| Level | Samples | Harmonics kept | Oversampling | Used for fundamentals up to ≈ |
+| --- | --- | --- | --- | --- |
+| 0 | 1,024 | 256 | 4 × | 82 Hz (E2); lower notes keep 256 harmonics |
+| 1 | 512 | 128 | 4 × | 164 Hz |
+| 2 | 512 | 64 | 8 × | 328 Hz |
+| 3 | 256 | 32 | 8 × | 656 Hz |
+| 4 | 256 | 16 | 16 × | 1.31 kHz |
+| 5 | 128 | 8 | 16 × | 2.63 kHz |
+| 6 | 128 | 4 | 32 × | 5.25 kHz |
+| 7 | 64 | 2 | 32 × | 10.5 kHz |
+| 8 | 32 | 1 (sine) | 32 × | above |
 
-Each level is four times oversampled (samples = 4 × harmonics) down to the 32-sample floor, carries one guard sample (a
-copy of sample 0, so the interpolation never masks), and is int16 normalised over the whole table (§6.5). A frame is
-2,121 samples, 4,242 B. A **table** is up to 16 frames (keyframes); the oscillator's position moves continuously between
+(Phase 2: the plan's 4 × throughout left the interpolation's images too strong in the upper levels, so they are
+oversampled more; level 1 at 8 × would cost another 34 KiB, TESTING.md §3.) Each level carries one guard sample (a copy
+of sample 0, so the interpolation never masks) and is int16 normalised over the whole table (§6.5). A frame is 2,921
+samples, 5,842 B. A **table** is up to 16 frames (keyframes); the oscillator's position moves continuously between
 adjacent frames (crossfade, §7.2), which is Serum's smooth interpolation, so 16 keyframes give a continuous sweep.
 
-The pool holds 32 frames (135,744 B, 132.6 KiB), shared by OSC A and OSC B: each gets 16, or one table takes more frames when
-the other takes fewer (a table never exceeds 16 in the MVP). Two oscillators on the same table share its frames.
+The pool holds 32 frames (186,944 B, 182.6 KiB), 16 for each of OSC A and OSC B. Frame k + 1 always lies a frame's
+length after frame k, which the oscillator's inner loop relies on (§7.2).
 
 ### 6.2 Level selection
 
 Per voice and oscillator, once per block, from the highest fundamental the block will play:
 `f_eff = f0 × (largest unison detune ratio) × (warp's harmonic stretch)`, the level is the smallest one whose top harmonic
 stays at or below 21 kHz. Brightness then steps by at most the top octave when a note crosses a level boundary
-(~10–20 kHz content). The harness measures that step (§18); if it is audible on smooth glides, the two levels are
-crossfaded over the block in which the boundary is crossed (a block of double cost, only then).
+(~10–20 kHz content). Built (Phase 2): a level changes only once the note has moved a semitone past the boundary
+(hysteresis: a vibrato across it does not flap), and the change is a crossfade of the two levels over one block, at
+double cost for that block only.
 
 ### 6.3 Interpolation and aliasing
 
@@ -151,6 +165,10 @@ its level's range. For tables whose energy is low up there (saws, squares, vocal
 for flat, noisy spectra it does not. The harness sweeps every factory table over the keyboard and measures the
 inharmonic energy (§18); a table that fails gets its top octave of harmonics tapered at build time. Cubic interpolation
 (+50 % per instance) is the fallback if tapering is not enough, applied per table, not globally.
+
+Measured (Phase 2, TESTING.md §2.2): smooth tables −41 dBc at worst (saws −48), bright tables −27.7 dBc at worst with
+their tops tapered; the warps alias much more at high amounts above C5 (PWM 100 %: −6 dBc at C7). The −60 / −40 dBc
+targets are not met; TESTING.md §3 has the remedies.
 
 ### 6.4 Factory tables
 
@@ -165,7 +183,7 @@ Stored frames do not fit (one 16-frame table is 66 KiB of mips, 32 KiB at level 
 `tools/gen_wavetables.py` holds the definitions. It writes the C table of recipes and keyframes (`build/gen`), renders
 every table to PNG and WAV for documentation (`docs/WAVETABLES.md`), and writes reference frames the C generator is
 tested against (§18). Every table is original: generated from formulas and hand-placed keyframes, no third-party data.
-Target: ~48 factory tables in ~70 KiB of flash.
+Built: 54 factory tables, 12 KiB of keyframe data.
 
 ### 6.5 Building a table
 
@@ -195,7 +213,9 @@ mix the frames by the position's fraction, interpolate by the phase's fraction; 
 the unison voice's Q15 pan gains. Increments, frame pointers, crossfade and gains are set per block; the increment and
 the crossfade ramp linearly across the block, so pitch and position modulation are smooth. Each warp mode has its own
 loop (no per-sample switch). Phase 0 cost: 37 listing instructions per instance as compiled C; the target after tuning
-for this core is ≤ 28.
+for this core was ≤ 28. Built (Phase 2): the kernels are integer, write left and right interleaved through one
+pointer, read frame k + 1 at a fixed offset from frame k, and come in two forms, gains held (the usual block) and gains
+ramping: 35 instructions a sample plain, 46 through a warp map, 62 for SYNC, 40 for FM (TESTING.md §4.1).
 
 ### 7.3 Warp modes
 
@@ -208,9 +228,13 @@ MVP (6), all phase-domain or a single extra lookup:
 | PWM | `p' = p / w` while `p < w`, then hold the last sample (0 = silence for square-like tables) | level for `f0 / w` |
 | ASYM ± | `p' = p^g` over the whole cycle | level for `f0 × (max slope)` |
 | MIRROR | first half plays the wave at double speed, second half mirrored; AMOUNT moves the fold point | level for `2 × f0` |
-| FM (from B) | phase offset `p + depth × B(t)` (true phase/frequency modulation by OSC B's output, per unison voice in step) | level for `f0 × (1 + depth × fB / f0)` |
+| FM (from the other oscillator) | phase offset `p + depth × B(t)`, B being the other oscillator's centre unison voice (one modulator per oscillator: the per-unison-voice modulator of the plan costs a second oscillator per instance) | depth held under 21 kHz as the others; level for `f0 × (1 + depth × fB / f0)` |
 
 v1 adds: FLIP, REMAP (curve), QUANTISE, ODD/EVEN, FM from SUB/NOISE, AM, RM, thru-zero FM, PD from other oscillators.
+
+Built (Phase 2): the warps of the phase (BEND, ASYM, MIRROR, PWM, SYNC) go through a 65-point map of the phase,
+rebuilt when the warp or its amount changes; each warp's AMOUNT is capped so its steepest slope keeps the top harmonic
+under 21 kHz at the note playing.
 
 ### 7.4 Unison
 
@@ -239,17 +263,20 @@ One filter per voice, stereo (the unison spread is stereo), between the routed s
 | --- | --- | --- |
 | LP12, HP12, BP12, NOTCH, PEAK | trapezoidal (TPT) state-variable filter, Simper's form | zero-delay feedback: tuning stays correct up to Nyquist, stable under any modulation speed, never blows up as resonance rises; one structure gives every response |
 | LP24, HP24, BP24 | two TPT SVFs in series, resonance on the second | the 24 dB slopes at twice the cost |
-| LADDER | four one-pole TPT stages in a loop with a soft saturator (`x / (1 + |x|)`) in the feedback, resonance compensated for passband loss | the "MG" character for basses and leads; the saturator bounds the loop at any resonance |
+| LADDER | four one-pole TPT stages in a loop with a soft saturator (`x − 4x³/27`, flat beyond ±1.5) in the feedback, resonance compensated for passband loss | the "MG" character for basses and leads; the saturator bounds the loop at any resonance |
 | FORMANT | three parallel TPT band-passes tuned to vowel formants; CUTOFF morphs through the vowels A E I O U, VAR shifts them | vocal and talking basses |
 | COMB ± (v1) | short feedback delay per voice | needs 16 KiB of delay lines at 8 voices; comes with the second filter in v1 if RAM allows |
 
 Controls: CUTOFF (20 Hz–20 kHz, exponential), RESONANCE (to self-oscillation on the SVF types, bounded on all),
-DRIVE (input gain into a soft clip, level-compensated), KEY TRACK (0–100 %, about C3), VAR (the type's extra knob:
-FAT on SVF types, MORPH LP→BP→HP on SVF12, FORMANT SHIFT), MIX (dry/wet), and per-source routing (§4).
+DRIVE (input gain into a soft clip, level-compensated), KEY TRACK (0–100 %, about C3), VAR (built: the stereo spread
+of the cutoff, left down and right up by up to an octave each; on FORMANT, the formants' shift), MIX (dry/wet), and
+per-source routing (§4).
 
 Coefficients come from the cutoff once per block (a `tan` approximation, prewarped) and step linearly across the
-block. The cutoff is clamped below 0.47 fs after modulation. The harness drives every type with impulses, noise and
-square waves at every cutoff/resonance corner, sweeping cutoff at audio-rate depth, and fails on any growth (§18).
+block. The SVF's three coefficients are each bounded, so a ramp between any two filters stays stable even with the
+cutoff jumping 20 Hz ↔ 20 kHz in a block (tested); each response is a loop of its own. The cutoff is clamped below
+0.47 fs after modulation. The harness drives every type with impulses, noise and square waves at every
+cutoff/resonance corner, sweeping cutoff at audio-rate depth, and fails on any growth (§18).
 
 ## 10. Envelopes and LFOs
 
@@ -312,8 +339,10 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
 - **Pitch bend**: RANGE UP and DOWN (0..24 semitones) per patch; the panel bend is a knob that springs back (§17).
 - **Sustain** (CC64) holds releases.
 - **Stealing** (a new note with every voice in use): first a voice in release, the quietest; then the oldest held note
-  that is not the newest or the lowest; never the note just played. The stolen voice fades out over 3 ms before it is
-  reused, so steals do not click (the harness measures the step, §18).
+  that is not the newest or the lowest; never the note just played. The stolen voice fades out over 4 blocks (2.9 ms)
+  before it is reused, so steals do not click (the harness measures the step, §18). Built (Phase 2): every switch
+  fades the same way (a source on or off, a warp, shape, type or route change, the filter on, off or its type, a table
+  swap, a patch change): out over 4 blocks, the change made while silent, back in over 4.
 - **Unison budget**: the total of sounding oscillator instances (voices × oscillators × unison) is limited (default
   48 on one core; set by the guard). When notes would exceed it, the oldest voices step down in unison count (their
   outer voices fade out over a block) before any voice is stolen. New notes get the patch's full unison while the budget
@@ -322,6 +351,12 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
   one oldest-voice step per half; above 78 % the costly FX quality steps down (OTT upward compression off, reverb
   density halved); two halves above 85 % shed a voice, as Felucca's `shed_voice` does, faded. Below 55 % for a second,
   the steps undo in reverse order. The load, the budget and the shed count are on the INFO page and the console.
+- **Cost** (Phase 2, TESTING.md §4): the target cost model puts a voice of A + B with LP12 at ~408 listing instructions
+  a sample, each unison instance at ~48, every effect together at ~1,550 and the engine's overhead at ~290. At the
+  205 instructions a µs measured on integer code, one core holds about 7 such voices without effects and about 3 with
+  every effect: the 8-voice, 48-instance plan does not fit one core as built. The optimisation pass (effects, control
+  rate, overhead), the second core (§19) and the defaults of the budget are the Phase 2 checkpoint's decisions; the
+  BENCH page gives the real rate.
 
 ## 14. Effects
 
@@ -330,11 +365,11 @@ Global, stereo, float, fixed order, each with ON and MIX:
 | Module | Algorithm | Notes |
 | --- | --- | --- |
 | DRIVE | soft clip, tube-like asymmetric, hard clip, sine fold; pre-gain, tone (tilt), level compensation | no oversampling (cost) |
-| CHORUS | two modulated taps per side on one 4 KiB int16 line, linear interpolation | RATE (Hz/sync), DEPTH, DELAY, FEEDBACK, tone |
-| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 0.93 s a side | TIME (ms or synced, dotted/triplet), FEEDBACK, LP/HP in the loop, OFFSET L/R |
-| REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate with damping and slow modulation | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
+| CHORUS | two modulated taps per side on one 4 KiB int16 line (23 ms a side), delay 2–15 ms, depth up to 3 ms, linear interpolation | RATE (Hz/sync), DEPTH, DELAY, FEEDBACK, tone |
+| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 905 ms a side | TIME (ms or synced, dotted/triplet), FEEDBACK, LP/HP in the loop, OFFSET L/R |
+| REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
-| LIMITER | look-ahead-free peak limiter with a soft knee before the master | catches resonant peaks and OTT gain |
+| LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
 
 Half-rate processing of the delay and reverb halves their memory and cost; their high end is filtered below 10 kHz
 anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clock.
@@ -350,7 +385,8 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
   possible on a stock FM-1**: its only MIDI jack is an input (an optocoupler at its pads; no TX pin is known on the
   board; confirmed by PCB photos and by three firmware projects). Options: a USB-MIDI host adapter turns the FM-1's USB
   MIDI out into DIN/TRS without a computer; a hardware modification (a free GPIO with UART TX, two resistors and a jack)
-  would need a pin found on the board first, and is out of scope until one is.
+  would need a pin found on the board first, and is out of scope until one is. Decided after Phase 1: TRS MIDI out is
+  dropped; MIDI out is USB only.
 
 ## 16. Presets and storage
 
@@ -408,7 +444,8 @@ in use; buttons show the open page's family, a locked layer breathes.
 
 ## 18. Testing
 
-The host harness (`tests/st_*`, gcc, no HAL) renders audio offline through the real DSP sources:
+The host harness (`tests/sy_*`, gcc, no HAL) renders audio offline through the real DSP sources. What it checks and
+what it found: [TESTING.md](TESTING.md). The plan:
 
 | Test | Pass condition |
 | --- | --- |
@@ -418,7 +455,7 @@ The host harness (`tests/st_*`, gcc, no HAL) renders audio offline through the r
 | Filter stability | every type at cutoff/resonance/drive corners, audio-rate cutoff modulation, impulses and full-scale squares: bounded output, decays after input stops |
 | Determinism | the same events give the same output hash run to run and between the host, the emulator and (for the shared parts) a cc build |
 | Golden renders | every factory preset plays a fixed phrase; its hash and levels are recorded; a change must be intended (`GOLDEN_UPDATE=1`) |
-| Cost | per-kernel listing counts from the target build (`tools/costprobe`, extended to the real kernels), host instruction counts, per-voice cycles at each unison count |
+| Cost | per-kernel listing counts from the target build (`tools/costprobe/sy_cost.sh`), and the whole engine's on the target by the cost model (`sy_dyn.sh`: the listing weighed by the host's line counts) |
 | Units | parameter table, matrix, allocation and stealing, glide, storage round trip and migration, flash allow-list |
 
 The emulator (`web/emu`, extended from Felucca's) runs the whole firmware in a browser for the UI. Felucca's
@@ -438,10 +475,11 @@ whether Strata needs that is decided by the device test.
 
 | Risk | Mitigation |
 | --- | --- |
+| CPU: the engine costs about twice Phase 0's estimate (§13, TESTING.md §4) | an optimisation pass on the effects (the chorus alone ~520 instructions a sample), the control rate and the overhead; the second core; the budget's defaults; decided with the BENCH page's real rate |
 | FPU slower than assumed | kernels isolated; fixed-point filter/FX fallback; decided by the BENCH page |
 | I-cache misses (code runs from flash; 32 KB cache shared) | hot loops are small; if the BENCH page shows UI-dependent load, the oscillator and filter loops move to `.ram_text` (24 KiB) |
 | Aliasing of bright tables with linear interpolation | per-table taper; cubic interpolation for the few that need it |
 | Brightness steps at mip boundaries on glides | measured; crossfade the levels in boundary blocks |
 | Table build gap (~20 ms) on table/preset change | faded; documented; preset changes are silent between the old sound's fade and the new one |
-| RAM (pool at ~94 %) | delay length and reverb size are the first to give back |
-| TRS MIDI out | not possible on stock hardware (§15) |
+| RAM: the engine's pool is 309,334 B; with the screen's canvas (59,520 B) that is 214 B over Felucca's pool and before the 8 KiB margin it must keep (TESTING.md §4.4) | shorten the delay (905 → 750 ms a side frees 13.4 KiB), or move the generator's scratch (11.4 KiB) to `.bss` if it has room once Felucca's sequencer is gone |
+| TRS MIDI out | not possible on stock hardware; dropped (§15) |

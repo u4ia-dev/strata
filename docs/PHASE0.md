@@ -268,3 +268,18 @@ hyper/dimension, EQ, arpeggiator, preset morphing, 8 macros, the second core as 
 - **The stock VM store** (`0x94000–0xE8FFF`: the stock firmware's settings, a copy of the Bluetooth MAC, wheel
   calibration it inherited) contains Felucca's user store. Felucca-family firmwares overwrite that part; the stock
   firmware rebuilds its settings when it returns. Only a full flash backup restores the original contents.
+
+## Update after Phase 2
+
+- **TRS MIDI out is dropped** (your decision at the start of Phase 2). MIDI out is USB.
+- **RAM, measured** on the target build of the engine (TESTING.md §4.4), replacing the plan's table in §3: the pool
+  holds the wavetables at 182.6 KiB (32 frames of 5,842 B: the upper levels are oversampled more than the planned 4 ×,
+  against aliasing), the delay at 78 KiB (905 ms a side), the reverb at 19.9 KiB, the generator's scratch at 11.4 KiB
+  and the chorus at 4 KiB: 309,334 B in all. With Felucca's screen canvas (59,520 B) that is 214 B over the 360 KiB
+  pool, before its 8 KiB margin: integration frees at least 8.2 KiB (the delay shortened to 750 ms a side frees
+  13.4 KiB). `.bss` holds ~19 KiB, the eight voices 14.2 KiB of it.
+- **CPU, estimated** for the whole engine by the target cost model (TESTING.md §4): about twice this report's §3
+  figures, mostly control-rate work and effects the Phase 0 estimate left out or underrated (the effects ~1,550
+  listing instructions a sample against ~520 estimated; a voice's control and mixing ~260 against ~50). At 205
+  instructions a µs, one core holds about 7 voices of A + B with a filter and no effects, about 3 with every effect.
+  The rate of this float code on the device is still unmeasured (the BENCH page).
