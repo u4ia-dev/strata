@@ -100,6 +100,9 @@ static uint8_t fx_lowcut;                        /* (panel.c's settings_init set
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_sounds.h"
+#include "../../firmware/src/sy_gfx.c"
+#include "../../firmware/src/sy_ui.c"
+#include "../../firmware/src/sy_ui_draw.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #include "../../firmware/src/sy_app.c"
 
@@ -240,7 +243,8 @@ EXPORT uint32_t web_now_ms(void) { return fm1_ms; }
 EXPORT uint32_t web_playing(void) { return 0; }
 EXPORT uint32_t web_sample_rate(void) { return 44118u; }
 
-/* for the test (web/emu/strata_emu_test.mjs): the voices sounding, the page shown, a parameter's value and text */
+/* for the tests (web/emu/strata_emu_test.mjs, strata_shot.mjs): the voices sounding, the page shown, a parameter's
+ * value, the MOD layer, a matrix slot, the palette */
 EXPORT uint32_t web_test_voices(void)
 {
     uint32_t i, n = 0;
@@ -248,9 +252,30 @@ EXPORT uint32_t web_test_voices(void)
         n += sy_v[i].on != 0;
     return n;
 }
-EXPORT uint32_t web_test_page(void) { return sy_page; }
-EXPORT uint32_t web_test_page_section(void) { return sy_pg[sy_page].sec; }
-EXPORT int32_t web_test_page_param(uint32_t k) { return k < sy_pg[sy_page].n ? sy_pg[sy_page].id[k] : -1; }
+EXPORT uint32_t web_test_page(void) { return ui.page; }
+EXPORT uint32_t web_test_page_section(void) { return UI_PG[ui.page].sec; }
+EXPORT const char *web_test_page_name(void) { return UI_PG[ui.page].name; }
+EXPORT int32_t web_test_page_param(uint32_t k) { return k < 4u ? UI_PG[ui.page].id[k] : -1; }
 EXPORT int32_t web_test_value(uint32_t id) { return id < SP_COUNT ? sy_patch.p[id] : 0; }
+EXPORT void web_test_set(uint32_t id, int32_t v)
+{
+    if (id < SP_COUNT) {
+        sy_patch.p[id] = sp_clamp(id, v);
+        sy_ui_touch();
+    }
+}
 EXPORT const char *web_test_patch_name(void) { return sy_patch.name; }
 EXPORT uint32_t web_test_sound(void) { return sy_sound; }
+EXPORT uint32_t web_test_mod(void) { return ui.mod; }
+EXPORT uint32_t web_test_mod_src(void) { return ui.mod_src; }
+EXPORT int32_t web_test_slot(uint32_t s, uint32_t field) { return s < NSLOT && field < 3u ? sy_patch.p[SP_M1_SRC + 3u * s + field] : 0; }
+EXPORT uint32_t web_test_palette(int32_t i)
+{
+    if (i >= 0) {
+        ui.pal = (uint8_t)(i % (int32_t)SY_NPAL);
+        sy_palette(ui.pal);
+        ui.dirty = D_ALL;
+    }
+    return ui.pal;
+}
+EXPORT uint32_t web_test_dirty(void) { return ui.dirty; }

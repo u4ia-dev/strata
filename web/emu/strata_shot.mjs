@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 brandonmbarone
-// STRATA's screen on the simulated FM-1 as PNG files, to look at without a browser (twice the panel's size): after
-// boot (OSC A, the first sound), and on the FX family's first page with a key held and two knobs turned.
+// STRATA's screen on the simulated FM-1 as PNG files, to look at without a browser (twice the panel's size). A short
+// session, played as the panel would: the wave page (VOWELS, BEND+), REC held (LFO 1 picked by its white key, KNOB 2
+// turned: its depth on WT POS), the unison page, an envelope with a key held, the MENU, and the wave page in each
+// palette. It prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -13,7 +15,10 @@ if (ex._initialize) ex._initialize();
 ex.web_nor_erase();
 ex.web_master(700);
 ex.web_boot();
-const run = (s) => { for (let n = Math.round(s * 44118 / 128); n > 0; n--) ex.web_render(128); };
+const run = (s) => { for (let n = Math.max(1, Math.round(s * 44118 / 128)); n > 0; n--) ex.web_render(128); };
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11 };   // panel.c B_*
+const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
+const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
 
 function crc32(buf) {
   let crc = 0xffffffff;
@@ -55,11 +60,51 @@ function png(name, scale = 2) {                 // the frame buffer: RGB565, hig
 mkdirSync(out, { recursive: true });
 run(0.6);
 png("boot.png");
-ex.web_keys(1 << 7);                            // key 7 (C4) held
-ex.web_buttons(1 << 0);                         // FX (panel.c B_FX): DRIVE
-run(0.05);
-ex.web_buttons(0);
-ex.web_enc(3, 20);                              // KNOB 1: DRIVE's ON (already on)
-ex.web_enc(4, 1);                               // KNOB 2: its TYPE, one step
+const [TABLE, POS, WARP, WAMT] = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
+ex.web_test_set(TABLE, 27);                     // VOWELS
+ex.web_test_set(POS, 375);
+ex.web_test_set(WARP, 2);                       // BEND+
+ex.web_test_set(WAMT, 300);
+run(0.4);                                       // (the table builds)
+png("wave.png");
+ex.web_buttons(1 << B.REC);                     // REC held: the MOD layer
 run(0.6);
-png("fx.png");
+ex.web_keys(1 << 4);                            // A3, a white key: LFO 1
+run(0.05);
+ex.web_keys(0);
+for (let i = 0; i < 4; i++) { ex.web_enc(E.K2, 1); run(0.004); }   // a quick turn of KNOB 2
+run(0.1);
+png("mod.png");
+console.log(`mod layer ${ex.web_test_mod()}, source ${ex.web_test_mod_src()}, slot 1: src ${ex.web_test_slot(0, 0)} dst ${ex.web_test_slot(0, 1)} amt ${ex.web_test_slot(0, 2)}`);
+ex.web_buttons(0);
+run(0.1);
+png("wave_mod.png");
+tap(B.EDIT);                                    // OSC A UNISON
+run(0.1);
+png("unison.png");
+tap(B.ENV);                                     // ENV 1
+ex.web_keys(1 << 7);
+run(0.3);
+png("env.png");
+ex.web_keys(0);
+run(0.2);
+tap(B.ENV);
+tap(B.ENV);                                     // ENV 2 (its default decays to nothing)
+ex.web_keys(1 << 7);
+run(0.15);
+png("env2.png");
+ex.web_keys(0);
+run(0.2);
+ex.web_buttons(1 << B.HOME);                    // HOME held: the MENU
+run(0.6);
+ex.web_buttons(0);
+run(0.1);
+png("menu.png");
+tap(B.EDIT);                                    // back to OSC A
+run(0.1);
+for (let p = 0; p < 7; p++) {
+  ex.web_test_palette(p);
+  run(0.05);
+  png(`pal${p}.png`);
+}
+ex.web_test_palette(0);
