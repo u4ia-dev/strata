@@ -243,31 +243,38 @@ test drives its module's exports as the page does: no imports; every test sound 
 bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT) and a foreign one is refused; a load is
 taken, a second one held while it fades (2 quanta), then played as sent; values as text.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 12 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 18 checks)
 
-`sy_app.c` with the engine, Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after
-Felucca's): the clock, the audio halves as the DMA asks for them, the key matrix and its LEDs, the 240 × 240 screen,
-an erased flash image. Not simulated: USB, TRS MIDI, the console, the battery, and time within an audio half (the clock
-moves a millisecond at a time, so the screen shows `cpu --` there rather than a load). **Verified in emulator**, under
-Node:
+`sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
+compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the audio halves as the DMA asks for
+them, the key matrix and its LEDs, the 240 x 240 screen, an erased flash image. Not simulated: USB, TRS MIDI, the
+console, the battery, time within an audio half (no CPU load to show), and the panel's speed (a region is drawn and
+sent at once). **Verified in emulator**, under Node:
 
 | Check | Result |
 | --- | --- |
 | The module | no imports (the worklet gives it none) |
-| Boot | draws (79 colours), silent before a key; the first page OSC A, the sound SUPERSAW |
-| A key | plays (peak 0.101, one voice); its release ends it (no voice after 1.5 s) |
+| Boot | draws (260 colours), silent before a key; the first page OSC A WAVE, the sound SUPERSAW |
+| Idle | nothing changed, nothing drawn (0 blits in 0.2 s) |
+| A key | plays (peak 0.102, one voice); its release ends it |
 | LEDs | the key held and the page's family button (EDIT) lit |
-| KNOB 2 | turns the page's second parameter, the table (1 → 4 for three detents) |
-| FX, twice | DRIVE, then CHORUS (a family button cycles its sections) |
-| SELECT, PRESETS | the next page; the next sound (PLUCK) |
+| KNOB 1 (a list) | the table one entry a detent (1 -> 4 for three); 3 regions redrawn, not the screen |
+| KNOB 2 (a value) | speed-sensitive: 3 slow detents move WT POS 0.1 % each, 6 quick ones 25.1 % |
+| FX, ALGORITHM, SELECT | DRIVE; the next effect (CHORUS); the next page |
+| PRESETS | the next sound (PLUCK) |
+| The MOD layer | REC held opens it; a white key (A3) picks LFO 1 and plays nothing; KNOB 2 sets LFO 1's depth on WT POS in a matrix slot (5 slow detents: 1.0 %); released, it closes, the slot stays |
+| .. its leftovers | a slot it made and turned back to 0 is freed when it closes |
+| REC's gestures | a tap does nothing, a double tap latches the layer, a tap then lets it go |
+| The MENU | HOME held; KNOB 1 changes the palette and the screen with it (25,870 pixels) |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
 
-The screen was checked by eye from `strata_shot.mjs`'s PNGs (the header, the four knob cards with their values and
-gauges, the footer). **A bug the test found**: the table's CC 0 means "no CC", so a CC 0 message (bank select) set
-the first parameter without one (OSC A's ON); the lookup now skips CC 0, and the lookup before the fix fails the
-check.
+The screens were checked by eye from `strata_shot.mjs`'s PNGs (a session: the wave page with VOWELS and BEND+, REC
+held with LFO 1 on WT POS, the unison page, ENV 1 and ENV 2 with a key held, the MENU, each palette). Bugs the tests
+found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
+ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
+double-tap rule, so the session taps slower.
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 

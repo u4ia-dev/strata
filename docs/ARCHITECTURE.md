@@ -51,7 +51,10 @@ cards and the workbench), `sy_sounds.h` (the eight starter sounds, until Phase 5
 (the app around the engine on Felucca's HAL, `panel.c` and `gfx.c`: the audio interrupt, the event rings, MIDI in, the
 pages, the LEDs, a placeholder screen); `strata.c`, the unit that includes Felucca's platform and `sy_app.c`, comes
 with integration. In the browser: `web/strata` (the workbench: the DSP alone) and `web/emu/strata_web.c` (the app on
-the simulated FM-1).
+the simulated FM-1). Phase 4 adds the UI: `sy_gfx.c` (the palettes by colour role, anti-aliased arcs, discs,
+segments and curves on `gfx.c`'s canvas), `sy_ui.c` (pages, families, gestures, the knobs, the MOD layer) and
+`sy_ui_draw.c` (the five screen regions, the graphs, the LEDs); `sy_app.c` keeps the audio, the events, MIDI in, the
+sounds and the keys.
 
 | Kept from Felucca (unchanged where possible, so upstream fixes merge) | Replaced or new in Strata |
 | --- | --- |
@@ -427,9 +430,25 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
 
 ## 17. User interface (draft; CONTROLS.md is the reference once the UI phase is done)
 
-Phase 3's skeleton (`sy_app.c`) is a placeholder for testing, not this design: the parameter table four to a page (a
-header, four knob cards with a value and a gauge, a footer), the family buttons cycling their sections, SELECT the
-pages, PRESETS the starter sounds, OCT− / OCT+. Phase 4 builds what follows.
+**Phase 4, at the look stop** (verified in emulator; the design: the Strata Screen Design canvas, approved with its
+seven palettes and STRATA's amber as the default). The screen is five regions, each drawn only when it changes and sent
+on its own (one canvas strip at a time): a header (the section, its power light, the page and its number, at the right
+the oscillator's OCT SEM FIN, an envelope's or LFO's tabs, the effects that are on; in the MOD layer a banner with
+the source and the depth just set), the display window and its graph, four knob cells (a dial: the value's arc, the
+modulation's halos, the pointer; or a list's pill), and a footer of the mod sources' chips (lit: moving something on
+this page) or a word for a moment. Colour is a role (sound, now, value, modulation and its negative and other
+sources, ...), each palette thirteen base colours and the rest derived; MENU > COLOR picks one. Graphs so far: the
+table in 3D (its frames as the oscillator stores them, the playing one on top, the range modulation sweeps), one
+frame in 2D (warped by the oscillator's own warp function, the unwarped one behind) with the unison's voices, an
+envelope (the other one behind, each voice on it, a time ruler), the palettes, and a list of the section's values for
+the pages whose graph comes later. Knobs are speed-sensitive (a slow turn 0.1 % a detent, a quick one up to 5 %;
+MENU > ACCEL OFF: 1 %); a list, a count or a short range moves one value a detent. The MOD layer: REC held (double
+tap: latched); a white key picks the source (the keys light: the pick, the sources in use), a knob sets its depth on
+that knob's parameter (a matrix slot made when needed, freed at 0 when the layer closes); ENV held: the same for
+ENV 2, the keys still playing. HOME held: the MENU. Two new font faces (10 px caps, 12 px semibold) and Z, _ and ±
+cost about 33 KB of flash. Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the filter, LFO, matrix, rack
+and HOME graphs, presets (browser, user slots, save, undo, restore), MIDI learn, help, the rest of the MENU, and
+CONTROLS.md. The draft below is the plan those follow.
 
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
