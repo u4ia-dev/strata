@@ -36,19 +36,22 @@ typedef struct {                           /* a kernel call: one unison voice ov
 /* The pi32v2 has 16 registers and these loops need most of them (the target listing: tools/costprobe). So: the
  * output is one interleaved buffer (left, right: one pointer), one shift gives the index and the fraction
  * together, frame k + 1 is frame k's pointer plus WT_FRAME (frames are contiguous in the pool; a table of one
- * frame reads the pool's next frame with a crossfade of 0), and each kernel comes twice: gains held (the usual
- * block) and gains ramping (_g: unison, level and fade changes), one a line (tools/costprobe counts by line). */
+ * frame reads the pool's next frame with a crossfade of 0), and each kernel comes four times: gains held (the usual
+ * block) or ramping (_g: unison, level and fade changes), and two frames crossfaded or one (1: the position on a
+ * frame for the whole run, as at either end, at a keyframe or in a table of one frame: what the crossfade of 0 or 1
+ * gives exactly, for 7 instructions less), one a line (tools/costprobe counts by line). */
 #define OSC_SETUP                                                                                         \
     const int16_t *a = j->a, *b = a + WT_FRAME;                                                           \
     uint32_t shf = 17u - j->bits, ph = j->ph, inc = j->inc;                                               \
     int32_t dinc = j->dinc, xf = j->xf, dxf = j->dxf, gl = j->gl, gr = j->gr
 #define OSC_READ(q)                                                                                       \
     uint32_t x = (q) >> shf, i = x >> 15;                                                                 \
-    int32_t fr = (int32_t)(x & 0x7FFFu);                                                                  \
-    int32_t a0 = a[i], b0 = b[i];                                                                         \
-    int32_t sa = a0 + (((a[i + 1u] - a0) * fr) >> 15);                                                    \
-    int32_t sb = b0 + (((b[i + 1u] - b0) * fr) >> 15);                                                    \
-    int32_t s = sa + (((sb - sa) * xf) >> 15)
+    int32_t fr = (int32_t)(x & 0x7FFFu), a0 = a[i];                                                       \
+    int32_t s = a0 + (((a[i + 1u] - a0) * fr) >> 15);                                                     \
+    if (f2) {                                                                                             \
+        int32_t b0 = b[i], sb = b0 + (((b[i + 1u] - b0) * fr) >> 15);                                     \
+        s += ((sb - s) * xf) >> 15;                                                                       \
+    }
 #define OSC_OUT                                                                                           \
     o[0] += (s * gl) >> 15;                                                                               \
     o[1] += (s * gr) >> 15;                                                                               \
@@ -60,9 +63,10 @@ typedef struct {                           /* a kernel call: one unison voice ov
 #define OSC_MAP(q)                                                                                        \
     uint32_t sg = ph >> 26, w0 = map[sg];                                                                 \
     uint32_t q = w0 + (uint32_t)(((int32_t)(map[sg + 1u] - w0) >> 16) * (int32_t)((ph >> 10) & 0xFFFFu))
-#define OSC_KERNEL(NAME, RAMP, DECL, BODY)                                                                \
+#define OSC_KERNEL(NAME, RAMP, F2, DECL, BODY)                                                            \
     static uint32_t NAME(int32_t *restrict o, uint32_t n, const osc_job_t *j)                             \
     {                                                                                                     \
+        const int f2 = F2;                                                                                \
         int32_t dgl = j->dgl, dgr = j->dgr;                                                               \
         DECL;                                                                                             \
         OSC_SETUP;                                                                                        \
@@ -80,14 +84,18 @@ typedef struct {                           /* a kernel call: one unison voice ov
 /* the phase as it is */
 #define OSC_D_PLAIN do {} while (0)
 #define OSC_B_PLAIN OSC_READ(ph)
-OSC_KERNEL(osc_k_plain, 0, OSC_D_PLAIN, OSC_B_PLAIN)
-OSC_KERNEL(osc_k_plain_g, 1, OSC_D_PLAIN, OSC_B_PLAIN)
+OSC_KERNEL(osc_k_plain, 0, 1, OSC_D_PLAIN, OSC_B_PLAIN)
+OSC_KERNEL(osc_k_plain_g, 1, 1, OSC_D_PLAIN, OSC_B_PLAIN)
+OSC_KERNEL(osc_k_plain1, 0, 0, OSC_D_PLAIN, OSC_B_PLAIN)
+OSC_KERNEL(osc_k_plain1_g, 1, 0, OSC_D_PLAIN, OSC_B_PLAIN)
 
 /* through the warp map */
 #define OSC_D_MAP const uint32_t *map = j->map
 #define OSC_B_MAP OSC_MAP(q); OSC_READ(q)
-OSC_KERNEL(osc_k_map, 0, OSC_D_MAP, OSC_B_MAP)
-OSC_KERNEL(osc_k_map_g, 1, OSC_D_MAP, OSC_B_MAP)
+OSC_KERNEL(osc_k_map, 0, 1, OSC_D_MAP, OSC_B_MAP)
+OSC_KERNEL(osc_k_map_g, 1, 1, OSC_D_MAP, OSC_B_MAP)
+OSC_KERNEL(osc_k_map1, 0, 0, OSC_D_MAP, OSC_B_MAP)
+OSC_KERNEL(osc_k_map1_g, 1, 0, OSC_D_MAP, OSC_B_MAP)
 
 /* SYNC: the map, and a window that dips the output where the master resets (deep only as far as the slave is
  * from a whole cycle there: at a whole ratio the reset is already continuous) */
@@ -98,19 +106,24 @@ OSC_KERNEL(osc_k_map_g, 1, OSC_D_MAP, OSC_B_MAP)
     OSC_READ(q);                                                                                          \
     if (e < wt)                                                                                           \
         s = (s * (32767 - ((wd * (32767 - (int32_t)((e * wk) >> 15))) >> 15))) >> 15
-OSC_KERNEL(osc_k_sync, 0, OSC_D_SYNC, OSC_B_SYNC)
-OSC_KERNEL(osc_k_sync_g, 1, OSC_D_SYNC, OSC_B_SYNC)
+OSC_KERNEL(osc_k_sync, 0, 1, OSC_D_SYNC, OSC_B_SYNC)
+OSC_KERNEL(osc_k_sync_g, 1, 1, OSC_D_SYNC, OSC_B_SYNC)
+OSC_KERNEL(osc_k_sync1, 0, 0, OSC_D_SYNC, OSC_B_SYNC)
+OSC_KERNEL(osc_k_sync1_g, 1, 0, OSC_D_SYNC, OSC_B_SYNC)
 
 /* FM: phase modulation by the other oscillator */
 #define OSC_D_PM const int32_t *pm = j->pm; uint32_t pmd = j->pmd
 #define OSC_B_PM uint32_t q = ph + (uint32_t)*pm * pmd; pm += 2; OSC_READ(q)
-OSC_KERNEL(osc_k_pm, 0, OSC_D_PM, OSC_B_PM)
-OSC_KERNEL(osc_k_pm_g, 1, OSC_D_PM, OSC_B_PM)
+OSC_KERNEL(osc_k_pm, 0, 1, OSC_D_PM, OSC_B_PM)
+OSC_KERNEL(osc_k_pm_g, 1, 1, OSC_D_PM, OSC_B_PM)
+OSC_KERNEL(osc_k_pm1, 0, 0, OSC_D_PM, OSC_B_PM)
+OSC_KERNEL(osc_k_pm1_g, 1, 0, OSC_D_PM, OSC_B_PM)
 
 typedef uint32_t (*osc_kernel_t)(int32_t *restrict, uint32_t, const osc_job_t *);
 enum { OSK_PLAIN, OSK_MAP, OSK_SYNC, OSK_PM };
-static const osc_kernel_t OSC_KS[4][2] = {{osc_k_plain, osc_k_plain_g}, {osc_k_map, osc_k_map_g},
-                                          {osc_k_sync, osc_k_sync_g}, {osc_k_pm, osc_k_pm_g}};
+static const osc_kernel_t OSC_KS[4][2][2] = {      /* [kind][gains ramping][two frames] */
+    {{osc_k_plain1, osc_k_plain}, {osc_k_plain1_g, osc_k_plain_g}}, {{osc_k_map1, osc_k_map}, {osc_k_map1_g, osc_k_map_g}},
+    {{osc_k_sync1, osc_k_sync}, {osc_k_sync1_g, osc_k_sync_g}}, {{osc_k_pm1, osc_k_pm}, {osc_k_pm1_g, osc_k_pm_g}}};
 
 /* -------------------------------------------------------------------------------------------- state --- */
 typedef struct {                           /* an oscillator of a voice */
@@ -265,10 +278,13 @@ static void osc_note(osc_v_t *o, int retrig, float phase, float rand, uint32_t *
 static uint32_t osc_level(uint32_t inc, float s)
 {
     float e = (float)inc * s;
-    if (wt_level(inc) >= WT_NLEV)
+    uint32_t l;
+    if (inc > WT_INC_L0 << (WT_NLEV - 1u))                 /* (wt_level(inc) == WT_NLEV) */
         return WT_NLEV;
-    return e >= 2147483648.0f ? WT_NLEV - 1u : (wt_level((uint32_t)(int32_t)e) < WT_NLEV ? wt_level((uint32_t)(int32_t)e)
-                                                                                       : WT_NLEV - 1u);
+    if (e >= 2147483648.0f)
+        return WT_NLEV - 1u;
+    l = wt_level((uint32_t)(int32_t)e);
+    return l < WT_NLEV ? l : WT_NLEV - 1u;
 }
 
 /* one unison voice over a block at one level: position p .. p + dp SY_BLK (frames), split where it crosses a
@@ -276,7 +292,7 @@ static uint32_t osc_level(uint32_t inc, float s)
 static uint32_t osc_run(uint32_t kind, osc_job_t *jb, const wt_table_t *t, uint32_t lv, float p, float dp,
                         int32_t *lr)
 {
-    uint32_t done = 0, nf = t->n;
+    uint32_t done = 0, nf = t->n, two;
     int32_t inc0 = (int32_t)jb->inc, gl0 = jb->gl, gr0 = jb->gr;
     const int32_t *pm0 = jb->pm;
     jb->bits = WT_BITS[lv];
@@ -298,10 +314,11 @@ static uint32_t osc_run(uint32_t kind, osc_job_t *jb, const wt_table_t *t, uint3
             xf0 = sy_clampf(p - (float)ki, 0.0f, 1.0f);
             xf1 = sy_clampf(p + dp * (float)m - (float)ki, 0.0f, 1.0f);
         }
-        jb->a = wt_frame(t, kf, lv);
         jb->xf = (int32_t)(xf0 * 32768.0f);
         jb->dxf = (int32_t)((xf1 - xf0) * 32768.0f) / (int32_t)m;
-        jb->ph = OSC_KS[kind][(jb->dgl | jb->dgr) != 0](lr + 2u * done, m, jb);
+        two = jb->dxf != 0 || (jb->xf != 0 && jb->xf != 32768);     /* (else the position is on frame kf or kf + 1) */
+        jb->a = wt_frame(t, kf + (!two && jb->xf != 0), lv);
+        jb->ph = OSC_KS[kind][(jb->dgl | jb->dgr) != 0][two](lr + 2u * done, m, jb);
         done += m;
         jb->inc = (uint32_t)(inc0 + jb->dinc * (int32_t)done);
         jb->gl = gl0 + jb->dgl * (int32_t)done;
@@ -405,8 +422,9 @@ static uint32_t osc_setup(osc_v_t *o, const osc_par_t *pp, uint32_t warp, osc_jo
     return OSK_MAP;
 }
 
-/* one block of an oscillator of a voice, added into lr (left and right interleaved, Q15 in int32) */
-static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *lr)
+/* one block of an oscillator of a voice, added into lr (left and right interleaved, Q15 in int32); sg: the source's
+ * gains (level, pan, fades: left at the block's start and end, right), in its unison voices' */
+static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *lr, const float *sg)
 {
     uint32_t n = pp->nuni, nold = o->fresh ? n : o->n, nmax = n > nold ? n : nold, j, i, nf = t->n;
     osc_job_t jb;
@@ -428,7 +446,7 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
         uint32_t ia = (uint32_t)(((uint64_t)inc0 * o->ratio[j]) >> 30);
         uint32_t ib = (uint32_t)(((uint64_t)pp->inc1 * o->ratio[j]) >> 30), im = ia > ib ? ia : ib;
         uint32_t lv = osc_level(im, o->slope), old = o->lev[j];
-        int32_t tl = j < n ? o->tl[j] : 0, tr = j < n ? o->tr[j] : 0;          /* (leaving: to 0) */
+        int32_t tl = j < n ? o->tl[j] : 0, tr = j < n ? o->tr[j] : 0, ql0, ql1, qr0, qr1;   /* (leaving: to 0) */
         int32_t g0l = o->fresh ? tl : j < nold ? o->gl[j] : 0, g0r = o->fresh ? tr : j < nold ? o->gr[j] : 0;
         float p0 = sy_clampf(pos0 + sp * o->x[j], 0.0f, (float)(nf - 1u));
         float p1 = sy_clampf(pos1 + sp * o->x[j], 0.0f, (float)(nf - 1u));
@@ -437,15 +455,19 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
             lv = old;                                  /* hysteresis: a level down a semitone late */
         if (old >= WT_NLEV)
             g0l = o->fresh ? g0l : 0, g0r = o->fresh ? g0r : 0;   /* silent before: fade in */
+        ql0 = (int32_t)((float)g0l * sg[0] + 0.5f);    /* the source's gains in (rounded): the kernels play these */
+        ql1 = (int32_t)((float)tl * sg[1] + 0.5f);
+        qr0 = (int32_t)((float)g0r * sg[2] + 0.5f);
+        qr1 = (int32_t)((float)tr * sg[3] + 0.5f);
         jb.inc = ia;
         jb.dinc = ((int32_t)ib - (int32_t)ia) / (int32_t)SY_BLK;
         if (lv >= WT_NLEV) {                           /* too high: fade the old level out, or nothing */
             if (old < WT_NLEV && !o->fresh) {
                 jb.ph = o->ph[j];
-                jb.gl = g0l;
-                jb.gr = g0r;
-                jb.dgl = -g0l / (int32_t)SY_BLK;
-                jb.dgr = -g0r / (int32_t)SY_BLK;
+                jb.gl = ql0;
+                jb.gr = qr0;
+                jb.dgl = -ql0 / (int32_t)SY_BLK;
+                jb.dgr = -qr0 / (int32_t)SY_BLK;
                 o->ph[j] = osc_run(k, &jb, t, old, p0, dp, lr);
             } else {
                 o->ph[j] += (ia >> 1) * SY_BLK + (ib >> 1) * SY_BLK;
@@ -454,25 +476,25 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
             tl = tr = 0;
         } else if (old == lv || old >= WT_NLEV || o->fresh) {
             jb.ph = o->ph[j];
-            jb.gl = g0l;
-            jb.gr = g0r;
-            jb.dgl = (tl - g0l) / (int32_t)SY_BLK;
-            jb.dgr = (tr - g0r) / (int32_t)SY_BLK;
+            jb.gl = ql0;
+            jb.gr = qr0;
+            jb.dgl = (ql1 - ql0) / (int32_t)SY_BLK;
+            jb.dgr = (qr1 - qr0) / (int32_t)SY_BLK;
             o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, lr);
         } else {                                       /* a level change: the old one fades out, the new in */
             uint32_t ph = o->ph[j];
             jb.ph = ph;
-            jb.gl = g0l;
-            jb.gr = g0r;
-            jb.dgl = -g0l / (int32_t)SY_BLK;
-            jb.dgr = -g0r / (int32_t)SY_BLK;
+            jb.gl = ql0;
+            jb.gr = qr0;
+            jb.dgl = -ql0 / (int32_t)SY_BLK;
+            jb.dgr = -qr0 / (int32_t)SY_BLK;
             osc_run(k, &jb, t, old, p0, dp, lr);
             jb.inc = ia;
             jb.ph = ph;
             jb.gl = 0;
             jb.gr = 0;
-            jb.dgl = tl / (int32_t)SY_BLK;
-            jb.dgr = tr / (int32_t)SY_BLK;
+            jb.dgl = ql1 / (int32_t)SY_BLK;
+            jb.dgr = qr1 / (int32_t)SY_BLK;
             o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, lr);
         }
         if ((hold > 0.0f || wdc != 0.0f) && lv < WT_NLEV) {   /* PWM holds the cycle's first sample: its share is */
@@ -483,10 +505,10 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
                 v0 = hold * ((float)fa[0] + (float)(fb[0] - fa[0]) * (p1 - (float)kf));
             }
             v0 *= 1.0f / 32768.0f;
-            dc[0] += v0 * (float)g0l;
-            dc[1] += v0 * (float)tl;
-            dc[2] += v0 * (float)g0r;
-            dc[3] += v0 * (float)tr;
+            dc[0] += v0 * (float)ql0;
+            dc[1] += v0 * (float)ql1;
+            dc[2] += v0 * (float)qr0;
+            dc[3] += v0 * (float)qr1;
         }
         o->lev[j] = (uint8_t)lv;
         o->gl[j] = (int16_t)tl;

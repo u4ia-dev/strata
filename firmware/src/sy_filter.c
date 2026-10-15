@@ -59,7 +59,7 @@ static inline float flt_k(float res, float kmax) { return kmax * sy_exp2f(-sy_lo
  * coefficients a1 a2 a3 are each bounded (0..1, 0..0.5, 0..1), so a ramp from one filter to another passes only
  * through tame ones, even with the cutoff jumping 20 Hz -> 20 kHz in a block (ramping k + g, or g, would not) */
 #define FLT_SVF_KERNEL(NAME, OUT)                                                                         \
-    static void NAME(float *restrict x, float *st, const float *c0, const float *c1)                     \
+    static SY_NOINLINE void NAME(float *restrict x, float *st, const float *c0, const float *c1)         \
     {                                                                                                     \
         float ic1 = st[0], ic2 = st[1], a1 = c0[0], a2 = c0[1], a3 = c0[2], k = c0[3];                    \
         const float inv = 1.0f / (float)SY_BLK;                                                           \
@@ -90,13 +90,14 @@ typedef void (*flt_svf_t)(float *restrict, float *, const float *, const float *
 enum { FR_LP, FR_BP, FR_HP, FR_NOTCH, FR_PEAK };
 static const flt_svf_t FLT_SVF[5] = {flt_svf_lp, flt_svf_bp, flt_svf_hp, flt_svf_notch, flt_svf_peak};
 static const uint8_t FLT_RESP[FT_LADDER] = {FR_LP, FR_LP, FR_HP, FR_HP, FR_BP, FR_BP, FR_NOTCH, FR_PEAK};
+static const uint8_t FLT_NST[FT_COUNT] = {2, 4, 2, 4, 2, 4, 2, 2, 4, 6};    /* the states each type uses, a channel */
 
 /* the ladder over a block of one channel: g (the prewarped cutoff) and k (feedback 0..4) ramp. Two divisions a
  * sample (G, and the solve). Newton steps in their place were tried: no fewer instructions on the target (72
  * against 62 and the two divides, whose time there is not yet measured: the BENCH page) and, at 90 % resonance,
  * -59 dB off exact division in a fast sweep, -18 dB with the cutoff jumping; ramping G instead of g moves a
  * fast-swept ladder by -44 dB. Kept exact */
-static void flt_ladder(float *x, float *st, float g0, float g1, float k0, float k1)
+static SY_NOINLINE void flt_ladder(float *x, float *st, float g0, float g1, float k0, float k1)
 {
     float s1 = st[0], s2 = st[1], s3 = st[2], s4 = st[3];
     const float inv = 1.0f / (float)SY_BLK;
@@ -204,8 +205,8 @@ static void flt_block(flt_t *f, const flt_par_t *p, float *l, float *r)
         for (c = 0; c < 2u; c++)
             for (i = 0; i < SY_BLK; i++)
                 ch[c][i] = dry[c][i] + (ch[c][i] - dry[c][i]) * p->mix;
-    for (c = 0; c < 2u; c++)
-        for (i = 0; i < 6u; i++) {
+    for (c = 0; c < 2u; c++)                       /* (the others stay 0: a type change clears them all) */
+        for (i = 0; i < FLT_NST[t]; i++) {
             SY_FLUSH(f->s[c][i]);
             f->s[c][i] = sy_clampf(f->s[c][i], -64.0f, 64.0f);
         }

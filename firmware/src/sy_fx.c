@@ -9,7 +9,7 @@
  * DRIVE: SOFT (cubic clip), TUBE (the clip biased: even harmonics), HARD (a clamp), FOLD (a sine folder); gain 1..32,
  * TONE tilts the result about 2 kHz, the level partly made up (gain^-0.3). CHORUS: two taps a side on a 23 ms
  * line, swept by sines in quadrature (left / right opposite), DELAY 2..15 ms, DEPTH to 3 ms, FEEDBACK. DELAY: STEREO or
- * PING-PONG, 10..900 ms or a note value of the tempo, FEEDBACK through a low pass and a high pass. REVERB: PLATE
+ * PING-PONG, 10..750 ms or a note value of the tempo, FEEDBACK through a low pass and a high pass. REVERB: PLATE
  * (4 lines) or HALL (8 lines), a feedback delay network: Hadamard mixing, a damping low pass and the decay's gain
  * on every line (the same RT60 for all), two lines' taps drifting slowly (no metallic ringing), two input
  * diffusers, PRE-DELAY up to 50 ms, WIDTH, LOW CUT. OTT: three bands split by complementary crossovers (low =
@@ -22,13 +22,15 @@ static const char *const DRV_NAMES[4] = {"SOFT", "TUBE", "HARD", "FOLD"};
 static const char *const DLY_NAMES[2] = {"STEREO", "PINGPONG"};
 static const char *const RV_NAMES[2] = {"PLATE", "HALL"};
 #define FX_CHO_N 1024u                    /* chorus line a side (23 ms) */
-#define FX_DLY_N 19968u                   /* delay line a side at half rate: 905 ms */
+#define FX_DLY_N 16544u                   /* delay line a side at half rate: 750 ms */
 #define FX_RV_NL 8u
 #define FX_RV_PRE 1104u                   /* pre-delay at half rate: 50 ms */
 #define FX_RV_AP0 142u
 #define FX_RV_AP1 379u
 #define FX_HB (SY_BLK / 2u)               /* a block at half rate */
+#define FX_RV_DPH ((uint32_t)(0.27f * 2.0f / SY_FS * 4294967296.0f))   /* the reverb's drift: 0.27 Hz */
 static const uint16_t FX_RV_LEN[FX_RV_NL] = {1499, 1153, 1741, 853, 1321, 1031, 1607, 937};   /* 39..79 ms */
+static const uint16_t FX_RV_BASE[FX_RV_NL] = {0, 1507, 2668, 4417, 5278, 6607, 7646, 9261};   /* (each + 8 guard) */
 #define FX_RV_TOTAL (1499u + 1153u + 1741u + 853u + 1321u + 1031u + 1607u + 937u + 8u * 8u)
 static int16_t fx_cho[2][FX_CHO_N] SY_POOL;
 static int16_t fx_dly[2][FX_DLY_N] SY_POOL;
@@ -42,7 +44,8 @@ static uint8_t fx_lo;                     /* the CPU guard: OTT's upward compres
 static struct {
     float mix[6];                         /* each module's mix at the end of the last block (0: off) */
     float drv_lp[2];
-    uint32_t cho_w, cho_ph;
+    uint32_t cho_w, cho_ph;               /* the chorus's write index (0..FX_CHO_N - 1), its LFO's phase */
+    float cho_bm, cho_hd;                 /* its taps' centre and half swing (samples) at the end of the last block */
     float cho_fb[2];
     uint32_t dly_w;                       /* write index (half rate) */
     float dly_t;                          /* the read delay, half-rate samples (smoothed) */
@@ -98,72 +101,100 @@ static void fx_blend(float *x, const float *wet, float m0, float m1)
 }
 
 /* ------------------------------------------------------------------------------------------ DRIVE --- */
+/* a loop a curve (SHAPE of v, the input times the gain); TONE: lows x (1 - t), highs x (1 + t) about 2 kHz; the
+ * blend in the same loop */
+#define DRV_LOOP(SHAPE)                                                                                   \
+    for (i = 0; i < SY_BLK; i++, m += dm) {                                                               \
+        float v = x[i] * g, y = SHAPE, w;                                                                 \
+        lp += (y - lp) * 0.25f;                                                                           \
+        w = (lp * (1.0f - tone) + (y - lp) * (1.0f + tone)) * mk;                                         \
+        x[i] += (w - x[i]) * m;                                                                           \
+    }
 static void fx_drive(float *l, float *r)
 {
-    float m0, wet[2][SY_BLK], *ch[2] = {l, r};
+    float m0, *ch[2] = {l, r};
     uint32_t c, i, type = (uint32_t)sy_patch.p[SP_DR_TYPE];
     float amt = mod_get(sy_goff, SP_DR_AMT), g = 1.0f + 31.0f * amt * amt, mk = sy_exp2f(-0.3f * sy_log2f(g));
     float tone = sp_lin(SP_DR_TONE, mod_get(sy_goff, SP_DR_TONE)) * 0.001f;
     if (!fx_mixes(0, SP_DR_ON, mod_get(sy_goff, SP_DR_MIX), &m0))
         return;
     for (c = 0; c < 2u; c++) {
-        float lp = fx.drv_lp[c];
-        for (i = 0; i < SY_BLK; i++) {
-            float x = ch[c][i] * g, y;
-            switch (type) {
-            case DRV_TUBE: y = sy_softclip(x + 0.3f) - 0.296f; break;       /* (softclip(0.3)) */
-            case DRV_HARD: y = sy_clampf(x, -1.0f, 1.0f); break;
-            case DRV_FOLD: y = sy_sin2pi(0.25f * x); break;
-            default: y = sy_softclip(x); break;
-            }
-            lp += (y - lp) * 0.25f;                       /* TONE: lows x (1 - t), highs x (1 + t), ~2 kHz */
-            wet[c][i] = (lp * (1.0f - tone) + (y - lp) * (1.0f + tone)) * mk;
+        float lp = fx.drv_lp[c], *x = ch[c], m = m0, dm = (fx.mix[0] - m0) * (1.0f / (float)SY_BLK);
+        switch (type) {
+        case DRV_TUBE: DRV_LOOP(sy_softclip(v + 0.3f) - 0.296f); break;      /* (softclip(0.3)) */
+        case DRV_HARD: DRV_LOOP(sy_clampf(v, -1.0f, 1.0f)); break;
+        case DRV_FOLD: DRV_LOOP(sy_sin2pi(0.25f * v)); break;
+        default: DRV_LOOP(sy_softclip(v)); break;
         }
         SY_FLUSH(lp);
         fx.drv_lp[c] = lp;
-        fx_blend(ch[c], wet[c], m0, fx.mix[0]);
     }
 }
 
 /* ----------------------------------------------------------------------------------------- CHORUS --- */
+/* the taps read at the write index (0..FX_CHO_N - 1) less their delay: positive, so truncation is the floor. The
+ * LFO is a sine and cosine pair turned a sample at a time, set from the phase at each block's start (no drift);
+ * DELAY and DEPTH ramp across the block; the blend is done in the same loop */
 static void fx_chorus(float *l, float *r)
 {
-    float m0, wet[2][SY_BLK], *ch[2] = {l, r};
-    uint32_t i, c;
+    float m0, *ch[2] = {l, r};
+    uint32_t i, c, w = fx.cho_w;
     float base = (2.0f + 13.0f * mod_get(sy_goff, SP_CH_DELAY)) * 0.001f * SY_FS;
     float depth = 3.0f * mod_get(sy_goff, SP_CH_DEPTH) * 0.001f * SY_FS, fb = 0.9f * mod_get(sy_goff, SP_CH_FDBK);
     uint32_t inc = (uint32_t)(int32_t)(sp_lfo_hz(mod_get(sy_goff, SP_CH_RATE)) * 0.25f / SY_FS * 4294967296.0f);
+    float bm1 = base + 0.5f * depth, hd1 = 0.5f * depth, bm, hd, dbm, dhd, sn, cs, sr, cr, m, dm;
     if (!fx_mixes(1, SP_CH_ON, mod_get(sy_goff, SP_CH_MIX), &m0))
         return;
-    for (i = 0; i < SY_BLK; i++) {
-        uint32_t w = fx.cho_w & (FX_CHO_N - 1u);
-        float ph = (float)(fx.cho_ph >> 8) * (1.0f / 16777216.0f);
-        for (c = 0; c < 2u; c++) {
+    if (m0 <= 0.0f)                                     /* (switched on: no ramp from long ago) */
+        fx.cho_bm = bm1, fx.cho_hd = hd1;
+    bm = fx.cho_bm;
+    hd = fx.cho_hd;
+    dbm = (bm1 - bm) * (1.0f / (float)SY_BLK);
+    dhd = (hd1 - hd) * (1.0f / (float)SY_BLK);
+    {
+        float ph = (float)(fx.cho_ph >> 8) * (1.0f / 16777216.0f), dph = (float)(inc >> 8) * (1.0f / 16777216.0f);
+        sn = sy_sin2pi(ph);
+        cs = sy_sin2pi(ph + 0.25f);
+        sr = sy_sin2pi(dph);
+        cr = sy_sin2pi(dph + 0.25f);
+    }
+    m = m0;
+    dm = (fx.mix[1] - m0) * (1.0f / (float)SY_BLK);
+    for (i = 0; i < SY_BLK; i++, m += dm) {
+        float hs = hd * sn, hc = hd * cs, wf = (float)(w + FX_CHO_N), t;
+        float d[2][2] = {{bm + hs, bm + hc}, {bm - hs, bm - hc}};      /* two taps a side, a quarter cycle apart; */
+        for (c = 0; c < 2u; c++) {                                      /* the right opposite the left */
             float acc = 0.0f;
-            uint32_t t;
-            for (t = 0; t < 2u; t++) {                  /* two taps a side, a quarter cycle apart; R opposite L */
-                float d = base + depth * (0.5f + 0.5f * sy_sin2pi(ph + 0.25f * (float)t + 0.5f * (float)c));
-                float rp = (float)(fx.cho_w + FX_CHO_N) - d;
-                int32_t i0 = sy_floori(rp);
-                float f = rp - (float)i0, a = fx_cho[c][(uint32_t)i0 & (FX_CHO_N - 1u)];
-                float b = fx_cho[c][(uint32_t)(i0 + 1) & (FX_CHO_N - 1u)];
-                acc += (a + (b - a) * f) * FX_DQ;
+            uint32_t k;
+            for (k = 0; k < 2u; k++) {
+                float rp = wf - d[c][k], f, a, b2;
+                int32_t i0 = (int32_t)rp;
+                f = rp - (float)i0;
+                a = fx_cho[c][(uint32_t)i0 & (FX_CHO_N - 1u)];
+                b2 = fx_cho[c][(uint32_t)(i0 + 1) & (FX_CHO_N - 1u)];
+                acc += (a + (b2 - a) * f) * FX_DQ;
             }
             acc *= 0.5f;
-            wet[c][i] = acc;
             fx_cho[c][w] = fx_q(ch[c][i] + acc * fb);
+            ch[c][i] += (acc - ch[c][i]) * m;
         }
-        fx.cho_w++;
-        fx.cho_ph += inc;
+        w = (w + 1u) & (FX_CHO_N - 1u);
+        t = sn * cr + cs * sr;
+        cs = cs * cr - sn * sr;
+        sn = t;
+        bm += dbm;
+        hd += dhd;
     }
-    for (c = 0; c < 2u; c++)
-        fx_blend(ch[c], wet[c], m0, fx.mix[1]);
+    fx.cho_w = w;
+    fx.cho_ph += inc * SY_BLK;
+    fx.cho_bm = bm1;
+    fx.cho_hd = hd1;
 }
 
 /* ------------------------------------------------------------------------------------------ DELAY --- */
 static void fx_delay(float *l, float *r)
 {
-    float m0, wet[2][SY_BLK], *ch[2] = {l, r};
+    float m0, m, dm, *ch[2] = {l, r};
     uint32_t i, c, pp = sy_patch.p[SP_DL_MODE] != 0, sync = (uint32_t)sy_patch.p[SP_DL_SYNC];
     float secs = sync && sync < 18u ? SYNC_BEATS[sync] * 60.0f / sy_tempo : sp_dly_s(mod_get(sy_goff, SP_DL_TIME));
     float target = sy_clampf(secs * SY_FS * 0.5f, 2.0f, (float)(FX_DLY_N - 4u));
@@ -174,13 +205,19 @@ static void fx_delay(float *l, float *r)
         return;
     if (fx.dly_t <= 0.0f)
         fx.dly_t = target;
+    m = m0;
+    dm = (fx.mix[2] - m0) * (1.0f / (float)SY_BLK);
     for (i = 0; i < SY_BLK; i += 2u) {
         float out[2], t;
+        uint32_t i0, i1;
         fx.dly_t += (target - fx.dly_t) * 0.002f;      /* a time change glides (tape-like), never jumps */
         t = (float)fx.dly_w + (float)FX_DLY_N - fx.dly_t;
+        i0 = (uint32_t)(int32_t)t;                      /* (t > 0: the floor; under 2 FX_DLY_N: one wrap at most) */
+        i1 = i0 + 1u;
+        i0 = i0 >= FX_DLY_N ? i0 - FX_DLY_N : i0;
+        i1 = i1 >= FX_DLY_N ? i1 - FX_DLY_N : i1;
         for (c = 0; c < 2u; c++) {                      /* read, half rate */
-            int32_t i0 = sy_floori(t);
-            float f = t - (float)i0, a = fx_dly[c][(uint32_t)i0 % FX_DLY_N], b = fx_dly[c][(uint32_t)(i0 + 1) % FX_DLY_N];
+            float f = t - (float)(int32_t)t, a = fx_dly[c][i0], b = fx_dly[c][i1];
             float y = (a + (b - a) * f) * FX_DQ;
             fx.dly_lp[c] += (y - fx.dly_lp[c]) * klp;  /* the loop's low pass, high pass */
             fx.dly_hp[c] += (fx.dly_lp[c] - fx.dly_hp[c]) * khp;
@@ -197,32 +234,36 @@ static void fx_delay(float *l, float *r)
                 fx_dly[1][fx.dly_w] = fx_q(x1 + fb * out[1]);
             }
         }
-        for (c = 0; c < 2u; c++) {                      /* out: linear between half-rate samples */
-            wet[c][i] = 0.5f * (fx.dly_o[c][1] + out[c]);
-            wet[c][i + 1u] = out[c];
-            fx.dly_o[c][1] = out[c];
-            fx.dly_in[c] = ch[c][i + 1u];
+        {                                               /* out: linear between half-rate samples, blended */
+            float m2 = m + dm;
+            for (c = 0; c < 2u; c++) {
+                float w0 = 0.5f * (fx.dly_o[c][1] + out[c]);
+                fx.dly_o[c][1] = out[c];
+                fx.dly_in[c] = ch[c][i + 1u];
+                ch[c][i] += (w0 - ch[c][i]) * m;
+                ch[c][i + 1u] += (out[c] - ch[c][i + 1u]) * m2;
+            }
+            m = m2 + dm;
         }
         fx.dly_w = fx.dly_w + 1u < FX_DLY_N ? fx.dly_w + 1u : 0u;
     }
     for (c = 0; c < 2u; c++) {
         SY_FLUSH(fx.dly_lp[c]);
         SY_FLUSH(fx.dly_hp[c]);
-        fx_blend(ch[c], wet[c], m0, fx.mix[2]);
     }
 }
 
 /* ----------------------------------------------------------------------------------------- REVERB --- */
 static void fx_reverb(float *l, float *r)
 {
-    float m0, wet[2][SY_BLK], *ch[2] = {l, r};
+    float m0, m, dm, *ch[2] = {l, r};
     uint32_t i, c, k, nl = sy_patch.p[SP_RV_TYPE] && !fx_lo ? 8u : 4u;
     float size = 0.45f + 0.55f * mod_get(sy_goff, SP_RV_SIZE);
     float rt = 0.3f * sy_exp2f(6.0589f * mod_get(sy_goff, SP_RV_DECAY));          /* 0.3 .. 20 s */
     float damp = 1.0f - 0.85f * mod_get(sy_goff, SP_RV_DAMP), width = mod_get(sy_goff, SP_RV_WIDTH);
     float khp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_RV_LOCUT)) * 0.05f / SY_FS);
     uint32_t pre = (uint32_t)(sp_n[SP_RV_PRE] * (float)(FX_RV_PRE - 1u));
-    float gain[FX_RV_NL], len[FX_RV_NL];
+    float gain[FX_RV_NL], len[FX_RV_NL], l1, l4, d1, d4, dd1, dd4;
     uint32_t base = 0;
     if (!fx_mixes(3, SP_RV_ON, mod_get(sy_goff, SP_RV_MIX), &m0))
         return;
@@ -238,18 +279,33 @@ static void fx_reverb(float *l, float *r)
             }
         fx.rv_nl = (uint8_t)nl;
     }
-    for (k = 0; k < nl; k++) {                          /* each line's length and its decay to RT60 */
+    for (k = 0; k < FX_RV_NL; k++)                      /* each line's length and its decay to RT60 */
         len[k] = (float)FX_RV_LEN[k] * size;
+    for (k = 0; k < nl; k++)
         gain[k] = sy_exp2f(-9.9658f * len[k] / (rt * SY_FS * 0.5f));
+    {                                                   /* two lines drift by +-4 samples (0.27 Hz): the drift */
+        uint32_t ph0 = fx.rv_ph, ph1 = ph0 + FX_RV_DPH * FX_HB;    /* at the block's ends, straight between */
+        float a = (float)(ph0 >> 8) * (1.0f / 16777216.0f), b = (float)(ph1 >> 8) * (1.0f / 16777216.0f);
+        d1 = 4.0f * sy_sin2pi(a);
+        d4 = 4.0f * sy_sin2pi(a + 0.37f);
+        dd1 = (4.0f * sy_sin2pi(b) - d1) * (1.0f / (float)FX_HB);
+        dd4 = (4.0f * sy_sin2pi(b + 0.37f) - d4) * (1.0f / (float)FX_HB);
+        fx.rv_ph = ph1;
     }
+    l1 = len[1];
+    l4 = len[4];
+    m = m0;
+    dm = (fx.mix[3] - m0) * (1.0f / (float)SY_BLK);
     for (i = 0; i < SY_BLK; i += 2u) {
         float m1 = 0.5f * (l[i + 1u] + r[i + 1u]), x = 0.25f * (fx.rv_in + m1) + 0.25f * (l[i] + r[i]), y[FX_RV_NL], o[2];
-        float ph = (float)(fx.rv_ph >> 8) * (1.0f / 16777216.0f);
         fx.rv_in = m1;                                  /* (the mono input, 1-2-1, every other sample) */
         fx.rv_hp[0] += (x - fx.rv_hp[0]) * khp;        /* LOW CUT */
         x -= fx.rv_hp[0];
         fx_rvpre[fx.rv_pw] = fx_q(x);                   /* PRE-DELAY */
-        x = (float)fx_rvpre[(fx.rv_pw + FX_RV_PRE - pre) % FX_RV_PRE] * FX_DQ;
+        {
+            uint32_t q = fx.rv_pw + FX_RV_PRE - pre;
+            x = (float)fx_rvpre[q >= FX_RV_PRE ? q - FX_RV_PRE : q] * FX_DQ;
+        }
         fx.rv_pw = (uint16_t)(fx.rv_pw + 1u < FX_RV_PRE ? fx.rv_pw + 1u : 0u);
         {                                               /* two allpass diffusers */
             float d = (float)fx_rvap[fx.rv_a0] * FX_DQ, v = x + 0.6f * d;
@@ -262,16 +318,22 @@ static void fx_reverb(float *l, float *r)
             x = d - 0.6f * v;
             fx.rv_a1 = (uint16_t)(fx.rv_a1 + 1u < FX_RV_AP1 ? fx.rv_a1 + 1u : 0u);
         }
-        for (k = 0, base = 0; k < nl; k++) {            /* read each line (two of them drift by +-4 samples) */
-            uint32_t n = FX_RV_LEN[k] + 8u;
-            float d = len[k] + (k == 1u ? 4.0f * sy_sin2pi(ph) : k == 4u ? 4.0f * sy_sin2pi(ph + 0.37f) : 0.0f);
-            float rp = (float)fx.rv_w[k] + (float)n - d;
-            int32_t i0 = sy_floori(rp);
-            float f = rp - (float)i0, a = fx_rv[base + (uint32_t)i0 % n], b = fx_rv[base + (uint32_t)(i0 + 1) % n];
-            float s = (a + (b - a) * f) * FX_DQ;
-            fx.rv_lp[k] += (s - fx.rv_lp[k]) * damp;   /* DAMP */
+        len[1] = l1 + d1;
+        len[4] = l4 + d4;
+        d1 += dd1;
+        d4 += dd4;
+        for (k = 0; k < nl; k++) {                      /* read each line: at its write index + n less the delay */
+            uint32_t n = FX_RV_LEN[k] + 8u, i0, i1;    /* (positive: truncation is the floor; under 2n) */
+            const int16_t *ln = fx_rv + FX_RV_BASE[k];
+            float rp = (float)(fx.rv_w[k] + n) - len[k], f, a, b, sv;   /* (the sum exact either way) */
+            i0 = (uint32_t)(int32_t)rp;
+            f = rp - (float)i0;
+            i1 = i0 + 1u;
+            a = ln[i0 >= n ? i0 - n : i0];
+            b = ln[i1 >= n ? i1 - n : i1];
+            sv = (a + (b - a) * f) * FX_DQ;
+            fx.rv_lp[k] += (sv - fx.rv_lp[k]) * damp;  /* DAMP */
             y[k] = fx.rv_lp[k] * gain[k];
-            base += n;
         }
         o[0] = y[0] - y[2] + y[4] - y[6] * (nl > 4u);  /* the outputs before the mixing */
         o[1] = y[1] - y[3] + (y[5] - y[7]) * (nl > 4u);
@@ -286,26 +348,30 @@ static void fx_reverb(float *l, float *r)
             float a0 = y[0] + y[1], a1 = y[0] - y[1], a2 = y[2] + y[3], a3 = y[2] - y[3];
             y[0] = (a0 + a2) * 0.5f; y[1] = (a1 + a3) * 0.5f; y[2] = (a0 - a2) * 0.5f; y[3] = (a1 - a3) * 0.5f;
         }
-        for (k = 0, base = 0; k < nl; k++) {            /* write back with the input */
-            uint32_t n = FX_RV_LEN[k] + 8u;
-            fx_rv[base + fx.rv_w[k]] = fx_q(y[k] + x * (k & 1u ? -0.5f : 0.5f));
-            fx.rv_w[k] = (uint16_t)(fx.rv_w[k] + 1u < n ? fx.rv_w[k] + 1u : 0u);
-            base += n;
+        {                                               /* write back with the input, +- by line */
+            float xh = x * 0.5f;
+            for (k = 0; k < nl; k++) {
+                uint32_t n = FX_RV_LEN[k] + 8u;
+                fx_rv[FX_RV_BASE[k] + fx.rv_w[k]] = fx_q(k & 1u ? y[k] - xh : y[k] + xh);
+                fx.rv_w[k] = (uint16_t)(fx.rv_w[k] + 1u < n ? fx.rv_w[k] + 1u : 0u);
+            }
         }
-        for (c = 0; c < 2u; c++) {                      /* WIDTH: the sides towards their middle */
-            float s = 0.5f * (o[0] + o[1]), v = s + (o[c] - s) * width;
-            v *= 0.6f;
-            wet[c][i] = 0.5f * (fx.rv_o[c][1] + v);
-            wet[c][i + 1u] = v;
-            fx.rv_o[c][1] = v;
+        {                                               /* WIDTH: the sides towards their middle; blended */
+            float m2 = m + dm;
+            for (c = 0; c < 2u; c++) {
+                float s = 0.5f * (o[0] + o[1]), v = s + (o[c] - s) * width, w0;
+                v *= 0.6f;
+                w0 = 0.5f * (fx.rv_o[c][1] + v);
+                fx.rv_o[c][1] = v;
+                ch[c][i] += (w0 - ch[c][i]) * m;
+                ch[c][i + 1u] += (v - ch[c][i + 1u]) * m2;
+            }
+            m = m2 + dm;
         }
-        fx.rv_ph += (uint32_t)(0.27f * 2.0f / SY_FS * 4294967296.0f);
     }
     for (k = 0; k < FX_RV_NL; k++)
         SY_FLUSH(fx.rv_lp[k]);
     SY_FLUSH(fx.rv_hp[0]);
-    for (c = 0; c < 2u; c++)
-        fx_blend(ch[c], wet[c], m0, fx.mix[3]);
 }
 
 /* -------------------------------------------------------------------------------------------- OTT --- */
@@ -336,9 +402,11 @@ static void fx_ott(float *l, float *r)
         flt_svf_lp(bands[1][c], fx.ott_s[1][c], c2, c2);
     for (c = 0; c < 2u; c++)
         for (i = 0; i < SY_BLK; i++) {
-            bands[2][c][i] -= bands[1][c][i];
-            for (b = 0; b < 3u; b++)
-                pk[b] = sy_maxf(pk[b], sy_absf(bands[b][c][i]));
+            float x2 = bands[2][c][i] - bands[1][c][i];
+            bands[2][c][i] = x2;
+            pk[0] = sy_maxf(pk[0], sy_absf(bands[0][c][i]));
+            pk[1] = sy_maxf(pk[1], sy_absf(bands[1][c][i]));
+            pk[2] = sy_maxf(pk[2], sy_absf(x2));
         }
     for (b = 0; b < 3u; b++) {                          /* followers, the gains in dB once a block */
         static const float ATK[3] = {0.20f, 0.35f, 0.50f}, REL[3] = {0.010f, 0.025f, 0.050f};
@@ -363,8 +431,9 @@ static void fx_ott(float *l, float *r)
                 float w = bands[0][c][i] * g[0] + bands[1][c][i] * g[1] + bands[2][c][i] * g[2];
                 ch[c][i] += (w - ch[c][i]) * m;
             }
-            for (b = 0; b < 3u; b++)
-                g[b] += dg[b];
+            g[0] += dg[0];
+            g[1] += dg[1];
+            g[2] += dg[2];
         }
         sy_copyf(fx.ott_g, g1, 3u);
     }
@@ -393,6 +462,13 @@ static void fx_limit(float *l, float *r)
 {
     float g = fx.lim_g;
     uint32_t i;
+    if (g == 1.0f) {                                    /* at rest, and the block under the knee: as it is (the */
+        float pk = 0.0f;                                /* loop below would leave it so, and g at 1) */
+        for (i = 0; i < SY_BLK; i++)
+            pk = sy_maxf(pk, sy_maxf(sy_absf(l[i]), sy_absf(r[i])));
+        if (pk <= 0.75f)
+            return;
+    }
     for (i = 0; i < SY_BLK; i++) {
         float p = sy_maxf(sy_absf(l[i]), sy_absf(r[i])) * g;
         if (p > 0.944f)                                 /* -0.5 dBFS: down at once */

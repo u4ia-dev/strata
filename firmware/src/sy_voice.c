@@ -2,9 +2,9 @@
  * Copyright (C) 2026 brandonmbarone */
 /* STRATA voice (docs/ARCHITECTURE.md §4, §8): OSC A, OSC B, SUB and NOISE, each to the FILTER or DIRECT, then the
  * amp (ENV 1 x velocity) into the mix. Once a block: the matrix's offsets (from the last block's sources), the
- * envelopes, the LFOs, the pitch (glide, bend), each source's settings. Then the audio: the oscillators into
- * int32 (Q15), turned into float on the way into their bus with their level and pan ramped across the block, the
- * sub and the noise, the filter, the amp ramped across the block. A source switched on or off, or changing kind
+ * envelopes, the LFOs, the pitch (glide, bend), each source's settings. Then the audio: the oscillators into an
+ * integer bus a route (Q15, their level, pan and fades ramped in their unison voices' gains), made float once; the
+ * sub and the noise added in float; the filter (in place when all wet); the amp ramped across the block. A source switched on or off, or changing kind
  * (warp, shape, type, route), fades out over 4 blocks (2.9 ms), changes while silent and fades back in; the filter
  * too (its MIX from or to 0): nothing a knob or a switch does steps the output.
  * SUB: sine, triangle, saw, square, pulse (polyBLEP edges) or a rounded square, OCT below the note. NOISE: white,
@@ -293,16 +293,31 @@ static void voice_mix(float *bl, float *br, const float *x, const float *y, cons
     }
 }
 
+/* a route's bus from its oscillators' (Q15 in int32, left and right interleaved; none: silence) */
+static void voice_from_q(float *bl, float *br, const int32_t *q)
+{
+    uint32_t i;
+    if (!q) {
+        sy_zerof(bl, SY_BLK);
+        sy_zerof(br, SY_BLK);
+        return;
+    }
+    for (i = 0; i < SY_BLK; i++) {
+        bl[i] = (float)q[2u * i] * (1.0f / 32768.0f);
+        br[i] = (float)q[2u * i + 1u] * (1.0f / 32768.0f);
+    }
+}
+
 /* one block of a voice added into ml / mr */
 static void voice_block(sy_voice_t *v, float *ml, float *mr)
 {
-    static int32_t olr[2u * SY_BLK], pm[SY_NOSC][2u * SY_BLK];
+    static int32_t qb[2][2u * SY_BLK], pm[SY_NOSC][2u * SY_BLK];   /* the oscillators' buses: FILTER, DIRECT */
     static float fl[SY_BLK], fr[SY_BLK], dl[SY_BLK], dr[SY_BLK], x[SY_BLK], y[SY_BLK];
     const float *off = v->off;
     float amp0 = v->amp * v->fade, amp1, fade1, g[4][2], pitch;
     osc_par_t op[SY_NOSC];
     uint32_t o, i, k, ran = 0;
-    int on[4];
+    int on[4], anydir = 0;
     env_par_t ep;
 
     /* control: offsets, envelopes, LFOs, pitch */
@@ -402,27 +417,31 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             }
         }
 
-        /* audio: the sources into the FILTER bus (fl fr) or DIRECT (dl dr), by the route playing */
-        for (i = 0; i < SY_BLK; i++)
-            fl[i] = fr[i] = dl[i] = dr[i] = 0.0f;
+        /* audio: the sources into the FILTER bus (fl fr) or DIRECT (dl dr), by the route playing (DIRECT only
+         * when a source takes it). The oscillators add into an integer bus a route, their level, pan and fades in
+         * their unison voices' gains, made float once; the sub and the noise add in float */
+        int qon[2] = {0, 0};
+        for (k = 0; k < 4u; k++)
+            anydir |= on[k] && (v->kind[k] >> 7);
         for (o = 0; o < SY_NOSC; o++) {
-            float s0 = wt_g[o][0] * (1.0f / 32768.0f), s1 = wt_g[o][1] * (1.0f / 32768.0f), g0[2], g1[2];
             int dir = v->kind[o] >> 7;
-            if (!on[o] || (s0 <= 0.0f && s1 <= 0.0f) || !wt_tab[o].n)
+            float sg[4];
+            if (!on[o] || (wt_g[o][0] <= 0.0f && wt_g[o][1] <= 0.0f) || !wt_tab[o].n)
                 continue;
-            sy_zeroi(olr, 2u * SY_BLK);
-            osc_block(&v->osc[o], &wt_tab[o], &op[o], olr);
-            for (i = 0; i < SY_BLK; i++) {                     /* (int32 -> float once, the gains next) */
-                x[i] = (float)olr[2u * i];
-                y[i] = (float)olr[2u * i + 1u];
+            sg[0] = v->g[o][0] * wt_g[o][0];                   /* left at the block's start and end, right */
+            sg[1] = g[o][0] * wt_g[o][1];
+            sg[2] = v->g[o][1] * wt_g[o][0];
+            sg[3] = g[o][1] * wt_g[o][1];
+            if (!qon[dir]) {
+                sy_zeroi(qb[dir], 2u * SY_BLK);
+                qon[dir] = 1;
             }
-            g0[0] = v->g[o][0] * s0;
-            g0[1] = v->g[o][1] * s0;
-            g1[0] = g[o][0] * s1;
-            g1[1] = g[o][1] * s1;
-            voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, g0, g1);
+            osc_block(&v->osc[o], &wt_tab[o], &op[o], qb[dir], sg);
             ran |= 1u << o;
         }
+        voice_from_q(fl, fr, qon[0] ? qb[0] : 0);
+        if (anydir)
+            voice_from_q(dl, dr, qon[1] ? qb[1] : 0);
         if (on[VS_SUB]) {
             int dir = v->kind[VS_SUB] >> 7;
             voice_sub(v, voice_inc(pitch + 12.0f * (float)sy_patch.p[SP_SUB_OCT]), v->kind[VS_SUB] & 0x7Fu,
@@ -466,14 +485,18 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             fp.drive = mod_get(off, SP_F_DRIVE);
             fp.var = mod_get(off, SP_F_VAR);
             fp.mix = 1.0f;
-            sy_copyf(wet[0], fl, SY_BLK);
-            sy_copyf(wet[1], fr, SY_BLK);
             if (f0 <= 0.0f && !v->fresh)
                 flt_note(&v->flt);                             /* switched on: from rest */
-            flt_block(&v->flt, &fp, wet[0], wet[1]);
-            for (i = 0; i < SY_BLK; i++, m += dm) {
-                fl[i] += (wet[0][i] - fl[i]) * m;
-                fr[i] += (wet[1][i] - fr[i]) * m;
+            if (m0 >= 1.0f && m1 >= 1.0f) {
+                flt_block(&v->flt, &fp, fl, fr);               /* all wet: in place */
+            } else {
+                sy_copyf(wet[0], fl, SY_BLK);
+                sy_copyf(wet[1], fr, SY_BLK);
+                flt_block(&v->flt, &fp, wet[0], wet[1]);
+                for (i = 0; i < SY_BLK; i++, m += dm) {
+                    fl[i] += (wet[0][i] - fl[i]) * m;
+                    fr[i] += (wet[1][i] - fr[i]) * m;
+                }
             }
         }
         if (f1 <= 0.0f)
@@ -485,10 +508,15 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
     /* the amp (envelope x velocity x steal fade), ramped */
     {
         float a = amp0, da = (amp1 * fade1 - amp0) * (1.0f / (float)SY_BLK);
-        if (ran)
+        if (ran && anydir)
             for (i = 0; i < SY_BLK; i++, a += da) {
                 ml[i] += (fl[i] + dl[i]) * a;
                 mr[i] += (fr[i] + dr[i]) * a;
+            }
+        else if (ran)
+            for (i = 0; i < SY_BLK; i++, a += da) {
+                ml[i] += fl[i] * a;
+                mr[i] += fr[i] * a;
             }
     }
     v->amp = amp1;

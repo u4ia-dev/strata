@@ -36,14 +36,13 @@ static wt_table_t wt_tab[SY_NOSC];
 
 /* the level for an increment (2^32 = one cycle a sample): the lowest whose top harmonic stays <= 21 kHz;
  * WT_NLEV = too high to play */
-static uint32_t wt_level(uint32_t inc)
-{
-    uint32_t l = 0, lim = WT_INC_L0;
-    while (inc > lim && l < WT_NLEV) {
-        lim <<= 1;
-        l++;
-    }
-    return l;
+static uint32_t wt_level(uint32_t inc)                  /* the smallest l with inc <= WT_INC_L0 << l, or WT_NLEV: */
+{                                                       /* how many of the 9 limits inc is over (4 compares) */
+#define WT_LIM(l) (WT_INC_L0 << (l))
+    if (inc > WT_LIM(4))
+        return inc > WT_LIM(6) ? (inc > WT_LIM(7) ? (inc > WT_LIM(8) ? 9u : 8u) : 7u) : (inc > WT_LIM(5) ? 6u : 5u);
+    return inc > WT_LIM(1) ? (inc > WT_LIM(2) ? (inc > WT_LIM(3) ? 4u : 3u) : 2u) : (inc > WT_LIM(0) ? 1u : 0u);
+#undef WT_LIM
 }
 
 /* a level of frame k of a table */

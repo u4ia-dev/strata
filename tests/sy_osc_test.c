@@ -64,7 +64,7 @@ static void render(uint32_t table, float pos, uint32_t warp, float wamt, float n
     p.width = width;
     for (b = 0; b < n; b += SY_BLK) {
         memset(ilr, 0, sizeof ilr);
-        osc_block(&ov, &wt_tab[0], &p, ilr);
+        osc_block(&ov, &wt_tab[0], &p, ilr, UNITY);
         for (i = 0; i < SY_BLK && b + i < n; i++) {
             l[b + i] = (float)ilr[2u * i] * (1.0f / 32768.0f);
             r[b + i] = (float)ilr[2u * i + 1u] * (1.0f / 32768.0f);
@@ -224,7 +224,7 @@ int main(int argc, char **argv)
             float note = base + 0.30f * sinf(6.2831853f * 5.0f * (float)b / 1378.0f);
             p.inc1 = voice_inc(note);
             p.inc0 = p.inc1;
-            osc_block(&ov, &wt_tab[0], &p, ilr);
+            osc_block(&ov, &wt_tab[0], &p, ilr, UNITY);
             if (b > 2u && ov.lev[0] != last)
                 changes++;
             last = ov.lev[0];

@@ -145,6 +145,24 @@ static void t_params(void)
         buf[0] = 'X';
         check("a foreign blob is refused", !sp_unpack(&b, buf, j));
     }
+    {                                                     /* the values read as stored follow a change at once */
+        static const uint16_t IDS[] = {SP_V_GLIDE, SP_V_VEL, SP_NZ_STEREO, SP_RV_PRE, SP_L1_DELAY, SP_L1_RISE,
+                                       SP_L1_SMOOTH, SP_L2_DELAY, SP_L2_RISE, SP_L2_SMOOTH};
+        uint32_t k, tested = 0;
+        int ok = 1;
+        eng_reset();
+        snap();
+        for (k = 0; k < sizeof IDS / sizeof IDS[0]; k++)  /* (no patch load after: the UI and MIDI write so) */
+            set(IDS[k], SP[IDS[k]].lo + (SP[IDS[k]].def - SP[IDS[k]].lo + 333) % (SP[IDS[k]].hi - SP[IDS[k]].lo + 1));
+        run(1, 0);
+        for (k = 0; k < sizeof IDS / sizeof IDS[0]; k++)
+            if (!(SP[IDS[k]].flags & F_SMOOTH)) {
+                ok &= sp_n[IDS[k]] == sp_norm_of(IDS[k], sy_patch.p[IDS[k]]);
+                tested++;
+            }
+        check("values read as stored (GLIDE, VEL AMP, STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change "
+              "at once, without a patch load", ok && tested >= 8u);
+    }
 }
 
 /* ----------------------------------------------------------------------------------------- 2 matrix --- */
@@ -694,7 +712,7 @@ static void t_dc_sources(void)
             pk = 0;
             for (b = 0; b < 404u; b++) {
                 memset(ilr, 0, sizeof ilr);
-                osc_block(o, &wt_tab[0], &p, ilr);
+                osc_block(o, &wt_tab[0], &p, ilr, UNITY);
                 if (b >= 4u)
                     for (i = 0; i < SY_BLK; i++) {
                         m += (double)ilr[2u * i];
@@ -856,8 +874,51 @@ static void t_golden(const char *gpath)
 }
 
 /* -------------------------------------------------------------------------------------- 8 effects --- */
+/* a 1 kHz sine (0.5) through the chorus alone, fully wet, for 1.5 s: its power away from 1 kHz (dB under the
+ * total; the line's int16 and the interpolation's own error stay under -60 dB) */
+static double chorus_noise(void)
+{
+    static float out[1u << 16];
+    float l[SY_BLK], r[SY_BLK];
+    double *p = malloc(((1u << 15) + 1u) * sizeof *p), ph = 0, db;
+    uint32_t b, i, n = 0;
+    for (b = 0; n < (1u << 16); b++) {
+        for (i = 0; i < SY_BLK; i++, ph += 1000.0 / (double)SY_FS)
+            l[i] = r[i] = (float)(0.5 * sin(2.0 * M_PI * ph));
+        mod_offsets(sy_goff, 0, 0);
+        fx_chorus(l, r);
+        for (i = 0; i < SY_BLK && b >= 64u && n < (1u << 16); i++)
+            out[n++] = l[i];
+    }
+    power_spectrum(out, 1u << 16, p);
+    db = inharmonic_db(p, 1u << 16, SY_FS, 1000.0, 40);
+    free(p);
+    return db;
+}
+
 static void t_fx(void)
 {
+    {                                                     /* the chorus as clean after 10 minutes as at the start */
+        float z[2][SY_BLK];                               /* (its read position once came from a count of every */
+        uint32_t b;                                       /* sample played: a float of it lost the fraction) */
+        double n0, n1;
+        eng_reset();
+        set(SP_CH_ON, 1);
+        set(SP_CH_MIX, 1000);
+        set(SP_CH_FDBK, 0);
+        snap();
+        n0 = chorus_noise();
+        for (b = 0; b < (uint32_t)(600.0 * (double)SY_FS) / SY_BLK; b++) {
+            sy_zerof(z[0], SY_BLK);
+            sy_zerof(z[1], SY_BLK);
+            fx_chorus(z[0], z[1]);
+        }
+        n1 = chorus_noise();
+        printf("engine: chorus on a 1 kHz sine, power away from it: %.1f dB at the start, %.1f dB after 10 minutes\n",
+               n0, n1);
+        check("the chorus as clean after 10 minutes of playing as at the start (under -60 dB, within 3 dB)",
+              n0 < -60.0 && n1 < -60.0 && n1 < n0 + 3.0);
+    }
     uint32_t i, b, s = 99;
     float l[SY_BLK], r[SY_BLK], x[SY_BLK];
     double err = 0, top = 0;

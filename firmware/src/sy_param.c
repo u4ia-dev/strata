@@ -186,8 +186,12 @@ typedef struct {
 static const sp_desc_t SP[SP_COUNT] = {SY_PARAMS(SP_ROW)};
 
 /* the patch: what presets store and the UI and MIDI write */
+#define SP_NPAIR (SP_COUNT / 2u)
 typedef struct {
-    int16_t p[SP_COUNT];
+    union {
+        int16_t p[SP_COUNT];
+        uint32_t pw[SP_NPAIR];        /* (the values two at a time: sp_block looks for changes a word at a time) */
+    };
     char name[17];
     uint8_t cat;                      /* CAT_* (the preset browser) */
     char macro[4][9];                 /* the macros' names */
@@ -195,7 +199,13 @@ typedef struct {
 enum { CAT_BASS, CAT_LEAD, CAT_PAD, CAT_PLUCK, CAT_KEYS, CAT_FX, CAT_SEQ, CAT_OTHER, CAT_COUNT };
 
 static sy_patch_t sy_patch;          /* the sound playing (the edit buffer) */
-static float sp_n[SP_COUNT];         /* audio side: each continuous value normalised 0..1, smoothed */
+static float sp_n[SP_COUNT];         /* audio side: each value normalised 0..1 (the continuous ones smoothed) */
+static float sp_t[SP_COUNT];         /* .. where each is going: its stored value normalised */
+static union {
+    int16_t v[SP_COUNT];
+    uint32_t w[SP_NPAIR];
+} sp_last;                           /* .. the stored values sp_t is of */
+static uint8_t sp_mv[SP_COUNT], sp_mvf[SP_COUNT], sp_nmv;   /* the smoothed values still on their way */
 #define SP_SMOOTH_K 0.0700f          /* a block's step of the one-pole: tau 10 ms (1 - e^(-32 / (0.010 fs))) */
 
 static inline float sp_norm_of(uint32_t id, int32_t v)
@@ -231,19 +241,46 @@ static int16_t sp_clamp(uint32_t id, int32_t v)
 static void sp_snap(void)
 {
     uint32_t i;
-    for (i = 0; i < SP_COUNT; i++)
-        sp_n[i] = sp_norm_of(i, sy_patch.p[i]);
+    for (i = 0; i < SP_COUNT; i++) {
+        sp_last.v[i] = sy_patch.p[i];
+        sp_n[i] = sp_t[i] = sp_norm_of(i, sp_last.v[i]);
+        sp_mvf[i] = 0;
+    }
+    sp_nmv = 0;
 }
 
-/* once a block: the continuous values one step towards the stored ones */
+/* once a block: the values follow the stored ones (whoever wrote them: the UI, MIDI, a test). A changed value is
+ * normalised once; a continuous one then glides (a step of a 10 ms one-pole a block, exactly at it when under
+ * 1e-5), the others (lists, switches and the values read as stored) take it at once */
+static void sp_changed(uint32_t i)
+{
+    sp_last.v[i] = sy_patch.p[i];
+    sp_t[i] = sp_norm_of(i, sp_last.v[i]);
+    if (!(SP[i].flags & F_SMOOTH))
+        sp_n[i] = sp_t[i];
+    else if (!sp_mvf[i])
+        sp_mvf[i] = 1, sp_mv[sp_nmv++] = (uint8_t)i;
+}
+
 static void sp_block(void)
 {
-    uint32_t i;
-    for (i = 0; i < SP_COUNT; i++)
-        if (SP[i].flags & F_SMOOTH) {
-            float t = sp_norm_of(i, sy_patch.p[i]), d = t - sp_n[i];
-            sp_n[i] = sy_absf(d) < 1e-5f ? t : sp_n[i] + d * SP_SMOOTH_K;
-        }
+    uint32_t i, k;
+    for (k = 0; k < SP_NPAIR; k++)
+        if (sy_patch.pw[k] != sp_last.w[k])
+            for (i = 2u * k; i < 2u * k + 2u; i++)
+                if (sy_patch.p[i] != sp_last.v[i])
+                    sp_changed(i);
+    if ((SP_COUNT & 1u) && sy_patch.p[SP_COUNT - 1u] != sp_last.v[SP_COUNT - 1u])
+        sp_changed(SP_COUNT - 1u);
+    for (k = 0; k < sp_nmv;) {
+        uint32_t id = sp_mv[k];
+        float t = sp_t[id], d = t - sp_n[id];
+        sp_n[id] = sy_absf(d) < 1e-5f ? t : sp_n[id] + d * SP_SMOOTH_K;
+        if (sp_n[id] == t)
+            sp_mvf[id] = 0, sp_mv[k] = sp_mv[--sp_nmv];
+        else
+            k++;
+    }
 }
 
 /* ------------------------------------------------------------------------------- units for the DSP --- */
@@ -252,7 +289,7 @@ static inline float sp_lin(uint32_t id, float n) { return (float)SP[id].lo + n *
 static inline float sp_time_s(float n) { return 0.001f * sy_exp2f(n * 14.8727f); }        /* 1 ms .. 30 s */
 static inline float sp_cut_hz(float n) { return 20.0f * sy_exp2f(n * 9.96578f); }         /* 20 Hz .. 20 kHz */
 static inline float sp_lfo_hz(float n) { return 0.01f * sy_exp2f(n * 11.9658f); }         /* 0.01 .. 40 Hz */
-static inline float sp_dly_s(float n) { return 0.010f * sy_exp2f(n * 6.49185f); }         /* 10 .. 900 ms */
+static inline float sp_dly_s(float n) { return 0.010f * sy_exp2f(n * 6.22882f); }         /* 10 .. 750 ms */
 static inline float sp_db_gain(int32_t v) { return v <= 0 ? 0.0f : sy_exp2f((float)(v - 600) * 0.0166096f); }
 
 /* note values (U_SYNC): beats (quarter notes) a cycle. 0 = free */

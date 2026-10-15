@@ -370,16 +370,10 @@ static int sy_cpu(uint32_t load_q8)
 }
 
 /* ------------------------------------------------------------------------------------- the block --- */
-/* a 5 Hz DC blocker over a block, in place: y = x - x1 + R y1 (st: last input, last output) */
-static void sy_dcblock(float *x, float *st)
+/* the 5 Hz DC blockers (y = x - x1 + R y1, run inside sy_block's loops); a state, flushed, back after a block */
+#define SY_DC_R 0.99929f
+static inline void sy_dc_store(float *st, float x1, float y1)
 {
-    float x1 = st[0], y1 = st[1];
-    uint32_t i;
-    for (i = 0; i < SY_BLK; i++) {
-        float y = x[i] - x1 + 0.99929f * y1;
-        x1 = x[i];
-        x[i] = y1 = y;
-    }
     SY_FLUSH(x1);
     SY_FLUSH(y1);
     st[0] = x1;
@@ -436,19 +430,30 @@ static void sy_block(int32_t *out)
     }
     vol1 = sp_db_gain((int32_t)(sp_lin(SP_V_VOL, mod_get(sy_goff, SP_V_VOL)) + 0.5f));
     dv = (vol1 - vol0) * (1.0f / (float)SY_BLK);
-    for (i = 0; i < SY_BLK; i++, vol0 += dv) {
-        sy_mix_l[i] *= vol0;
-        sy_mix_r[i] *= vol0;
+    {                                                /* the volume, ramped, and no DC into the effects (warps, */
+        float a0 = sy_dc[0][0], b0 = sy_dc[0][1], a1 = sy_dc[1][0], b1 = sy_dc[1][1];   /* sync, FM make some) */
+        for (i = 0; i < SY_BLK; i++, vol0 += dv) {
+            float xl = sy_mix_l[i] * vol0, xr = sy_mix_r[i] * vol0;
+            float yl = xl - a0 + SY_DC_R * b0, yr = xr - a1 + SY_DC_R * b1;
+            a0 = xl, b0 = yl, a1 = xr, b1 = yr;
+            sy_mix_l[i] = yl;
+            sy_mix_r[i] = yr;
+        }
+        sy_dc_store(sy_dc[0], a0, b0);
+        sy_dc_store(sy_dc[1], a1, b1);
     }
     sy_vol = vol1;
-    sy_dcblock(sy_mix_l, sy_dc[0]);                  /* no DC into the effects (warps, sync, FM make some) */
-    sy_dcblock(sy_mix_r, sy_dc[1]);
     fx_block(sy_mix_l, sy_mix_r);
-    sy_dcblock(sy_mix_l, sy_dc[2]);                  /* the master: none out of them either (TUBE makes some) */
-    sy_dcblock(sy_mix_r, sy_dc[3]);
-    for (i = 0; i < SY_BLK; i++) {
-        out[2u * i] = (int32_t)(sy_clampf(sy_mix_l[i], -1.0f, 1.0f) * 32767.0f);
-        out[2u * i + 1u] = (int32_t)(sy_clampf(sy_mix_r[i], -1.0f, 1.0f) * 32767.0f);
+    {                                                /* the master: no DC out of the effects (TUBE makes some), */
+        float a0 = sy_dc[2][0], b0 = sy_dc[2][1], a1 = sy_dc[3][0], b1 = sy_dc[3][1];   /* to Q15 */
+        for (i = 0; i < SY_BLK; i++) {
+            float yl = sy_mix_l[i] - a0 + SY_DC_R * b0, yr = sy_mix_r[i] - a1 + SY_DC_R * b1;
+            a0 = sy_mix_l[i], b0 = yl, a1 = sy_mix_r[i], b1 = yr;
+            out[2u * i] = (int32_t)(sy_clampf(yl, -1.0f, 1.0f) * 32767.0f);
+            out[2u * i + 1u] = (int32_t)(sy_clampf(yr, -1.0f, 1.0f) * 32767.0f);
+        }
+        sy_dc_store(sy_dc[2], a0, b0);
+        sy_dc_store(sy_dc[3], a1, b1);
     }
 }
 
