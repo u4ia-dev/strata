@@ -480,7 +480,8 @@ what it found: [TESTING.md](TESTING.md). The plan:
 | Units | parameter table, matrix, allocation and stealing, glide, storage round trip and migration, flash allow-list |
 
 The emulator (`web/emu`: Felucca's page and worklet, with Strata's glue `strata_web.c`) runs the app on a simulated
-FM-1 in a browser; `strata_emu_test.mjs` drives it under Node and `strata_shot.mjs` writes its screen as PNG. The engine
+FM-1 in a browser; `strata_emu_test.mjs` drives it under Node, `strata_shot.mjs` writes its screen as PNG and
+`strata_browser_test.mjs` runs the page in headless Chrome. The engine
 also builds as WebAssembly for the host tests (`tests/sy_wasm.sh`) and for the workbench (`web/strata`, `wb_test.mjs`).
 Felucca's platform tests (storage, OTA, loader, USB, MIDI parser, input) keep running.
 

@@ -20,6 +20,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 | `web/strata/build.sh`, then `node web/strata/wb_test.mjs` | the workbench page into `build/strata/`, and its test (§6.2) |
 | `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` | Strata on the simulated FM-1 into `build/emu_strata/`, and its test (§6.3); `node web/emu/strata_shot.mjs` writes the screen as PNG into `build/emu_strata/shots/` |
 | `python3 -m http.server -d build/emu_strata 8000` | the emulator in a browser, at `http://localhost:8000` |
+| `node web/emu/strata_browser_test.mjs` | the emulator's one-file page in headless Chrome or Edge under five content security policies (§6.4); on Windows with Windows' Node |
 
 ## 2. Verified on host
 
@@ -224,8 +225,8 @@ of those sounds).
 
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
-The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. Nothing here has
-been opened in a browser: the pages are **not browser-tested** until someone plays them.
+The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. The emulator's page
+has also run in headless Chrome (§6.4); the workbench's page has not been opened in a browser.
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
@@ -267,6 +268,21 @@ The screen was checked by eye from `strata_shot.mjs`'s PNGs (the header, the fou
 gauges, the footer). **A bug the test found**: the table's CC 0 means "no CC", so a CC 0 message (bank select) set
 the first parameter without one (OSC A's ON); the lookup now skips CC 0, and the lookup before the fix fails the
 check.
+
+### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
+
+`build_strata.sh` also writes the page as one file (`make_page_strata.py`): the module as base64, the font as a data:
+URI, the worklet's helpers declared in the page. The worklet loads from `worklet.js` beside the page or, where that
+is refused or missing, from its source in the page as a Blob, so the page works under either kind of policy a
+publishing host may set. Headless Chrome 155 (its own profile, audio muted), from a local server:
+
+| Policy | Result |
+| --- | --- |
+| none; scripts from the page's origin only (no blob:); blob: only (`worklet.js` refused); no `worklet.js` (404) | each starts (the screen draws, so the worklet runs), the lowest key lights its LED and its release puts it out, no sideways scroll |
+| the content alone, in a skeleton like the publishing host's, origin-only scripts | the same; at 400 px wide the tall layout, no sideways scroll |
+
+The only errors are the refusals the policies make. Not covered: the sound itself (muted; the Node tests check it),
+Web MIDI, and the publishing host's own policy, which is not known here.
 
 ## 7. Needs hardware test
 

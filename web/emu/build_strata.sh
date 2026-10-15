@@ -4,7 +4,9 @@
 # STRATA on the simulated FM-1 in the browser: the app (web/emu/strata_web.c) compiled to WebAssembly with Emscripten,
 # played by Felucca's page and worklet (web/emu/index.html, worklet.js), the page's name and its storage keys made
 # Strata's (so it keeps nothing of a Felucca emulator's on the same site).
-#   web/emu/build_strata.sh   ->  build/emu_strata/{index.html, worklet.js, strata.wasm, fonts/}
+#   web/emu/build_strata.sh   ->  build/emu_strata/{index.html, worklet.js, strata.wasm, fonts/}, and the page with
+#                                 the module and the font in it (make_page_strata.py): strata_emulator.html (to open
+#                                 locally), strata_emulator_content.html (to publish, with worklet.js beside it)
 # Needs build/gen: the wavetables (tools/gen_wavetables.py build/gen) and the UI's fonts, icons, keycaps and palettes
 # (tools/gen_aa_font.py, gen_aa_icons.py, gen_aa_keycaps.py, gen_ui_palettes.py: made here when missing).
 set -e
@@ -26,7 +28,7 @@ emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -Wall -Wno-unused-function -Wn
     -Wno-unused-but-set-variable -Ibuild/gen -Ifirmware/src \
     --no-entry -sSTANDALONE_WASM -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=33554432 -sFILESYSTEM=0 \
     -o build/emu_strata/strata.wasm web/emu/strata_web.c
-sed -e 's|<title>Felucca</title>|<title>Strata</title>|' \
+sed -e 's|<title>Felucca</title>|<title>Strata Emulator</title>|' \
     -e 's|content="Felucca, the multi-engine synth firmware for the FM-1, running in your browser: the same code the instrument runs."|content="Strata, a wavetable synth firmware for the FM-1, running in your browser: the same code the instrument runs."|' \
     -e 's|  Felucca by Leo Kuroshita, Hügelton Instruments · |  Strata, a Felucca fork · Felucca by Leo Kuroshita, Hügelton Instruments · |' \
     -e 's|<nav><a href="../installer/">Install</a><a href="../editor/">Editor</a><a href="https://github.com/hugelton/Felucca">Source</a></nav>|<nav><a href="https://github.com/hugelton/Felucca">Felucca</a></nav>|' \
@@ -40,3 +42,4 @@ grep -q 'fetch("strata.wasm")' build/emu_strata/index.html || { echo "emu_strata
 cp web/emu/worklet.js build/emu_strata/
 cp web/emu/fonts/DotGothic16-subset.woff web/emu/fonts/OFL.txt build/emu_strata/fonts/
 echo "emu_strata: build/emu_strata ($(wc -c < build/emu_strata/strata.wasm | tr -d ' ') B wasm)"
+python3 web/emu/make_page_strata.py build/emu_strata
