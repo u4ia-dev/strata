@@ -231,7 +231,7 @@ static void fx_reverb(float *l, float *r)
             for (k = 0, base = 0; k < FX_RV_NL; k++) {
                 uint32_t n = FX_RV_LEN[k] + 8u;
                 if (k >= fx.rv_nl) {
-                    memset(fx_rv + base, 0, n * sizeof fx_rv[0]);
+                    sy_zero16(fx_rv + base, n);
                     fx.rv_lp[k] = 0.0f;
                 }
                 base += n;
@@ -323,20 +323,23 @@ static void fx_ott(float *l, float *r)
     lv[2] = sy_exp2f(sp_lin(SP_OT_HIGH, mod_get(sy_goff, SP_OT_HIGH)) * 0.0166096f);
     flt_svf_coef(88.3f, 1.414f, c1);
     flt_svf_coef(2500.0f, 1.414f, c2);
-    for (c = 0; c < 2u; c++) {                          /* the split: low = LP(x), mid = LP(x - low) .. */
-        for (i = 0; i < SY_BLK; i++)
-            bands[0][c][i] = ch[c][i];
-        flt_svf(bands[0][c], fx.ott_s[0][c], c1, c1, 0.0f, 0.0f, 0.0f, 1.0f);
+    for (c = 0; c < 2u; c++)                            /* the split: low = LP(x), mid = LP(x - low) .. */
+        sy_copyf(bands[0][c], ch[c], SY_BLK);
+    for (c = 0; c < 2u; c++)
+        flt_svf_lp(bands[0][c], fx.ott_s[0][c], c1, c1);
+    for (c = 0; c < 2u; c++) {
         for (i = 0; i < SY_BLK; i++)
             bands[1][c][i] = ch[c][i] - bands[0][c][i];
-        memcpy(bands[2][c], bands[1][c], sizeof bands[2][c]);
-        flt_svf(bands[1][c], fx.ott_s[1][c], c2, c2, 0.0f, 0.0f, 0.0f, 1.0f);
+        sy_copyf(bands[2][c], bands[1][c], SY_BLK);
+    }
+    for (c = 0; c < 2u; c++)
+        flt_svf_lp(bands[1][c], fx.ott_s[1][c], c2, c2);
+    for (c = 0; c < 2u; c++)
         for (i = 0; i < SY_BLK; i++) {
             bands[2][c][i] -= bands[1][c][i];
             for (b = 0; b < 3u; b++)
                 pk[b] = sy_maxf(pk[b], sy_absf(bands[b][c][i]));
         }
-    }
     for (b = 0; b < 3u; b++) {                          /* followers, the gains in dB once a block */
         static const float ATK[3] = {0.20f, 0.35f, 0.50f}, REL[3] = {0.010f, 0.025f, 0.050f};
         float e = fx.ott_env[b], ldb, gdb = 0.0f;
@@ -363,7 +366,7 @@ static void fx_ott(float *l, float *r)
             for (b = 0; b < 3u; b++)
                 g[b] += dg[b];
         }
-        memcpy(fx.ott_g, g1, sizeof g1);
+        sy_copyf(fx.ott_g, g1, 3u);
     }
     for (b = 0; b < 3u; b++)
         SY_FLUSH(fx.ott_env[b]);

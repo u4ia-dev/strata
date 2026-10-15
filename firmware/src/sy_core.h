@@ -32,6 +32,13 @@ static inline float sy_clampf(float x, float lo, float hi) { return x < lo ? lo 
 static inline int32_t sy_clampi(int32_t x, int32_t lo, int32_t hi) { return x < lo ? lo : x > hi ? hi : x; }
 static inline float sy_lerpf(float a, float b, float t) { return a + (b - a) * t; }
 
+/* zeroing and copying in the audio path: the firmware's memset and memcpy go a byte at a time (src/libc.c, built
+ * -fno-builtin: 3 or 4 instructions a byte on the target), these a word at a time */
+static inline void sy_zerof(float *x, uint32_t n) { while (n--) *x++ = 0.0f; }
+static inline void sy_zeroi(int32_t *x, uint32_t n) { while (n--) *x++ = 0; }
+static inline void sy_zero16(int16_t *x, uint32_t n) { while (n--) *x++ = 0; }
+static inline void sy_copyf(float *restrict d, const float *restrict s, uint32_t n) { while (n--) *d++ = *s++; }
+
 static inline int32_t sy_floori(float x)          /* floor for |x| < 2^31 */
 {
     int32_t i = (int32_t)x;

@@ -85,35 +85,42 @@ static inline void voice_bal(float pan, float lvl, float *g)
 }
 
 /* --------------------------------------------------------------------------------------------- sub --- */
+/* one loop a shape (a switch in the loop keeps every shape's constants out of the target's registers) */
+#define SUB_LOOP(BODY)                                                                                    \
+    for (i = 0; i < SY_BLK; i++, ph += inc) {                                                             \
+        float t = (float)(ph >> 8) * (1.0f / 16777216.0f);                                                \
+        BODY;                                                                                             \
+    }
 static void voice_sub(sy_voice_t *v, uint32_t inc, uint32_t shape, float pw, float *x)
 {
     uint32_t i, ph = v->sub_ph;
     float dt = (float)inc * (1.0f / 4294967296.0f), idt = dt > 0.0f ? 1.0f / dt : 0.0f;
     float w = 0.5f - 0.45f * pw, lp = v->sub_lp, k = sy_minf(1.0f, 25.1327f * dt);   /* ROUND: ~4 x f0 */
-    for (i = 0; i < SY_BLK; i++, ph += inc) {
-        float t = (float)(ph >> 8) * (1.0f / 16777216.0f), y;
-        switch (shape) {
-        case SUB_SINE: y = sy_sin2pi(t); break;
-        case SUB_TRI: y = 4.0f * sy_absf(t - 0.5f) - 1.0f; break;
-        case SUB_SAW: y = 2.0f * t - 1.0f - voice_blep(t, dt, idt); break;
-        case SUB_PULSE: {
-            float u = t + 1.0f - w;
-            u -= (float)sy_floori(u);
-            y = (t < w ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt) - (2.0f * w - 1.0f);
-            break;                                         /* (less its mean: no DC) */
-        }
-        default: {                                         /* SQUARE, ROUND */
-            float u = t + 0.5f;
-            u -= (float)sy_floori(u);
-            y = (t < 0.5f ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt);
-            if (shape == SUB_ROUND) {
-                lp += (y - lp) * k;
-                y = lp;
-            }
-            break;
-        }
-        }
-        x[i] = y;
+    switch (shape) {
+    case SUB_SINE:
+        SUB_LOOP(x[i] = sy_sin2pi(t));
+        break;
+    case SUB_TRI:
+        SUB_LOOP(x[i] = 4.0f * sy_absf(t - 0.5f) - 1.0f);
+        break;
+    case SUB_SAW:
+        SUB_LOOP(x[i] = 2.0f * t - 1.0f - voice_blep(t, dt, idt));
+        break;
+    case SUB_PULSE: {                                      /* (less its mean: no DC) */
+        float m = 2.0f * w - 1.0f;
+        SUB_LOOP(float u = t + 1.0f - w; u -= (float)sy_floori(u);
+                 x[i] = (t < w ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt) - m);
+        break;
+    }
+    case SUB_ROUND:                                        /* the square through a one-pole */
+        SUB_LOOP(float u = t + 0.5f; u -= (float)sy_floori(u);
+                 lp += ((t < 0.5f ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt) - lp) * k;
+                 x[i] = lp);
+        break;
+    default:                                               /* SQUARE */
+        SUB_LOOP(float u = t + 0.5f; u -= (float)sy_floori(u);
+                 x[i] = (t < 0.5f ? 1.0f : -1.0f) + voice_blep(t, dt, idt) - voice_blep(u, dt, idt));
+        break;
     }
     v->sub_ph = ph;
     SY_FLUSH(lp);
@@ -121,29 +128,37 @@ static void voice_sub(sy_voice_t *v, uint32_t inc, uint32_t shape, float pw, flo
 }
 
 /* ------------------------------------------------------------------------------------------- noise --- */
+/* one loop a type; COLOR: a one-pole at about 1 kHz splits it, lows x (1 - c), highs x (1 + c) */
+#define NZ_LOOP(BODY)                                                                                     \
+    for (i = 0; i < SY_BLK; i++) {                                                                        \
+        float w = sy_randf(sy_rand(&seed)), y;                                                            \
+        BODY;                                                                                             \
+        tl += (y - tl) * 0.1329f;                                                                         \
+        o[i] = tl * lo + (y - tl) * hi;                                                                   \
+    }
 static void voice_noise(sy_voice_t *v, uint32_t type, float color, float stereo, float *l, float *r)
 {
     uint32_t i, c;
-    float *out[2] = {l, r};
+    float *out[2] = {l, r}, lo = 1.0f - color, hi = 1.0f + color;
     for (c = 0; c < 2u; c++) {
-        float *s = v->nz[c];
-        for (i = 0; i < SY_BLK; i++) {
-            float w = sy_randf(sy_rand(&v->nz_seed[c])), y, hp;
-            if (type == 1u) {                           /* pink */
-                s[0] += (w - s[0]) * 0.0056806f;
-                s[1] += (w - s[1]) * 0.0553753f;
-                s[2] += (w - s[2]) * 0.4342910f;
-                y = 8.665f * s[0] + 1.980f * s[1] + 0.7332f * s[2] + 0.1205f * w;
-            } else if (type == 2u) {                    /* brown */
-                s[3] = 0.998f * s[3] + 0.0632f * w;
-                y = s[3];
-            } else {
-                y = w;
-            }
-            s[4] += (y - s[4]) * 0.1329f;               /* COLOR: lows x (1 - c), highs x (1 + c), about 1 kHz */
-            hp = y - s[4];
-            out[c][i] = s[4] * (1.0f - color) + hp * (1.0f + color);
+        float *s = v->nz[c], *o = out[c], tl = s[4];
+        uint32_t seed = v->nz_seed[c];
+        if (type == 1u) {                               /* pink */
+            float p0 = s[0], p1 = s[1], p2 = s[2];
+            NZ_LOOP(p0 += (w - p0) * 0.0056806f; p1 += (w - p1) * 0.0553753f; p2 += (w - p2) * 0.4342910f;
+                    y = 8.665f * p0 + 1.980f * p1 + 0.7332f * p2 + 0.1205f * w);
+            s[0] = p0;
+            s[1] = p1;
+            s[2] = p2;
+        } else if (type == 2u) {                        /* brown */
+            float b = s[3];
+            NZ_LOOP(b = 0.998f * b + 0.0632f * w; y = b);
+            s[3] = b;
+        } else {
+            NZ_LOOP(y = w);
         }
+        s[4] = tl;
+        v->nz_seed[c] = seed;
         for (i = 0; i < 5u; i++)
             SY_FLUSH(s[i]);
     }
@@ -281,7 +296,7 @@ static void voice_mix(float *bl, float *br, const float *x, const float *y, cons
 /* one block of a voice added into ml / mr */
 static void voice_block(sy_voice_t *v, float *ml, float *mr)
 {
-    static int32_t ol[SY_BLK], orr[SY_BLK], pm[SY_NOSC][SY_BLK];
+    static int32_t olr[2u * SY_BLK], pm[SY_NOSC][2u * SY_BLK];
     static float fl[SY_BLK], fr[SY_BLK], dl[SY_BLK], dr[SY_BLK], x[SY_BLK], y[SY_BLK];
     const float *off = v->off;
     float amp0 = v->amp * v->fade, amp1, fade1, g[4][2], pitch;
@@ -381,7 +396,7 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
                 osc_modulator(&v->osc[m], &wt_tab[m], &op[m], pm[o], !on[m]);
                 if (s < 1.0f || ds != 0.0f)
                     for (i = 0; i < SY_BLK; i++, s += ds)
-                        pm[o][i] = (int32_t)((float)pm[o][i] * s);
+                        pm[o][2u * i] = (int32_t)((float)pm[o][2u * i] * s);
                 op[o].pm = pm[o];
                 op[o].pm_inc = op[m].inc1;
             }
@@ -395,12 +410,11 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             int dir = v->kind[o] >> 7;
             if (!on[o] || (s0 <= 0.0f && s1 <= 0.0f) || !wt_tab[o].n)
                 continue;
-            for (i = 0; i < SY_BLK; i++)
-                ol[i] = orr[i] = 0;
-            osc_block(&v->osc[o], &wt_tab[o], &op[o], ol, orr);
+            sy_zeroi(olr, 2u * SY_BLK);
+            osc_block(&v->osc[o], &wt_tab[o], &op[o], olr);
             for (i = 0; i < SY_BLK; i++) {                     /* (int32 -> float once, the gains next) */
-                x[i] = (float)ol[i];
-                y[i] = (float)orr[i];
+                x[i] = (float)olr[2u * i];
+                y[i] = (float)olr[2u * i + 1u];
             }
             g0[0] = v->g[o][0] * s0;
             g0[1] = v->g[o][1] * s0;
@@ -423,7 +437,7 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             voice_mix(dir ? dl : fl, dir ? dr : fr, x, y, v->g[VS_NZ], g[VS_NZ]);
             ran |= 1u << VS_NZ;
         }
-        memcpy(v->g, g, sizeof g);
+        sy_copyf(v->g[0], g[0], 8u);
         v->ran = (uint8_t)ran;
         for (k = 0; k < 4u; k++)                               /* a kind change takes effect once faded out */
             if (v->son[k] <= 0.0f)
@@ -452,8 +466,8 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
             fp.drive = mod_get(off, SP_F_DRIVE);
             fp.var = mod_get(off, SP_F_VAR);
             fp.mix = 1.0f;
-            memcpy(wet[0], fl, sizeof fl);
-            memcpy(wet[1], fr, sizeof fr);
+            sy_copyf(wet[0], fl, SY_BLK);
+            sy_copyf(wet[1], fr, SY_BLK);
             if (f0 <= 0.0f && !v->fresh)
                 flt_note(&v->flt);                             /* switched on: from rest */
             flt_block(&v->flt, &fp, wet[0], wet[1]);

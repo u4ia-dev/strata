@@ -653,7 +653,7 @@ static void t_dc_sources(void)
                t[c], db(t[c]));
     }
     {                                                     /* the sources' own means, over whole cycles */
-        static int32_t il[SY_BLK], ir[SY_BLK];
+        static int32_t ilr[2u * SY_BLK];
         static float x[SY_BLK];
         double m, pk;
         uint32_t b, w;
@@ -693,13 +693,12 @@ static void t_dc_sources(void)
             m = 0;
             pk = 0;
             for (b = 0; b < 404u; b++) {
-                memset(il, 0, sizeof il);
-                memset(ir, 0, sizeof ir);
-                osc_block(o, &wt_tab[0], &p, il, ir);
+                memset(ilr, 0, sizeof ilr);
+                osc_block(o, &wt_tab[0], &p, ilr);
                 if (b >= 4u)
                     for (i = 0; i < SY_BLK; i++) {
-                        m += (double)il[i];
-                        pk = fmax(pk, fabs((double)il[i]));
+                        m += (double)ilr[2u * i];
+                        pk = fmax(pk, fabs((double)ilr[2u * i]));
                     }
             }
             m /= 400.0 * SY_BLK;
@@ -794,6 +793,24 @@ static void t_golden(const char *gpath)
                 if (*c == ' ')
                     *c = '_';
             wav_write(path, L, R, n);
+        }
+        if (getenv("GOLDEN_RAW")) {                       /* the render as float (L R interleaved): how far an
+                                                           * intended change moves it (tests/sy_golden_diff.py) */
+            const char *raw = getenv("GOLDEN_RAW");
+            char path[256];
+            FILE *rf;
+            uint32_t k;
+            snprintf(path, sizeof path, "%s/%s.f32", raw, SOUNDS[i].name);
+            for (char *c = path + strlen(raw); *c; c++)
+                if (*c == ' ')
+                    *c = '_';
+            if ((rf = fopen(path, "wb")) != 0) {
+                for (k = 0; k < n; k++) {
+                    fwrite(&L[k], sizeof L[k], 1, rf);
+                    fwrite(&R[k], sizeof R[k], 1, rf);
+                }
+                fclose(rf);
+            }
         }
         n = play(&SOUNDS[i]);
         h2 = hash_out(n);

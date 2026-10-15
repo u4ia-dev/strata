@@ -52,29 +52,50 @@ static void flt_svf_coef(float hz, float k, float *c)
 /* resonance 0..1 -> k: kmax (flat) .. 0.02 (+34 dB at the cutoff), even in dB */
 static inline float flt_k(float res, float kmax) { return kmax * sy_exp2f(-sy_log2f(kmax * 50.0f) * res); }
 
-/* one SVF stage over a block of one channel, in place, coefficients c0 -> c1;
- * out = m0 v0 + (m1 + mk k) v1 + m2 v2 (low pass 0 0 0 1, band pass 0 0 1 0 (normalised: k v1), high pass 1 -1 0 -1) */
-static void flt_svf(float *x, float *st, const float *c0, const float *c1, float m0, float mk, float m1, float m2)
-{
-    float ic1 = st[0], ic2 = st[1], a1 = c0[0], a2 = c0[1], a3 = c0[2], k = c0[3];
-    const float inv = 1.0f / (float)SY_BLK;
-    float d1 = (c1[0] - a1) * inv, d2 = (c1[1] - a2) * inv, d3 = (c1[2] - a3) * inv, dk = (c1[3] - k) * inv;
-    uint32_t i;
-    for (i = 0; i < SY_BLK; i++) {
-        float v0 = x[i], v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
-        ic1 = 2.0f * v1 - ic1;
-        ic2 = 2.0f * v2 - ic2;
-        x[i] = m0 * v0 + (m1 + mk * k) * v1 + m2 * v2;
-        a1 += d1;
-        a2 += d2;
-        a3 += d3;
-        k += dk;
+/* one SVF stage over a block of one channel, in place, the state st (ic1 ic2), the coefficients ramping c0 -> c1.
+ * Each response is a loop of its own, from v0 (the input), v1 (the band), v2 (the low) and k: LP v2, BP k v1 (unity
+ * at the centre), HP v0 - k v1 - v2, NOTCH v0 - k v1, PEAK v0 + 3 k v1 (+12 dB). (Both channels in one loop would
+ * share the ramp, but it overflows the target's 16 registers and is no faster there: tools/costprobe.) The
+ * coefficients a1 a2 a3 are each bounded (0..1, 0..0.5, 0..1), so a ramp from one filter to another passes only
+ * through tame ones, even with the cutoff jumping 20 Hz -> 20 kHz in a block (ramping k + g, or g, would not) */
+#define FLT_SVF_KERNEL(NAME, OUT)                                                                         \
+    static void NAME(float *restrict x, float *st, const float *c0, const float *c1)                     \
+    {                                                                                                     \
+        float ic1 = st[0], ic2 = st[1], a1 = c0[0], a2 = c0[1], a3 = c0[2], k = c0[3];                    \
+        const float inv = 1.0f / (float)SY_BLK;                                                           \
+        float d1 = (c1[0] - a1) * inv, d2 = (c1[1] - a2) * inv, d3 = (c1[2] - a3) * inv;                  \
+        float dk = (c1[3] - k) * inv;                                                                     \
+        uint32_t i;                                                                                       \
+        for (i = 0; i < SY_BLK; i++) {                                                                    \
+            float v0 = x[i], v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;       \
+            ic1 = 2.0f * v1 - ic1;                                                                        \
+            ic2 = 2.0f * v2 - ic2;                                                                        \
+            x[i] = OUT;                                                                                   \
+            a1 += d1;                                                                                     \
+            a2 += d2;                                                                                     \
+            a3 += d3;                                                                                     \
+            k += dk;                                                                                      \
+        }                                                                                                 \
+        (void)k;                                                                                          \
+        st[0] = ic1;                                                                                      \
+        st[1] = ic2;                                                                                      \
     }
-    st[0] = ic1;
-    st[1] = ic2;
-}
+FLT_SVF_KERNEL(flt_svf_lp, v2)
+FLT_SVF_KERNEL(flt_svf_bp, k * v1)
+FLT_SVF_KERNEL(flt_svf_hp, v0 - k * v1 - v2)
+FLT_SVF_KERNEL(flt_svf_notch, v0 - k * v1)
+FLT_SVF_KERNEL(flt_svf_peak, v0 + 3.0f * k * v1)
 
-/* the ladder over a block of one channel: g (the prewarped cutoff) and k (feedback 0..4) ramp */
+typedef void (*flt_svf_t)(float *restrict, float *, const float *, const float *);
+enum { FR_LP, FR_BP, FR_HP, FR_NOTCH, FR_PEAK };
+static const flt_svf_t FLT_SVF[5] = {flt_svf_lp, flt_svf_bp, flt_svf_hp, flt_svf_notch, flt_svf_peak};
+static const uint8_t FLT_RESP[FT_LADDER] = {FR_LP, FR_LP, FR_HP, FR_HP, FR_BP, FR_BP, FR_NOTCH, FR_PEAK};
+
+/* the ladder over a block of one channel: g (the prewarped cutoff) and k (feedback 0..4) ramp. Two divisions a
+ * sample (G, and the solve). Newton steps in their place were tried: no fewer instructions on the target (72
+ * against 62 and the two divides, whose time there is not yet measured: the BENCH page) and, at 90 % resonance,
+ * -59 dB off exact division in a fast sweep, -18 dB with the cutoff jumping; ramping G instead of g moves a
+ * fast-swept ladder by -44 dB. Kept exact */
 static void flt_ladder(float *x, float *st, float g0, float g1, float k0, float k1)
 {
     float s1 = st[0], s2 = st[1], s3 = st[2], s4 = st[3];
@@ -97,6 +118,7 @@ static void flt_ladder(float *x, float *st, float g0, float g1, float k0, float 
     st[0] = s1; st[1] = s2; st[2] = s3; st[3] = s4;
 }
 
+
 static void flt_note(flt_t *f)
 {
     memset(f, 0, sizeof *f);
@@ -108,6 +130,7 @@ static void flt_block(flt_t *f, const flt_par_t *p, float *l, float *r)
 {
     float dry[2][SY_BLK], *ch[2] = {l, r}, cn[2][3][4], gn[3] = {0.0f, 0.0f, 0.0f};
     uint32_t c, i, b, t = p->type;
+    sy_zerof(cn[0][0], 24u);                       /* (the stages a type leaves unset: 0, not stack garbage) */
     if (t != f->type) {                            /* a new topology: from rest (the voice fades it in) */
         memset(f->s, 0, sizeof f->s);
         f->type = (uint8_t)t;
@@ -115,7 +138,7 @@ static void flt_block(flt_t *f, const flt_par_t *p, float *l, float *r)
     }
     if (p->mix < 1.0f)
         for (c = 0; c < 2u; c++)
-            memcpy(dry[c], ch[c], sizeof dry[c]);
+            sy_copyf(dry[c], ch[c], SY_BLK);
     if (p->drive > 0.0f) {                         /* gain 1 .. 16 into the clip; out at 1 / sqrt(gain) x (1 + drive) */
         float g = 1.0f + 15.0f * p->drive * p->drive, mk = sy_exp2f(-0.5f * sy_log2f(g)) * (1.0f + p->drive);
         for (c = 0; c < 2u; c++)
@@ -136,55 +159,46 @@ static void flt_block(flt_t *f, const flt_par_t *p, float *l, float *r)
         }
         for (c = 0; c < 2u; c++) {
             float out[SY_BLK];
-            for (i = 0; i < SY_BLK; i++)
-                out[i] = 0.0f;
+            sy_zerof(out, SY_BLK);
             for (b = 0; b < 3u; b++) {
                 float tmp[SY_BLK], g0 = f->fresh ? gn[b] : f->fg[b], dg = (gn[b] - g0) * (1.0f / (float)SY_BLK);
-                memcpy(tmp, ch[c], sizeof tmp);
-                flt_svf(tmp, f->s[c] + 2u * b, f->fresh ? cn[0][b] : f->c[0][b], cn[0][b], 0.0f, 1.0f, 0.0f, 0.0f);
+                sy_copyf(tmp, ch[c], SY_BLK);
+                flt_svf_bp(tmp, f->s[c] + 2u * b, f->fresh ? cn[0][b] : f->c[0][b], cn[0][b]);
                 for (i = 0; i < SY_BLK; i++, g0 += dg)
                     out[i] += tmp[i] * g0;
             }
-            memcpy(ch[c], out, sizeof out);
+            sy_copyf(ch[c], out, SY_BLK);
         }
-        memcpy(f->c[0], cn[0], sizeof f->c[0]);
-        memcpy(f->fg, gn, sizeof gn);
-    } else {
+        sy_copyf(f->c[0][0], cn[0][0], 12u);
+        sy_copyf(f->fg, gn, 3u);
+    } else if (t == FT_LADDER) {
         for (c = 0; c < 2u; c++) {                 /* VAR: the left channel's cutoff down, the right's up */
             float hz = p->hz * sy_exp2f(c ? p->var : -p->var);
             float (*c0)[4] = f->fresh ? cn[c] : f->c[c];
-            if (t == FT_LADDER) {
-                cn[c][0][0] = flt_g(hz);
-                cn[c][0][3] = 4.0f * p->res;
-                flt_ladder(ch[c], f->s[c], f->fresh ? cn[c][0][0] : c0[0][0], cn[c][0][0],
-                           f->fresh ? cn[c][0][3] : c0[0][3], cn[c][0][3]);
-                continue;
-            }
-            if (t == FT_LP24 || t == FT_HP24 || t == FT_BP24) {
-                flt_svf_coef(hz, 1.848f, cn[c][0]);                   /* stage 1: Q 0.54 */
-                flt_svf_coef(hz, flt_k(p->res, 0.765f), cn[c][1]);    /* stage 2: Q 1.31 .. 50 */
-                c0 = f->fresh ? cn[c] : f->c[c];
-                for (b = 0; b < 2u; b++) {
-                    if (t == FT_LP24)
-                        flt_svf(ch[c], f->s[c] + 2u * b, c0[b], cn[c][b], 0.0f, 0.0f, 0.0f, 1.0f);
-                    else if (t == FT_HP24)
-                        flt_svf(ch[c], f->s[c] + 2u * b, c0[b], cn[c][b], 1.0f, -1.0f, 0.0f, -1.0f);
-                    else
-                        flt_svf(ch[c], f->s[c] + 2u * b, c0[b], cn[c][b], 0.0f, 1.0f, 0.0f, 0.0f);
-                }
-                continue;
-            }
-            flt_svf_coef(hz, flt_k(p->res, 1.414f), cn[c][0]);
-            c0 = f->fresh ? cn[c] : f->c[c];
-            switch (t) {
-            case FT_LP12: flt_svf(ch[c], f->s[c], c0[0], cn[c][0], 0.0f, 0.0f, 0.0f, 1.0f); break;
-            case FT_HP12: flt_svf(ch[c], f->s[c], c0[0], cn[c][0], 1.0f, -1.0f, 0.0f, -1.0f); break;
-            case FT_BP12: flt_svf(ch[c], f->s[c], c0[0], cn[c][0], 0.0f, 1.0f, 0.0f, 0.0f); break;
-            case FT_NOTCH: flt_svf(ch[c], f->s[c], c0[0], cn[c][0], 1.0f, -1.0f, 0.0f, 0.0f); break;
-            default: flt_svf(ch[c], f->s[c], c0[0], cn[c][0], 1.0f, 3.0f, 0.0f, 0.0f); break;   /* PEAK: +12 dB */
-            }
+            cn[c][0][0] = flt_g(hz);
+            cn[c][0][3] = 4.0f * p->res;
+            flt_ladder(ch[c], f->s[c], c0[0][0], cn[c][0][0], c0[0][3], cn[c][0][3]);
         }
-        memcpy(f->c, cn, sizeof cn);
+        sy_copyf(f->c[0][0], cn[0][0], 24u);
+    } else {                                       /* the SVFs: 24 dB, stage 1 at Q 0.54 and stage 2 at Q 1.31 .. 50 */
+        uint32_t ns = (t == FT_LP24 || t == FT_HP24 || t == FT_BP24) ? 2u : 1u, rs = FLT_RESP[t];
+        float ka = ns == 2u ? 1.848f : flt_k(p->res, 1.414f), kb = ns == 2u ? flt_k(p->res, 0.765f) : 0.0f;
+        float (*c0)[3][4] = f->fresh ? cn : f->c;
+        for (c = 0; c < 2u; c++) {                 /* VAR: the left channel's cutoff down, the right's up */
+            float hz;
+            if (c && p->var == 0.0f) {
+                sy_copyf(cn[1][0], cn[0][0], 12u);
+                break;
+            }
+            hz = p->hz * sy_exp2f(c ? p->var : -p->var);
+            flt_svf_coef(hz, ka, cn[c][0]);
+            if (ns == 2u)
+                flt_svf_coef(hz, kb, cn[c][1]);
+        }
+        for (c = 0; c < 2u; c++)
+            for (b = 0; b < ns; b++)
+                FLT_SVF[rs](ch[c], f->s[c] + 2u * b, c0[c][b], cn[c][b]);
+        sy_copyf(f->c[0][0], cn[0][0], 24u);
     }
     if (p->mix < 1.0f)
         for (c = 0; c < 2u; c++)

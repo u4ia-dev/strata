@@ -46,7 +46,7 @@ static void use_table(uint32_t id)
 static void render(uint32_t table, float pos, uint32_t warp, float wamt, float note, uint32_t nuni, float det,
                    float width, float rand, float *l, float *r, uint32_t n)
 {
-    static int32_t il[SY_BLK], ir[SY_BLK];
+    static int32_t ilr[2u * SY_BLK];
     osc_par_t p;
     uint32_t b, i;
     static uint32_t seed = 12345;
@@ -63,12 +63,11 @@ static void render(uint32_t table, float pos, uint32_t warp, float wamt, float n
     p.blend = 1.0f;
     p.width = width;
     for (b = 0; b < n; b += SY_BLK) {
-        memset(il, 0, sizeof il);
-        memset(ir, 0, sizeof ir);
-        osc_block(&ov, &wt_tab[0], &p, il, ir);
+        memset(ilr, 0, sizeof ilr);
+        osc_block(&ov, &wt_tab[0], &p, ilr);
         for (i = 0; i < SY_BLK && b + i < n; i++) {
-            l[b + i] = (float)il[i] * (1.0f / 32768.0f);
-            r[b + i] = (float)ir[i] * (1.0f / 32768.0f);
+            l[b + i] = (float)ilr[2u * i] * (1.0f / 32768.0f);
+            r[b + i] = (float)ilr[2u * i + 1u] * (1.0f / 32768.0f);
         }
     }
 }
@@ -207,7 +206,7 @@ int main(int argc, char **argv)
 
     /* 5. levels: hysteresis */
     {
-        static int32_t il[SY_BLK], ir[SY_BLK];
+        static int32_t ilr[2u * SY_BLK];
         osc_par_t p;
         uint32_t b, changes = 0, last;
         static uint32_t seed = 1;
@@ -225,7 +224,7 @@ int main(int argc, char **argv)
             float note = base + 0.30f * sinf(6.2831853f * 5.0f * (float)b / 1378.0f);
             p.inc1 = voice_inc(note);
             p.inc0 = p.inc1;
-            osc_block(&ov, &wt_tab[0], &p, il, ir);
+            osc_block(&ov, &wt_tab[0], &p, ilr);
             if (b > 2u && ov.lev[0] != last)
                 changes++;
             last = ov.lev[0];

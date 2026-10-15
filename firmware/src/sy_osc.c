@@ -19,100 +19,98 @@ static const char *const WARP_NAMES[WARP_COUNT] = {"OFF", "SYNC", "BEND+", "BEND
                                                    "MIRROR", "FM"};
 
 typedef struct {                           /* a kernel call: one unison voice over n samples */
-    const int16_t *a, *b;                  /* the level in frame k and in frame k + 1 */
+    const int16_t *a;                      /* the level in frame k (frame k + 1's is WT_FRAME further on) */
     uint32_t bits;                         /* log2 of the level's samples */
     uint32_t ph, inc;                      /* phase, increment */
     int32_t dinc;                          /* the increment's step a sample */
     int32_t xf, dxf;                       /* the crossfade k -> k + 1 (Q15, 0..32768) and its step */
     int32_t gl, gr, dgl, dgr;              /* gains (Q15) and their steps */
     const uint32_t *map;                   /* warp map (OSC_NMAP + 1 phases) */
-    const int32_t *pm;                     /* FM: the modulator (Q15 a sample) */
+    const int32_t *pm;                     /* FM: the modulator (Q15, every other int32: an interleaved buffer's left) */
     uint32_t pmd;                          /* FM: phase units per Q15 unit of the modulator */
     uint32_t wt, wk;                       /* SYNC window: its width (phase >> 17), 32767 / width (Q15) */
     int32_t wd;                            /* SYNC window: depth, Q15 */
 } osc_job_t;
 
 /* ---------------------------------------------------------------------------------------- kernels --- */
+/* The pi32v2 has 16 registers and these loops need most of them (the target listing: tools/costprobe). So: the
+ * output is one interleaved buffer (left, right: one pointer), one shift gives the index and the fraction
+ * together, frame k + 1 is frame k's pointer plus WT_FRAME (frames are contiguous in the pool; a table of one
+ * frame reads the pool's next frame with a crossfade of 0), and each kernel comes twice: gains held (the usual
+ * block) and gains ramping (_g: unison, level and fade changes), one a line (tools/costprobe counts by line). */
 #define OSC_SETUP                                                                                         \
-    const int16_t *a = j->a, *b = j->b;                                                                   \
-    uint32_t bits = j->bits, sh = 32u - bits, ph = j->ph, inc = j->inc;                                   \
-    int32_t dinc = j->dinc, xf = j->xf, dxf = j->dxf, gl = j->gl, gr = j->gr, dgl = j->dgl, dgr = j->dgr
+    const int16_t *a = j->a, *b = a + WT_FRAME;                                                           \
+    uint32_t shf = 17u - j->bits, ph = j->ph, inc = j->inc;                                               \
+    int32_t dinc = j->dinc, xf = j->xf, dxf = j->dxf, gl = j->gl, gr = j->gr
 #define OSC_READ(q)                                                                                       \
-    uint32_t i = (q) >> sh;                                                                               \
-    int32_t fr = (int32_t)(((q) << bits) >> 17);                                                         \
+    uint32_t x = (q) >> shf, i = x >> 15;                                                                 \
+    int32_t fr = (int32_t)(x & 0x7FFFu);                                                                  \
     int32_t a0 = a[i], b0 = b[i];                                                                         \
     int32_t sa = a0 + (((a[i + 1u] - a0) * fr) >> 15);                                                    \
     int32_t sb = b0 + (((b[i + 1u] - b0) * fr) >> 15);                                                    \
     int32_t s = sa + (((sb - sa) * xf) >> 15)
 #define OSC_OUT                                                                                           \
-    *l++ += (s * gl) >> 15;                                                                               \
-    *r++ += (s * gr) >> 15;                                                                               \
+    o[0] += (s * gl) >> 15;                                                                               \
+    o[1] += (s * gr) >> 15;                                                                               \
+    o += 2;                                                                                               \
     ph += inc;                                                                                            \
     inc += (uint32_t)dinc;                                                                                \
-    xf += dxf;                                                                                            \
-    gl += dgl;                                                                                            \
-    gr += dgr
+    xf += dxf
 /* the phase through the warp map: 64 segments, a 16-bit fraction (the segment's span >> 16: 1.5e-5 cycle) */
 #define OSC_MAP(q)                                                                                        \
     uint32_t sg = ph >> 26, w0 = map[sg];                                                                 \
     uint32_t q = w0 + (uint32_t)(((int32_t)(map[sg + 1u] - w0) >> 16) * (int32_t)((ph >> 10) & 0xFFFFu))
+#define OSC_KERNEL(NAME, RAMP, DECL, BODY)                                                                \
+    static uint32_t NAME(int32_t *restrict o, uint32_t n, const osc_job_t *j)                             \
+    {                                                                                                     \
+        int32_t dgl = j->dgl, dgr = j->dgr;                                                               \
+        DECL;                                                                                             \
+        OSC_SETUP;                                                                                        \
+        do {                                                                                              \
+            BODY;                                                                                         \
+            OSC_OUT;                                                                                      \
+            if (RAMP) {                                                                                   \
+                gl += dgl;                                                                                \
+                gr += dgr;                                                                                \
+            }                                                                                             \
+        } while (--n);                                                                                    \
+        return ph;                                                                                        \
+    }
 
-static uint32_t osc_k_plain(int32_t *restrict l, int32_t *restrict r, uint32_t n, const osc_job_t *j)
-{
-    OSC_SETUP;
-    do {
-        OSC_READ(ph);
-        OSC_OUT;
-    } while (--n);
-    return ph;
-}
+/* the phase as it is */
+#define OSC_D_PLAIN do {} while (0)
+#define OSC_B_PLAIN OSC_READ(ph)
+OSC_KERNEL(osc_k_plain, 0, OSC_D_PLAIN, OSC_B_PLAIN)
+OSC_KERNEL(osc_k_plain_g, 1, OSC_D_PLAIN, OSC_B_PLAIN)
 
-static uint32_t osc_k_map(int32_t *restrict l, int32_t *restrict r, uint32_t n, const osc_job_t *j)
-{
-    const uint32_t *map = j->map;
-    OSC_SETUP;
-    do {
-        OSC_MAP(q);
-        OSC_READ(q);
-        OSC_OUT;
-    } while (--n);
-    return ph;
-}
+/* through the warp map */
+#define OSC_D_MAP const uint32_t *map = j->map
+#define OSC_B_MAP OSC_MAP(q); OSC_READ(q)
+OSC_KERNEL(osc_k_map, 0, OSC_D_MAP, OSC_B_MAP)
+OSC_KERNEL(osc_k_map_g, 1, OSC_D_MAP, OSC_B_MAP)
 
 /* SYNC: the map, and a window that dips the output where the master resets (deep only as far as the slave is
  * from a whole cycle there: at a whole ratio the reset is already continuous) */
-static uint32_t osc_k_sync(int32_t *restrict l, int32_t *restrict r, uint32_t n, const osc_job_t *j)
-{
-    const uint32_t *map = j->map;
-    uint32_t wt = j->wt, wk = j->wk;
-    int32_t wd = j->wd;
-    OSC_SETUP;
-    do {
-        uint32_t e = (ph < 0x80000000u ? ph : 0u - ph) >> 17;
-        OSC_MAP(q);
-        OSC_READ(q);
-        if (e < wt)
-            s = (s * (32767 - ((wd * (32767 - (int32_t)((e * wk) >> 15))) >> 15))) >> 15;
-        OSC_OUT;
-    } while (--n);
-    return ph;
-}
+#define OSC_D_SYNC const uint32_t *map = j->map; uint32_t wt = j->wt, wk = j->wk; int32_t wd = j->wd
+#define OSC_B_SYNC                                                                                        \
+    uint32_t e = (ph < 0x80000000u ? ph : 0u - ph) >> 17;                                                 \
+    OSC_MAP(q);                                                                                           \
+    OSC_READ(q);                                                                                          \
+    if (e < wt)                                                                                           \
+        s = (s * (32767 - ((wd * (32767 - (int32_t)((e * wk) >> 15))) >> 15))) >> 15
+OSC_KERNEL(osc_k_sync, 0, OSC_D_SYNC, OSC_B_SYNC)
+OSC_KERNEL(osc_k_sync_g, 1, OSC_D_SYNC, OSC_B_SYNC)
 
 /* FM: phase modulation by the other oscillator */
-static uint32_t osc_k_pm(int32_t *restrict l, int32_t *restrict r, uint32_t n, const osc_job_t *j)
-{
-    const int32_t *pm = j->pm;
-    uint32_t pmd = j->pmd;
-    OSC_SETUP;
-    do {
-        uint32_t q = ph + (uint32_t)*pm++ * pmd;
-        OSC_READ(q);
-        OSC_OUT;
-    } while (--n);
-    return ph;
-}
+#define OSC_D_PM const int32_t *pm = j->pm; uint32_t pmd = j->pmd
+#define OSC_B_PM uint32_t q = ph + (uint32_t)*pm * pmd; pm += 2; OSC_READ(q)
+OSC_KERNEL(osc_k_pm, 0, OSC_D_PM, OSC_B_PM)
+OSC_KERNEL(osc_k_pm_g, 1, OSC_D_PM, OSC_B_PM)
 
-typedef uint32_t (*osc_kernel_t)(int32_t *restrict, int32_t *restrict, uint32_t, const osc_job_t *);
+typedef uint32_t (*osc_kernel_t)(int32_t *restrict, uint32_t, const osc_job_t *);
+enum { OSK_PLAIN, OSK_MAP, OSK_SYNC, OSK_PM };
+static const osc_kernel_t OSC_KS[4][2] = {{osc_k_plain, osc_k_plain_g}, {osc_k_map, osc_k_map_g},
+                                          {osc_k_sync, osc_k_sync_g}, {osc_k_pm, osc_k_pm_g}};
 
 /* -------------------------------------------------------------------------------------------- state --- */
 typedef struct {                           /* an oscillator of a voice */
@@ -275,8 +273,8 @@ static uint32_t osc_level(uint32_t inc, float s)
 
 /* one unison voice over a block at one level: position p .. p + dp SY_BLK (frames), split where it crosses a
  * frame; jb holds the phase, increments and gains at the block's start. Returns the phase at its end */
-static uint32_t osc_run(osc_kernel_t k, osc_job_t *jb, const wt_table_t *t, uint32_t lv, float p, float dp,
-                        int32_t *l, int32_t *r)
+static uint32_t osc_run(uint32_t kind, osc_job_t *jb, const wt_table_t *t, uint32_t lv, float p, float dp,
+                        int32_t *lr)
 {
     uint32_t done = 0, nf = t->n;
     int32_t inc0 = (int32_t)jb->inc, gl0 = jb->gl, gr0 = jb->gr;
@@ -301,15 +299,14 @@ static uint32_t osc_run(osc_kernel_t k, osc_job_t *jb, const wt_table_t *t, uint
             xf1 = sy_clampf(p + dp * (float)m - (float)ki, 0.0f, 1.0f);
         }
         jb->a = wt_frame(t, kf, lv);
-        jb->b = wt_frame(t, nf >= 2u ? kf + 1u : kf, lv);
         jb->xf = (int32_t)(xf0 * 32768.0f);
         jb->dxf = (int32_t)((xf1 - xf0) * 32768.0f) / (int32_t)m;
-        jb->ph = k(l + done, r + done, m, jb);
+        jb->ph = OSC_KS[kind][(jb->dgl | jb->dgr) != 0](lr + 2u * done, m, jb);
         done += m;
         jb->inc = (uint32_t)(inc0 + jb->dinc * (int32_t)done);
         jb->gl = gl0 + jb->dgl * (int32_t)done;
         jb->gr = gr0 + jb->dgr * (int32_t)done;
-        jb->pm = pm0 ? pm0 + done : 0;
+        jb->pm = pm0 ? pm0 + 2u * done : 0;
         p += dp * (float)m;
     }
     jb->pm = pm0;
@@ -373,47 +370,47 @@ static float osc_warp_dc(osc_v_t *o, const wt_table_t *t, uint32_t mode, float p
     return s;
 }
 
-/* the kernel and its settings for a block of an oscillator */
-static osc_kernel_t osc_setup(osc_v_t *o, const osc_par_t *pp, osc_job_t *jb)
+/* the kernel and its settings for a block of an oscillator, playing warp (pp's, or FM's modulator's) */
+static uint32_t osc_setup(osc_v_t *o, const osc_par_t *pp, uint32_t warp, osc_job_t *jb)
 {
     float amt;
     jb->map = o->map;
     jb->pm = 0;
     jb->pmd = 0;
     o->slope = 1.0f;
-    if (pp->warp == WARP_OFF || (pp->warp == WARP_FM && !pp->pm))
-        return osc_k_plain;
-    if (pp->warp == WARP_FM) {                         /* +-2 cycles at 100 %, held under 21 kHz as the others */
+    if (warp == WARP_OFF || (warp == WARP_FM && !pp->pm))
+        return OSK_PLAIN;
+    if (warp == WARP_FM) {                         /* +-2 cycles at 100 %, held under 21 kHz as the others */
         float dc = 2.0f * pp->wamt * pp->wamt, r = (float)pp->pm_inc / (float)(pp->inc1 ? pp->inc1 : 1u);
         float maxs = 2044404224.0f / ((float)(pp->inc1 ? pp->inc1 : 1u) * 1.0905f);
         dc = sy_minf(dc, sy_maxf(0.0f, (maxs - 1.0f) / (6.2831853f * sy_maxf(r, 1e-3f))));
         jb->pm = pp->pm;
         jb->pmd = (uint32_t)(dc * 131072.0f);
         o->slope = 1.0f + 6.2831853f * dc * r;
-        return osc_k_pm;
+        return OSK_PM;
     }
-    amt = osc_amt_cap(pp->warp, pp->wamt, pp->inc1);
-    if (pp->warp != o->c_wmode || sy_absf(amt - o->c_wamt) > 1e-4f)
-        osc_warp_map(o, pp->warp, amt);
+    amt = osc_amt_cap(warp, pp->wamt, pp->inc1);
+    if (warp != o->c_wmode || sy_absf(amt - o->c_wamt) > 1e-4f)
+        osc_warp_map(o, warp, amt);
     o->slope = o->mslope;
-    if (pp->warp == WARP_SYNC) {
+    if (warp == WARP_SYNC) {
         float rr = o->mslope, fr = rr - (float)sy_floori(rr), d = 4.0f * sy_minf(fr, 1.0f - fr);
         uint32_t w = pp->inc1 < 0x20000000u ? pp->inc1 * 4u : 0x80000000u;   /* the dip: 4 samples or 2 %, */
         w = w > 85899346u ? w : 85899346u;                                        /* the longer */
         jb->wt = w >> 17;
         jb->wk = (32767u << 15) / jb->wt;
         jb->wd = (int32_t)(sy_minf(d, 1.0f) * 32767.0f);
-        return osc_k_sync;
+        return OSK_SYNC;
     }
-    return osc_k_map;
+    return OSK_MAP;
 }
 
-/* one block of an oscillator of a voice, added into l / r (Q15 in int32) */
-static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *l, int32_t *r)
+/* one block of an oscillator of a voice, added into lr (left and right interleaved, Q15 in int32) */
+static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *lr)
 {
     uint32_t n = pp->nuni, nold = o->fresh ? n : o->n, nmax = n > nold ? n : nold, j, i, nf = t->n;
     osc_job_t jb;
-    osc_kernel_t k;
+    uint32_t k;
     float pos1 = pp->pos * (float)(nf - 1u), pos0 = o->fresh ? pos1 : o->pos, sp = pp->spread * 0.5f * (float)(nf - 1u);
     float dc[4] = {0.0f, 0.0f, 0.0f, 0.0f}, hold, wdc = 0.0f;   /* a warp's offset: left and right, start and end */
     uint32_t inc0 = o->fresh ? pp->inc0 : o->inc;
@@ -421,7 +418,7 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
         osc_uni_detune(o, nmax, pp->umode, pp->det);    /* (voices leaving keep their places this block) */
     if (nmax != o->c_gn || sy_absf(pp->blend - o->c_blend) > 1e-4f || sy_absf(pp->width - o->c_width) > 1e-4f)
         osc_uni_gains(o, nmax, pp->blend, pp->width);
-    k = osc_setup(o, pp, &jb);
+    k = osc_setup(o, pp, pp->warp, &jb);
     hold = pp->warp == WARP_PWM ? (1.0f - 1.0f / OSC_SMAX) * o->c_wamt : 0.0f;   /* the share of the cycle held */
     if (pp->warp != WARP_OFF && pp->warp != WARP_FM && pp->warp != WARP_PWM) {  /* the others' offset: the centre */
         uint32_t c = (nmax - 1u) / 2u, ic = (uint32_t)(((uint64_t)pp->inc1 * o->ratio[c]) >> 30);   /* voice's */
@@ -449,7 +446,7 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
                 jb.gr = g0r;
                 jb.dgl = -g0l / (int32_t)SY_BLK;
                 jb.dgr = -g0r / (int32_t)SY_BLK;
-                o->ph[j] = osc_run(k, &jb, t, old, p0, dp, l, r);
+                o->ph[j] = osc_run(k, &jb, t, old, p0, dp, lr);
             } else {
                 o->ph[j] += (ia >> 1) * SY_BLK + (ib >> 1) * SY_BLK;
             }
@@ -461,7 +458,7 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
             jb.gr = g0r;
             jb.dgl = (tl - g0l) / (int32_t)SY_BLK;
             jb.dgr = (tr - g0r) / (int32_t)SY_BLK;
-            o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, l, r);
+            o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, lr);
         } else {                                       /* a level change: the old one fades out, the new in */
             uint32_t ph = o->ph[j];
             jb.ph = ph;
@@ -469,14 +466,14 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
             jb.gr = g0r;
             jb.dgl = -g0l / (int32_t)SY_BLK;
             jb.dgr = -g0r / (int32_t)SY_BLK;
-            osc_run(k, &jb, t, old, p0, dp, l, r);
+            osc_run(k, &jb, t, old, p0, dp, lr);
             jb.inc = ia;
             jb.ph = ph;
             jb.gl = 0;
             jb.gr = 0;
             jb.dgl = tl / (int32_t)SY_BLK;
             jb.dgr = tr / (int32_t)SY_BLK;
-            o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, l, r);
+            o->ph[j] = osc_run(k, &jb, t, lv, p0, dp, lr);
         }
         if ((hold > 0.0f || wdc != 0.0f) && lv < WT_NLEV) {   /* PWM holds the cycle's first sample: its share is */
             float v0 = wdc;                                   /* an offset; the other warps': wdc */
@@ -498,8 +495,8 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
     if (hold > 0.0f || wdc != 0.0f)                   /* ... taken out, ramped as the gains are: a warp adds no DC */
         for (i = 0; i < SY_BLK; i++) {
             float a = (float)i * (1.0f / (float)SY_BLK);
-            l[i] -= (int32_t)(dc[0] + (dc[1] - dc[0]) * a);
-            r[i] -= (int32_t)(dc[2] + (dc[3] - dc[2]) * a);
+            lr[2u * i] -= (int32_t)(dc[0] + (dc[1] - dc[0]) * a);
+            lr[2u * i + 1u] -= (int32_t)(dc[2] + (dc[3] - dc[2]) * a);
         }
     if (nmax > n)                                     /* the voices that faded out are gone */
         osc_uni_detune(o, n, pp->umode, pp->det);
@@ -509,25 +506,20 @@ static void osc_block(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int3
     o->fresh = 0;
 }
 
-/* FM's modulator: this oscillator's centre unison voice alone (Q15 into m), its warp but no window or FM of its
- * own; the phases advance only with advance (the oscillator is off and does not run itself) */
+/* FM's modulator: this oscillator's centre unison voice alone (Q15 into m's left: an interleaved block), its warp
+ * but no window or FM of its own; the phases advance only with advance (the oscillator is off and does not run) */
 static void osc_modulator(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, int32_t *m, int advance)
 {
-    static int32_t rr[SY_BLK];
     osc_job_t jb;
-    osc_par_t q = *pp;
-    osc_kernel_t k;
+    uint32_t k;
     uint32_t c, lv, nf = t->n, ia, ib, ph;
     float pos1 = pp->pos * (float)(nf - 1u), pos0 = o->fresh ? pos1 : o->pos;
     uint32_t inc0 = o->fresh ? pp->inc0 : o->inc;
-    memset(m, 0, SY_BLK * sizeof *m);
+    sy_zeroi(m, 2u * SY_BLK);
     if (pp->nuni != o->c_n || pp->umode != o->c_mode || sy_absf(pp->det - o->c_det) > 1e-5f)
         osc_uni_detune(o, pp->nuni, pp->umode, pp->det);
     c = (pp->nuni - 1u) / 2u;
-    if (q.warp == WARP_FM || q.warp == WARP_SYNC)
-        q.warp = WARP_OFF;
-    q.pm = 0;
-    k = osc_setup(o, &q, &jb);
+    k = osc_setup(o, pp, pp->warp == WARP_FM || pp->warp == WARP_SYNC ? WARP_OFF : pp->warp, &jb);
     ia = (uint32_t)(((uint64_t)inc0 * o->ratio[c]) >> 30);
     ib = (uint32_t)(((uint64_t)pp->inc1 * o->ratio[c]) >> 30);
     lv = osc_level(ia > ib ? ia : ib, o->slope);
@@ -539,7 +531,7 @@ static void osc_modulator(osc_v_t *o, const wt_table_t *t, const osc_par_t *pp, 
     jb.gl = 32767;
     jb.gr = 0;
     jb.dgl = jb.dgr = 0;
-    ph = osc_run(k, &jb, t, lv, pos0, (pos1 - pos0) * (1.0f / (float)SY_BLK), m, rr);
+    ph = osc_run(k, &jb, t, lv, pos0, (pos1 - pos0) * (1.0f / (float)SY_BLK), m);
     if (advance) {
         uint32_t j;
         for (j = 0; j < pp->nuni; j++)
