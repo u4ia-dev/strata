@@ -123,7 +123,7 @@ check("every test sound plays the engine test's phrase bit for bit as recorded (
       if (cstr(m, m.sw_param_name(i)) === name && cstr(m, m.sw_section_name(m.sw_param_section(i))) === sec) return i;
     return -1;
   };
-  const cut = id("CUTOFF", "FILTER"), pos = id("POS", "OSC A"), deg = id("PHASE", "OSC A");
+  const cut = id("CUTOFF", "FILTER"), pos = id("WT POS", "OSC A"), deg = id("PHASE", "OSC A");
   check("values as text: the cutoff, a percentage, the degree sign (Latin-1)",
         cstr(m, m.sw_text(cut, 1000)) === "20.0 kHz" && cstr(m, m.sw_text(pos, 750)) === "75.0%" &&
         cstr(m, m.sw_text(deg, 90)) === "90°");
