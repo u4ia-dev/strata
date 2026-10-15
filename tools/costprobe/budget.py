@@ -1,65 +1,74 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Phase 0 CPU budget for the FM-1: voices x oscillators x unison against one audio half.
+# Copyright (C) 2026 brandonmbarone
+"""The CPU budget on the FM-1 from the target cost model (tools/costprobe/sy_dyn.sh writes DIR/dyn_N.json, one a
+scenario of sy_profile.c): each scenario's share of one core, the parts (the engine idle, a voice, a unison
+instance, the effects), and how many voices x unison fit.
 
-Inputs are per-sample instruction counts from the target listing (tools/costprobe/run.sh,
-JieLi clang -O2, pi32v2 -mcpu=r3 -mfprev1) and two conversion rates:
-  INT_RATE   205 instructions / us: measured on an FM-1 by ChoralRoot (docs/CZ1.md, listing count
-             of integer code over the unit's measured time)
-  FLOAT_RATE 150 instructions / us: an assumption for FPU-heavy code (no device figure yet;
-             the on-device BENCH page will replace it)
-Everything here is an estimate until the BENCH page runs on a unit."""
+Rates: listing instructions a microsecond on the device. 205 was measured on integer code (ChoralRoot, docs/CZ1.md);
+this engine's float code has no device figure yet: the BENCH page will give it. So every figure here is an
+estimate, shown at 150, 205 and 300 a microsecond.
 
-HALF_US = 128 / 44117.6 * 1e6          # one I2S half: 128 frames = 2901 us
-PLAN_LOAD = 0.75                       # worst case we plan for (Felucca sheds at 85 %)
+    budget.py DIR
+"""
+import json
+import os
+import sys
+
+FS = 44117.647
+RATES = (150.0, 205.0, 300.0)
+PLAN_LOAD = 0.75                       # the most we plan for (the guard sheds at 70 / 78 / 85 %)
 SYSTEM = 0.08                          # audio ISR frame work, TIMER5 key scan, USB (ChoralRoot: 4-6 %)
-INT_RATE, FLOAT_RATE = 205.0, 150.0
-
-# per-sample listing instructions (as compiled today) and which rate applies
-OSC = (37, INT_RATE)                   # one wavetable oscillator instance (one unison voice), stereo out
-WARP = (10, INT_RATE)                  # phase-domain warp on that instance (estimate)
-VOICE = {                              # per voice, once
-    "sub": (20, INT_RATE),
-    "noise": (12, INT_RATE),
-    "filter svf stereo": (42, FLOAT_RATE),
-    "amp + mix stereo": (13, FLOAT_RATE),
-    "control rate (env, lfo, matrix, pitch)": (40, INT_RATE),
-}
-FX = {
-    "drive": (22, FLOAT_RATE),
-    "chorus": (48, FLOAT_RATE),
-    "delay (ping-pong)": (76, FLOAT_RATE),
-    "reverb (FDN 4)": (176, FLOAT_RATE),
-    "OTT 3-band": (170, FLOAT_RATE),
-    "master (dc, limiter)": (30, FLOAT_RATE),
-}
+NAMES = ["idle: no voice, no effect", "1 voice: A x 1", "1 voice: A x 16", "8 voices: A x 1",
+         "8 voices: A + B x 1, LP12", "8 voices: A + B x 3, LP24, every effect",
+         "8 voices: A + B x 16 (budget 48), LADDER, every effect",
+         "8 voices: A BEND+ / B SYNC x 1, LP12, SUB + pink NOISE", "1 voice: A x 1, every effect"]
 
 
-def us_per_half(items):
-    return sum(n / rate for n, rate in items) * 128
+def load(d):
+    out = {}
+    for i in range(len(NAMES)):
+        p = os.path.join(d, f"dyn_{i}.json")
+        if os.path.exists(p):
+            with open(p) as f:
+                out[i] = json.load(f)["per_sample"]
+    return out
 
 
-def main():
-    budget = HALF_US * (PLAN_LOAD - SYSTEM)
-    fx = us_per_half(FX.values())
-    voice_fixed = us_per_half(VOICE.values())
-    osc = us_per_half([OSC])
-    osc_w = us_per_half([OSC, WARP])
-    print(f"half {HALF_US:.0f} us; planned {PLAN_LOAD:.0%} - system {SYSTEM:.0%} = {budget:.0f} us for voices + FX")
-    print(f"FX rack, all on: {fx:.0f} us ({fx / HALF_US:.1%}); per voice fixed {voice_fixed:.1f} us; "
-          f"per osc instance {osc:.1f} us ({osc_w:.1f} with a warp)")
-    for name, items in (("all FX", fx), ("FX without reverb/OTT", fx - us_per_half([FX['reverb (FDN 4)'], FX['OTT 3-band']]))):
-        left = budget - items
-        print(f"\n{name}: {left:.0f} us for voices")
-        print("  unison/osc  2 osc: voices   (with warp on both)")
-        for u in (1, 2, 3, 4, 5, 6, 7, 8, 16):
-            per = voice_fixed + 2 * u * osc
-            per_w = voice_fixed + 2 * u * osc_w
-            print(f"  {u:9d}  {left / per:12.1f}   ({left / per_w:.1f})   {per:6.1f} us a voice")
-    # one voice of everything: what a single mono lead costs at 16 unison
-    lead = voice_fixed + 2 * 16 * osc_w
-    print(f"\nmono lead, 2 osc x 16 unison + warps: {lead:.0f} us ({lead / HALF_US:.1%} of a half)")
+def pct(n, rate):
+    return n * FS / (rate * 1e6) * 100.0
+
+
+def main(argv):
+    d = argv[1] if len(argv) > 1 else "build/cost/prof"
+    s = load(d)
+    if len(s) < len(NAMES):
+        print(f"budget: run tools/costprobe/sy_dyn.sh first ({len(s)} of {len(NAMES)} scenarios in {d})")
+        return 1
+    hdr = "  ".join(f"{r:.0f}/us" for r in RATES)
+    print(f"\nbudget: the target listing's instructions a sample (estimate), and one core's share at {hdr}")
+    for i, nm in enumerate(NAMES):
+        print(f"  {s[i]:7.0f}  " + "  ".join(f"{pct(s[i], r):5.0f} %" for r in RATES) + f"   {nm}")
+    idle = s[0]
+    inst = (s[2] - s[1]) / 15.0                       # a unison instance more (A x 1 -> A x 16)
+    voice = (s[3] - s[0]) / 8.0                       # a voice: A x 1, no filter
+    voice_b_lp = (s[4] - s[0]) / 8.0                  # a voice: A + B x 1, LP12
+    fx = s[8] - s[1]                                  # every effect
+    print(f"\nbudget: parts (instructions a sample): the engine idle {idle:.0f}; a voice (A x 1, no filter) "
+          f"{voice:.0f}; a voice (A + B x 1, LP12) {voice_b_lp:.0f}; a unison instance more {inst:.0f}; "
+          f"every effect {fx:.0f}")
+    for rate in RATES:
+        room = (PLAN_LOAD - SYSTEM) * rate * 1e6 / FS   # instructions a sample we may spend
+        print(f"\nbudget at {rate:.0f}/us: {room:.0f} instructions a sample at {PLAN_LOAD:.0%} less {SYSTEM:.0%} system")
+        for fxon in (False, True):
+            left = room - idle - (fx if fxon else 0.0)
+            row = []
+            for u in (1, 2, 3, 4, 7):
+                per = voice_b_lp + 2.0 * (u - 1) * inst
+                row.append(f"x{u}: {max(0.0, left / per):4.1f}")
+            print(f"  voices of A + B, LP12, {'every effect' if fxon else 'no effect   '}: " + "   ".join(row))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv))
