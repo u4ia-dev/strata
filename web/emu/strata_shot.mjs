@@ -5,7 +5,8 @@
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
 // one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
 // chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
-// the SETTINGS (HOME held 5 s) and the wave page in each palette. It prints what the session set.
+// the SETTINGS (HOME held 5 s), SAVE (a sound named, the numbers, written, its next version), the
+// browser (all, PAD), HOME with a user preset, and the wave page in each palette. It prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -240,6 +241,47 @@ run(5.2);
 ex.web_buttons(0);
 run(0.1);
 png("settings.png");
+const btn = (b, t = 0.03) => { ex.web_buttons(1 << b); run(t); ex.web_buttons(0); run(0.03); };
+const key = (k) => { ex.web_keys(1 << k); run(0.03); ex.web_keys(0); run(0.03); };
+tap(B.EDIT);                                    // SAVE: a new sound named (WARM PAD), the numbers, its next version
+btn(B.SAVE);
+run(0.4);
+for (let i = 0; i < 16; i++) btn(B.OCTDN);
+for (const k of [22, 0, 17, 12, 26, 15, 0]) key(k);
+ex.web_keys(1 << 3);                            // (D held: its key lit)
+run(0.05);
+png("save_name.png");
+ex.web_keys(0);
+run(0.05);
+btn(B.OCTUP);
+ex.web_keys(1 << 1);                            // the numbers: F#3 is 2
+run(0.05);
+png("save_symbols.png");
+ex.web_keys(0);
+run(0.05);
+btn(B.OCTDN);
+btn(B.OCTUP);
+btn(B.SAVE);                                    // written: USER 1
+run(0.4);
+png("save_done.png");
+btn(B.SAVE);
+run(0.4);
+png("save_version.png");
+btn(B.HOME);
+run(0.1);
+ex.web_buttons(1 << B.SAVE);                    // SAVE held: the browser
+run(0.7);
+ex.web_buttons(0);
+run(0.1);
+png("browser.png");
+ex.web_enc(E.K1, 3);                            // PAD
+run(0.1);
+png("browser_pad.png");
+btn(B.HOME);
+run(0.1);
+tap(B.HOME);                                    // HOME: the sound now USER 1
+run(0.2);
+png("home_user.png");
 tap(B.EDIT);                                    // back to OSC A (its WAVE page)
 to(0);
 run(0.1);

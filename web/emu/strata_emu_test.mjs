@@ -24,7 +24,8 @@ function check(what, ok) {
 }
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19 };   // SEC_*
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19,
+              SAVE: 20, BROWSE: 21 };                                                         // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
@@ -583,6 +584,93 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_test_set(ID.A_WARP, 0);
   ex.web_test_set(ID.A_WAMT, 0);
   play(ex, 1.2);
+}
+{                                               // SAVE: a sound never saved is named, into the first free slot
+  const toast = () => cstr(ex, ex.web_test_toast()), sname = () => cstr(ex, ex.web_test_save_name());
+  const key = (k) => { ex.web_keys(1 << k); play(ex, 0.03); ex.web_keys(0); play(ex, 0.03); };
+  const btn = (b, t = 0.03) => { ex.web_buttons(1 << b); play(ex, t); ex.web_buttons(0); play(ex, 0.03); };
+  tap(ex, B.EDIT);
+  const w0 = ex.web_flash_writes_count(), name0 = cstr(ex, ex.web_test_patch_name());
+  btn(B.SAVE);
+  play(ex, 0.4);
+  const sec = ex.web_test_page_section(), n0 = sname(), slot0 = ex.web_test_save_slot();
+  for (let i = 0; i < 16; i++) btn(B.OCTDN);    // OCT-: deleted, then typed: WARM PAD
+  for (const k of [22, 0, 17, 12, 26, 15, 0, 3]) key(k);
+  const typed = sname();
+  btn(B.OCTUP);                                 // OCT+: the numbers; F#3 is 2; OCT- deletes it; OCT+ back
+  key(1);
+  const two = sname();
+  btn(B.OCTDN);
+  btn(B.OCTUP);
+  ex.web_enc(E.K3, 1);                          // KNOB 3: the category
+  play(ex, 0.12);
+  btn(B.SAVE);
+  play(ex, 0.3);
+  const saved = [toast(), ex.web_test_page_section(), ex.web_test_user_slot(), cstr(ex, ex.web_test_slot_name(0))];
+  check(`SAVE tapped: its screen (section ${sec}), "${n0}" to name, USER ${slot0 + 1}; OCT- deletes, the keys type "${typed}", OCT+ numbers ("${two}")`,
+        sec === SEC.SAVE && n0 === name0 && slot0 === 0 && typed === "WARM PAD" && two === "WARM PAD2");
+  check(`.. SAVE writes it ("${saved[0]}"): back (section ${saved[1]}), the sound USER ${saved[2] + 1}, slot 1 "${saved[3]}", ${ex.web_flash_writes_count() - w0} flash writes, ${ex.web_test_refused()} refused`,
+        saved[0] === "SAVED: USER 1" && saved[1] !== SEC.SAVE && saved[2] === 0 && saved[3] === "WARM PAD" &&
+        ex.web_flash_writes_count() > w0 && ex.web_test_refused() === 0 && cstr(ex, ex.web_test_patch_name()) === "WARM PAD");
+  btn(B.SAVE);                                  // saved before: its next version offered, in the next slot
+  play(ex, 0.4);
+  const v2 = [sname(), ex.web_test_save_slot(), ex.web_test_page_section()];
+  btn(B.HOME);                                  // HOME: back unsaved
+  play(ex, 0.1);
+  check(`SAVE again: the next version, "${v2[0]}" in USER ${v2[1] + 1}; HOME: back unsaved (section ${ex.web_test_page_section()}, slot 2 "${cstr(ex, ex.web_test_slot_name(1))}")`,
+        v2[0] === "WARM PAD v2" && v2[1] === 1 && v2[2] === SEC.SAVE && ex.web_test_page_section() !== SEC.SAVE &&
+        cstr(ex, ex.web_test_slot_name(1)) === "");
+  const POS = ID.A_POS, p0 = ex.web_test_value(POS);   // tapped twice: over its own slot (WT POS changed first)
+  ex.web_test_set(POS, p0 > 500 ? p0 - 40 : p0 + 40);
+  const p1 = ex.web_test_value(POS);
+  play(ex, 0.4);
+  btn(B.SAVE);
+  btn(B.SAVE);
+  play(ex, 0.3);
+  check(`SAVE tapped twice: over USER 1 at once ("${toast()}"): its stored WT POS ${p0} -> ${ex.web_test_slot_value(0, POS)}; no screen (section ${ex.web_test_page_section()})`,
+        toast() === "SAVED OVER USER 1" && ex.web_test_slot_value(0, POS) === p1 && ex.web_test_page_section() !== SEC.SAVE);
+  ex.web_buttons(1 << B.SAVE);                  // SAVE held, let go: the browser
+  play(ex, 0.7);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  const bsec = ex.web_test_page_section();
+  ex.web_enc(E.K2, -1);                         // KNOB 2: the preset before (INIT), loaded; then WARM PAD again, from the flash
+  play(ex, 0.3);
+  const before = cstr(ex, ex.web_test_patch_name()), us1 = ex.web_test_user_slot();
+  ex.web_enc(E.K2, 1);
+  play(ex, 0.3);
+  check(`SAVE held: the browser (section ${bsec}); KNOB 2 loads as it turns ("${before}", user slot ${us1}), then "${cstr(ex, ex.web_test_patch_name())}" from USER ${ex.web_test_user_slot() + 1} (WT POS ${ex.web_test_value(POS)})`,
+        bsec === SEC.BROWSE && before === "INIT" && us1 === -1 && cstr(ex, ex.web_test_patch_name()) === "WARM PAD" &&
+        ex.web_test_user_slot() === 0 && ex.web_test_value(POS) === p1);
+  ex.web_buttons(1 << B.SAVE);                  // SAVE held + OCT-: undo, no browser
+  play(ex, 0.7);
+  chord(B.SAVE, B.OCTDN);
+  ex.web_buttons(0);
+  play(ex, 0.2);
+  const und = [toast(), cstr(ex, ex.web_test_patch_name())];
+  btn(B.HOME);
+  play(ex, 0.1);
+  check(`.. SAVE held + OCT-: undo ("${und[0]}": "${und[1]}"), the browser stays (section ${bsec}); HOME: back`,
+        und[0] === "UNDO" && und[1] === "INIT" && ex.web_test_page_section() !== SEC.BROWSE);
+  const ra = ex.web_test_erase(0), rb = ex.web_test_erase(0xE8000);
+  check(`the flash's allow-list: an erase at 0x00000 (the boot) or 0xE8000 (the stock firmware's backup) refused (${ra}, ${rb}; ${ex.web_test_refused()} refused)`,
+        ra === -8 && rb === -8 && ex.web_test_refused() === 2);
+}
+{                                               // power off and on: the presets, the settings, the sound playing come back
+  ex.web_test_palette(3);
+  play(ex, 3.8);                                // (3 s of quiet: the settings and the sound written)
+  const nor = new Uint8Array(ex.memory.buffer, ex.web_nor(), ex.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const b2 = instance.exports;
+  if (b2._initialize) b2._initialize();
+  new Uint8Array(b2.memory.buffer, b2.web_nor(), b2.web_nor_size()).set(nor);
+  b2.web_master(700);
+  b2.web_boot();
+  play(b2, 0.3);
+  check(`power off and on: USER 1 "${cstr(b2, b2.web_test_slot_name(0))}" kept; the sound playing back ("${cstr(b2, b2.web_test_patch_name())}"); the palette ${b2.web_test_palette(-1)}`,
+        cstr(b2, b2.web_test_slot_name(0)) === "WARM PAD" &&
+        cstr(b2, b2.web_test_patch_name()) === cstr(ex, ex.web_test_patch_name()) && b2.web_test_palette(-1) === 3);
+  ex.web_test_palette(0);
 }
 {
   ex.web_midi(0x90, 64, 100);
