@@ -55,13 +55,15 @@ static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SA
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
 enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ,
        UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,
-       UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT };         /* (the matrix's: the slot picked, its source, place, amount) */   /* (SAVE's, the browser's: sy_ui_save.c) */
+       UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT,           /* (the matrix's: the slot picked, its source, place, amount) */
+       UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL };          /* (SCL's: the keys' scale, its root, how keys fit, velocity) */   /* (SAVE's, the browser's: sy_ui_save.c) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
 #define SEC_BROWSE (SEC_COUNT + 3)
+#define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -113,20 +115,39 @@ static const ui_page_t UI_PG[] = {
     {SEC_EQ, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},
     {SEC_EQ, G_EQ, "GAINS", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_ACCEL, -1, -1}},
+    {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
 
 /* the families: the sections each button shows (0xFF ends) */
-enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_N };
+enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_SCL, FAM_N };
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
     {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_MATRIX, 0xFF}, {SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, 0xFF},
-    {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF}, {SEC_SAVE, SEC_BROWSE, 0xFF},
+    {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF}, {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF},
 };
 #define UI_NFX 6u                                   /* the effects, SEC_DRIVE .. SEC_EQ */
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB, NB};
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB, NB, B_SCL};
+
+/* SCL: the scales (Felucca's, seq.c SCALE_MASK), each a bit a semitone from the root; how the keys fit them */
+#define UI_NSCALE 16u
+static const uint16_t UI_SCALE_MASK[UI_NSCALE] = {
+    0xFFF, 0xAB5, 0x5AD, 0x6AD, 0x6B5, 0x295, 0x4A9, 0x9AD,   /* chromatic; major 0 2 4 5 7 9 11; minor 0 2 3 5 7 8 10; */
+    0x5AB, 0xAD5, 0x56B, 0xAAD, 0x4E9, 0x555, 0x6DB, 0xB6D,   /* dorian, mixolydian, pentatonics, harmonic minor; */
+};                                                            /* phrygian .. diminished as named below */
+static const char *const UI_SCALE_NAME[UI_NSCALE] = {"CHROM", "MAJOR", "MINOR", "DORIAN", "MIXOLYD", "PENTA",
+                                                     "M PENTA", "HARM MIN", "PHRYGIAN", "LYDIAN", "LOCRIAN",
+                                                     "MEL MIN", "BLUES", "WHOLE", "DIM H-W", "DIM W-H"};
+static const char *const UI_SCALE_LONG[UI_NSCALE] = {
+    "CHROMATIC", "MAJOR", "NATURAL MINOR", "DORIAN", "MIXOLYDIAN", "MAJOR PENTATONIC", "MINOR PENTATONIC",
+    "HARMONIC MINOR", "PHRYGIAN", "LYDIAN", "LOCRIAN", "MELODIC MINOR", "BLUES", "WHOLE TONE", "DIMINISHED H-W",
+    "DIMINISHED W-H"};
+static const char *const UI_NOTE_NAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+enum { UI_FIT_OFF, UI_FIT_SNAP, UI_FIT_WHITE, UI_NFIT };
+static const char *const UI_FIT_NAME[UI_NFIT] = {"OFF", "SNAP", "WHITE"};
+#define UI_KEY0 53                                  /* the lowest key, F3 (sy_app.c SY_KEY0) */
 
 /* the MOD layer's white keys, F3 .. G5: the sources (black keys: none) */
 static const uint8_t UI_KEY_SRC[27] = {
@@ -166,6 +187,8 @@ static struct {
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
     uint8_t mslot;                                  /* the matrix's slot picked (SEQ), 0 .. NSLOT - 1 */
+    uint8_t scale, root, fit, kvel;                 /* SCL: the keys' scale, its root (0 C .. 11 B), how a key fits */
+                                                    /* it (UI_FIT_*), the keys' velocity (1 .. 127) */
     uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
     uint8_t act_k;                                  /* the knob turning (its cell lit; 0xFF none) */
     uint32_t act_t;                                 /* .. its last detent */
@@ -204,7 +227,7 @@ static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
 static const char *ui_sec_name(uint32_t s)
 {
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
-                                                                                                     : "PRESETS";
+           : s == SEC_KEYS ? "KEYS" : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
 static void ui_save_over(void);
@@ -829,6 +852,16 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (ui.mod) {
         return;
+    } else if (item >= UI_SCALE && item <= UI_KVEL) {   /* SCL: the scale, the root (round), the fit, the velocity */
+        if (item == UI_SCALE)
+            ui.scale = (uint8_t)((ui.scale + (uint32_t)(s % (int32_t)UI_NSCALE + (int32_t)UI_NSCALE)) % UI_NSCALE);
+        else if (item == UI_ROOT)
+            ui.root = (uint8_t)((ui.root + (uint32_t)(s % 12 + 12)) % 12u);
+        else if (item == UI_FIT)
+            ui.fit = (uint8_t)sy_clampi(ui.fit + s, 0, UI_NFIT - 1);
+        else
+            ui.kvel = (uint8_t)sy_clampi(ui.kvel + ui_accel(e, s, 126), 1, 127);
+        ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
     } else if (item >= UI_BPM && item <= UI_TSN) {
         if (item == UI_BPM)
             ui.bpm = (uint16_t)sy_clampi(ui.bpm + ui_accel(e, s, 280), 20, 300);
@@ -965,6 +998,7 @@ static void ui_press(uint32_t b)
         sy_app_octave(b == B_OCTUP ? 1 : -1);
         sp_fix(t + 9, sy_app_oct(), 0u, 1);
         ui_toast(t);
+        ui.dirty |= D_HEAD;                         /* (SCL's header: the octave) */
     }
 }
 
@@ -985,6 +1019,8 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
         ui_lfo_del_arm();
     else if (b == B_SAVE && !ui.mod)
         ui_save_hold();                             /* (5 s: over its own slot) */
+    else if (b == B_SCL && !ui.mod)
+        ui_toast("SCL HELD: A KEY IS THE ROOT");
 }
 
 static void ui_release(uint32_t b, int held)
@@ -1074,12 +1110,57 @@ static void ui_buttons(void)
     }
 }
 
+/* key k's note at octave oct, as SCL fits it (-1: silent): OFF, the key's own; SNAP, a note off the scale moved down
+ * onto it; WHITE, the white keys walk the scale from the root at C4 and the black keys are silent (Felucca's
+ * kb_pitch) */
+static int32_t sy_ui_key_note(uint32_t k, int32_t oct)
+{
+    static const int8_t DEG[12] = {0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6};   /* the white keys' degrees from C */
+    uint32_t mask = UI_SCALE_MASK[ui.scale % UI_NSCALE], i, cnt = 0;
+    int32_t n = UI_KEY0 + (int32_t)k, d, wo;
+    if (ui.fit == UI_FIT_SNAP) {
+        for (i = 0; i < 12u && !((mask >> (uint32_t)((n - ui.root + 120) % 12)) & 1u); i++)
+            n--;
+    } else if (ui.fit == UI_FIT_WHITE) {
+        if (DEG[n % 12] < 0)
+            return -1;
+        d = DEG[n % 12] + (n / 12 - 5) * 7;         /* (white keys from C4) */
+        for (i = 0; i < 12u; i++)
+            cnt += (mask >> i) & 1u;
+        wo = d / (int32_t)cnt;
+        d %= (int32_t)cnt;
+        if (d < 0) {
+            d += (int32_t)cnt;
+            wo--;
+        }
+        for (i = 0; i < 12u; i++)
+            if ((mask >> i) & 1u) {
+                if (!d)
+                    break;
+                d--;
+            }
+        n = 60 + ui.root + 12 * wo + (int32_t)i;
+    }
+    n += 12 * oct;
+    return n < 0 ? 0 : n > 127 ? 127 : n;
+}
+static uint32_t sy_ui_key_vel(void) { return ui.kvel ? ui.kvel : 100u; }
+
 /* the keys in REC's MOD layer: a white key picks its source, no key plays; 1 = taken (no note). (ENV's layer:
  * the keys play, to hear what ENV 2 does) */
 static int sy_ui_key(uint32_t k)
 {
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
+    if ((ui.bt_down & (1u << B_SCL)) && !ui.mod) {  /* SCL held: a key is the root (no note; SCL's tap none) */
+        char t[16];
+        ui.root = (uint8_t)((UI_KEY0 + (int32_t)k) % 12);
+        ui.bt_chord |= (uint16_t)(1u << B_SCL);
+        sp_put(sp_put(t, "ROOT "), UI_NOTE_NAME[ui.root]);
+        ui_toast(t);
+        ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+        return 1;
+    }
     if (!ui.mod || ui.mod_btn != B_REC)
         return 0;
     if (k < 27u && UI_KEY_SRC[k]) {
@@ -1124,8 +1205,10 @@ static void palette_apply(void) { sy_palette(ui.pal); }
 static void settings_save(void) {}
 
 /* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
- * HOLD time. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
-#define SS_SETTINGS_LEN 11u
+ * HOLD time; then SCL's scale, root, fit and velocity. Fields are only added at the end: a shorter record (an older
+ * build's, 11 bytes at least) leaves the rest as they were. n 0: written into b, their length; else b's (n bytes)
+ * taken: 1 (0: not these) */
+#define SS_SETTINGS_LEN 15u
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -1137,9 +1220,13 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         b[8] = ui.tsb;
         b[9] = ui.tsn;
         b[10] = settings_hold;
+        b[11] = ui.scale;
+        b[12] = ui.root;
+        b[13] = ui.fit;
+        b[14] = ui.kvel;
         return SS_SETTINGS_LEN;
     }
-    if (n != SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
+    if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
         return 0;
     ui.pal = (uint8_t)(b[4] % SY_NPAL);
     ui.accel = b[5] != 0;
@@ -1147,6 +1234,12 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
     ui.tsb = (uint8_t)sy_clampi(b[8], 1, 16);
     ui.tsn = (uint8_t)sy_clampi(b[9], 0, 4);
     settings_hold = (uint8_t)(b[10] % 4u);
+    if (n >= 15u) {
+        ui.scale = (uint8_t)(b[11] % UI_NSCALE);
+        ui.root = (uint8_t)(b[12] % 12u);
+        ui.fit = (uint8_t)(b[13] % UI_NFIT);
+        ui.kvel = (uint8_t)sy_clampi(b[14], 1, 127);
+    }
     sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
     sy_palette(ui.pal);
     ui.dirty = D_ALL;
@@ -1161,6 +1254,7 @@ static void sy_ui_boot(void)
     ui.cd_btn = NB;
     ui.act_k = 0xFF;
     ui.sv_key = 0xFF;
+    ui.kvel = 100;                                  /* SCL: chromatic from C, the keys as they are, 100 */
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;

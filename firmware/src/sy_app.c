@@ -17,7 +17,6 @@
 #define SY_HALF 128u                             /* an I2S half: four engine blocks */
 #define SY_HALF_WORDS (SY_HALF * 2u)
 #define SY_OUT_SHIFT 7                           /* Q15 -> 24 bit, a -6 dBFS ceiling (Felucca's audio.c OUT_SHIFT) */
-#define SY_PANEL_VEL 100u                        /* the keys have no velocity */
 #define SY_NKEY 27u                              /* F3 .. G5 */
 #define SY_KEY0 53                               /* F3 */
 #ifndef SY_LOAD_KNOWN
@@ -392,7 +391,9 @@ static void sy_flash_boot(void)
 }
 
 /* -------------------------------------------------------------------------------------------- keys --- */
+_Static_assert(SY_KEY0 == UI_KEY0, "sy_ui.c's keys start where these do");
 static uint32_t sy_keyprev;
+static int32_t sy_key_note = -1, sy_key_vel;     /* the last note a key started, its velocity (the tests) */
 static uint8_t sy_keynote[SY_NKEY];             /* the note each key started (0xFF: none): released as it was */
 static int32_t sy_oct;                           /* OCT- / OCT+: -3 .. +3 */
 
@@ -408,11 +409,15 @@ static void sy_keys(void)
         if (!((chg >> k) & 1u))
             continue;
         if ((now >> k) & 1u) {
-            int32_t n = SY_KEY0 + (int32_t)k + 12 * sy_oct;
+            int32_t n = sy_ui_key_note(k, sy_oct);  /* (SCL's fit; -1 silent) */
+            uint32_t v = sy_ui_key_vel();
             if (sy_ui_key(k))
                 continue;
-            if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_ui, SY_EV_NOTE, (uint32_t)n, SY_PANEL_VEL))
+            if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_ui, SY_EV_NOTE, (uint32_t)n, v)) {
                 sy_keynote[k] = (uint8_t)n;
+                sy_key_note = n;
+                sy_key_vel = (int32_t)v;
+            }
         } else if (sy_keynote[k] != 0xFF) {
             if (sy_ev_push(&sy_ev_ui, SY_EV_NOTE, sy_keynote[k], 0))
                 sy_keynote[k] = 0xFF;

@@ -178,6 +178,10 @@ static void ui_draw_head(void)
             sp_fix(t, (int32_t)n, 0u, 0);
             r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
             break;
+        case SEC_KEYS:                              /* the keys' octave (OCT- / OCT+) */
+            sp_fix(sp_put(t, "OCT "), sy_app_oct(), 0u, sy_app_oct() != 0);
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, t, sk.dim, sk.ground);
+            break;
         case SEC_MATRIX:                            /* the slots in use (a source and an amount) */
             for (n = 0, s = 0; s < NSLOT; s++)
                 n += sy_patch.p[SP_M1_SRC + 3u * s] > SRC_NONE && sy_patch.p[SP_M1_AMT + 3u * s] != 0;
@@ -314,6 +318,23 @@ static void ui_tempo_cell(int32_t id, int act)
     ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
 }
 
+/* SCL's cells: the scale, the root, the fit (pills), the keys' velocity (a dial) */
+static void ui_keys_cell(int32_t id, int act)
+{
+    static const char *const NAME[4] = {"SCALE", "ROOT", "FIT", "VELOCITY"};
+    char t[8];
+    if (id == UI_KVEL) {
+        ui_dial_at((float)(ui.kvel - 1u) * (1.0f / 126.0f), 0, ui.mod != 0, act);
+        sp_fix(t, ui.kvel, 0u, 0);
+        ui_cell_value(t, ui.mod ? sk.dim : sk.text, act);
+    } else {
+        ui_pill(id == UI_SCALE ? UI_SCALE_NAME[ui.scale % UI_NSCALE] : id == UI_ROOT ? UI_NOTE_NAME[ui.root % 12u]
+                                                                                    : UI_FIT_NAME[ui.fit % UI_NFIT],
+                ui.mod != 0, act);
+    }
+    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_SCALE], ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
+}
+
 static void ui_draw_knob(uint32_t k)
 {
     static const char *const EQPT[3] = {"LOW", "MID", "HIGH"};
@@ -330,6 +351,8 @@ static void ui_draw_knob(uint32_t k)
     } else if (id == UI_EQPT) {                     /* the EQ's point picked */
         ui_pill(EQPT[ui.eqpt < 3u ? ui.eqpt : 0u], ui.mod != 0, act);
         ui_text_c(0, 46, 60, &AF_XS, "POINT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
+    } else if (id >= UI_SCALE && id <= UI_KVEL) {   /* SCL's */
+        ui_keys_cell(id, act);
     } else if (id == UI_MSLOT) {                    /* the matrix's slot picked */
         sp_fix(t, (int32_t)ui.mslot + 1, 0u, 0);
         ui_pill(t, ui.mod != 0, act);
@@ -378,6 +401,8 @@ static void ui_draw_foot(void)
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 SAVE: NAME IT", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_MENU) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 1: COLOR \xB7 KNOB 2: ACCEL", sk.dim, sk.ground);
+    } else if (ui_sec() == SEC_KEYS) {
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "SCL HELD + A KEY: THE ROOT", sk.dim, sk.ground);
     } else if (UI_PG[ui.page].id[0] == UI_LPT && !ui.mod) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "LFO TWICE: ADD A POINT", sk.dim, sk.ground);
     } else {
@@ -842,6 +867,51 @@ static void ui_g_list(void)
     }
 }
 
+/* SCL's KEYS: the root and the scale by name, its notes from the root, and the 27 keys as they play with FIT: the
+ * root's in NOW, the scale's in SOUND, the rest plain; each white key names the note it plays (SNAP: a key off the
+ * scale, the note below; WHITE: the scale's notes, the black keys silent and dark) */
+static void ui_g_keys(void)
+{
+    static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0};   /* from F */
+    uint32_t mask = UI_SCALE_MASK[ui.scale % UI_NSCALE], k, w, pass, i;
+    char t[40];
+    int32_t x, y = WY + 44;
+    sp_put(sp_put(sp_put(t, UI_NOTE_NAME[ui.root % 12u]), " "), UI_SCALE_LONG[ui.scale % UI_NSCALE]);
+    cv_text_on(WX + 6, WY + 4, &AF_SB, t, sk.text, sk.display);
+    sp_put(sp_put(t, "FIT "), UI_FIT_NAME[ui.fit % UI_NFIT]);
+    cv_text_r(WX + WW - 6, WY + 6, &AF_XS, t, ui.fit ? sk.label : sk.faint, sk.display);
+    for (x = WX + 6, i = 0; i < 12u; i++)           /* the scale's notes from the root */
+        if ((mask >> i) & 1u)
+            x = cv_text_on(x, WY + 25, &AF_XS, UI_NOTE_NAME[(ui.root + i) % 12u], i ? sk.label : sk.now,
+                           sk.display) + 5;
+    for (pass = 0; pass < 2u; pass++)               /* the white keys, then the black over them */
+        for (k = 0, w = 0; k < 27u; k++) {
+            int black = BLACK[k % 12u];
+            int32_t n = sy_ui_key_note(k, 0), own = n == UI_KEY0 + (int32_t)k || ui.fit != UI_FIT_SNAP;
+            int32_t pc = n >= 0 && own ? (n - ui.root + 120) % 12 : -1;   /* (a key SNAP moves: plain) */
+            int root = pc == 0, in = pc > 0 && ((mask >> (uint32_t)pc) & 1u);
+            uint16_t fill = n < 0 ? sk.ground : root ? sk.now : in ? sk.wtint : black ? sk.ground : sk.raised;
+            uint16_t edge = n < 0 ? sk.track : root ? sk.now : in ? sk.wmid : black ? sk.rline : sk.rline2;
+            if (!black) {
+                if (!pass) {
+                    int32_t kx = WX + 5 + (int32_t)(w * 27u) / 2;
+                    cv_rrect(kx, y, 13, 52, 2, edge, sk.display);
+                    cv_rrect(kx + 1, y + 1, 11, 50, 1, fill, edge);
+                    if (n >= 0) {
+                        const char *nm = UI_NOTE_NAME[n % 12];
+                        cv_text_on(kx + (13 - text_w(&AF_XS, nm)) / 2, y + 38, &AF_XS, nm,
+                                   root ? sk.ground : in ? sk.sound : sk.dim, fill);
+                    }
+                }
+                w++;
+            } else if (pass) {
+                int32_t kx = WX + 5 + (int32_t)(w * 27u) / 2 - 5;
+                cv_rrect(kx, y, 9, 30, 2, edge, sk.raised);
+                cv_rrect(kx + 1, y + 1, 7, 28, 1, fill, edge);
+            }
+        }
+}
+
 /* SEQ's MATRIX: the eight slots, each its source, where it goes (the destination's section and name) and how much
  * (positive in VALUE, negative in MOD-), the one picked raised (KNOB 2-4 set it); a slot without a source: EMPTY */
 static void ui_g_matrix(void)
@@ -1009,6 +1079,7 @@ static void ui_draw_disp(uint32_t r0)
     case G_SAVE: ui_g_save(); break;
     case G_BROWSE: ui_g_browse(); break;
     case G_MATRIX: ui_g_matrix(); break;
+    case G_KEYS: ui_g_keys(); break;
     default: ui_g_list(); break;
     }
     for (y = r0; y < cv_h; y++) {
@@ -1041,9 +1112,9 @@ static void ui_led(uint8_t *l, uint32_t id)         /* matrix id: a button's (pa
  * the other family buttons dim, REC or ENV lit while its layer is on */
 static void sy_ui_leds(void)
 {
-    uint32_t c, k, f;
+    uint32_t c, k, f, mask = UI_SCALE_MASK[ui.scale % UI_NSCALE];
     for (c = 0; c < FM1_NCOL; c++)
-        fm1_led[c] = fm1_led_dim[c] = 0;
+        fm1_led[c] = fm1_led_dim[c] = fm1_led_mid[c] = fm1_led_breath[c] = 0;
     for (k = 0; k < 27u; k++) {
         if (ui.mod && ui.mod_btn == B_REC) {
             if (UI_KEY_SRC[k] == ui.mod_src)
@@ -1052,6 +1123,14 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led_dim, 14u + k);
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
+        } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
+            int32_t n = sy_ui_key_note(k, 0);           /* mid level; a key SNAP moves or WHITE silences: dark */
+            uint32_t pc = n >= 0 && (ui.fit != UI_FIT_SNAP || n == UI_KEY0 + (int32_t)k)
+                              ? (uint32_t)(n - ui.root + 120) % 12u : 12u;
+            if (pc == 0u)
+                ui_led(fm1_led_mid, 14u + k);
+            else if (pc < 12u && ((mask >> pc) & 1u))
+                ui_led(fm1_led_dim, 14u + k);
         }
     }
     for (f = 0; f < FAM_N; f++)
