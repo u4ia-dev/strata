@@ -1,0 +1,478 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2026 brandonmbarone
+     After Felucca's web/index_pkg.html (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
+     GPL-3.0); its update protocol (fm1ota.js) and package code (fm1pkg.js) are Felucca's, unchanged.
+     STRATA's flasher: a page on this computer (Web MIDI's SysEx needs a secure context: localhost). make_flasher.py
+     fills in the libraries and the package's facts and copies the package beside it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata Flasher</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --raise: #ebe8e2; --line: #dcd8d0; --text: #1c1d20; --mute: #63666d;
+    --amber: #a85d00; --amber-bg: #fff1dc; --blue: #1f63d1; --red: #b3261e; --red-bg: #fde8e6; --green: #1d7a46;
+    --green-bg: #e3f4ea; --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131416; --card: #1b1c1f; --raise: #24262a; --line: #33363b; --text: #ecebe7; --mute: #9b9ea5;
+      --amber: #ffab4a; --amber-bg: #3a2a14; --blue: #6aa2ff; --red: #ff8a80; --red-bg: #3b1d1b; --green: #6fd69a;
+      --green-bg: #17301f; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131416; --card: #1b1c1f; --raise: #24262a; --line: #33363b; --text: #ecebe7; --mute: #9b9ea5;
+    --amber: #ffab4a; --amber-bg: #3a2a14; --blue: #6aa2ff; --red: #ff8a80; --red-bg: #3b1d1b; --green: #6fd69a;
+    --green-bg: #17301f; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }     /* (over every display a rule below gives: the confirmations stay hidden) */
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 "Inter Tight", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 700px; margin: 0 auto; padding-block: 36px 56px;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+         display: grid; gap: 16px; }
+  header { display: grid; gap: 6px; padding-bottom: 4px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 30px; height: 22px; display: grid; grid-template-rows: repeat(3, 1fr); gap: 3px; }
+  .mark i { display: block; border-radius: 2px; background: var(--amber); }
+  .mark i:nth-child(2) { margin-right: 6px; opacity: .75; } .mark i:nth-child(3) { margin-right: 12px; opacity: .5; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: .02em; font-weight: 650; }
+  .sub { margin: 0; color: var(--mute); }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 8px 0 0; font-size: 13px; }
+  .facts dt { color: var(--mute); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; padding-top: 2px; }
+  .facts dd { margin: 0; font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 16px;
+                 display: grid; gap: 12px; min-width: 0; }
+  h2 { margin: 0; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 10px; text-wrap: balance; }
+  h2 .n { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px;
+          background: var(--amber-bg); color: var(--amber); flex: none; }
+  p { margin: 0; max-width: 64ch; }
+  .small { font-size: 13px; color: var(--mute); }
+  ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  ul.checks label { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer; }
+  ul.checks input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--amber); }
+  .aside { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 8px; background: var(--raise); font-size: 13.5px;
+           display: grid; gap: 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--raise); color: var(--text); }
+  button.primary { background: var(--amber); border-color: var(--amber); color: #1c1407; }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  button:disabled { opacity: .38; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .status { border-left: 4px solid var(--line); }
+  .status[data-kind="busy"] { border-left-color: var(--blue); }
+  .status[data-kind="ok"] { border-left-color: var(--green); background: var(--green-bg); }
+  .status[data-kind="err"] { border-left-color: var(--red); background: var(--red-bg); }
+  .status[data-kind="warn"] { border-left-color: var(--amber); background: var(--amber-bg); }
+  #status { font-weight: 600; }
+  progress { width: 100%; height: 6px; accent-color: var(--amber); }
+  details summary { cursor: pointer; color: var(--mute); font-size: 13px; }
+  pre { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--raise); font: 12px/1.45 var(--mono);
+        white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+  .confirm { padding: 12px; border-radius: 8px; border: 1px solid var(--amber); background: var(--amber-bg); display: grid;
+             gap: 10px; }
+  .warn { color: var(--red); font-weight: 600; }
+  ol.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+  code, kbd { font-family: var(--mono); font-size: 12.5px; background: var(--raise); border-radius: 4px; padding: 1px 5px; }
+  a { color: var(--blue); }
+  input[type="file"] { font: inherit; font-size: 13px; max-width: 100%; }
+  footer { font-size: 12px; color: var(--mute); display: grid; gap: 6px; padding-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>Strata</h1></div>
+    <p class="sub">Hardware test flasher for the M-VAVE FM-1 &middot; Chrome or Edge, on this computer only</p>
+    <dl class="facts">
+      <dt>Build</dt><dd id="f-version">&hellip;</dd>
+      <dt>Identity</dt><dd id="f-product">&hellip;</dd>
+      <dt>Package</dt><dd id="f-size">&hellip;</dd>
+      <dt>SHA-256</dt><dd id="f-sha">&hellip;</dd>
+    </dl>
+  </header>
+
+  <section class="card status" id="status-card" data-kind="">
+    <div id="status">Loading the package&hellip;</div>
+    <progress id="bar" max="100" value="0" hidden></progress>
+    <details><summary>Log</summary><pre id="log"></pre></details>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">1</span>Before you start</h2>
+    <ul class="checks">
+      <li>
+        <label><input type="checkbox" class="pre" id="c-backup">
+          <span>I have a <b>full flash backup</b> of this FM-1 (all 1 MiB, read twice, both copies the same SHA-256),
+          made with jl-uboot-tool or MvaveFM1Unbricker, and I keep it.</span></label>
+        <div class="aside">
+          <p>The FM-1 must be in its backup mode for that (the chip's own USB boot, <code>WL82 UBOOT1.00</code>). This
+          button asks the firmware running now (official, Felucca or Strata) to go there. If Windows then offers to
+          format a disk: <b>Cancel</b>. When the backup is done, switch the FM-1 off and on again.</p>
+          <div class="row"><button id="uboot" disabled>Put the FM-1 in backup mode&hellip;</button></div>
+          <div class="confirm" id="uboot-confirm" hidden>
+            <p id="uboot-what">The FM-1 will stop its firmware and wait for jl-uboot-tool. Nothing is written.</p>
+            <div class="row"><button id="uboot-go" class="primary">Go to backup mode</button>
+              <button id="uboot-cancel">Cancel</button></div>
+          </div>
+        </div>
+      </li>
+      <li><label><input type="checkbox" class="pre" id="c-power">
+        <span>The battery is <b>charged</b>, and the FM-1 is plugged <b>straight into this computer</b> with a USB
+        data cable (no hub). I will not unplug it or touch its power switch while it writes.</span></label></li>
+      <li><label><input type="checkbox" class="pre" id="c-apps">
+        <span>Every other app that uses MIDI is closed (DAWs, M-UPGRADE, Felucca's editor).</span></label></li>
+      <li><label><input type="checkbox" class="pre" id="c-store">
+        <span>I know Strata keeps its presets where Felucca keeps projects and samples: saving a preset can overwrite
+        them. My backup has them.</span></label></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">2</span>Install</h2>
+    <p>The FM-1's own update path, as Felucca's installer uses it: the firmware running now reads the package and
+    starts the update loader, the loader writes the app area only (<code>0x4000</code>&ndash;<code>0x92FFF</code>;
+    the boot head and your settings' sectors are never written), then the FM-1 restarts into Strata. About a
+    minute.</p>
+    <div class="row"><button id="find" class="primary" disabled>Find the FM-1&hellip;</button></div>
+    <div class="confirm" id="confirm" hidden>
+      <p id="found"></p>
+      <p class="warn">Do not unplug the FM-1 or switch it off until this page says Done.</p>
+      <div class="row"><button id="write" class="primary">Write Strata</button><button id="cancel">Cancel</button></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">3</span>Test and report</h2>
+    <p>Work through the checklist in <a href="FLASHING.md" target="_blank" rel="noopener">FLASHING.md</a> (section
+    4). On the FM-1, hold HOME 5&nbsp;s for the SETTINGS; the last page, BENCH, shows the measurements. This reads the
+    same figures from Strata's USB serial console, ready to paste back.</p>
+    <div class="row">
+      <button id="report" disabled>Read the device report&hellip;</button>
+      <button id="run" disabled>Run BENCH's loops, then read&hellip;</button>
+      <button id="copy" disabled>Copy</button>
+    </div>
+    <p class="small">Chrome asks for the port: pick the FM-1's (a USB serial device). The loops stop the sound for a
+    moment.</p>
+    <pre id="report-text" hidden></pre>
+  </section>
+
+  <section class="card">
+    <h2>Going back</h2>
+    <ol class="steps">
+      <li><b>To Felucca:</b> its own installer, <a href="https://hugelton.github.io/Felucca/" target="_blank"
+        rel="noopener">hugelton.github.io/Felucca</a>. It finds Strata's FM-1: Strata keeps Felucca's update entry and
+        its USB name.</li>
+      <li><b>To the official V15:</b> pick M-VAVE's unmodified <code>FM-1.fwsc</code> (checked here by its SHA-256,
+        never uploaded), then write it with the same update path. M-VAVE's own updater works too.</li>
+      <li><b>To exactly what you had:</b> write your full backup back with jl-uboot-tool (FLASHING.md, section 6).</li>
+    </ol>
+    <label class="small">Official FM-1.fwsc (V15): <input id="stock-file" type="file" accept=".fwsc"></label>
+    <div class="row"><button id="stock-go" class="danger" disabled>Return to official V15&hellip;</button></div>
+    <div class="confirm" id="stock-confirm" hidden>
+      <p id="stock-what"></p>
+      <div class="row"><button id="stock-write" class="danger">Write V15</button><button id="stock-cancel">Cancel</button></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>If something goes wrong</h2>
+    <ul class="checks small">
+      <li>A write stopped (cable, browser): replug and press <b>Find the FM-1</b> again. The FM-1 stays in update mode
+        and the page finishes the write.</li>
+      <li>Strata shows <b>STRATA CRASH</b>: take a photo. It restarts; a second crash within 30&nbsp;s puts it in backup
+        mode by itself, where your backup can be written back.</li>
+      <li>Backup mode by hand, while Strata runs: hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s (a
+        countdown shows from 2&nbsp;s).</li>
+      <li>Nothing on USB at all, in any mode: the FM-1 Transporter (MvaveFM1Unbricker's TRANSPORTER-GUIDE.md).</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>Strata (a Felucca fork) and Felucca: GPL-3.0, no warranty; at your own risk. The package also holds three
+    JieLi AC79 SDK files (Apache-2.0): see LICENSING.md and LICENSES/ beside this page.</span>
+    <span>M-VAVE and FM-1 are trademarks of their respective owners. Strata is not affiliated with or endorsed by
+    them, nor by Felucca's author.</span>
+  </footer>
+</main>
+<script type="module">
+/*LIB*/
+const meta = /*META*/;
+const $ = (id) => document.getElementById(id);   // (sleep: fm1ota.js's)
+const SOFT_KEY = [0xF0, 0x22, 0x24, 0x35, 0x7D, 0xF7];   // the FM-1's UBOOT soft key (stock, Felucca, Strata)
+const WHY = {
+  nomidi: "This browser cannot reach the FM-1 by Web MIDI. Use Chrome or Edge, and open the page from localhost (serve.py).",
+  denied: "MIDI (with SysEx) was not allowed. Allow MIDI for this site (the address bar's site settings) and try again.",
+  notfound: "No FM-1 answered. Check the cable (a data cable, straight into the computer), close other MIDI apps, and try again.",
+  model: "The device that answered is not an FM-1",
+  stopped: "The FM-1 stopped answering. Replug the cable and press Find the FM-1: it stays in update mode until a write is finished.",
+  lost: "The USB connection was lost. Replug the cable and press Find the FM-1 to finish.",
+  noloader: "The FM-1 in update mode did not appear. Replug the cable and press Find the FM-1: it stays in update mode until finished.",
+  noreturn: "The FM-1 did not come back after the write. Switch it off and on.",
+  mismatch: "Written, but the FM-1 reports another firmware",
+  badreq: "The FM-1 asked for something outside the package: stopped, nothing more sent. Press Find the FM-1 again.",
+  badpkg: "The package beside this page is not the one it was made for (size, SHA-256 or identity). Run make_flasher.py again.",
+};
+let image = null, midi = null, writing = false, pending = null, stock = null, stockPending = null, report = "";
+let ubootAsked = false;                                  // (backup mode: its confirmation shown first)
+
+const log = (t) => { $("log").textContent += t + "\n"; };
+function say(text, kind = "") { $("status").textContent = text; $("status-card").dataset.kind = kind; }
+function showErr(e) {
+  const code = e && e.code;
+  say(code && WHY[code] ? WHY[code] + (e.detail ? ` (${e.detail})` : "") : "Error: " + (e && e.message || e), "err");
+  log(String(e && e.stack || e));
+}
+function codeErr(code, detail = "") { const e = new Error(WHY[code] || code); e.code = code; e.detail = detail; return e; }
+function describe(id) {
+  if (/^ota-/i.test(id.model)) return "in update mode (an earlier write did not finish)";
+  if (id.version === 15 || id.version < 900) return "the official firmware";
+  return id.text === meta.product ? "Felucca, Strata or another firmware of this family (development identity)"
+                                  : "Felucca or another firmware of its family";
+}
+function gate() {
+  const ready = !!image && [...document.querySelectorAll(".pre")].every((c) => c.checked);
+  $("find").disabled = !ready || writing || !$("confirm").hidden;
+  $("uboot").disabled = writing || !navigator.requestMIDIAccess;
+  $("stock-go").disabled = !stock || writing || !$("c-backup").checked || !$("c-power").checked;
+  $("report").disabled = $("run").disabled = writing || !navigator.serial;
+  $("stock-file").disabled = writing;
+}
+document.querySelectorAll(".pre").forEach((c) => c.addEventListener("change", gate));
+window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = ""; } });
+
+async function getMidi() {
+  if (!navigator.requestMIDIAccess) throw codeErr("nomidi");
+  if (!midi) {
+    try { midi = await navigator.requestMIDIAccess({ sysex: true }); } catch (_) { throw codeErr("denied"); }
+  }
+  return midi;
+}
+
+// the package: as make_flasher.py described it, else nothing is offered
+(async () => {
+  $("f-version").textContent = meta.version;
+  $("f-product").textContent = meta.product;
+  $("f-size").textContent = `${meta.pkg} · ${meta.size.toLocaleString("en")} bytes`;
+  $("f-sha").textContent = meta.sha256;
+  if (!window.isSecureContext || !navigator.requestMIDIAccess) { say(WHY.nomidi, "err"); gate(); return; }
+  try {
+    const r = await fetch(meta.pkg, { cache: "no-store" });
+    if (!r.ok) throw new Error(`${meta.pkg}: HTTP ${r.status}`);
+    const pkg = new Uint8Array(await r.arrayBuffer());
+    if (pkg.length !== meta.size || await sha256hex(pkg) !== meta.sha256 || productOf(pkg) !== meta.product) {
+      say(WHY.badpkg, "err");
+      return;
+    }
+    image = logicalImage(pkg);
+    say("Package checked. Tick the four boxes to install.", "");
+  } catch (e) { showErr(e); }
+  gate();
+})();
+
+// the steps fm1ota.js reports, on the bar: step 1's reads (~74), then the loader's (~1167)
+function stepper() {
+  $("bar").hidden = false;
+  $("bar").value = 0;
+  const total = 74 + 1167;
+  return (k, a) => {
+    log(`${k} ${a ?? ""}`);
+    if (k === "start") say(`Starting: the FM-1 reports ${a}`, "busy");
+    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); $("bar").value = (a / total) * 100; }
+    if (k === "loader") say("Restarting into the update loader…", "busy");
+    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); $("bar").value = ((74 + a) / total) * 100; }
+    if (k === "reboot") say("Restarting the FM-1…", "busy");
+    if (k === "done") $("bar").value = 100;
+  };
+}
+
+// Find: what answers, shown before anything is written
+$("find").addEventListener("click", async () => {
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    say("Looking for the FM-1…", "busy");
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    dev.link.close();
+    const loader = /^ota-/i.test(dev.id.model);
+    if ((loader ? dev.id.model.slice(4) : dev.id.model) !== "FM-1") throw codeErr("model", dev.id.text);
+    pending = { loader };
+    stockPending = null;
+    $("stock-confirm").hidden = true;
+    $("found").textContent = loader
+      ? `The FM-1 on “${dev.name}” is in update mode (${dev.id.text}): an earlier write did not finish. Finish it with Strata (${meta.product})?`
+      : `Found ${dev.id.text} on “${dev.name}”: ${describe(dev.id)}. Write Strata (${meta.version}, ${meta.product}) over it?`;
+    $("confirm").hidden = false;
+    say("Found the FM-1. Confirm to write.", "warn");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+$("cancel").addEventListener("click", () => { $("confirm").hidden = true; pending = null; say("Cancelled: nothing was written.", ""); gate(); });
+
+$("write").addEventListener("click", async () => {
+  if (!pending) return;
+  const job = pending;
+  pending = null;
+  $("confirm").hidden = true;
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log), step = stepper();
+    if (job.loader) {
+      if (!await up.resume(image, step, meta.product)) throw codeErr("stopped");
+    } else {
+      await up.install(image, meta.product, step);
+    }
+    say(`Done: the FM-1 runs Strata (${meta.product}). Now step 3.`, "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+// backup mode: the soft key to whatever answers (nothing is written)
+$("uboot").addEventListener("click", () => { ubootAsked = true; $("uboot-confirm").hidden = false; });
+$("uboot-cancel").addEventListener("click", () => { ubootAsked = false; $("uboot-confirm").hidden = true; });
+$("uboot-go").addEventListener("click", async () => {
+  if (!ubootAsked) return;
+  ubootAsked = false;
+  $("uboot-confirm").hidden = true;
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    dev.link.send(SOFT_KEY);
+    await sleep(200);
+    dev.link.close();
+    log(`soft key sent to ${dev.id.text} (${dev.name})`);
+    say(`Sent to ${dev.id.text}: the FM-1 should now be the USB disk “WL82 UBOOT1.00” (Cancel any format offer). ` +
+        "Make the backup, then switch it off and on.", "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+// the official V15, checked here, then the same update path
+$("stock-file").addEventListener("change", async () => {
+  stock = null; gate();
+  const file = $("stock-file").files[0];
+  if (!file) return;
+  try {
+    if (file.size !== STOCK_V15_SIZE) throw new Error("this is not M-VAVE's FM-1.fwsc V15 (its size)");
+    stock = await validateStockPackage(new Uint8Array(await file.arrayBuffer()));
+    say("Official V15 checked (SHA-256). Tick the backup and power boxes above to use it.", "");
+  } catch (e) { say("Cannot use this file: " + e.message, "err"); }
+  gate();
+});
+$("stock-go").addEventListener("click", async () => {
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    dev.link.close();
+    stockPending = { loader: /^ota-/i.test(dev.id.model) };
+    pending = null;
+    $("confirm").hidden = true;
+    $("stock-what").textContent = `Write the official V15 (FM-1_015) over ${dev.id.text}? Strata's presets stay in the ` +
+      "flash but V15 does not read them; your backup has everything.";
+    $("stock-confirm").hidden = false;
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+$("stock-cancel").addEventListener("click", () => { $("stock-confirm").hidden = true; stockPending = null; gate(); });
+$("stock-write").addEventListener("click", async () => {
+  if (!stockPending || !stock) return;
+  const job = stockPending;
+  stockPending = null;
+  $("stock-confirm").hidden = true;
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log), step = stepper();
+    if (job.loader) {
+      if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");
+    } else {
+      await up.install(stock.image, stock.product, step);
+    }
+    say("Done: the FM-1 runs the official V15.", "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+// the report: Strata's console (sy_console.c) over Web Serial, `status` and `bench`
+async function consoleRun(cmds, beforeLast = 0) {
+  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+  await port.open({ baudRate: 115200 });
+  let reader = null, writer = null, out = "";
+  try {
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+    reader = port.readable.getReader();
+    writer = port.writable.getWriter();
+    const dec = new TextDecoder(), enc = new TextEncoder();
+    let buf = "", pend = null;
+    const until = async (ms) => {                       // read until the prompt "> " ends what came, or ms pass
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        pend = pend || reader.read();
+        const r = await Promise.race([pend, sleep(Math.max(1, end - Date.now())).then(() => null)]);
+        if (!r) break;
+        pend = null;
+        if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        if (/> $/.test(buf)) return true;
+      }
+      return false;
+    };
+    await writer.write(enc.encode("\r"));
+    await until(1500);
+    for (let i = 0; i < cmds.length; i++) {
+      if (i === cmds.length - 1 && beforeLast) await sleep(beforeLast);
+      buf = "";
+      await writer.write(enc.encode(cmds[i] + "\r"));
+      await until(3000);
+      out += buf.replace(/\r/g, "").replace(/\n?> $/, "") + "\n";
+    }
+  } finally {
+    try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch (_) {}
+    try { if (writer) writer.releaseLock(); } catch (_) {}
+    await port.close();
+  }
+  return out;
+}
+async function readReport(cmds, beforeLast) {
+  writing = true; gate();
+  try {
+    say("Reading Strata's console…", "busy");
+    report = `Strata hardware test report (${meta.version}, ${meta.product}, package SHA-256 ${meta.sha256})\n` +
+             `browser: ${navigator.userAgent}\n\n` + await consoleRun(cmds, beforeLast);
+    $("report-text").textContent = report;
+    $("report-text").hidden = false;
+    $("copy").disabled = false;
+    say("Report read. Copy it and paste it into the conversation, with what you heard and saw.", "ok");
+  } catch (e) {
+    if (e && e.name === "NotFoundError") say("No port was picked.", "");
+    else showErr(e);
+  }
+  writing = false; gate();
+  $("copy").disabled = !report;
+}
+$("report").addEventListener("click", () => readReport(["status", "bench"], 0));
+$("run").addEventListener("click", () => readReport(["bench run", "status", "bench"], 1500));
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(report); say("Copied.", "ok"); }
+  catch (_) {
+    const r = document.createRange();
+    r.selectNodeContents($("report-text"));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    say("Selected: press Ctrl+C to copy.", "");
+  }
+});
+gate();
+</script>
+</body>
+</html>
