@@ -92,8 +92,15 @@ check("every test sound plays the engine test's phrase bit for bit as recorded (
     same &&= m.sw_unpack(n) === 1 && name === cstr(m, m.sw_patch_name()) &&
              a.every((v, i) => v === new Int16Array(m.memory.buffer, m.sw_values(), m.sw_param_count())[i]);
   }
+  m.sw_sound(0);                                // an LFO's drawn shape goes with the code
+  m.sw_test_point(1, 1, 1, 640, 1);
+  m.sw_test_point(1, 2, 2, -777, 1);
+  const n = m.sw_pack();
+  m.sw_test_point(1, 1, 1, 0, 1);
+  m.sw_test_point(1, 2, 2, 0, 1);
+  same &&= m.sw_unpack(n) === 1 && m.sw_test_point(1, 1, 1, 0, 0) === 640 && m.sw_test_point(1, 2, 2, 0, 0) === -777;
   new Uint8Array(m.memory.buffer, m.sw_code_buf(), 4).set([88, 88, 88, 88]);
-  check("a patch's code: packed and unpacked the same (the test sounds, INIT); a foreign one refused",
+  check("a patch's code: packed and unpacked the same (the test sounds, INIT, a drawn LFO); a foreign one refused",
         same && m.sw_unpack(40) === 0);
 }
 

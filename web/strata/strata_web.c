@@ -33,6 +33,7 @@ static char sw_txt[SP_TEXT_N];
 static uint8_t sw_code[1024];            /* a patch packed (sp_pack): in and out */
 static int16_t sw_vals[SP_COUNT];        /* a patch's values: in and out */
 static char sw_name[17];
+static sp_draw_t sw_draw[2];             /* .. its LFOs' drawn shapes (kept through a code; drawn on the FM-1) */
 static float sw_peak;
 
 /* ------------------------------------------------------------------------------------------- audio --- */
@@ -131,6 +132,7 @@ static void sw_from(const sy_patch_t *p)
     memcpy(sw_vals, p->p, sizeof sw_vals);
     memcpy(sw_name, p->name, sizeof sw_name);
     sw_name[16] = 0;
+    memcpy(sw_draw, p->draw, sizeof sw_draw);
 }
 
 static void sw_to(sy_patch_t *p)
@@ -141,6 +143,11 @@ static void sw_to(sy_patch_t *p)
         p->p[i] = sp_clamp(i, sw_vals[i]);
     memcpy(p->name, sw_name, sizeof p->name);
     p->name[16] = 0;
+    for (i = 0; i < 2u; i++)
+        if (sw_draw[i].n >= 2u) {                /* (none yet: the default's) */
+            p->draw[i] = sw_draw[i];
+            sp_draw_fix(&p->draw[i]);
+        }
 }
 
 EXPORT uint32_t sw_sound_count(void) { return sizeof SOUNDS / sizeof SOUNDS[0]; }
@@ -210,5 +217,16 @@ EXPORT void sw_test_sound(uint32_t k)
     sy_tables_now();
 }
 EXPORT void sw_test_bend(int32_t v14) { sy_bend(v14); }
+/* LFO k's drawn shape in sw_values' patch: point i's x, y or curve (f 0..2), set to v first (set) */
+EXPORT int32_t sw_test_point(uint32_t k, uint32_t i, uint32_t f, int32_t v, uint32_t set)
+{
+    sp_draw_t *d = &sw_draw[k & 1u];
+    int16_t *a = f == 0u ? d->x : f == 1u ? d->y : d->c;
+    if (i >= SP_NPT)
+        return 0;
+    if (set)
+        a[i] = (int16_t)v;
+    return a[i];
+}
 /* the engine test's blocks(secs), the same float arithmetic */
 EXPORT uint32_t sw_test_blocks(float secs) { return (uint32_t)(secs * SY_FS) / SY_BLK; }

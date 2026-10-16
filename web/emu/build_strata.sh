@@ -36,7 +36,7 @@ sed -e 's|<title>Felucca</title>|<title>Strata Emulator</title>|' \
     -e 's|"felucca-emu-flash"|"strata-emu-flash"|; s|"felucca-emu-knobs"|"strata-emu-knobs"|; s|"felucca-emu-knobmode"|"strata-emu-knobmode"|' \
     -e 's|fetch("felucca.wasm")|fetch("strata.wasm")|; s|felucca.wasm: |strata.wasm: |' \
     -e 's|console.warn("Felucca: |console.warn("Strata: |; s|console.warn(`Felucca: |console.warn(`Strata: |' \
-    -e 's|@VERSION@|Phase 4|g; s|@PREVIEW@| (look stop)|g' \
+    -e 's|@VERSION@|Phase 4|g; s|@PREVIEW@| (in progress)|g' \
     web/emu/index.html > build/emu_strata/index.html
 grep -q 'fetch("strata.wasm")' build/emu_strata/index.html || { echo "emu_strata: the page did not take the module's name"; exit 1; }
 cp web/emu/worklet.js build/emu_strata/

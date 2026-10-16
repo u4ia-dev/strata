@@ -244,7 +244,7 @@ EXPORT uint32_t web_playing(void) { return 0; }
 EXPORT uint32_t web_sample_rate(void) { return 44118u; }
 
 /* for the tests (web/emu/strata_emu_test.mjs, strata_shot.mjs): the voices sounding, the page shown, a parameter's
- * value, the MOD layer, a matrix slot, the palette */
+ * value, the MOD layer, a matrix slot, the palette, the keys' octave, an LFO's drawn points and the one picked */
 EXPORT uint32_t web_test_voices(void)
 {
     uint32_t i, n = 0;
@@ -279,3 +279,15 @@ EXPORT uint32_t web_test_palette(int32_t i)
     return ui.pal;
 }
 EXPORT uint32_t web_test_dirty(void) { return ui.dirty; }
+EXPORT int32_t web_test_oct(void) { return sy_app_oct(); }
+/* LFO k's drawn shape: f 0 its count of points, 1 .. 3 point i's x, y, curve */
+EXPORT int32_t web_test_draw(uint32_t k, uint32_t i, uint32_t f)
+{
+    const sp_draw_t *d = &sy_patch.draw[k & 1u];
+    if (f == 0u)
+        return d->n;
+    if (i >= SP_NPT)
+        return 0;
+    return f == 1u ? d->x[i] : f == 2u ? d->y[i] : d->c[i];
+}
+EXPORT uint32_t web_test_lpt(uint32_t k) { return ui.lpt[k & 1u]; }

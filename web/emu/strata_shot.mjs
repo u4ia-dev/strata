@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 brandonmbarone
 // STRATA's screen on the simulated FM-1 as PNG files, to look at without a browser (twice the panel's size). A short
-// session, played as the panel would: the wave page (VOWELS, BEND+), REC held (LFO 1 picked by its white key, KNOB 2
-// turned: its depth on WT POS), the unison page, an envelope with a key held, the MENU, and the wave page in each
-// palette. It prints what the session set.
+// session, played as the panel would: the wave page (VOWELS, BEND+), REC held (LFO 1 picked by its white key, KNOB 1
+// turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
+// one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), the MENU,
+// and the wave page in each palette. It prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -16,7 +17,7 @@ ex.web_nor_erase();
 ex.web_master(700);
 ex.web_boot();
 const run = (s) => { for (let n = Math.max(1, Math.round(s * 44118 / 128)); n > 0; n--) ex.web_render(128); };
-const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11 };   // panel.c B_*
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
 
@@ -60,7 +61,7 @@ function png(name, scale = 2) {                 // the frame buffer: RGB565, hig
 mkdirSync(out, { recursive: true });
 run(0.6);
 png("boot.png");
-const [TABLE, POS, WARP, WAMT] = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
+const [POS, TABLE, WARP, WAMT] = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
 ex.web_test_set(TABLE, 27);                     // VOWELS
 ex.web_test_set(POS, 375);
 ex.web_test_set(WARP, 2);                       // BEND+
@@ -72,7 +73,7 @@ run(0.6);
 ex.web_keys(1 << 4);                            // A3, a white key: LFO 1
 run(0.05);
 ex.web_keys(0);
-for (let i = 0; i < 4; i++) { ex.web_enc(E.K2, 1); run(0.004); }   // a quick turn of KNOB 2
+for (let i = 0; i < 4; i++) { ex.web_enc(E.K1, 1); run(0.004); }   // a quick turn of KNOB 1
 run(0.1);
 png("mod.png");
 console.log(`mod layer ${ex.web_test_mod()}, source ${ex.web_test_mod_src()}, slot 1: src ${ex.web_test_slot(0, 0)} dst ${ex.web_test_slot(0, 1)} amt ${ex.web_test_slot(0, 2)}`);
@@ -95,6 +96,29 @@ run(0.15);
 png("env2.png");
 ex.web_keys(0);
 run(0.2);
+tap(B.LFO);                                     // LFO 1 POINTS: the sine's points, point 2 picked
+ex.web_enc(E.K1, 1);
+run(0.1);
+png("lfo_points.png");
+for (let i = 0; i < 12; i++) { ex.web_enc(E.K3, -1); run(0.004); }   // lowered: drawn from the sine
+run(0.1);
+ex.web_enc(E.K1, 1);                            // point 3, then LFO twice: a point left of it
+run(0.05);
+for (let i = 0; i < 2; i++) { ex.web_buttons(1 << B.LFO); run(0.03); ex.web_buttons(0); run(0.08); }
+for (let i = 0; i < 3; i++) { ex.web_enc(E.K4, 1); run(0.004); }    // its curve
+ex.web_keys(1 << 7);
+run(0.35);
+png("lfo_drawn.png");
+ex.web_keys(0);
+console.log(`LFO 1: ${ex.web_test_draw(0, 0, 0)} points, point ${ex.web_test_lpt(0) + 1} picked`);
+run(0.2);
+ex.web_enc(E.SELECT, 1);                        // its SHAPE page: S&H
+run(0.05);
+ex.web_enc(E.K1, 5 - ex.web_test_value(ex.web_test_page_param(0)));
+run(0.1);
+png("lfo_sh.png");
+ex.web_enc(E.K1, 7);                            // (back to DRAWN)
+run(0.1);
 ex.web_buttons(1 << B.HOME);                    // HOME held: the MENU
 run(0.6);
 ex.web_buttons(0);
