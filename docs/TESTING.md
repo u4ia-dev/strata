@@ -24,7 +24,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-81 checks in five programs (`tests/sy_*.c`), all passing.
+88 checks in five programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -61,11 +61,13 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 52 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 59 checks; `sy_smoke`, 2)
 
-- **Parameters and presets**: 166 parameters; a patch packs into 387 bytes and back unchanged; an older patch (fewer
-  values) loads with defaults; out-of-range values clamp; a foreign blob is refused; the values read as stored
-  (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change at once, without a patch load.
+- **Parameters and presets**: 166 parameters; a patch packs into at most 582 bytes (the LFOs' drawn shapes included)
+  and back unchanged; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
+  a malformed drawn shape is not read (too many points) or made whole (places out of order, values out of range); a
+  foreign blob is refused; the values read as stored (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE,
+  SMOOTH) take a change at once, without a patch load.
 - **Values as text** (`sy_text.c`, what the knob cards and the workbench show): every list parameter names each of its
   values; every value of every parameter formats, in under 16 characters, with nothing unknown; spot values (the
   cutoff, times, levels, lists, destinations) read as expected.
@@ -76,6 +78,11 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   stay within 48 instances), the CPU guard (unison down over 70 %, cheaper effects over 78 %, a voice shed after two
   halves over 85 %, all undone under 55 %).
 - **Timing**: ATTACK and RELEASE 100 ms take 100.8 ms; LFO rates free and synced to the tempo.
+- **LFO shapes as points** (the start of a drawing): every built-in shape's points are whole, and the table is read to
+  its end; the points' curves lie on the shapes exactly (within 0.0004 of the ±1 range) but for SINE (within 0.053: no
+  one curve follows a quarter sine closer) and BOUNCE (0.105, its first bounce twice as tall). A drawn pulse, high for
+  30 % of its cycle, plays high for 30.1 % of 10 s; an edit of a drawn shape is not taken while under way and is taken
+  at the next block when done; a patch load takes its drawn shapes.
 - **Clicks** (largest sample-to-sample step against a steady sine's): 17 events (note on/off, steal, retrigger, MONO,
   table swap, patch change, cutoff, macro, bend and level jumps, unison 1 → 7, OSC B / SUB / filter on and off, filter
   type, warp change) all under 2×; worst 1.59× (unison 1 → 7).
@@ -230,7 +237,7 @@ has also run in headless Chrome (§6.4); the workbench's page has not been opene
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
-The five host programs (§2) built with `emcc` and run under Node: 81 checks, all passing, the golden renders included.
+The five host programs (§2) built with `emcc` and run under Node: 88 checks, all passing, the golden renders included.
 The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
 multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
 workbench and the emulator sound as the host-verified engine does.
@@ -240,10 +247,11 @@ workbench and the emulator sound as the host-verified engine does.
 One HTML file: the DSP in an AudioWorklet, every control built from the parameter table and shown with `sp_text`, the
 on-screen keys, the computer keyboard and Web MIDI, the test sounds and INIT, a patch as a copyable code, a scope. The
 test drives its module's exports as the page does: no imports; every test sound plays the engine test's phrase bit for
-bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT) and a foreign one is refused; a load is
-taken, a second one held while it fades (2 quanta), then played as sent; values as text.
+bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an LFO's drawn shape) and a foreign one
+is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
+workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 18 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 31 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
 compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the audio halves as the DMA asks for
@@ -258,20 +266,32 @@ sent at once). **Verified in emulator**, under Node:
 | Idle | nothing changed, nothing drawn (0 blits in 0.2 s) |
 | A key | plays (peak 0.102, one voice); its release ends it |
 | LEDs | the key held and the page's family button (EDIT) lit |
-| KNOB 1 (a list) | the table one entry a detent (1 -> 4 for three); 3 regions redrawn, not the screen |
-| KNOB 2 (a value) | speed-sensitive: 3 slow detents move WT POS 0.1 % each, 6 quick ones 25.1 % |
+| The WAVE page | KNOB 1 WT POS, KNOB 2 TABLE, KNOB 3 WARP, KNOB 4 AMOUNT |
+| KNOB 2 (a list) | the table one entry a detent (1 -> 4 for three); 3 regions redrawn, not the screen |
+| KNOB 1 (a value) | speed-sensitive: 3 slow detents move WT POS 0.1 % each, 6 quick ones 25.1 % |
 | FX, ALGORITHM, SELECT | DRIVE; the next effect (CHORUS); the next page |
 | PRESETS | the next sound (PLUCK) |
-| The MOD layer | REC held opens it; a white key (A3) picks LFO 1 and plays nothing; KNOB 2 sets LFO 1's depth on WT POS in a matrix slot (5 slow detents: 1.0 %); released, it closes, the slot stays |
+| The MOD layer | REC held opens it; a white key (A3) picks LFO 1 and plays nothing; KNOB 1 sets LFO 1's depth on WT POS in a matrix slot (5 slow detents: 1.0 %); released, it closes, the slot stays |
 | .. its leftovers | a slot it made and turned back to 0 is freed when it closes |
 | REC's gestures | a tap does nothing, a double tap latches the layer, a tap then lets it go |
 | The MENU | HOME held; KNOB 1 changes the palette and the screen with it (25,870 pixels) |
+| OCT with EDIT held | the section's pages: OCT+ WAVE -> UNISON, OCT- back to WAVE, OCT- again round to OUTPUT; EDIT let go: no tap (the page stays); the keys' octave unchanged |
+| OCT with ENV held | OCT+ steps the section shown (OSC A); ENV held on past the hold time: no ENV 2 layer; let go: no tap |
+| OCT alone | the keys' octave +1 and back; the page stays |
+| An LFO's POINTS page | LFO 1's first page; KNOB 1-4 the point, its place, its level, the curve |
+| .. KNOB 1 | picks a point, round (+2: point 3; -3: point 5 of 5); the shape untouched (SINE) |
+| .. KNOB 3 | lowers point 2 (1000 -> 990 for 5 slow detents): the sine's 5 points become the drawn shape (SHAPE DRAWN); 2,032 pixels change |
+| .. KNOB 2, KNOB 4 | point 2 along the cycle (250 -> 253 slow; quickly no further than the next point, 500); the last point stays at the end; KNOB 4 on it curves the segment into it (+0.8 % for 4 slow detents) |
+| .. LFO twice | a point left of the one picked, halfway (625 between 500 and 750), on the curve, picked; the page stays POINTS. The first point picked: the new one right of it (250, halfway to 500) |
+| .. not | LFO twice from another family's page: no point (the LFO's next page); STAIRS shown (16 points): no 17th; the MOD layer: KNOB 3 changes nothing |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
 
 The screens were checked by eye from `strata_shot.mjs`'s PNGs (a session: the wave page with VOWELS and BEND+, REC
-held with LFO 1 on WT POS, the unison page, ENV 1 and ENV 2 with a key held, the MENU, each palette). Bugs the tests
+held with LFO 1 on WT POS, the unison page, ENV 1 and ENV 2 with a key held, LFO 1's POINTS page (the sine's points;
+then drawn: a point lowered, one added and curved, a key held: the voice on its cycle), its SHAPE page with S&H's five
+sample cycles, the MENU, each palette). Bugs the tests
 found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
 ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
 double-tap rule, so the session taps slower.

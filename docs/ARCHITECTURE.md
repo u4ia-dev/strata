@@ -306,11 +306,21 @@ LEGATO-INVERT flag. Evaluated per voice per block: the segment's linear position
 amp envelope's value ramps linearly across the block. Envelopes retrigger from their current level, never from zero, so
 voice reuse and retriggers do not click.
 
-**LFO 1, LFO 2** (MVP; 3–4 in v1): SHAPE (sine, triangle, saw up, saw down, square, sample & hold, smooth random, plus
-eight multi-point shapes; drawn shapes in v1), RATE (0.01–40 Hz, or synced 8 bars … 1/32 with dotted and triplet),
-MODE (free: one phase for all voices, aligned to the MIDI clock when it runs; retrigger: per voice, from PHASE at the
-note; envelope: one cycle, then hold), DELAY and RISE (fade-in), PHASE, SMOOTH, and POLY / MONO. Evaluated per block,
-linear between blocks.
+**LFO 1, LFO 2** (MVP; 3–4 in v1): SHAPE (sine, triangle, saw up, saw down, square, sample & hold, smooth random,
+step 4, stairs, pulse, bounce, trapezoid, and DRAWN), RATE (0.01–40 Hz, or synced 8 bars … 1/32 with dotted and
+triplet), MODE (free: one phase for all voices, aligned to the MIDI clock when it runs; retrigger: per voice, from
+PHASE at the note; envelope: one cycle, then hold), DELAY and RISE (fade-in), PHASE, SMOOTH, and POLY / MONO.
+Evaluated per block, linear between blocks.
+
+**Drawn shapes** (Phase 4, at the user's request): each LFO's shape as up to 16 points over a cycle (the first at its
+start, the last at its end, two at one place a step), with a curve between each two: the envelopes' `u / (u + (1 − u)
+2^(4c))`, so a curve split in two at a new point stays the same shape (`k` becomes `k / d` and `d`, `d = u + k (1 −
+u)`). The patch keeps both LFOs' points (`sp_draw_t`); every built-in shape has its points (`SP_SHAPE_PTS`), where
+a drawing starts: exact but for SINE and BOUNCE, whose quarter sines no one curve follows closer than 2.6 % of the
+range (5.3 % on BOUNCE's first bounce). The audio side takes the points as floats at a block's start when they changed
+(`lfo_draw_sync`), never half written: the main loop writes them between `sy_draw_edit` and `sy_draw_done`, a sequence
+count odd while an edit is under way, and a compiler barrier each side; a patch load takes its own. Edited on the
+LFO's POINTS page (§17).
 
 ## 11. Modulation
 
@@ -412,7 +422,8 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
 
 - **Patch**: the parameter values in id order with a count (new parameters take their defaults when older presets
   load), the matrix slots, the two table references (factory id or user table), the macro names, the preset name (16
-  characters) and category (bass, lead, pad, pluck, keys, FX, sequence/arp, other). ~0.6 KiB.
+  characters) and category (bass, lead, pad, pluck, keys, FX, sequence/arp, other), then the LFOs' drawn shapes (`'D'`,
+  each LFO's count of points and its points; a patch without them takes the default's). At most 582 bytes.
 - **Factory presets** (64 at first, up to 128) are constants in the image, written by `tools/gen_presets.py` from
   readable definitions.
 - **User presets**: 128 slots in the user store as A/B sector objects (`storage.c`: commit record last, newest valid copy
@@ -446,9 +457,23 @@ MENU > ACCEL OFF: 1 %); a list, a count or a short range moves one value a deten
 tap: latched); a white key picks the source (the keys light: the pick, the sources in use), a knob sets its depth on
 that knob's parameter (a matrix slot made when needed, freed at 0 when the layer closes); ENV held: the same for
 ENV 2, the keys still playing. HOME held: the MENU. Two new font faces (10 px caps, 12 px semibold) and Z, _ and ±
-cost about 33 KB of flash. Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the filter, LFO, matrix, rack
-and HOME graphs, presets (browser, user slots, save, undo, restore), MIDI learn, help, the rest of the MENU, and
-CONTROLS.md. The draft below is the plan those follow.
+cost about 33 KB of flash.
+
+**After the look stop** (the user's changes, verified in emulator): OCT− / OCT+ with a family button (or REC) held
+step the pages of the section shown, round (OSC A's WAVE, UNISON, SPREAD, PITCH, OUTPUT); the octave stays and the
+held button's release and hold do nothing. The WAVE page's knobs are WT POS, TABLE, WARP, AMOUNT. Each LFO has three
+pages, each with its graph (a cycle of the shape as the audio side plays it: a random shape as five cycles of sample
+levels; where each voice is in its cycle, live while notes sound; the shape, the rate, the mode): POINTS (KNOB 1
+picks a point, round; KNOB 2 moves it along the cycle between its neighbours, the first and last staying at the
+ends; KNOB 3 up and down; KNOB 4 the curve of the segment from it, the last point's into it; the graph marks the
+points, the one picked and that segment), SHAPE (SHAPE, SYNC, RATE, MODE) and TIME (DELAY, RISE, PHASE, SMOOTH). A
+shape other than DRAWN shows its own points; the first edit draws from them ("DRAWN FROM SINE"). LFO tapped twice on
+the POINTS page adds a point left of the one picked (the first point picked: right of it), halfway to the point
+before, on the curve, and picks it (16 points at most; none where two points share a place).
+
+Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the filter, matrix, rack and HOME graphs, presets
+(browser, user slots, save, undo, restore), MIDI learn, help, the rest of the MENU, and CONTROLS.md. The draft below
+is the plan those follow.
 
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
@@ -463,7 +488,7 @@ changed, in strips, so the 12 MHz display keeps up.
 | HOME | HOME (preset, macros on KNOB 1–4), MACROS | the MENU |
 | EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | quick jump: a key per section |
 | ENV | ENV 1, ENV 1 +, ENV 2, ENV 2 + | **assign ENV 2**: turn a knob to set its amount |
-| LFO | LFO 1, LFO 1 +, LFO 2, LFO 2 + | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
+| LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
 | SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount) | — |
 | REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount |
 | FX | DRIVE, CHORUS, DELAY, DELAY +, REVERB, REVERB +, OTT, OTT + | **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
@@ -472,7 +497,7 @@ changed, in strips, so the 12 MHz display keeps up.
 | SAVE | SAVE (a user slot), PRESETS (browse by category) | UNDO |
 | ARP | (v1: the arpeggiator) | — |
 | PLAY | starts and stops the internal clock (synced LFOs and delays; the arp in v1) | — |
-| OCT− / OCT+ | octave; in dialogs back / confirm | both 5 s: UBOOT (Felucca) |
+| OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); in dialogs back / confirm | both 5 s: UBOOT (Felucca) |
 
 PRESETS turns through presets from every page that is not a list. SELECT steps the pages (or, in the MENU, the tempo or
 mod wheel, as Felucca's SELECT option).
