@@ -26,7 +26,8 @@ function check(what, ok) {
   if (!ok) failed++;
   console.log(`emu: ${what.padEnd(100)} ${ok ? "ok" : "FAIL"}`);
 }
-const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12,
+            OCTUP: 13 };                                                                       // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, OTT: 16, EQ: 17,
               MENU: 18, GLOBAL: 19, SAVE: 20, BROWSE: 21 };                                   // SEC_*
@@ -536,6 +537,27 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 0.1);
   tap(ex, B.EDIT);
 }
+{                                               // SEQ: the matrix, a slot at a time (a fresh unit)
+  const m = await boot(), mscr = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
+  const mtap = (b) => { m.web_buttons(1 << b); play(m, 0.03); m.web_buttons(0); play(m, 0.35); };
+  play(m, 0.2);
+  mtap(B.SEQ);
+  const sec = m.web_test_page_section(), pg = cstr(m, m.web_test_page_name()), first = m.web_test_page_virt(1);
+  m.web_enc(E.K1, -1);                          // KNOB 1: the slot before slot 1, round: slot 8
+  play(m, 0.12);
+  const SRC8 = m.web_test_page_virt(1), DST8 = m.web_test_page_virt(2), AMT8 = m.web_test_page_virt(3);
+  const s0 = m.web_test_value(SRC8), a = mscr();
+  m.web_enc(E.K2, 3);                           // KNOB 2: its source, three on from NONE: LFO 1
+  play(m, 0.12);
+  m.web_enc(E.K3, 2);                           // KNOB 3: where it goes, the second parameter that can be modulated
+  play(m, 0.12);
+  for (let i = 0; i < 6; i++) { m.web_enc(E.K4, 1); play(m, 0.004); }   // KNOB 4: how much, quickly
+  play(m, 0.1);
+  const b = mscr(), src = m.web_test_value(SRC8), dst = m.web_test_value(DST8), amt = m.web_test_value(AMT8);
+  check(`SEQ: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b, 22, 136)} pixels`,
+        sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
+        s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b, 22, 136) > 300);
+}
 {                                               // the chorus's taps: still in silence, moving with a note
   tap(ex, B.FX);
   ex.web_enc(E.ALGO, SEC.CHORUS - ex.web_test_page_section());
@@ -731,7 +753,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     }
     return -1;
   };
-  const CH_ON = param(SEC.CHORUS, "MORE", 1), OT_ON = param(SEC.OTT, "BANDS", 3), M1 = param(SEC.MATRIX, "SLOT 1", 0);
+  const CH_ON = param(SEC.CHORUS, "MORE", 1), OT_ON = param(SEC.OTT, "BANDS", 3);
+  param(SEC.MATRIX, "SLOTS", 0);
+  const M1 = z.web_test_page_virt(1);           // (slot 1 picked: its SOURCE)
   z.web_test_set(CH_ON, 1);                     // (every live graph live: the chorus and OTT on, LFO 1 on the EQ's MID)
   z.web_test_set(OT_ON, 1);
   z.web_test_set(ID.EQ_ON, 1);

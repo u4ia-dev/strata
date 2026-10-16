@@ -309,6 +309,7 @@ EXPORT uint32_t web_test_go(uint32_t p)
 EXPORT uint32_t web_test_page_section(void) { return UI_PG[ui.page].sec; }
 EXPORT const char *web_test_page_name(void) { return UI_PG[ui.page].name; }
 EXPORT int32_t web_test_page_param(uint32_t k) { return k < 4u ? UI_PG[ui.page].id[k] : -1; }
+EXPORT int32_t web_test_page_virt(uint32_t k) { return k < 4u ? ui_virt(UI_PG[ui.page].id[k]) : -1; }   /* (the EQ point picked's, the matrix slot's) */
 EXPORT int32_t web_test_value(uint32_t id) { return id < SP_COUNT ? sy_patch.p[id] : 0; }
 EXPORT void web_test_set(uint32_t id, int32_t v)
 {
