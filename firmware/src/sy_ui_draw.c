@@ -5,12 +5,13 @@
  *     an envelope's or LFO's tabs, the effects that are on; in the MOD layer the banner (the source, what it set);
  *   display 240 x 114 at (0, 22): the window (228 x 110) and the page's graph: the table in 3D (its frames, the
  *     current one, the range its modulation sweeps), one frame in 2D (warped, the unwarped one behind) with the
- *     unison's voices, an envelope (the other one behind, the voices on it), a list of the section, the palettes;
+ *     unison's voices, an envelope (the other one behind, the voices on it), an LFO's cycle (its points, the one
+ *     picked, the segment KNOB 4 curves; where the voices are), a list of the section, the palettes;
  *   knob cells 60 x 76 at (60 k, 136): a dial (the value's arc, the modulation's halos, the pointer) or a list's pill,
  *     the name, the value (the MOD layer: the picked source's depth);
  *   footer 240 x 28 at (0, 212): the mod sources' chips (lit: moving something on this page; the MOD layer's pick
- *     filled), or a word for a moment;
- * and sy_ui_frame: what changed, the live graphs (voices on an envelope, a table being built), the LEDs. */
+ *     filled), or a word for a moment, or a hint (the MENU, an LFO's POINTS);
+ * and sy_ui_frame: what changed, the live graphs (voices on an envelope or an LFO, a table being built), the LEDs. */
 
 #define R_DISP_Y 22
 #define R_KNOB_Y 136
@@ -158,21 +159,53 @@ static void ui_pill(const char *s, int dim)
     ui_text_c(9, 14 + CAP_IN(XS, 20), 42, &AF_XS, s, dim ? sk.faint : sk.text, bg);
 }
 
+/* a dial at t (0..1): the value's arc (bip: from the middle), the knob, the pointer */
+static void ui_dial_at(float t, int bip, int dim)
+{
+    float dx, dy;
+    cv_arc(30.0f, 24.0f, 14.0f, 3.0f, bip ? 0.5f : 0.0f, t, dim ? sk.faint : sk.value);
+    cv_disc(30.0f, 24.0f, 10.0f, sk.dl);
+    cv_disc(30.0f, 24.0f, 9.0f, sk.disc);
+    sy_dial_dir(t, &dx, &dy);
+    cv_seg(30.0f + 3.5f * dx, 24.0f + 3.5f * dy, 30.0f + 8.5f * dx, 24.0f + 8.5f * dy, 1.6f, dim ? sk.dim : sk.text);
+}
+
 static void ui_dial(uint32_t id, int dim)           /* id's value: its arc, its modulation, the pointer */
 {
     const sp_desc_t *d = &SP[id];
-    float t = (float)(sy_patch.p[id] - d->lo) / (float)(d->hi - d->lo), olo, ohi, plo, phi, dx, dy;
+    float t = (float)(sy_patch.p[id] - d->lo) / (float)(d->hi - d->lo), olo, ohi, plo, phi;
     cv_arc(30.0f, 24.0f, 14.0f, 3.0f, 0.0f, 1.0f, sk.track);
     ui_mod_span(id, ui.mod ? ui.mod_src : SRC_COUNT, &olo, &ohi, &plo, &phi);
     if (ohi > olo)                                  /* the others (the MOD layer: grey under the pick's) */
         cv_arc(30.0f, 24.0f, 19.0f, 2.5f, t + olo, t + ohi, ui.mod ? sk.modoff : ohi > 0.0f ? sk.mod : sk.modneg);
     if (phi > plo)
         cv_arc(30.0f, 24.0f, 19.0f, 2.5f, t + plo, t + phi, phi > 0.0f ? sk.mod : sk.modneg);
-    cv_arc(30.0f, 24.0f, 14.0f, 3.0f, d->lo < 0 ? 0.5f : 0.0f, t, dim ? sk.faint : sk.value);
-    cv_disc(30.0f, 24.0f, 10.0f, sk.dl);
-    cv_disc(30.0f, 24.0f, 9.0f, sk.disc);
-    sy_dial_dir(t, &dx, &dy);
-    cv_seg(30.0f + 3.5f * dx, 24.0f + 3.5f * dy, 30.0f + 8.5f * dx, 24.0f + 8.5f * dy, 1.6f, dim ? sk.dim : sk.text);
+    ui_dial_at(t, d->lo < 0, dim);
+}
+
+/* an LFO's POINTS page, KNOB 1-4: the point picked of the points (a pill), its place, its level, the curve from it
+ * (the last point: into it); the place dim for the first and the last (they stay at the ends) */
+static void ui_lfo_cell(int32_t id)
+{
+    static const char *const NAME[4] = {"POINT", "TIME", "LEVEL", "CURVE"};
+    uint32_t k = ui_lfo(), i;
+    sp_draw_t tp;
+    const sp_draw_t *d = ui_pts(k, &tp);
+    char t[16];
+    int dim = ui.mod != 0;
+    i = ui_lpt(k, d);
+    if (id == UI_LPT) {
+        sp_fix(sp_put(sp_fix(t, (int32_t)i + 1, 0u, 0), "/"), d->n, 0u, 0);
+        ui_pill(t, dim);
+    } else {
+        int32_t v = id == UI_LX ? d->x[i] : id == UI_LY ? d->y[i] : d->c[i + 1u < d->n ? i : i - 1u];
+        int still = dim || (id == UI_LX && (i == 0u || i + 1u == d->n));
+        cv_arc(30.0f, 24.0f, 14.0f, 3.0f, 0.0f, 1.0f, sk.track);
+        ui_dial_at(id == UI_LX ? (float)v * 0.001f : (float)(v + 1000) * 0.0005f, id != UI_LX, still);
+        sp_put(sp_fix(t, v, 1u, id != UI_LX), "%");
+        ui_text_c(0, 58, 60, &AF_S, t, still ? sk.dim : sk.text, sk.ground);
+    }
+    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_LPT], dim ? sk.faint : sk.label, sk.ground);
 }
 
 static void ui_draw_knob(uint32_t k)
@@ -180,7 +213,9 @@ static void ui_draw_knob(uint32_t k)
     int32_t id = UI_PG[ui.page].id[k];
     char t[SP_TEXT_N + 4];
     cv_begin(60, 76, sk.ground);
-    if (id >= UI_ITEM) {                            /* the MENU's items */
+    if (id >= UI_LPT) {
+        ui_lfo_cell(id);
+    } else if (id >= UI_ITEM) {                     /* the MENU's items */
         ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0);
         ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", sk.label, sk.ground);
     } else if (id >= 0) {
@@ -216,6 +251,8 @@ static void ui_draw_foot(void)
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.toast, sk.text, sk.ground);
     } else if (ui_sec() == SEC_MENU) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 1: COLOR \xB7 KNOB 2: ACCEL", sk.dim, sk.ground);
+    } else if (UI_PG[ui.page].id[0] == UI_LPT && !ui.mod) {
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "LFO TWICE: ADD A POINT", sk.dim, sk.ground);
     } else {
         for (i = 0; i < 8u; i++) {
             int32_t x = 10 + (int32_t)i * 28;
@@ -504,6 +541,76 @@ static void ui_g_env(void)
     ui_label(-1, 0, w, sk.faint);
 }
 
+/* an LFO: a cycle of its shape, as the audio side plays it (a random one: five cycles of sample levels); on the
+ * POINTS page its points, the one picked and the segment KNOB 4 curves; where the voices are in their cycles */
+#define UI_LY(v) ((float)WY + 54.0f - (v) * 34.0f)    /* an LFO's value as a row of the window */
+static void ui_g_lfo(void)
+{
+    uint32_t k = ui_lfo(), b = UI_LB(k), shape = (uint32_t)sy_patch.p[SP_L1_SHAPE + b], i;
+    uint32_t mode = (uint32_t)sy_patch.p[SP_L1_MODE + b], sync = (uint32_t)sy_patch.p[SP_L1_SYNC + b];
+    int rnd = ui_lfo_rnd(shape), pts = UI_PG[ui.page].id[0] == UI_LPT && !rnd, drawn = rnd || shape == LFO_DRAW;
+    sp_draw_t tp;
+    const sp_draw_t *d = ui_pts(k, &tp);
+    lfo_draw_t dr;
+    lfo_par_t lp;
+    lfo_t l0;
+    float ys[209], ph = (float)sy_patch.p[SP_L1_PHASE + b] * (1.0f / 360.0f);
+    char w[32];
+    lfo_draw_of(&dr, d);
+    memset(&lp, 0, sizeof lp);
+    memset(&l0, 0, sizeof l0);
+    lp.shape = (uint8_t)shape;
+    lp.dr = &dr;
+    for (i = 1; i < 4u; i++)                        /* the grid: the cycle's quarters, the middle */
+        cv_rect(WX + 8 + (int32_t)i * 52, WY + 17, 1, 75, sk.grid);
+    cv_rect(WX + 8, sy_floori(UI_LY(0.0f)), 209, 1, sk.grid2);
+    for (i = 0; i < 209u; i++) {
+        float x = sy_minf((float)i / 208.0f, 0.99999f);
+        ys[i] = UI_LY(drawn ? lfo_draw_at(&dr, (float)i / 208.0f) : lfo_shape(&l0, &lp, x));
+    }
+    cv_under(WX + 8, ys, 209u, UI_LY(0.0f), sk.wfill);
+    cv_curve(WX + 8, ys, 209u, 1.6f, sk.sound);
+    if (pts) {                                      /* the points, the segment KNOB 4 curves, the one picked */
+        uint32_t p = ui_lpt(k, d), g = p + 1u < d->n ? p : p - 1u;
+        int32_t c0 = sy_floori((float)d->x[g] * 0.208f + 0.5f), c1 = sy_floori((float)d->x[g + 1u] * 0.208f + 0.5f);
+        if (c1 > c0)
+            cv_curve(WX + 8 + c0, ys + c0, (uint32_t)(c1 - c0 + 1), 1.6f, sk.now);
+        for (i = 0; i < d->n; i++) {
+            int32_t x = WX + 8 + sy_floori((float)d->x[i] * 0.208f + 0.5f);
+            int32_t y = sy_floori(UI_LY((float)d->y[i] * 0.001f) + 0.5f);
+            if (i == p)
+                continue;
+            cv_rect(x - 2, y - 2, 5, 5, sk.sound);
+            cv_rect(x - 1, y - 1, 3, 3, sk.display);
+        }
+        cv_rect(WX + 8 + sy_floori((float)d->x[p] * 0.208f + 0.5f) - 3,
+                sy_floori(UI_LY((float)d->y[p] * 0.001f) + 0.5f) - 3, 7, 7, sk.now);
+    }
+    if (!rnd)                                       /* the voices: where each is in its cycle (FREE: one for all) */
+        for (i = 0; i < SY_NVOICE; i++) {
+            const lfo_t *l = mode == LFOM_FREE ? &sy_glfo[k] : &sy_v[i].lfo[k];
+            float x = (float)(l->ph >> 8) * (1.0f / 16777216.0f), y;
+            if (!sy_v[i].on)
+                continue;
+            if (mode == LFOM_FREE)
+                x += ph, x -= (float)sy_floori(x);
+            y = UI_LY(drawn ? lfo_draw_at(&dr, x) : lfo_shape(&l0, &lp, x));
+            cv_disc((float)WX + 8.0f + x * 208.0f, y, 2.8f, sk.display);
+            cv_disc((float)WX + 8.0f + x * 208.0f, y, 2.2f, sk.now);
+            if (mode == LFOM_FREE)
+                break;
+        }
+    ui_label(0, 1, LFO_NAMES[shape < LFO_NSHAPE ? shape : 0], sk.dim);
+    if (sync && sync < 18u)
+        sp_put(w, SYNC_NAMES[sync]);
+    else
+        sp_text(SP_L1_RATE + b, sy_patch.p[SP_L1_RATE + b], w);
+    ui_label(-1, 1, w, sk.dim);
+    sp_text(SP_L1_MODE + b, (int32_t)mode, w);
+    ui_label(0, 0, w, sk.faint);
+    ui_label(-1, 0, rnd ? "RANDOM \xB7 5 CYCLES" : "1 CYCLE", sk.faint);
+}
+
 /* a section's parameters as a list, the page's rows marked */
 static void ui_g_list(void)
 {
@@ -576,6 +683,7 @@ static void ui_draw_disp(void)
     case G_WT2D: ui_g_wt2d(0); break;
     case G_UNI: ui_g_wt2d(1); break;
     case G_ENV: ui_g_env(); break;
+    case G_LFO: ui_g_lfo(); break;
     case G_COLOR: ui_g_color(); break;
     default: ui_g_list(); break;
     }
@@ -624,10 +732,10 @@ static void sy_ui_frame(void)
 {
     uint32_t g = UI_PG[ui.page].graph, i, live = 0;
     static uint8_t was_live, was_busy;
-    if (g == G_ENV)
+    if (g == G_ENV || g == G_LFO)
         for (i = 0; i < SY_NVOICE; i++)
             live |= sy_v[i].on;
-    if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {   /* the voices move on the envelope */
+    if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {   /* the voices move on the envelope, the LFO */
         ui.live_t = fm1_ms;
         ui.dirty |= D_DISP;
         was_live = (uint8_t)live;

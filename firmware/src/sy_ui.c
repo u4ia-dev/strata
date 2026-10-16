@@ -4,16 +4,22 @@
  *   - Pages: a section's parameters four to a page, KNOB 1-4 left to right as on the panel, and what the display
  *     draws. A family button shows its sections' pages: a tap, the next page (EDIT: of the section ALGORITHM
  *     picked; the other families through all of theirs); ALGORITHM picks the family's section, SELECT steps its
- *     pages. HOME held: the MENU (COLOR: the palette; ACCEL: the knobs' feel).
+ *     pages; OCT- / OCT+ with a family button (or REC) held, the section's pages, round (the octave stays, the
+ *     button's release and hold do nothing). HOME held: the MENU (COLOR: the palette; ACCEL: the knobs' feel).
  *   - Knobs: speed-sensitive (a slow turn 0.1 % a detent, a quick one up to 5 %; ACCEL OFF: 1 % a detent); a list,
  *     a count or a short range one value a detent.
+ *   - An LFO's POINTS page: KNOB 1 picks a point (round), KNOB 2 moves it along the cycle (between its
+ *     neighbours; the first and last stay at the ends), KNOB 3 up and down, KNOB 4 curves the segment from it (the
+ *     last point: the one into it). A shape other than DRAWN shows its points; the first edit draws from them
+ *     (SHAPE DRAWN). LFO tapped twice on the page: a point left of the one picked, halfway to the one before (the
+ *     first point picked: right of it), on the curve.
  *   - The MOD layer: REC held (a double tap latches it, a tap lets it go). A white key picks the source, a knob
  *     sets that source's depth on its parameter: a matrix slot, made when needed and freed when the layer closes
  *     at 0. ENV held: the same for ENV 2 (an envelope onto a knob).
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
- * After the look stop: the LFO, FX, GLO and SCL layers, presets and SAVE, MIDI learn, help, the rest of the MENU,
- * the graphs of the filter, the LFOs, the matrix and the rack. Needs sy_app.c's keys and sounds (declared here),
+ * Still to come: the LFO, FX, GLO and SCL layers, presets and SAVE, MIDI learn, help, the rest of the MENU, the
+ * graphs of the filter, the matrix and the rack. Needs sy_app.c's keys and sounds (declared here),
  * panel.c, gfx.c, sy_gfx.c, the engine and sy_text.c. */
 
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
@@ -22,17 +28,17 @@ static int32_t sy_app_oct(void);
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 
 /* ------------------------------------------------------------------------------------------- pages --- */
-#define UI_ITEM 1000                                /* an item that is no parameter: the MENU's */
-enum { UI_COLOR = UI_ITEM, UI_ACCEL };
+#define UI_ITEM 1000                                /* an item that is no parameter: the MENU's, an LFO's points */
+enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC };
 #define SEC_MENU SEC_COUNT                          /* (a section of the UI's own) */
-enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_COLOR };
+enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_COLOR };
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
     char name[8];                                   /* the page's name in the header */
     int16_t id[4];                                  /* KNOB 1-4: parameters (or UI_* items), -1 none */
 } ui_page_t;
 #define UI_OSC(O, S)                                                                                      \
-    {S, G_WT3D, "WAVE", {SP_##O##_TABLE, SP_##O##_POS, SP_##O##_WARP, SP_##O##_WAMT}},                     \
+    {S, G_WT3D, "WAVE", {SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT}},                     \
     {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH}},                \
     {S, G_UNI, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},              \
     {S, G_WT2D, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                  \
@@ -41,8 +47,9 @@ typedef struct {
     {S, G_ENV, "ADSR", {SP_##E##_ATK, SP_##E##_DEC, SP_##E##_SUS, SP_##E##_REL}},                          \
     {S, G_ENV, "SHAPE", {SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV}},
 #define UI_LFO(L, S)                                                                                      \
-    {S, G_LIST, "SHAPE", {SP_##L##_SHAPE, SP_##L##_SYNC, SP_##L##_RATE, SP_##L##_MODE}},                   \
-    {S, G_LIST, "TIME", {SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH}},
+    {S, G_LFO, "POINTS", {UI_LPT, UI_LX, UI_LY, UI_LC}},                                                   \
+    {S, G_LFO, "SHAPE", {SP_##L##_SHAPE, SP_##L##_SYNC, SP_##L##_RATE, SP_##L##_MODE}},                    \
+    {S, G_LFO, "TIME", {SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH}},
 static const ui_page_t UI_PG[] = {
     UI_OSC(A, SEC_OSCA)
     UI_OSC(B, SEC_OSCB)
@@ -116,7 +123,9 @@ static struct {
     int16_t mod_last;                               /* the parameter it set last (the banner), -1 none */
     uint32_t bt_t[NB], tap_t[NB];                   /* a button's press, its last tap */
     uint16_t bt_down, bt_held;                      /* buttons down; held past HOLD (their layer on) */
+    uint16_t bt_chord;                              /* .. held while OCT stepped the pages (no tap, no layer) */
     uint16_t prev_page;                             /* the page before the last tap (a double tap puts it back) */
+    uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint32_t en_t[NE];                              /* an encoder's last turn (the speed) */
     int8_t en_dir[NE];
     char toast[24];                                 /* a word in the footer, until toast_t */
@@ -252,35 +261,29 @@ static void ui_go(uint32_t page)
     ui.dirty = D_ALL;
 }
 
-/* a family button's tap: its page (another family), else the next of the section (EDIT) or of the family */
-static void ui_family_tap(uint32_t f)
+/* s pages on, round: the family's (SELECT, a family button's tap), the section's (sec: EDIT's tap, OCT- / OCT+
+ * with a family button held) */
+static void ui_step_pages(int32_t s, int sec)
 {
-    uint32_t p = ui.page, n;
-    if (ui.fam != f) {
-        ui_go(ui_in_fam(ui.fpage[f], f) ? ui.fpage[f] : ui_first_page(FAM_SECS[f][0]));
-        return;
-    }
-    for (n = 0; n < UI_NPG; n++) {
-        p = (p + 1u) % UI_NPG;
-        if (f == FAM_EDIT ? UI_PG[p].sec == ui_sec() : ui_in_fam(p, f))
-            break;
-    }
-    ui_go(p);
-}
-
-/* SELECT: the family's pages */
-static void ui_step_page(int32_t s)
-{
-    uint32_t p = ui.page, n;
+    uint32_t p = ui.page, n, cur = ui_sec();
     while (s) {
         for (n = 0; n < UI_NPG; n++) {
             p = s > 0 ? (p + 1u) % UI_NPG : (p + UI_NPG - 1u) % UI_NPG;
-            if (ui_in_fam(p, ui.fam))
+            if (sec ? UI_PG[p].sec == cur : ui_in_fam(p, ui.fam))
                 break;
         }
         s += s > 0 ? -1 : 1;
     }
     ui_go(p);
+}
+
+/* a family button's tap: its page (another family), else the next of the section (EDIT) or of the family */
+static void ui_family_tap(uint32_t f)
+{
+    if (ui.fam != f)
+        ui_go(ui_in_fam(ui.fpage[f], f) ? ui.fpage[f] : ui_first_page(FAM_SECS[f][0]));
+    else
+        ui_step_pages(1, f == FAM_EDIT);
 }
 
 /* ALGORITHM: the family's sections (each on the page it showed last) */
@@ -319,6 +322,121 @@ static int32_t ui_accel(uint32_t e, int32_t s, int32_t range)
         return s * (range > 100 ? range / 100 : 1);
     m = per >= 50u ? 1u : per >= 30u ? 2u : per >= 20u ? 4u : per >= 12u ? 10u : per >= 7u ? 25u : 50u;
     return s * (int32_t)m * unit;
+}
+
+/* ------------------------------------------------------------------------------------ LFO points --- */
+#define UI_LB(k) ((k) ? (uint32_t)(SP_L2_SHAPE - SP_L1_SHAPE) : 0u)
+static uint32_t ui_lfo(void) { return ui_sec() == SEC_LFO2; }   /* the LFO shown: 0, 1 */
+static int ui_lfo_rnd(uint32_t shape) { return shape == LFO_SH || shape == LFO_SMOOTH; }
+
+/* LFO k's points as shown: its drawn shape, or (SHAPE another) that shape's, into t */
+static const sp_draw_t *ui_pts(uint32_t k, sp_draw_t *t)
+{
+    uint32_t shape = (uint32_t)sy_patch.p[SP_L1_SHAPE + UI_LB(k)];
+    if (shape == LFO_DRAW)
+        return &sy_patch.draw[k];
+    sp_shape_pts(shape, t);
+    return t;
+}
+static uint32_t ui_lpt(uint32_t k, const sp_draw_t *d) { return ui.lpt[k] < d->n ? ui.lpt[k] : d->n - 1u; }
+
+/* an edit of LFO k's points: begun (SHAPE another: its points become the drawn shape), then done (SHAPE DRAWN,
+ * once the audio side can take the points whole) */
+static sp_draw_t *ui_pts_edit(uint32_t k)
+{
+    uint32_t shape = (uint32_t)sy_patch.p[SP_L1_SHAPE + UI_LB(k)];
+    sy_draw_edit();
+    if (shape != LFO_DRAW)
+        sp_shape_pts(shape, &sy_patch.draw[k]);
+    return &sy_patch.draw[k];
+}
+static void ui_pts_done(uint32_t k)
+{
+    int16_t *sh = &sy_patch.p[SP_L1_SHAPE + UI_LB(k)];
+    sy_draw_done();
+    if (*sh != LFO_DRAW) {
+        char t[24];
+        sp_put(sp_put(t, "DRAWN FROM "), LFO_NAMES[*sh < LFO_NSHAPE ? *sh : 0]);
+        *sh = LFO_DRAW;
+        ui_toast(t);
+    }
+    ui.dirty |= D_KNOBS | D_DISP;
+}
+
+static int16_t ui_curve_of(float k)                 /* a segment's 2^(4 c) as its curve c */
+{
+    return (int16_t)sy_clampi(sy_floori(sy_log2f(k) * 250.0f + 0.5f), -1000, 1000);
+}
+
+/* KNOB 1-4 on the POINTS page: the point picked, its place, its level, the curve from it (not while a sound
+ * loads: it brings its own points) */
+static void ui_lfo_turn(int32_t item, int32_t s, uint32_t e)
+{
+    uint32_t k = ui_lfo(), i, g;
+    sp_draw_t t, *w;
+    const sp_draw_t *d = ui_pts(k, &t);
+    if (sy_next_st)
+        return;
+    i = ui_lpt(k, d);
+    if (item == UI_LPT) {
+        ui.lpt[k] = (uint8_t)(((int32_t)i + s % (int32_t)d->n + (int32_t)d->n) % (int32_t)d->n);
+        ui.dirty |= D_KNOBS | D_DISP;
+        return;
+    }
+    if (item == UI_LX && (i == 0u || i + 1u == d->n))
+        return;                                     /* (the first and the last stay at the cycle's ends) */
+    ui.lpt[k] = (uint8_t)i;
+    w = ui_pts_edit(k);
+    g = i + 1u < w->n ? i : i - 1u;                 /* the segment from the point (the last: the one into it) */
+    if (item == UI_LX)
+        w->x[i] = (int16_t)sy_clampi(w->x[i] + ui_accel(e, s, 1000), w->x[i - 1u], w->x[i + 1u]);
+    else if (item == UI_LY)
+        w->y[i] = (int16_t)sy_clampi(w->y[i] + ui_accel(e, s, 2000), -1000, 1000);
+    else
+        w->c[g] = (int16_t)sy_clampi(w->c[g] + ui_accel(e, s, 2000), -1000, 1000);
+    ui_pts_done(k);
+}
+
+/* LFO tapped twice on the POINTS page: a point left of the one picked (the first: right of it), halfway to the
+ * one before, on the curve between them, which it splits in two (the shape stays as it was); it is picked */
+static void ui_lfo_add(void)
+{
+    uint32_t k = ui_lfo(), a, j;
+    sp_draw_t t, *w;
+    const sp_draw_t *d = ui_pts(k, &t);
+    int32_t x0, x1, xm;
+    float u, kc, dd;
+    if (sy_next_st)
+        return;
+    if (d->n >= SP_NPT) {
+        ui_toast("16 POINTS AT MOST");
+        return;
+    }
+    a = ui_lpt(k, d);
+    a = a ? a - 1u : 0u;                            /* the segment a .. a + 1 takes it */
+    x0 = d->x[a];
+    x1 = d->x[a + 1u];
+    if (x1 - x0 < 2) {
+        ui_toast("NO ROOM THERE");
+        return;
+    }
+    xm = (x0 + x1) / 2;
+    w = ui_pts_edit(k);
+    u = (float)(xm - x0) / (float)(x1 - x0);
+    kc = sy_exp2f(4.0f * (float)w->c[a] * 0.001f);
+    dd = u + kc * (1.0f - u);                       /* the curve split at u: 2^(4 c) of kc / dd before, dd after */
+    for (j = w->n; j > a + 1u; j--) {
+        w->x[j] = w->x[j - 1u];
+        w->y[j] = w->y[j - 1u];
+        w->c[j] = w->c[j - 1u];
+    }
+    w->x[a + 1u] = (int16_t)xm;
+    w->y[a + 1u] = (int16_t)sy_floori((float)w->y[a] + (float)(w->y[a + 2u] - w->y[a]) * u / dd + 0.5f);
+    w->c[a + 1u] = ui_curve_of(dd);
+    w->c[a] = ui_curve_of(kc / dd);
+    w->n++;
+    ui.lpt[k] = (uint8_t)(a + 1u);
+    ui_pts_done(k);
 }
 
 /* the MOD layer: source pick's depth on parameter id, by s steps */
@@ -373,8 +491,8 @@ static void ui_mod_close(void)
     ui.dirty = D_ALL;
 }
 
-/* the MENU's items */
-static void ui_item_turn(int32_t item, int32_t s)
+/* the items: the MENU's, an LFO's points (not in the MOD layer: nothing there to modulate) */
+static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
 {
     if (item == UI_COLOR) {
         ui.pal = (uint8_t)((ui.pal + (uint32_t)(s % (int32_t)SY_NPAL + (int32_t)SY_NPAL)) % SY_NPAL);
@@ -383,6 +501,8 @@ static void ui_item_turn(int32_t item, int32_t s)
     } else if (item == UI_ACCEL) {
         ui.accel = s > 0;
         ui.dirty |= D_KNOBS | D_DISP;
+    } else if (!ui.mod) {
+        ui_lfo_turn(item, s, e);
     }
 }
 
@@ -393,7 +513,7 @@ static void ui_knob(uint32_t k, int32_t s)
     if (id < 0)
         return;
     if (id >= UI_ITEM) {
-        ui_item_turn(id, s);
+        ui_item_turn(id, s, EN_K1 + k);
         return;
     }
     if (ui.mod) {
@@ -427,11 +547,19 @@ static void sy_ui_touch(void) { ui.dirty |= D_KNOBS | D_DISP | D_HEAD | D_FOOT; 
 
 /* ---------------------------------------------------------------------------------------- buttons --- */
 static int ui_has_layer(uint32_t b) { return b == B_REC || b == B_ENV; }
+#define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_SEQ) | (1u << B_FX) | \
+                  (1u << B_GLO) | (1u << B_REC))    /* held with OCT- / OCT+: the section's pages */
 
 static void ui_press(uint32_t b)
 {
     if (b == B_OCTDN || b == B_OCTUP) {
         char t[16] = "KEYS OCT ";
+        uint16_t held = (uint16_t)(ui.bt_down & UI_CHORD);
+        if (held) {
+            ui.bt_chord |= held;
+            ui_step_pages(b == B_OCTUP ? 1 : -1, 1);
+            return;
+        }
         sy_app_octave(b == B_OCTUP ? 1 : -1);
         sp_fix(t + 9, sy_app_oct(), 0u, 1);
         ui_toast(t);
@@ -463,6 +591,12 @@ static void ui_release(uint32_t b, int held)
         ui.tap_t[b] = 0;
         return;
     }
+    if (b == B_LFO && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod && UI_PG[ui.prev_page].id[0] == UI_LPT) {
+        ui_go(ui.prev_page);                        /* twice on the POINTS page: a point (the page step undone) */
+        ui_lfo_add();
+        ui.tap_t[b] = 0;
+        return;
+    }
     ui.tap_t[b] = fm1_ms;
     if (ui.mod == 2u && b == ui.mod_btn) {          /* a tap lets a latched layer go */
         ui_mod_close();
@@ -485,18 +619,21 @@ static void ui_buttons(void)
         if ((pr >> panel.btn[b]) & 1u) {
             ui.bt_down |= (uint16_t)bit;
             ui.bt_held &= (uint16_t)~bit;
+            ui.bt_chord &= (uint16_t)~bit;
             ui.bt_t[b] = fm1_ms;
             ui_press(b);
         }
         if ((ui.bt_down & bit) && !(ui.bt_held & bit) && fm1_ms - ui.bt_t[b] >= HOLD_MS[settings_hold % 4u]) {
             ui.bt_held |= (uint16_t)bit;
-            ui_hold(b);
+            if (!(ui.bt_chord & bit))               /* (held for OCT's pages: no layer) */
+                ui_hold(b);
         }
         if ((rel >> panel.btn[b]) & 1u) {
             int held = !!(ui.bt_held & bit);
             ui.bt_down &= (uint16_t)~bit;
             ui.bt_held &= (uint16_t)~bit;
-            ui_release(b, held);
+            if (held || !(ui.bt_chord & bit))       /* (held for OCT's pages: no tap) */
+                ui_release(b, held);
         }
     }
 }
@@ -526,7 +663,7 @@ static void sy_ui_ms(void)
         if ((s = panel_enc(EN_K1 + k)) != 0)
             ui_knob(k, s);
     if ((s = panel_enc(EN_SELECT)) != 0)
-        ui_step_page(s);
+        ui_step_pages(s, 0);
     if ((s = panel_enc(EN_ALGO)) != 0)
         ui_step_section(s);
     if ((s = panel_enc(EN_PRESET)) != 0)
