@@ -27,7 +27,7 @@ const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };        
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19 };   // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
-             FX_ORDER: 177,
+             FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 
@@ -472,18 +472,42 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_enc(E.SELECT, -1);
   play(ex, 0.03);
   check(`FX: ALGORITHM through six effects (${secs}), round (${round}); the EQ's pages ${eq1[0]} (${eq1.slice(1)}), ${eq2[0]} (${eq2.slice(1)})`,
-        secs.join() === [12, 13, 14, 15, 16, 17].join() && round === SEC.DRIVE && eq1[0] === "GAIN" &&
-        eq1.slice(1).join() === [ID.EQ_LOW, ID.EQ_MID, ID.EQ_HIGH, ID.EQ_ON].join() && eq2[0] === "FREQ" &&
-        eq2.slice(1).join() === [ID.EQ_LFREQ, ID.EQ_MFREQ, ID.EQ_Q, ID.EQ_HFREQ].join());
+        secs.join() === [12, 13, 14, 15, 16, 17].join() && round === SEC.DRIVE && eq1[0] === "POINTS" &&
+        eq1.slice(1).join() === [ID.EQPT, ID.EQF, ID.EQG, ID.EQQ].join() && eq2[0] === "GAINS" &&
+        eq2.slice(1).join() === [ID.EQ_LOW, ID.EQ_MID, ID.EQ_HIGH, ID.EQ_ON].join());
+  ex.web_enc(E.K1, 1);                          // POINTS: MID picked, its GAIN (KNOB 3) turned
+  play(ex, 0.12);
   const before = scr();
-  for (let i = 0; i < 3; i++) { ex.web_enc(E.K2, 1); play(ex, 0.12); }
+  for (let i = 0; i < 3; i++) { ex.web_enc(E.K3, 1); play(ex, 0.12); }
   const act = ex.web_test_act(), ghost = ex.web_test_ghost(), mid = ex.web_test_value(ID.EQ_MID), lit = scr();
+  ex.web_enc(E.K4, 2);                          // .. its Q, and the shelves' (LOW: LO Q)
+  play(ex, 0.12);
+  const q = ex.web_test_value(ID.EQ_Q);
+  ex.web_enc(E.K1, -1);
+  play(ex, 0.03);
+  ex.web_enc(E.K4, 1);
+  play(ex, 0.12);
+  const lq = ex.web_test_value(ID.EQ_LQ);
   play(ex, 1.2);
   const act2 = ex.web_test_act(), ghost2 = ex.web_test_ghost(), rest = scr();
-  check(`EQ GAIN: KNOB 2 turned (MID ${mid}): its cell lit (knob ${act + 1}), the curve before the turn kept (${ghost}), ${changed(before, lit)} pixels; a second on, let go (${act2 === 255 ? "none" : act2}, ${ghost2}): ${changed(lit, rest)} pixels back`,
-        mid === 3 && act === 1 && ghost === 1 && changed(before, lit) > 200 && act2 === 255 && ghost2 === 0 &&
-        changed(lit, rest) > 200);
-  ex.web_test_set(ID.EQ_MID, 0);
+  check(`EQ POINTS: MID picked, KNOB 3 its GAIN (${mid}), its cell lit (knob ${act + 1}), the curve before kept (${ghost}), ${changed(before, lit)} pixels; KNOB 4 its Q (${q}); LOW's: LO Q (${lq}); a second on, let go (${act2 === 255 ? "none" : act2}, ${ghost2}), ${changed(lit, rest)} pixels back`,
+        mid === 3 && act === 2 && ghost === 1 && changed(before, lit) > 200 && q === 402 && lq === 301 &&
+        act2 === 255 && ghost2 === 0 && changed(lit, rest) > 200);
+  ex.web_enc(E.K1, 1);                          // the MOD layer on POINTS: KNOB 3 sets LFO 1's depth on MID's GAIN
+  play(ex, 0.03);
+  ex.web_buttons(1 << B.REC);
+  play(ex, 0.6);
+  ex.web_keys(1 << 4);                          // A3: LFO 1
+  play(ex, 0.03);
+  ex.web_keys(0);
+  for (let i = 0; i < 5; i++) { ex.web_enc(E.K3, 1); play(ex, 0.12); }
+  const sl = slots(ex).findIndex(([a, d]) => a === SRC.LFO1 && d === ID.EQ_MID);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  check(`.. the MOD layer on POINTS: KNOB 3 sets LFO 1's depth on MID's GAIN (slot ${sl + 1}: ${sl >= 0 ? ex.web_test_slot(sl, 2) : "-"})`,
+        sl >= 0 && ex.web_test_slot(sl, 2) === 10);
+  for (const [id, v] of [[ID.EQ_MID, 0], [ID.EQ_Q, 400], [ID.EQ_LQ, 300], [106 + 3 * sl, 0], [107 + 3 * sl, 0], [108 + 3 * sl, 0]])
+    ex.web_test_set(id, v);
   ex.web_enc(E.ALGO, SEC.DRIVE - ex.web_test_page_section());   // FX held + ALGORITHM: DRIVE along the rack
   play(ex, 0.03);
   const p0 = ex.web_test_page();
@@ -505,6 +529,26 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         moved === 120 && toast === "DRIVE: 2 OF 6" && stay === p0 && next === SEC.DELAY && first === SEC.CHORUS);
   ex.web_test_set(ID.FX_ORDER, 0);
   play(ex, 0.1);
+  tap(ex, B.EDIT);
+}
+{                                               // the chorus's taps: still in silence, moving with a note
+  tap(ex, B.FX);
+  ex.web_enc(E.ALGO, SEC.CHORUS - ex.web_test_page_section());
+  ex.web_test_set(135, 1);                      // CHORUS ON
+  play(ex, 1.6);
+  const d0 = ex.web_screen_draws();
+  play(ex, 1.0);
+  const still = ex.web_screen_draws() - d0;
+  ex.web_keys(1 << 7);
+  play(ex, 0.5);
+  const moving = ex.web_screen_draws() - d0 - still;
+  ex.web_keys(0);
+  play(ex, 3.0);
+  const d1 = ex.web_screen_draws();
+  play(ex, 1.0);
+  check(`CHORUS on: in silence its taps still (${still} blits in 1 s); a note: moving (${moving} in 0.5 s); after it, still again (${ex.web_screen_draws() - d1})`,
+        still === 0 && moving >= 4 && ex.web_screen_draws() - d1 === 0);
+  ex.web_test_set(135, 0);
   tap(ex, B.EDIT);
 }
 {                                               // HOME: the sound and its output, live

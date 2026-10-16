@@ -39,7 +39,7 @@ static int32_t sy_app_load(void);                   /* .. the audio's load in %,
 
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
-enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN };
+enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
@@ -92,8 +92,8 @@ static const ui_page_t UI_PG[] = {
     {SEC_REVERB, G_REVERB, "POWER", {SP_RV_ON, -1, -1, -1}},
     {SEC_OTT, G_OTT, "OTT", {SP_OT_DEPTH, SP_OT_TIME, SP_OT_UP, SP_OT_DOWN}},
     {SEC_OTT, G_OTT, "BANDS", {SP_OT_LOW, SP_OT_MID, SP_OT_HIGH, SP_OT_ON}},
-    {SEC_EQ, G_EQ, "GAIN", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
-    {SEC_EQ, G_EQ, "FREQ", {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_Q, SP_EQ_HFREQ}},
+    {SEC_EQ, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},
+    {SEC_EQ, G_EQ, "GAINS", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_ACCEL, -1, -1}},
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
@@ -144,6 +144,7 @@ static struct {
     uint16_t bt_chord;                              /* .. held while OCT stepped the pages (no tap, no layer) */
     uint16_t prev_page;                             /* the page before the last tap (a double tap puts it back) */
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
+    uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
     uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
     uint8_t act_k;                                  /* the knob turning (its cell lit; 0xFF none) */
     uint32_t act_t;                                 /* .. its last detent */
@@ -221,6 +222,16 @@ static void ui_page_of(uint32_t page, uint32_t *n, uint32_t *of)
         }
 }
 
+/* the EQ's POINTS page, KNOB 2-4: the point picked's FREQ, GAIN and Q (its parameters: the MOD layer sets their
+ * depths, undo takes them back); any other id as it is */
+static int32_t ui_virt(int32_t id)
+{
+    static const uint8_t F[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ}, G[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH};
+    static const uint8_t Q[3] = {SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ};
+    uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u;
+    return id == UI_EQF ? F[p] : id == UI_EQG ? G[p] : id == UI_EQQ ? Q[p] : id;
+}
+
 static int ui_list(uint32_t id)                     /* shown as a list (a pill), turned one entry a detent */
 {
     uint32_t u = SP[id].unit;
@@ -263,7 +274,7 @@ static int ui_src_on_page(uint32_t src)
     for (s = 0; s < NSLOT; s++)
         if (sy_patch.p[SP_M1_SRC + 3u * s] == (int32_t)src && sy_patch.p[SP_M1_AMT + 3u * s])
             for (k = 0; k < 4u; k++)
-                if (UI_PG[ui.page].id[k] >= 0 && sy_patch.p[SP_M1_DST + 3u * s] == UI_PG[ui.page].id[k])
+                if (UI_PG[ui.page].id[k] >= 0 && sy_patch.p[SP_M1_DST + 3u * s] == ui_virt(UI_PG[ui.page].id[k]))
                     return 1;
     return 0;
 }
@@ -745,9 +756,12 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
     } else if (item == UI_ACCEL) {
         ui.accel = s > 0;
         ui.dirty |= D_KNOBS | D_DISP;
+    } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */
+        ui.eqpt = (uint8_t)((ui.eqpt + (uint32_t)(s % 3 + 3)) % 3u);   /* whose depths KNOB 2-4 set) */
+        ui.dirty |= D_KNOBS | D_DISP;
     } else if (ui.mod) {
         return;
-    } else if (item >= UI_BPM) {
+    } else if (item >= UI_BPM && item <= UI_TSN) {
         if (item == UI_BPM)
             ui.bpm = (uint16_t)sy_clampi(ui.bpm + ui_accel(e, s, 280), 20, 300);
         else if (item == UI_TSB)
@@ -791,7 +805,7 @@ static int32_t ui_act_id(void)
     int32_t id;
     if (ui.act_k >= 4u || ui.mod)
         return -1;
-    id = UI_PG[ui.page].id[ui.act_k];
+    id = ui_virt(UI_PG[ui.page].id[ui.act_k]);
     return id >= 0 && id < UI_ITEM ? ui_eff(id) : id;
 }
 /* the patch as it was before the turn (the gesture's first state on the history), while a knob turns; 0 none */
@@ -804,7 +818,7 @@ static const sy_patch_t *ui_ghost(void)
 
 static void ui_knob(uint32_t k, int32_t s)
 {
-    int32_t id = UI_PG[ui.page].id[k];
+    int32_t id = ui_virt(UI_PG[ui.page].id[k]);     /* (the EQ's POINTS: the picked point's own) */
     const sp_desc_t *d;
     ui_cd_stop();
     if (id < 0)

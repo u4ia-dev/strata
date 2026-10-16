@@ -215,17 +215,25 @@ turn(0, -6, 0.004);
 png("ott.png");
 ex.web_keys(0);
 run(1.2);
-to(17);                                         // EQ: the three bands, MID turning
+to(17);                                         // EQ POINTS: MID picked, its GAIN turning; LFO 1 on MID's gain
 set(169, 1); set(170, 60); set(171, -40); set(172, 30);
-run(0.05);
-turn(1, -3);
+set(106, 3); set(107, 171); set(108, 250);      // slot 1: LFO 1 -> MID, +-25 %
+ex.web_enc(E.K1, 1);
+run(0.1);
+turn(2, -3);
 png("eq.png");
 run(1.2);
-ex.web_enc(E.SELECT, 1);                        // its FREQ page: MID FREQ turning
+ex.web_keys(1 << 7);                            // a note: the curve and MID's point where LFO 1 has them
+run(0.45);
+png("eq_live.png");
+ex.web_keys(0);
+run(1.5);
+ex.web_enc(E.SELECT, 1);                        // GAINS: LOW turning
 run(0.05);
-turn(1, 6, 0.004);
-png("eq_freq.png");
+turn(0, 4);
+png("eq_gains.png");
 run(1.2);
+set(106, 0); set(107, 0); set(108, 0);
 for (const id of [130, 135, 141, 149, 158, 169]) set(id, 0);
 ex.web_buttons(1 << B.HOME);                    // HOME held 5 s: the SETTINGS
 run(5.2);

@@ -32,6 +32,18 @@ static void ui_g_reverb(void);
 static void ui_g_ott(void);
 static void ui_g_eq(void);
 static void ui_flag(int32_t x, int32_t y, const char *s);
+static int ui_eq_modded(void);
+
+/* sound playing: a voice on, or the output still over -70 dBFS (a delay's or a reverb's tail). The live graphs move
+ * only while it does; otherwise they stand still and nothing is redrawn */
+static int ui_sounding(void)
+{
+    uint32_t i;
+    for (i = 0; i < SY_NVOICE; i++)
+        if (sy_v[i].on)
+            return 1;
+    return sy_out_pk > 10u;
+}
 
 /* s centred in w px from x0 (y: its line top), cut with an ellipsis when it is wider */
 static void ui_text_c(int32_t x0, int32_t y, int32_t w, const aafont_t *f, const char *s, uint16_t fg, uint16_t bg)
@@ -284,21 +296,26 @@ static void ui_tempo_cell(int32_t id, int act)
 
 static void ui_draw_knob(uint32_t k)
 {
-    int32_t id = UI_PG[ui.page].id[k];
+    static const char *const EQPT[3] = {"LOW", "MID", "HIGH"};
+    int32_t it = UI_PG[ui.page].id[k], id = ui_virt(it);   /* (the EQ's POINTS: the picked point's parameter) */
     int act = ui.act_k == k && !ui.mod;             /* (the knob turning) */
     char t[SP_TEXT_N + 4];
     cv_begin(60, 76, sk.ground);
-    if (id >= UI_BPM) {
+    if (id >= UI_BPM && id <= UI_TSN) {
         ui_tempo_cell(id, act);
-    } else if (id >= UI_LPT) {
+    } else if (id >= UI_LPT && id <= UI_LC) {
         ui_lfo_cell(id, act);
+    } else if (id == UI_EQPT) {                     /* the EQ's point picked */
+        ui_pill(EQPT[ui.eqpt < 3u ? ui.eqpt : 0u], ui.mod != 0, act);
+        ui_text_c(0, 46, 60, &AF_XS, "POINT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
     } else if (id >= UI_ITEM) {                     /* the SETTINGS' items */
         ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0, act);
         ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", act ? sk.now : sk.label, sk.ground);
     } else if (id >= 0) {
         int dim = ui.mod && !(SP[id].flags & F_MOD);
         int32_t e = ui_eff(id);                     /* (RATE, TIME with SYNC FIXED: the note value, under their name) */
-        const char *name = id >= SP_MAC1 && id <= SP_MAC4 ? sy_patch.macro[id - SP_MAC1] : SP[id].name;
+        const char *name = id >= SP_MAC1 && id <= SP_MAC4 ? sy_patch.macro[id - SP_MAC1]
+                           : it == UI_EQF ? "FREQ" : it == UI_EQG ? "GAIN" : it == UI_EQQ ? "Q" : SP[id].name;
         if (ui_list((uint32_t)e)) {
             sp_text((uint32_t)e, sy_patch.p[e], t);
             ui_pill(t, dim, act);
@@ -969,28 +986,35 @@ static void sy_ui_frame(void)
     }
     for (i = 0; i < SY_NVOICE; i++)
         nv += sy_v[i].on != 0;
-    if (g == G_ENV || g == G_LFO)
-        live = nv != 0;
-    else if (g == G_CHORUS || g == G_OTT)           /* the chorus's taps, OTT's levels: while it is on */
-        live = sy_patch.p[g == G_CHORUS ? SP_CH_ON : SP_OT_ON] != 0;
-    if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {   /* the voices move on the envelope, the LFO */
+    if (g == G_ENV || g == G_LFO)                   /* what moves, only while sound plays (then once more, still): */
+        live = nv != 0;                             /* the voices on an envelope or an LFO; the chorus's taps, */
+    else if (g == G_CHORUS || g == G_OTT)           /* OTT's levels (the effect on); the EQ's points where their */
+        live = sy_patch.p[g == G_CHORUS ? SP_CH_ON : SP_OT_ON] && ui_sounding();   /* modulation has them */
+    else if (g == G_EQ)
+        live = ui_sounding() && ui_eq_modded();
+    if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {
         ui.live_t = fm1_ms;
         ui.dirty |= D_DISP;
         was_live = (uint8_t)live;
     }
-    if (g == G_HOME) {                              /* the scope: a capture kept (drawn when it differs), the next */
-        static uint8_t fresh;                       /* asked for */
+    if (g == G_HOME) {                              /* the scope: while sound plays, and once after (silence, flat), */
+        static uint8_t fresh, flat = 1;             /* a capture kept (drawn when it differs), the next asked for */
+        int snd = ui_sounding();
         if (sy_scope.st == 2u) {
             SY_CBAR();
             if (!ui_scope_ok || memcmp(ui_scope, sy_scope.v, sizeof ui_scope)) {
                 memcpy(ui_scope, sy_scope.v, sizeof ui_scope);
                 fresh = 1;
             }
+            for (flat = 1, i = 0; i < 2u * SY_SCOPE_N; i++) {   /* (a capture under -66 dB: flat on the screen) */
+                int32_t v = ui_scope[i / SY_SCOPE_N][i % SY_SCOPE_N];
+                flat &= v > -16 && v < 16;
+            }
             ui_scope_ok = 1;
-            sy_scope_arm(ui_scope_step());
-        } else if (sy_scope.st == 0u) {
-            sy_scope_arm(ui_scope_step());
+            sy_scope.st = 0;
         }
+        if (sy_scope.st == 0u && (snd || !flat))
+            sy_scope_arm(ui_scope_step());
         if (fresh && fm1_ms - ui.live_t >= 40u) {
             ui.live_t = fm1_ms;
             ui.dirty |= D_LIVE;

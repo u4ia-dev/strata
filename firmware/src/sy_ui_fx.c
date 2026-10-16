@@ -724,64 +724,109 @@ static void ui_g_ott(void)
 }
 
 /* -------------------------------------------------------------------------------------------- EQ --- */
-static const uint8_t UI_EQ_DB[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH}, UI_EQ_HZ[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ};
+/* the EQ's nine values: each point's gain, frequency and Q (LOW, MID, HIGH) */
+static const uint8_t UI_EQ_ID[9] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ,
+                                    SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ};
 #define UI_QY(db) ((float)WY + 61.0f - sy_clampf((db), -20.0f, 20.0f) * 2.0f)   /* +-18 dB: 2 px a dB */
 
-/* the EQ's gain at f in dB for values p (each band's gain, frequency and the peak's Q; off-set by o: the
- * modulation's range, as parts of each range) */
-static float ui_eq_db(const int16_t *p, const float *o, float f)
+/* the nine as 0..1, into v: of values p each moved by d (a modulation's range end; 0: none); live: as the audio side
+ * has them now (smoothed, modulated) */
+static void ui_eq_vals(const int16_t *p, const float *d, int live, float *v)
 {
-    float db = 0.0f, q = sp_q(sy_clampf(ui_v(p, SP_EQ_Q) + (o ? o[6] : 0.0f), 0.0f, 1.0f));
+    uint32_t k;
+    for (k = 0; k < 9u; k++)
+        v[k] = live ? mod_get(sy_goff, UI_EQ_ID[k]) : sy_clampf(ui_v(p, UI_EQ_ID[k]) + (d ? d[k] : 0.0f), 0.0f, 1.0f);
+}
+static float ui_eq_gain(const float *v, uint32_t b) { return sp_lin(UI_EQ_ID[b], v[b]) * 0.1f; }   /* a point's dB */
+
+/* the EQ's gain at f in dB for the nine values v: each point's band, as fx_eq plays it (fx_eq_db) */
+static float ui_eq_db(const float *v, float f)
+{
+    float db = 0.0f;
     uint32_t b;
     for (b = 0; b < 3u; b++) {
-        float g = sp_lin(UI_EQ_DB[b], sy_clampf(ui_v(p, UI_EQ_DB[b]) + (o ? o[b] : 0.0f), 0.0f, 1.0f)) * 0.1f;
+        float g = ui_eq_gain(v, b);
         if (sy_absf(g) >= 0.01f)
-            db += fx_eq_db(b, sp_cut_hz(sy_clampf(ui_v(p, UI_EQ_HZ[b]) + (o ? o[3u + b] : 0.0f), 0.0f, 1.0f)), g, q, f);
+            db += fx_eq_db(b, sp_cut_hz(v[3u + b]), g, sp_q(v[6u + b]), f);
     }
     return db;
 }
-static void ui_eq_curve(const int16_t *p, const float *o, float *ys)
+static void ui_eq_curve(const float *v, float *ys)
 {
     uint32_t i;
     for (i = 0; i < UI_FN; i++)
-        ys[i] = UI_QY(ui_eq_db(p, o, ui_col_hz(i)));
+        ys[i] = UI_QY(ui_eq_db(v, ui_col_hz(i)));
 }
 
+/* any of the EQ's values modulated (its graph live while sound plays) */
+static int ui_eq_modded(void)
+{
+    float lo, hi, plo, phi;
+    uint32_t k;
+    for (k = 0; k < 9u; k++)
+        if (ui_mod_span(UI_EQ_ID[k], SRC_COUNT, &lo, &hi, &plo, &phi))
+            return 1;
+    return 0;
+}
+
+/* the EQ: its curve and its three points (each at its frequency and gain; on POINTS the one picked filled, the one a
+ * knob turns in NOW); the range a modulation sweeps, the curve's as a band and each point's as bars (up and down: its
+ * gain, across: its frequency); while sound plays, the curve and the points where the modulation has them now */
 static void ui_g_eq(void)
 {
-    static const uint8_t IDS[7] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ, SP_EQ_Q};
     const int16_t *p = sy_patch.p;
     const sy_patch_t *gh = ui_ghost();
-    int32_t act = ui_act_in(SP_EQ_ON, SP_EQ_HFREQ);
-    int band = act == SP_EQ_LOW || act == SP_EQ_LFREQ ? 0 : act == SP_EQ_MID || act == SP_EQ_MFREQ || act == SP_EQ_Q ? 1
-             : act == SP_EQ_HIGH || act == SP_EQ_HFREQ ? 2 : -1;
-    float ys[UI_FN], y2[UI_FN], lo[7], hi[7], plo, phi;
+    int32_t act = ui_act_id(), band = -1;
+    int points = UI_PG[ui.page].id[0] == UI_EQPT, live;
+    float ys[UI_FN], y2[UI_FN], lo[9], hi[9], v[9], vl[9], vh[9], plo, phi;
     uint32_t k, flat = 1, modded = 0;
     char w[32];
+    for (k = 0; k < 9u; k++) {
+        modded |= ui_mod_span(UI_EQ_ID[k], SRC_COUNT, &lo[k], &hi[k], &plo, &phi) > 0u;
+        if (act == (int32_t)UI_EQ_ID[k])
+            band = (int32_t)(k % 3u);
+    }
+    if (band < 0 && act != SP_EQ_ON)
+        act = -1;
+    live = modded && ui_sounding();
     ui_rack();
     ui_freq_grid(WY + 20, WY + 100);
     for (k = 0; k < 5u; k++)                        /* -12 -6 0 +6 +12 dB */
         cv_rect(WX + 8, sy_floori(UI_QY(6.0f * (float)k - 12.0f) + 0.5f), 211, 1, k == 2u ? sk.grid2 : sk.grid);
-    for (k = 0; k < 7u; k++)
-        modded |= ui_mod_span(IDS[k], SRC_COUNT, &lo[k], &hi[k], &plo, &phi) > 0u;
     if (modded) {                                   /* the range modulation sweeps: the curve at each end */
-        ui_eq_curve(p, lo, ys);
-        ui_eq_curve(p, hi, y2);
+        ui_eq_vals(p, lo, 0, vl);
+        ui_eq_vals(p, hi, 0, vh);
+        ui_eq_curve(vl, ys);
+        ui_eq_curve(vh, y2);
         cv_band(WX + 8, ys, y2, UI_FN, sk.mband);
     }
-    if (gh && act >= 0) {
-        ui_eq_curve(gh->p, 0, y2);
+    if (gh && band >= 0) {                          /* the curve before the turn */
+        ui_eq_vals(gh->p, 0, 0, v);
+        ui_eq_curve(v, y2);
         cv_curve_dash(WX + 8, y2, UI_FN, 1.0f, sk.ghost, 3u, 2u);
     }
-    ui_eq_curve(p, 0, ys);
+    ui_eq_vals(p, 0, live, v);
+    ui_eq_curve(v, ys);
     cv_under(WX + 8, ys, UI_FN, UI_QY(0.0f), sk.wfill);
-    cv_curve(WX + 8, ys, UI_FN, 1.6f, act >= 0 && act != SP_EQ_ON ? sk.now : sk.sound);
-    for (k = 0; k < 3u; k++) {                      /* each band's handle: its frequency, its gain */
-        int32_t x = sy_floori(ui_hz_x(sp_cut_hz(ui_v(p, UI_EQ_HZ[k]))) + 0.5f);
-        int32_t y = sy_floori(UI_QY((float)p[UI_EQ_DB[k]] * 0.1f) + 0.5f);
-        flat &= p[UI_EQ_DB[k]] == 0;
-        if ((int)k == band) {
+    cv_curve(WX + 8, ys, UI_FN, 1.6f, band >= 0 ? sk.now : sk.sound);
+    for (k = 0; k < 3u; k++) {                      /* the points */
+        int32_t x0 = sy_floori(ui_hz_x(sp_cut_hz(ui_v(p, UI_EQ_ID[3u + k]))) + 0.5f);
+        int32_t y0 = sy_floori(UI_QY((float)p[UI_EQ_ID[k]] * 0.1f) + 0.5f);
+        int32_t x = sy_floori(ui_hz_x(sp_cut_hz(v[3u + k])) + 0.5f), y = sy_floori(UI_QY(ui_eq_gain(v, k)) + 0.5f);
+        flat &= p[UI_EQ_ID[k]] == 0;
+        if (hi[k] > lo[k]) {                        /* its gain's sweep */
+            int32_t ya = sy_floori(UI_QY(ui_eq_gain(vh, k)) + 0.5f), yb = sy_floori(UI_QY(ui_eq_gain(vl, k)) + 0.5f);
+            cv_rect(x0 - 1, ya < yb ? ya : yb, 2, (ya < yb ? yb - ya : ya - yb) + 1, sk.mod);
+        }
+        if (hi[3u + k] > lo[3u + k]) {              /* its frequency's sweep */
+            int32_t xa = sy_floori(ui_hz_x(sp_cut_hz(vl[3u + k])) + 0.5f);
+            int32_t xb = sy_floori(ui_hz_x(sp_cut_hz(vh[3u + k])) + 0.5f);
+            cv_rect(xa < xb ? xa : xb, y0 - 1, (xa < xb ? xb - xa : xa - xb) + 1, 2, sk.mod);
+        }
+        if ((int32_t)k == band) {
             cv_rect(x - 3, y - 3, 7, 7, sk.now);
+        } else if (points && k == ui.eqpt) {
+            cv_rect(x - 3, y - 3, 7, 7, sk.sound);
         } else {
             cv_rect(x - 2, y - 2, 5, 5, sk.sound);
             cv_rect(x - 1, y - 1, 3, 3, sk.display);
@@ -789,17 +834,14 @@ static void ui_g_eq(void)
     }
     cv_text_on(WX + 4, WY + 21, &AF_XS, "+18", sk.faint, sk.display);
     cv_text_on(WX + 4, WY + 86, &AF_XS, "-18", sk.faint, sk.display);
-    if (flat)
+    if (flat && !modded)
         ui_text_c(WX, WY + 67, WW, &AF_XS, "FLAT: EVERY BAND AT 0 dB", sk.faint, sk.display);
     if (act >= 0) {
-        int32_t x, y;
+        int32_t x = WX + 150, y = WY + 20;
         if (band >= 0) {
-            x = sy_floori(ui_hz_x(sp_cut_hz(ui_v(p, UI_EQ_HZ[band])))) - 24;
-            y = sy_floori(UI_QY((float)p[UI_EQ_DB[band]] * 0.1f));
+            x = sy_floori(ui_hz_x(sp_cut_hz(v[3u + (uint32_t)band]))) - 24;
+            y = sy_floori(UI_QY(ui_eq_gain(v, (uint32_t)band)));
             y = y > WY + 50 ? y - 20 : y + 8;
-        } else {
-            x = WX + 150;
-            y = WY + 20;
         }
         sp_put(sp_put(w, SP[act].name), " ");
         ui_val(w + strlen(w), act);
