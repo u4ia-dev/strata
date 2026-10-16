@@ -119,6 +119,30 @@ run(0.1);
 png("lfo_sh.png");
 ex.web_enc(E.K1, 7);                            // (back to DRAWN)
 run(0.1);
+ex.web_enc(E.K2, 1);                            // SYNC FIXED: RATE a note value (1/8)
+run(0.05);
+ex.web_enc(E.K3, 3);
+ex.web_keys(1 << 7);
+run(0.3);
+png("lfo_fixed.png");
+ex.web_keys(0);
+run(0.2);
+ex.web_enc(E.SELECT, -1);                       // POINTS: LFO held, the delete's countdown
+run(0.05);
+ex.web_buttons(1 << B.LFO);
+run(1.5);
+png("lfo_delete.png");
+ex.web_buttons(0);
+run(0.1);
+tap(B.GLO);                                     // GLO three times: GLOBAL's TEMPO, 6/8 at 132
+tap(B.GLO);
+tap(B.GLO);
+for (let i = 0; i < 12; i++) { ex.web_enc(E.K1, 1); run(0.06); }
+ex.web_enc(E.K2, 2);
+ex.web_enc(E.K3, 1);
+run(0.1);
+png("tempo.png");
+console.log(`GLOBAL: ${ex.web_test_tempo(0)} BPM ${ex.web_test_tempo(1)}/${ex.web_test_tempo(2)}`);
 ex.web_buttons(1 << B.HOME);                    // HOME held: the MENU
 run(0.6);
 ex.web_buttons(0);

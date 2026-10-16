@@ -291,3 +291,9 @@ EXPORT int32_t web_test_draw(uint32_t k, uint32_t i, uint32_t f)
     return f == 1u ? d->x[i] : f == 2u ? d->y[i] : d->c[i];
 }
 EXPORT uint32_t web_test_lpt(uint32_t k) { return ui.lpt[k & 1u]; }
+/* GLOBAL: f 0 BPM, 1 TS-BEAT, 2 TS-NOTE; the engine's quarter notes a minute x 100 (f 3) */
+EXPORT int32_t web_test_tempo(uint32_t f)
+{
+    return f == 0u ? ui.bpm : f == 1u ? ui.tsb : f == 2u ? UI_TSN_VAL[ui.tsn] : (int32_t)(sy_tempo * 100.0f + 0.5f);
+}
+EXPORT const char *web_test_toast(void) { return ui.toast; }

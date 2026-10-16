@@ -8,8 +8,10 @@
 // lets it go); the MENU (HOME held) and its palettes; OCT- / OCT+ with a family button held (the section's pages,
 // round; the octave stays; no tap, no layer after) and alone (the octave); an LFO's POINTS page (KNOB 1 picks a point,
 // round; KNOB 2-4 its place, level, curve; the first edit draws from the shape; LFO twice adds a point halfway on the
-// curve; 16 at most; nothing in the MOD layer); a screen region drawn only when it changes; Web MIDI and its CCs; the
-// same input twice gives the same sound.
+// curve; 16 at most; nothing in the MOD layer; LFO held 5 s deletes the point picked, a countdown first, stopped by a
+// release or a knob, the end points kept); SAVE + OCT- / OCT+ (undo, redo: a gesture at a time, a sound's load);
+// SYNC FIXED (RATE and the delay's TIME step note values); GLO's GLOBAL page (BPM 20-300, TS-BEAT 1-16, TS-NOTE 1 2
+// 4 8 16); a screen region drawn only when it changes; Web MIDI and its CCs; the same input twice, the same sound.
 //   node web/emu/strata_emu_test.mjs [build/emu_strata/strata.wasm]      (from the repo root, after build_strata.sh)
 import { readFileSync } from "node:fs";
 
@@ -22,8 +24,9 @@ function check(what, ok) {
 }
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, DRIVE: 12, CHORUS: 13, MENU: 17 };                // sy_param.c SEC_*, SEC_MENU
-const ID = { A_TABLE: 1, A_POS: 2, LPT: 1002, LX: 1003, LY: 1004, LC: 1005, DRAWN: 12 };       // SP_*, sy_ui.c UI_*, LFO_DRAW
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, DRIVE: 12, CHORUS: 13, DELAY: 14, MENU: 17, GLOBAL: 18 };   // SEC_*, SEC_MENU, SEC_GLOBAL
+const ID = { A_TABLE: 1, A_POS: 2, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,                        // sy_param.c SP_*
+             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 
 async function boot() {
@@ -282,6 +285,154 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   check(`the MOD layer on POINTS: KNOB 3 changes nothing (SHAPE ${ex.web_test_value(SHAPE)}, ${ex.web_test_draw(0, 0, 0)} points)`,
         ex.web_test_value(SHAPE) === 8 && ex.web_test_draw(0, 0, 0) === n2);
   tap(ex, B.EDIT);
+}
+{                                               // LFO held 5 s on POINTS: the point picked goes
+  const n = () => ex.web_test_draw(0, 0, 0), toast = () => cstr(ex, ex.web_test_toast());
+  tap(ex, B.LFO);                               // (POINTS: STAIRS shown, its 16 points)
+  ex.web_enc(E.K1, 2 - ex.web_test_lpt(0));     // point 3
+  play(ex, 0.03);
+  const shape0 = ex.web_test_value(ID.L1_SHAPE), n0 = n();
+  ex.web_buttons(1 << B.LFO);
+  play(ex, 1.5);
+  const count = toast();
+  play(ex, 0.5);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  check(`LFO held on POINTS: a countdown ("${count}"); let go at 2 s, nothing deleted (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}, the footer "${toast()}")`,
+        count === "HOLD: DELETE POINT 3 IN 4" && ex.web_test_value(ID.L1_SHAPE) === shape0 && n() === n0 && toast() === "");
+  ex.web_buttons(1 << B.LFO);
+  play(ex, 5.3);
+  const gone = toast();
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  check(`.. held 5 s: point 3 goes ("${gone}"): STAIRS drawn (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}), ${n()} points, point ${ex.web_test_lpt(0) + 1} picked; the page stays (${name()})`,
+        gone === "POINT 3 DELETED" && ex.web_test_value(ID.L1_SHAPE) === ID.DRAWN && n() === 15 && ex.web_test_lpt(0) === 1 &&
+        ex.web_test_draw(0, 2, 1) === 250 && name() === "POINTS");
+  ex.web_enc(E.K1, -1);                         // the first point: it stays
+  play(ex, 0.03);
+  ex.web_buttons(1 << B.LFO);
+  play(ex, 1.0);
+  const ends = toast();
+  play(ex, 4.5);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  const n1 = n();
+  ex.web_enc(E.K1, 4);                          // a knob turned during the countdown stops it
+  play(ex, 0.03);
+  ex.web_buttons(1 << B.LFO);
+  play(ex, 2.0);
+  ex.web_enc(E.K3, 1);
+  play(ex, 3.5);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  check(`.. the first point picked: "${ends}", none deleted (${n1}); a knob turned during the countdown stops it (${n()} points)`,
+        ends === "THE END POINTS STAY" && n1 === 15 && n() === 15);
+  ex.web_buttons(1 << B.SAVE);                  // SAVE + OCT-: undo (the level KNOB 3 set, then the delete)
+  play(ex, 0.05);
+  chord(B.SAVE, B.OCTDN);
+  chord(B.SAVE, B.OCTDN);
+  const undone = [toast(), ex.web_test_value(ID.L1_SHAPE), n()];
+  chord(B.SAVE, B.OCTUP);
+  const redone = [toast(), ex.web_test_value(ID.L1_SHAPE), n()];
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  check(`SAVE + OCT- twice: the delete undone ("${undone[0]}": SHAPE ${undone[1]} STAIRS, the drawn shape of ${undone[2]}); SAVE + OCT+: redone ("${redone[0]}": SHAPE ${redone[1]}, ${redone[2]} points); SAVE let go: no page, no octave`,
+        undone[0] === "UNDO" && undone[1] === 8 && undone[2] === 7 && redone[0] === "REDO" && redone[1] === ID.DRAWN &&
+        redone[2] === 15 && name() === "POINTS" && ex.web_test_oct() === 0);
+}
+{                                               // SYNC FREE / FIXED: RATE in Hz or a note value
+  ex.web_enc(E.SELECT, 1);                      // LFO 1 SHAPE
+  play(ex, 0.03);
+  const [SYNC, RATE] = [ex.web_test_page_param(1), ex.web_test_page_param(2)];
+  const r0 = ex.web_test_value(RATE), q0 = ex.web_test_value(ID.L1_NOTE), s0 = ex.web_test_value(SYNC);
+  ex.web_enc(E.K2, 1);
+  play(ex, 0.03);
+  ex.web_enc(E.K3, 2);
+  play(ex, 0.03);
+  const fixed = [ex.web_test_value(SYNC), ex.web_test_value(ID.L1_NOTE), ex.web_test_value(RATE)];
+  ex.web_enc(E.K2, -1);
+  play(ex, 0.03);
+  ex.web_enc(E.K3, 2);
+  play(ex, 0.03);
+  check(`LFO 1 SHAPE: SYNC ${s0} -> FIXED (${fixed[0]}): KNOB 3 steps the note value (1/4: ${q0} -> ${fixed[1]}, RATE stays ${fixed[2]}); FREE: KNOB 3 the rate in Hz (${r0} -> ${ex.web_test_value(RATE)}), the note kept`,
+        s0 === 0 && fixed[0] === 1 && q0 === 8 && fixed[1] === 10 && fixed[2] === r0 && ex.web_test_value(RATE) === r0 + 2 &&
+        ex.web_test_value(ID.L1_NOTE) === 10);
+  tap(ex, B.FX);                                // the delay (FIXED 1/8D by default)
+  ex.web_enc(E.ALGO, 2 - (ex.web_test_page_section() - SEC.DRIVE));
+  play(ex, 0.03);
+  const dsec = ex.web_test_page_section(), [DSYNC, DTIME] = [ex.web_test_page_param(1), ex.web_test_page_param(2)];
+  const t0 = ex.web_test_value(DTIME), d0 = ex.web_test_value(ID.DL_NOTE), ds0 = ex.web_test_value(DSYNC);
+  ex.web_enc(E.K3, 1);
+  play(ex, 0.03);
+  const d1 = ex.web_test_value(ID.DL_NOTE);
+  ex.web_enc(E.K2, -1);
+  play(ex, 0.03);
+  ex.web_enc(E.K3, 1);
+  play(ex, 0.03);
+  check(`DELAY (section ${dsec}): SYNC FIXED (${ds0}): KNOB 3 steps the note (1/8D ${d0} -> ${d1}); FREE: KNOB 3 the time in ms (${t0} -> ${ex.web_test_value(DTIME)})`,
+        dsec === SEC.DELAY && ds0 === 1 && d0 === 10 && d1 === 11 && ex.web_test_value(DTIME) === t0 + 1 &&
+        ex.web_test_value(ID.DL_NOTE) === 11);
+}
+{                                               // GLO: GLOBAL's tempo and time signature
+  tap(ex, B.GLO);
+  tap(ex, B.GLO);
+  tap(ex, B.GLO);
+  const sec = ex.web_test_page_section(), items = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
+  const t = () => [0, 1, 2, 3].map((f) => ex.web_test_tempo(f));
+  const a = t();
+  for (let i = 0; i < 3; i++) { ex.web_enc(E.K1, 1); play(ex, 0.12); }
+  const b = t();
+  for (let i = 0; i < 40; i++) { ex.web_enc(E.K1, -1); play(ex, 0.004); }
+  const lo = t()[0];
+  for (let i = 0; i < 40; i++) { ex.web_enc(E.K1, 1); play(ex, 0.004); }
+  const hi = t()[0];
+  ex.web_enc(E.K2, 3); play(ex, 0.03);
+  const tsb = t()[1];
+  ex.web_enc(E.K2, -20); play(ex, 0.03);
+  const tsb1 = t()[1];
+  ex.web_enc(E.K2, 30); play(ex, 0.03);
+  const tsb16 = t()[1];
+  ex.web_enc(E.K3, 1); play(ex, 0.03);
+  const n8 = t();
+  ex.web_enc(E.K3, 9); play(ex, 0.03);
+  const n16 = t()[2];
+  ex.web_enc(E.K3, -9); play(ex, 0.03);
+  const n1 = t()[2];
+  check(`GLO three taps: GLOBAL (section ${sec}) ${name()} (${items}): ${a[0]} BPM ${a[1]}/${a[2]}`,
+        sec === SEC.GLOBAL && name() === "TEMPO" && items.join() === [ID.BPM, ID.TSB, ID.TSN, -1].join() &&
+        a[0] === 120 && a[1] === 4 && a[2] === 4 && a[3] === 12000);
+  check(`.. BPM: 3 slow detents ${a[0]} -> ${b[0]}, held between 20 and 300 (${lo}, ${hi}); TS-BEAT 1-16 (${tsb}, ${tsb1}, ${tsb16}); TS-NOTE 1 2 4 8 16 (${n8[2]}, ${n16}, ${n1}); 300 BPM in eighths: ${n8[3] / 100} quarter notes a minute`,
+        b[0] === 123 && lo === 20 && hi === 300 && tsb === 7 && tsb1 === 1 && tsb16 === 16 && n8[2] === 8 &&
+        n8[3] === 15000 && n16 === 16 && n1 === 1);
+  ex.web_enc(E.K2, -12); play(ex, 0.03);
+  ex.web_enc(E.K3, 2); play(ex, 0.03);
+  check(`.. back to 4/4 (${t()[1]}/${t()[2]}): 300 BPM, ${t()[3] / 100} quarter notes a minute`, t().join() === [300, 4, 4, 30000].join());
+  tap(ex, B.EDIT);
+}
+{                                               // undo, redo: a knob's gesture, a sound's load
+  const toast = () => cstr(ex, ex.web_test_toast()), pos = ex.web_test_page_param(0), v0 = ex.web_test_value(pos);
+  const undo = (b) => { ex.web_buttons(1 << B.SAVE); play(ex, 0.05); chord(B.SAVE, b); ex.web_buttons(0); play(ex, 0.4); };
+  for (let i = 0; i < 3; i++) { ex.web_enc(E.K1, 1); play(ex, 0.12); }
+  for (let i = 0; i < 3; i++) { ex.web_enc(E.K1, 1); play(ex, 0.12); }
+  const v1 = ex.web_test_value(pos);
+  play(ex, 1.2);
+  ex.web_enc(E.K1, 1);
+  play(ex, 0.12);
+  const v2 = ex.web_test_value(pos);
+  undo(B.OCTDN);
+  const u1 = ex.web_test_value(pos);
+  undo(B.OCTDN);
+  const u2 = [ex.web_test_value(pos), toast()];
+  undo(B.OCTUP);
+  check(`SAVE + OCT-: a gesture at a time (WT POS ${v0} -> ${v1}, a second later ${v2}; undone ${u1}, ${u2[0]}, "${u2[1]}"); SAVE + OCT+ redoes (${ex.web_test_value(pos)})`,
+        v1 === v0 + 6 && v2 === v1 + 1 && u1 === v1 && u2[0] === v0 && u2[1] === "UNDO" && ex.web_test_value(pos) === v1);
+  const s0 = cstr(ex, ex.web_test_patch_name());
+  ex.web_enc(E.PRESET, 1);
+  play(ex, 0.3);
+  const s1 = cstr(ex, ex.web_test_patch_name());
+  undo(B.OCTDN);
+  check(`.. a sound's load undone ("${s0}" -> "${s1}" -> "${cstr(ex, ex.web_test_patch_name())}", WT POS ${ex.web_test_value(pos)})`,
+        s1 !== s0 && cstr(ex, ex.web_test_patch_name()) === s0 && ex.web_test_value(pos) === v1);
 }
 {
   ex.web_midi(0x90, 64, 100);
