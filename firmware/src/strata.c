@@ -1,0 +1,118 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 brandonmbarone
+ * After Felucca's src/felucca.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0). */
+/* STRATA: one compilation unit, as Felucca is built (the HAL is header-only; each file uses what the files above it
+ * define, so the order matters). tools/build.py --strata compiles this one in place of felucca.c.
+ * From Felucca's platform (docs/ARCHITECTURE.md §2), unchanged: the HAL, libc.c, lcd.c, gfx.c, panel.c, usb.c
+ * (USB-MIDI, the USB audio input, the console's CDC, the SysEx frames), midi_uart.c (TRS MIDI IN), the flash driver
+ * and ota.c (the M-UPGRADE update entry). Strata's: the sy_* engine and UI, sy_app.c, and the FM-1's glue: sy_hw.c
+ * (the flash's and the update's hooks), sy_main.c (power-on, the guards, the main loop), sy_console.c. */
+
+/* ---------------------------------------------------- build options --- */
+#define FELUCCA_FLASH 1          /* the flash driver: Strata's presets, settings and the sound playing (sy_store.c) */
+#define FELUCCA_OTA 1            /* the M-UPGRADE update entry: always, it is the way back to Felucca or the stock
+                                  * firmware */
+#define FELUCCA_OTA_DRYRUN 0
+#ifndef FELUCCA_CDC
+#define FELUCCA_CDC 1            /* the USB serial console (sy_console.c) */
+#endif
+#ifndef FELUCCA_UAC
+#define FELUCCA_UAC 1            /* the USB audio input: what the DAC plays, 16-bit stereo, to the computer */
+#endif
+#define FELUCCA_UAC_TONE 0
+#ifndef FELUCCA_UART
+#define FELUCCA_UART 1           /* TRS MIDI IN on UART1 / PH8 */
+#endif
+#ifndef FELUCCA_ID
+#define FELUCCA_ID "FM-1_900"    /* the package identity (build.py: the .fwsc's marker string): Felucca's, kept (§16) */
+#endif
+#define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
+#define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
+#ifndef STRATA_VERSION
+#define STRATA_VERSION "V0.4 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
+#endif
+#if !FELUCCA_OTA || !FELUCCA_FLASH
+#error "Strata keeps the update entry and the flash: they are the way back"
+#endif
+
+/* ------------------------------------------------------------- HAL --- */
+#include <stdint.h>
+#include "fm1_time.h"
+#include "fm1_sys.h"
+#include "fm1_irq.h"
+#include "fm1_guard.h"
+#include "fm1_input.h"
+#include "fm1_timer.h"
+#include "fm1_audio.h"
+#include "fm1_adc.h"
+#include "fm1_lcd_hw.h"
+#include "fm1_flash.h"
+#define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* a ring's slot stored before its index moves */
+static volatile uint32_t fm1_ms;                 /* milliseconds (sy_main.c's TIMER5); usb.c declares it too */
+
+/* ----------------------------------------------------- base, display --- */
+#include "libc.c"
+#include "lcd.c"
+#include "gfx.c"
+static uint8_t fx_lowcut;                        /* (panel.c's Felucca settings hook: not Strata's) */
+#include "panel.c"
+
+/* -------------------------------------------------------- USB, MIDI --- */
+#define HALF_FRAMES 128          /* usb.c's USB audio input: the frames a render writes (sy_app.c SY_HALF) */
+#include "usb.c"
+#if FELUCCA_UART
+#include "midi_uart.c"
+#endif
+
+/* ---------------------------------------------------------- the synth --- */
+static int st_read(uint32_t off, void *dst, uint32_t n);   /* the flash's hooks (sy_hw.c, below: they need the */
+static int st_erase(uint32_t off);                          /* audio's ring and BENCH) */
+static int st_prog(uint32_t off, const void *src, uint32_t n);
+#include "sy_core.h"
+#include "sy_wt.c"
+#include "sy_wtgen.c"
+#include "sy_param.c"
+#include "sy_osc.c"
+#include "sy_env.c"
+#include "sy_lfo.c"
+#include "sy_mod.c"
+#include "sy_filter.c"
+#include "sy_voice.c"
+#include "sy_fx.c"
+#include "sy_engine.c"
+#include "sy_text.c"
+#include "sy_store.c"
+#include "sy_sounds.h"
+
+/* --------------------------------------------------------------- UI --- */
+#include "sy_gfx.c"
+#include "sy_ui.c"
+#include "sy_ui_draw.c"
+#include "sy_ui_fx.c"
+#include "sy_ui_save.c"
+
+/* -------------------------------------------------------------- app --- */
+static volatile uint8_t sy_in_audio;             /* the audio interrupt is rendering (sy_main.c's TIMER5 nests in it) */
+static volatile uint32_t t5_nested_ticks;        /* .. TIMER4 ticks TIMER5 spent nested in this half's render */
+#define SY_ISR_ENTER() (sy_in_audio = 1u, t5_nested_ticks = 0u)
+#define SY_ISR_EXIT() (sy_in_audio = 0u)
+#if FELUCCA_UAC
+#define SY_HALF_START() uac_render_start()
+#define SY_BLOCK_TAP(o, n) uac_tap(o, n)
+#else
+#define SY_HALF_START()
+#define SY_BLOCK_TAP(o, n)
+#endif
+#define SY_NESTED_TICKS() t5_nested_ticks
+#include "sy_app.c"
+
+/* ------------------------------------------------- update, the FM-1 --- */
+#include "ota.c"
+#include "sy_hw.c"
+#if FELUCCA_CDC
+static void cdc_task(void);                      /* sy_console.c */
+#endif
+#include "sy_main.c"
+#if FELUCCA_CDC
+#include "sy_console.c"
+#endif

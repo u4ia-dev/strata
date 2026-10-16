@@ -10,6 +10,11 @@ felucca.fwsc (package). A release build (--release X.Y) writes felucca-X.Y.fwsc 
 release-X.Y/ with the package, the app, SHA256SUMS, the sample attribution and the licence files.
 See BUILDING.md for the toolchain and the SDK.
 
+  tools/build.py --strata    STRATA (firmware/src/strata.c) in place of Felucca: build/strata.bin, strata.dis and
+                             strata.fwsc (the same identity FM-1_900, the same update loader, the same flash layout),
+                             the Strata DSP's FPU flags, its wavetable recipes (tools/gen_wavetables.py), and the
+                             interrupt stack's depth checked from the listing (docs/FLASHING.md)
+
 The JieLi toolchain is Linux x86-64 only. JIELI_TOOLCHAIN points at it; on
 macOS (or with JIELI_DOCKER=1) each tool runs in a linux/amd64 container.
 """
@@ -51,6 +56,10 @@ SDK_SHA256 = {
 
 PRODUCT = "FM-1_900"                # package identity; release builds are FM-1_9XY
 VERSION = None                      # FELUCCA_VERSION for release builds (default: firmware/src/felucca.c)
+UNIT = "felucca"                    # the compilation unit (firmware/src/UNIT.c) and the output's name; --strata
+# STRATA: the DSP is single-precision float on the pi32v2 FPU (sy_core.h), as the cost model built it
+# (tools/costprobe/sy_cost.sh); STRATA_OPT, -O2 by default, the whole unit
+STRATA_FLAGS = ["-mcpu=r3", "-mfprev1", "-ffp-contract=off"]
 # FELUCCA_CPU2 (firmware/src/felucca.c), unset or 1, the default (1.6.1): the second core is built in, its entry and
 # stacks (firmware/hal/fm1_cpu1.S) linked and its waiting loop (.c1_text) checked; MENU > SYSTEM > 2ND CORE starts it
 # (OFF by default: one core, as 1.6). FELUCCA_CPU2=0: none of it is built (1.6's one-core code and RAM)
@@ -107,6 +116,8 @@ def generate():
             [tools / "gen_tables.py", GEN / "felucca_tables.h"],
             [tools / "gen_fm6_patches.py", GEN / "felucca_fm6.h"],
             [tools / "gen_samples.py", GEN / "felucca_samples.h"]]
+    if UNIT == "strata":            # Strata: its wavetables' recipes (strata_wt.h); none of Felucca's sounds
+        cmds = [*cmds[:4], [tools / "gen_wavetables.py", GEN]]
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
     failed = []
@@ -191,6 +202,8 @@ def ld_regions():
 
 
 def build_app():
+    if UNIT == "strata":
+        return build_strata()
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_UAC_48K", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
@@ -221,9 +234,35 @@ def build_app():
                        check=True)
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
-    elf = OUT / "felucca.elf"
+    return link_app(OUT / "felucca.o")
+
+
+def build_strata():
+    """STRATA's unit (firmware/src/strata.c), the whole of it at STRATA_OPT with the FPU, then linked as Felucca's"""
+    flags = [*CFLAGS, *STRATA_FLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
+    flags[0] = os.environ.get("STRATA_OPT", "-O2")
+    for flag in ("FELUCCA_CDC", "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_48K", "FELUCCA_CDC_DEFAULT",
+                 "FELUCCA_UAC_AS_FIRST"):
+        v = os.environ.get(flag)    # unset: the default in firmware/src/strata.c
+        if v in ("0", "1"):
+            flags.append(f"-D{flag}={v}")
+    flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
+    if VERSION:
+        flags.append(f'-DSTRATA_VERSION="{VERSION}"')
+    (OUT / "fm1_cpu1.o").unlink(missing_ok=True)
+    tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
+           ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
+           ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
+           ("cc", *flags, "-c", FW / "src" / "strata.c", "-o", OUT / "strata.o"))
+    return link_app(OUT / "strata.o")
+
+
+def link_app(obj):
+    """the app linked (firmware/app.ld) and its image: .text, then .ram_text, .c1_text and .data at their load
+    addresses; build/UNIT.elf, .dis, .bin"""
+    elf = OUT / f"{UNIT}.elf"
     tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
-       *([OUT / "fm1_cpu1.o"] if CPU2 else []), OUT / "felucca.o", "-o", elf)
+       *([OUT / "fm1_cpu1.o"] if CPU2 else []), obj, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin", "c1text.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
@@ -235,7 +274,7 @@ def build_app():
                                ("common/bin/objdump", "-d", elf),
                                ("common/bin/objdump", "-d", "-j", ".ram_text", *(("-j", ".c1_text") if CPU2 else ()),
                                 elf))
-    (OUT / "felucca.dis").write_text(dis)
+    (OUT / f"{UNIT}.dis").write_text(dis)
 
     def symv(name):
         return int(re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M).group(1), 16)
@@ -252,7 +291,7 @@ def build_app():
             img += b"\xff" * (load - APP_XIP - len(img))
             img += blob
     img += b"\xff" * (-len(img) % 4)
-    (OUT / "felucca.bin").write_bytes(img)
+    (OUT / f"{UNIT}.bin").write_bytes(img)
     return bytes(img), syms, dis, rt
 
 
@@ -326,6 +365,11 @@ def check(img, syms, dis, rt):
     return errors, notes
 
 
+def isr_stack_check(dis):
+    """(placeholder until the listing's prologues are known)"""
+    return [], []
+
+
 # Every hardware register access lives in hal/. In src/, engines/src/ and loader/ (comments stripped):
 #  - no volatile pointer cast, except of a C object's address (`*(volatile T *)&x`: a read-once
 #    of a RAM flag shared with an ISR, e.g. usb.c ota_wire_send);
@@ -372,20 +416,23 @@ def mmio_check():
 
 
 def main():
-    global PRODUCT, VERSION
+    global PRODUCT, VERSION, UNIT, CPU2
     ap = argparse.ArgumentParser()
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string vX.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
+    ap.add_argument("--strata", action="store_true", help="STRATA (firmware/src/strata.c) in place of Felucca")
     a = ap.parse_args()
-    name = "felucca.fwsc"
+    if a.strata:
+        UNIT, CPU2 = "strata", False                # (one core: Strata's second core is v1)
+    name = f"{UNIT}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z, X.Y.Z.W or X.Y-suffix, one digit each")
         PRODUCT = "FM-1_9" + m[1] + m[2]
         VERSION = "v" + a.release.lower()      # e.g. v1.0, v1.1-rc1
-        name = f"felucca-{a.release}.fwsc"
-    if not (FW / "engines" / "src" / "felucca_engine.h").exists():
+        name = f"{UNIT}-{a.release}.fwsc"
+    if UNIT == "felucca" and not (FW / "engines" / "src" / "felucca_engine.h").exists():
         raise SystemExit("firmware/engines is empty: the Felucca-Engines submodule "
                          "(git submodule update --init, or clone with --recurse-submodules)")
     fm1pkg_make.SDK = a.sdk
@@ -399,6 +446,10 @@ def main():
         ota = ldr.result()
     img, syms, dis, rt = build_app()
     errors, notes = check(img, syms, dis, rt)
+    if UNIT == "strata":
+        e2, n2 = isr_stack_check(dis)
+        errors += e2
+        notes += n2
     hal_err = mmio_check()
     errors += hal_err
     if not hal_err:
@@ -414,21 +465,21 @@ def main():
     att = SRC / "assets" / "samples-cc0" / "ATTRIBUTION.txt"
     if att.exists():
         shutil.copy(att, OUT / "ATTRIBUTION.txt")
-    print(f"app      {OUT / 'felucca.bin'}  {len(img)} B")
+    print(f"app      {OUT / (UNIT + '.bin')}  {len(img)} B")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
     print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
     if a.release:                   # what a release carries: the package, the app and every licence they need
         rel = OUT / f"release-{a.release}"
         shutil.rmtree(rel, ignore_errors=True)
         (rel / "LICENSES").mkdir(parents=True)
-        app = f"felucca-{a.release}-app.bin"
+        app = f"{UNIT}-{a.release}-app.bin"
         (rel / name).write_bytes(pkg)
         (rel / app).write_bytes(img)
         (rel / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n"
                                                 for n, b in ((name, pkg), (app, bytes(img)))))
         for f in sorted((SRC / "LICENSES").glob("*.txt")):
             shutil.copy(f, rel / "LICENSES" / f.name)
-        if not (rel / "LICENSES" / "MIT-Felucca-Engines.txt").exists():     # ANALOG LOFI TRIO WHEEL NOISE (engines/)
+        if UNIT == "felucca" and not (rel / "LICENSES" / "MIT-Felucca-Engines.txt").exists():   # ANALOG LOFI TRIO WHEEL NOISE
             raise SystemExit("release: LICENSES/MIT-Felucca-Engines.txt is missing")
         for doc in ("LICENSE", "LICENSING.md"):
             shutil.copy(SRC / doc, rel / doc)
