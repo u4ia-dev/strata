@@ -21,7 +21,8 @@ typedef struct {
     int16_t kv[16][2];                     /* parameter, value pairs (-1 ends) */
 } prof_t;
 
-#define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}
+#define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}, {SP_EQ_ON, 1},   \
+               {SP_EQ_LOW, 30}, {SP_EQ_MID, -30}, {SP_EQ_HIGH, 30}
 static const prof_t PROF[] = {
     {"idle: no voice, no effect", 0, {{-1, 0}}},
     {"1 voice: A x 1", 1, {{-1, 0}}},

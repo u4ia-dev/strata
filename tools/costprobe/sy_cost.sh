@@ -19,4 +19,4 @@ mkdir -p "$OUT"
 python3 tools/costprobe/count_asm.py "$OUT/sy.s" \
     osc_k_plain osc_k_plain_g osc_k_plain1 osc_k_plain1_g osc_k_map osc_k_map_g osc_k_map1 osc_k_map1_g \
     osc_k_sync osc_k_sync_g osc_k_sync1 osc_k_sync1_g osc_k_pm osc_k_pm_g osc_k_pm1 osc_k_pm1_g \
-    flt_svf_lp flt_svf_bp flt_svf_hp flt_svf_notch flt_svf_peak flt_ladder voice_sub voice_noise probe_mix
+    flt_svf_lp flt_svf_bp flt_svf_hp flt_svf_notch flt_svf_peak flt_ladder voice_sub voice_noise fx_eq_band fx_eq_band_k probe_mix

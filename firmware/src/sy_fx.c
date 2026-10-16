@@ -520,6 +520,20 @@ static SY_NOINLINE void fx_eq_band(float *restrict x, float *st, const float *c0
     st[0] = ic1;
     st[1] = ic2;
 }
+/* .. the coefficients steady (nothing moving: the same as the ramp of 0, in fewer registers) */
+static SY_NOINLINE void fx_eq_band_k(float *restrict x, float *st, const float *c)
+{
+    float ic1 = st[0], ic2 = st[1], a1 = c[0], a2 = c[1], a3 = c[2], m0 = c[3], m1 = c[4], m2 = c[5];
+    uint32_t i;
+    for (i = 0; i < SY_BLK; i++) {
+        float v0 = x[i], v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+        ic1 = 2.0f * v1 - ic1;
+        ic2 = 2.0f * v2 - ic2;
+        x[i] = m0 * v0 + m1 * v1 + m2 * v2;
+    }
+    st[0] = ic1;
+    st[1] = ic2;
+}
 
 /* the three bands in series: a band at 0 dB is skipped (flat: as it is), and comes back from rest (its state 0, its
  * coefficients ramping from flat); fully on, in place */
@@ -550,8 +564,17 @@ static void fx_eq(float *l, float *r)
             fx.eq_c[b][4] = fx.eq_c[b][5] = 0.0f;
             sy_zerof(fx.eq_s[b][0], 4u);
         }
-        for (c = 0; c < 2u; c++)
-            fx_eq_band(w[c], fx.eq_s[b][c], fx.eq_c[b], c1);
+        {
+            uint32_t k, same = 1;
+            for (k = 0; k < 6u; k++)
+                same &= fx.eq_c[b][k] == c1[k];
+            for (c = 0; c < 2u; c++) {
+                if (same)
+                    fx_eq_band_k(w[c], fx.eq_s[b][c], c1);
+                else
+                    fx_eq_band(w[c], fx.eq_s[b][c], fx.eq_c[b], c1);
+            }
+        }
         sy_copyf(fx.eq_c[b], c1, 6u);
         run |= 1u << b;
     }
