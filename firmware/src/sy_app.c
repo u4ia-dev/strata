@@ -9,8 +9,10 @@
  *   - The main loop: sy_app_ms every millisecond (the keys -> notes, the UI's buttons and knobs (sy_ui.c), a step of a
  *     wavetable build), sy_app_frame about 60 times a second (the screen where it changed, the LEDs: sy_ui_draw.c).
  *     A value a knob turns is a 16-bit store into the patch: the engine's smoother takes it at its next block.
- * Nothing here writes the flash. Needs the HAL (or the emulator's), panel.c, gfx.c, the sy_* engine, sy_text.c,
- * sy_sounds.h, sy_gfx.c and the UI (sy_ui.c, sy_ui_draw.c, which call back the sy_app_* below). */
+ *   - The flash (sy_store.c), from the main loop only: a SAVE behind the engine's hush, the settings and the sound
+ *     playing once 3 s have gone by without sound; the user presets' index read at power-on.
+ * Needs the HAL (or the emulator's), panel.c, gfx.c, the sy_* engine, sy_text.c, sy_sounds.h, sy_gfx.c, sy_store.c
+ * and the UI (sy_ui.c, sy_ui_draw.c, sy_ui_fx.c, sy_ui_save.c, which call back the sy_app_* below). */
 
 #define SY_HALF 128u                             /* an I2S half: four engine blocks */
 #define SY_HALF_WORDS (SY_HALF * 2u)
@@ -165,23 +167,219 @@ static void sy_sound_load(uint32_t k)
     sy_ui_touch();
 }
 
-/* the sound playing as HOME shows it: its bank, its number (from 1) and the bank's count; INIT: none (0) */
+/* ------------------------------------------------------------------------------------- the presets --- */
+/* the presets the browser and PRESETS go through: the factory's (the starter sounds and INIT, until Phase 5's) then the
+ * user's slots that hold one (sy_store.c), an id each: k (factory) or SY_USER + slot. The user slots' names and
+ * categories are read once at power-on (and kept as saves change them) */
+static struct {
+    char name[17];
+    uint8_t cat, used;
+} sy_uidx[SS_NUSER];
+static int16_t sy_slot = -1;                     /* the user slot the sound playing came from or went to (-1 none) */
+
+static void sy_uidx_set(uint32_t s, const uint8_t *pk, uint32_t len)
+{
+    sy_patch_t p;
+    sy_uidx[s].used = len && sp_unpack(&p, pk, len);
+    if (!sy_uidx[s].used)
+        return;
+    memcpy(sy_uidx[s].name, p.name, sizeof sy_uidx[s].name);
+    sy_uidx[s].cat = p.cat;
+}
+static void sy_uidx_scan(void)                   /* (power-on: each pair read once, its five slots from it) */
+{
+    uint32_t pr, k;
+    memset(sy_uidx, 0, sizeof sy_uidx);
+    for (pr = 0; pr < SS_NPAIRS; pr++) {
+        int n = ss_load(SS_USER0 + pr, ss_buf, SS_PAYLOAD_MAX);
+        for (k = 0; n > 0 && k < SS_SLOTS && pr * SS_SLOTS + k < SS_NUSER; k++) {
+            uint32_t at = k * SS_SLOT_BYTES, len = (uint32_t)ss_buf[at] | (uint32_t)ss_buf[at + 1u] << 8;
+            if (len && len <= SS_SLOT_BYTES - 2u && at + 2u + len <= (uint32_t)n)
+                sy_uidx_set(pr * SS_SLOTS + k, ss_buf + at + 2u, len);
+        }
+    }
+}
+
+/* a preset's name and category (0: none such) */
+static const char *sy_app_entry(uint32_t id, uint8_t *cat)
+{
+    static const char INIT[] = "INIT";
+    if (id >= SY_USER)
+        return id - SY_USER < SS_NUSER && sy_uidx[id - SY_USER].used ? (*cat = sy_uidx[id - SY_USER].cat,
+                                                                          sy_uidx[id - SY_USER].name) : 0;
+    if (id + 1u < SY_NFACT) {
+        *cat = SOUNDS[id].cat;
+        return SOUNDS[id].name;
+    }
+    *cat = CAT_OTHER;
+    return id + 1u == SY_NFACT ? INIT : 0;
+}
+
+/* the presets of a bank (0 all, 1 factory, 2 user) and category (0 all, else CAT_* + 1), in order, into ids: their
+ * count */
+static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids)
+{
+    uint32_t k, n = 0;
+    uint8_t c;
+    for (k = 0; bank != 2u && k < SY_NFACT; k++)
+        if (sy_app_entry(k, &c) && (!cat || c + 1u == cat))
+            ids[n++] = (uint16_t)k;
+    for (k = 0; bank != 1u && k < SS_NUSER; k++)
+        if (sy_uidx[k].used && (!cat || sy_uidx[k].cat + 1u == cat))
+            ids[n++] = (uint16_t)(SY_USER + k);
+    return n;
+}
+static uint32_t sy_app_entry_now(void) { return sy_slot >= 0 ? SY_USER + (uint32_t)sy_slot : sy_sound; }
+static int32_t sy_app_slot(void) { return sy_slot; }
+static const char *sy_app_slot_name(uint32_t s) { return s < SS_NUSER && sy_uidx[s].used ? sy_uidx[s].name : 0; }
+static int32_t sy_app_slot_free(void)            /* the first empty slot, -1 all full */
+{
+    uint32_t s;
+    for (s = 0; s < SS_NUSER; s++)
+        if (!sy_uidx[s].used)
+            return (int32_t)s;
+    return -1;
+}
+
+/* a preset loaded, faded in as any (sy_patch_load); with a load in flight, after it */
+static void sy_app_entry_load(uint32_t id)
+{
+    uint8_t pk[SP_PACK_MAX];
+    sy_patch_t p;
+    int n;
+    if (id < SY_USER) {
+        sy_sound_load(id);
+        sy_slot = -1;
+        return;
+    }
+    if (sy_next_st || (n = ss_user_get(id - SY_USER, pk, sizeof pk)) <= 0 || !sp_unpack(&p, pk, (uint32_t)n))
+        return;
+    ui_hist_push();
+    ui.edit_t = 0;
+    sy_patch_load(&p);
+    sy_slot = (int16_t)(id - SY_USER);
+    sy_ui_touch();
+}
+
+/* the sound playing as HOME shows it: its bank, its number (from 1) and the bank's count (none for the user's) */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n)
 {
-    *n = sizeof SOUNDS / sizeof SOUNDS[0];
+    *n = SY_NFACT - 1u;
     *i = sy_sound + 1u;
-    if (sy_sound < *n)
+    if (sy_slot >= 0) {
+        *i = (uint32_t)sy_slot + 1u;
+        *n = 0;
+        return "USER";
+    }
+    if (sy_sound + 1u < SY_NFACT)
         return "STARTER";
     *i = *n = 0;
     return "INIT";
 }
 
-/* PRESETS: the next or an earlier starter sound (INIT after the last) */
+/* PRESETS: the next or an earlier preset, factory then user, round */
 static void sy_app_sound_step(int32_t s)
 {
-    uint32_t n = sizeof SOUNDS / sizeof SOUNDS[0] + 1u;
-    sy_sound_load((uint32_t)((int32_t)(sy_sound_want >= 0 ? (uint32_t)sy_sound_want : sy_sound) + s % (int32_t)n +
-                             (int32_t)n) % n);
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids), k, now = sy_sound_want >= 0 ? (uint32_t)sy_sound_want : sy_app_entry_now();
+    for (k = 0; k < n && ids[k] != now; k++)
+        ;
+    if (k == n)
+        k = 0;
+    sy_app_entry_load(ids[(uint32_t)(((int32_t)k + s % (int32_t)n + (int32_t)n) % (int32_t)n)]);
+}
+
+/* -------------------------------------------------------------------------------------------- flash --- */
+/* the main loop's flash work (sy_store.c). A SAVE: the audio hushed first (an erase holds the audio's interrupt off
+ * for ~17 ms, a page's program for up to 3 ms: storage_hw.c; the DMA loops the ring meanwhile, so the engine fades
+ * out over 5.8 ms and says hushed once the whole ring is silent; back in over 5.8 ms), then the slot written. The
+ * settings and the sound playing (back at power-on): only after 3 s without sound (the ring under -70 dBFS, nothing
+ * to hush), when they differ from what the flash has */
+#define SY_QUIET_MS 3000u
+static struct {
+    uint8_t busy;                                /* a SAVE waiting for the hush */
+    uint16_t slot;
+    uint8_t pk[SP_PACK_MAX];
+    uint32_t len, quiet_t, check_t, edit_crc, set_crc;
+} sy_fl;
+
+/* a SAVE asked for: the sound playing into user slot s, named and filed so; 0 queued (sy_ui_saved tells the end) */
+static int sy_app_save(uint32_t s, const char *name, uint32_t cat)
+{
+    uint32_t i;
+    if (sy_fl.busy || s >= SS_NUSER || sy_next_st)
+        return -1;
+    for (i = 0; i < 16u && name[i]; i++)
+        sy_patch.name[i] = name[i];
+    sy_patch.name[i] = 0;
+    sy_patch.cat = (uint8_t)(cat < CAT_COUNT ? cat : CAT_OTHER);
+    sy_fl.len = sp_pack(&sy_patch, sy_fl.pk);
+    sy_fl.slot = (uint16_t)s;
+    sy_fl.busy = 1;
+    sy_hush_req = 1;
+    return 0;
+}
+
+/* the edit buffer's bytes: the user slot (2), the starter sound (1), the packed patch */
+static uint32_t sy_edit_pack(uint8_t *b)
+{
+    b[0] = (uint8_t)sy_slot;
+    b[1] = (uint8_t)((uint16_t)sy_slot >> 8);
+    b[2] = (uint8_t)sy_sound;
+    return 3u + sp_pack(&sy_patch, b + 3);
+}
+
+static void sy_flash_ms(void)
+{
+    if (sy_fl.busy && sy_hushed) {               /* a SAVE: hushed, the slot written, back */
+        int rc = ss_user_put(sy_fl.slot, sy_fl.pk, sy_fl.len);
+        sy_hush_req = 0;
+        sy_fl.busy = 0;
+        if (!rc) {
+            sy_uidx_set(sy_fl.slot, sy_fl.pk, sy_fl.len);
+            sy_slot = (int16_t)sy_fl.slot;
+        }
+        sy_ui_saved(rc, sy_fl.slot);
+    }
+    if (ui_sounding())
+        sy_fl.quiet_t = fm1_ms;
+    if (fm1_ms - sy_fl.check_t < 500u || fm1_ms - sy_fl.quiet_t < SY_QUIET_MS || sy_fl.busy || sy_next_st)
+        return;
+    sy_fl.check_t = fm1_ms;
+    {                                            /* (quiet: the settings, the sound, when changed) */
+        uint8_t b[SS_SETTINGS_LEN + SP_PACK_MAX + 3u];
+        uint32_t n = sy_ui_settings(b, 0), c = ss_crc32(b, n);
+        if (c != sy_fl.set_crc && !ss_save(SS_SETTINGS, b, n))
+            sy_fl.set_crc = c;
+        n = sy_edit_pack(b);
+        c = ss_crc32(b, n);
+        if (c != sy_fl.edit_crc && !ss_save(SS_EDIT, b, n))
+            sy_fl.edit_crc = c;
+    }
+}
+
+/* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held: a way back to a
+ * start, should a sound ever stop the unit) */
+static void sy_flash_boot(void)
+{
+    uint8_t b[SS_SETTINGS_LEN + SP_PACK_MAX + 3u];
+    sy_patch_t p;
+    int n;
+    memset(&sy_fl, 0, sizeof sy_fl);
+    sy_uidx_scan();
+    if ((n = ss_load(SS_SETTINGS, b, sizeof b)) > 0 && sy_ui_settings(b, (uint32_t)n))
+        sy_fl.set_crc = ss_crc32(b, (uint32_t)n);
+    if (fm1_in.buttons & (1u << panel.btn[B_HOME]))
+        return;
+    n = ss_load(SS_EDIT, b, sizeof b);
+    if (n > 3 && sp_unpack(&p, b + 3, (uint32_t)n - 3u)) {
+        sy_slot = (int16_t)(b[0] | b[1] << 8);
+        if (sy_slot < -1 || sy_slot >= (int16_t)SS_NUSER || (sy_slot >= 0 && !sy_uidx[sy_slot].used))
+            sy_slot = -1;
+        sy_sound = b[2] < SY_NFACT ? b[2] : 0u;
+        sy_patch = p;
+        sy_fl.edit_crc = ss_crc32(b, (uint32_t)n);
+    }
 }
 
 /* -------------------------------------------------------------------------------------------- keys --- */
@@ -217,7 +415,8 @@ static void sy_keys(void)
 }
 
 /* --------------------------------------------------------------------------------------- main loop --- */
-/* power-on: the panel, the engine with the first starter sound (no fade: nothing plays yet), the UI, the audio */
+/* power-on: the panel, the engine with the first starter sound (no fade: nothing plays yet), the UI, then what the
+ * flash keeps (the user presets' index, the settings, the sound that was playing), the audio */
 static void sy_app_boot(void)
 {
     sy_patch_t p;
@@ -226,17 +425,20 @@ static void sy_app_boot(void)
     sy_init();
     sy_sound_patch(0, &p);
     sy_patch = p;
-    sp_snap();
-    sy_tables_now();
     sy_sound = 0;
+    sy_slot = -1;
+    sy_ui_boot();
+    sy_flash_boot();
+    sp_snap();
+    lfo_dr_seq = 1u;                             /* (the sound's drawn shapes: taken at the first block) */
+    sy_tables_now();
     for (k = 0; k < SY_NKEY; k++)
         sy_keynote[k] = 0xFF;
-    sy_ui_boot();
     sy_audio_init();
 }
 
 /* every millisecond: the keys, the UI's buttons and knobs, a step of a wavetable build, a sound asked for while
- * one was loading */
+ * one was loading, the flash's work */
 static void sy_app_ms(void)
 {
     sy_keys();
@@ -244,6 +446,7 @@ static void sy_app_ms(void)
     sy_service();
     if (sy_sound_want >= 0 && !sy_next_st)
         sy_sound_load((uint32_t)sy_sound_want);
+    sy_flash_ms();
 }
 
 /* a frame (~60 a second): the screen where it changed, the LEDs */

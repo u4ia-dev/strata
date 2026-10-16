@@ -11,7 +11,8 @@
  *   - the panel: buttons and encoders by their printed labels (panel.c maps them to the matrix), the keys as
  *     fm1_in.notes, the LEDs read back through the key matrix; MASTER as the output's level;
  *   - the screen: lcd_fill / lcd_blit into a 240 x 240 RGB565 frame (the panel's byte order);
- *   - the flash: an erased 1 MiB image for the page's save and restore (Strata writes nothing to it yet).
+ *   - the flash: a 1 MiB image (erased, or the page's saved one), written through storage_hw.c's hooks with the
+ *     firmware's allow-list (Strata's presets, settings and sound: sy_store.c), kept by the page across reloads.
  * Not here: USB, TRS MIDI, the console, the battery. Web MIDI's channel messages go to sy_app.c's MIDI in.
  *   web/emu/build_strata.sh  ->  build/emu_strata/{index.html, worklet.js, strata.wasm} */
 #include <stdint.h>
@@ -82,6 +83,43 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 }
 static void lcd_sync(void) {}
 
+/* ------------------------------------------------------------------------------------------- the flash --- */
+/* storage_hw.c's hooks on the simulated NOR: an erase or a program only inside the firmware's allow-list
+ * (hal/fm1_flash_map.h FL_STORE_OK, as storage_hw.c checks it; the RAM driver's FL_RANGE_OK is the device's second
+ * guard), a program only clearing bits, no page wrapping; what was refused is counted (the tests) */
+#include "../../firmware/hal/fm1_flash_map.h"
+static uint32_t web_flash_writes, web_flash_refused;
+static int st_read(uint32_t off, void *dst, uint32_t n)
+{
+    if (off >= sizeof nor || n > sizeof nor - off)
+        return -1;
+    memcpy(dst, nor + off, n);
+    return 0;
+}
+static int st_erase(uint32_t off)
+{
+    if (!FL_STORE_OK(off, 4096u) || (off & 4095u)) {
+        web_flash_refused++;
+        return -8;
+    }
+    memset(nor + off, 0xFF, 4096);
+    web_flash_writes++;
+    return 0;
+}
+static int st_prog(uint32_t off, const void *src, uint32_t n)
+{
+    const uint8_t *s = src;
+    uint32_t i;
+    if (!FL_STORE_OK(off, n) || (off & 0xFFu) + n > 256u) {
+        web_flash_refused++;
+        return -8;
+    }
+    for (i = 0; i < n; i++)
+        nor[off + i] &= s[i];
+    web_flash_writes++;
+    return 0;
+}
+
 /* ------------------------------------------------------------------------------ the app and the synth --- */
 #include "../../firmware/src/gfx.c"                /* (its fonts, palettes and keycaps: build/gen) */
 static uint8_t fx_lowcut;                        /* (panel.c's settings_init sets Felucca's low cut: not Strata's) */
@@ -99,11 +137,13 @@ static uint8_t fx_lowcut;                        /* (panel.c's settings_init set
 #include "../../firmware/src/sy_fx.c"
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
+#include "../../firmware/src/sy_store.c"
 #include "../../firmware/src/sy_sounds.h"
 #include "../../firmware/src/sy_gfx.c"
 #include "../../firmware/src/sy_ui.c"
 #include "../../firmware/src/sy_ui_draw.c"
 #include "../../firmware/src/sy_ui_fx.c"
+#include "../../firmware/src/sy_ui_save.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #include "../../firmware/src/sy_app.c"
 
@@ -164,11 +204,14 @@ EXPORT void web_render(uint32_t n)
     }
 }
 
-/* the flash: kept for the page's save and restore; nothing writes it yet */
+/* the flash: kept for the page's save and restore (it saves the image when the count of writes moves) */
 EXPORT uint8_t *web_nor(void) { return nor; }
 EXPORT uint32_t web_nor_size(void) { return sizeof nor; }
 EXPORT void web_nor_erase(void) { memset(nor, 0xFF, sizeof nor); }
-EXPORT uint32_t web_flash_writes_count(void) { return 0; }
+EXPORT uint32_t web_flash_writes_count(void) { return web_flash_writes; }
+/* for the tests: an erase where the allow-list says no (the hook refuses it: -8), the refusals so far */
+EXPORT int32_t web_test_erase(uint32_t off) { return st_erase(off); }
+EXPORT uint32_t web_test_refused(void) { return web_flash_refused; }
 EXPORT void web_boot(void)
 {
     if (web_booted)
@@ -299,6 +342,23 @@ EXPORT int32_t web_test_tempo(uint32_t f)
     return f == 0u ? ui.bpm : f == 1u ? ui.tsb : f == 2u ? UI_TSN_VAL[ui.tsn] : (int32_t)(sy_tempo * 100.0f + 0.5f);
 }
 EXPORT const char *web_test_toast(void) { return ui.toast; }
+/* SAVE: the name typed, the slot it goes to; the user slot the sound playing is from (-1 none); a user slot's name
+ * ("" empty) and one of its patch's values (-32768: empty) */
+EXPORT const char *web_test_save_name(void) { return ui.sv_name; }
+EXPORT uint32_t web_test_save_slot(void) { return ui.sv_slot; }
+EXPORT int32_t web_test_user_slot(void) { return sy_slot; }
+EXPORT const char *web_test_slot_name(uint32_t s)
+{
+    const char *n = sy_app_slot_name(s);
+    return n ? n : "";
+}
+EXPORT int32_t web_test_slot_value(uint32_t s, uint32_t id)
+{
+    uint8_t pk[SP_PACK_MAX];
+    sy_patch_t p;
+    int n = ss_user_get(s, pk, sizeof pk);
+    return n > 0 && sp_unpack(&p, pk, (uint32_t)n) && id < SP_COUNT ? p.p[id] : -32768;
+}
 /* the knob turning (0xFF none), whether a shape before the turn is kept (the ghost), HOME's scope captures taken */
 EXPORT uint32_t web_test_act(void) { return ui.act_k; }
 EXPORT uint32_t web_test_ghost(void) { return ui_ghost() != 0; }

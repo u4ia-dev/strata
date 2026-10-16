@@ -33,6 +33,10 @@ static void ui_g_ott(void);
 static void ui_g_eq(void);
 static void ui_flag(int32_t x, int32_t y, const char *s);
 static int ui_eq_modded(void);
+static void ui_g_save(void);                        /* sy_ui_save.c: SAVE's screen, the browser */
+static void ui_g_browse(void);
+static void ui_save_cell(int32_t id, int act);
+static void ui_save_head(char *t);
 
 /* sound playing: a voice on, or the output still over -70 dBFS (a delay's or a reverb's tail). The live graphs move
  * only while it does; otherwise they stand still and nothing is redrawn */
@@ -48,7 +52,7 @@ static int ui_sounding(void)
 /* s centred in w px from x0 (y: its line top), cut with an ellipsis when it is wider */
 static void ui_text_c(int32_t x0, int32_t y, int32_t w, const aafont_t *f, const char *s, uint16_t fg, uint16_t bg)
 {
-    char b[32];
+    char b[48];
     text_fit(b, sizeof b, s, f, w);
     cv_text_in(x0, y, w, f, b, fg, bg);
 }
@@ -172,6 +176,11 @@ static void ui_draw_head(void)
             sp_fix(t, (int32_t)n, 0u, 0);
             r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
             break;
+        case SEC_SAVE:                              /* SAVE: the slot it goes to; the browser: the category, the */
+        case SEC_BROWSE:                            /* place in it */
+            ui_save_head(t);
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, t, sk.dim, sk.ground);
+            break;
         case SEC_FILTER: {                          /* the sources through it: lit */
             static const uint16_t ON[4] = {SP_A_ON, SP_B_ON, SP_SUB_ON, SP_NZ_ON};
             static const uint16_t RT[4] = {SP_A_ROUTE, SP_B_ROUTE, SP_SUB_ROUTE, SP_NZ_ROUTE};
@@ -189,7 +198,8 @@ static void ui_draw_head(void)
         }
         }
         ui_page_of(ui.page, &n, &of);               /* the page, and its number where there is room */
-        e = sp_put(t, pg->name);
+        e = sp_put(t, pg->sec != SEC_SAVE ? pg->name : ui.sv_ver ? "NEW VERSION" : ui.sv_sym ? "NAME IT \xB7 123"
+                                                                                        : "NAME IT");
         if (of > 1u) {
             e = sp_fix(sp_put(e, " "), (int32_t)n, 0u, 0);
             sp_fix(sp_put(e, "/"), (int32_t)of, 0u, 0);
@@ -305,6 +315,8 @@ static void ui_draw_knob(uint32_t k)
         ui_tempo_cell(id, act);
     } else if (id >= UI_LPT && id <= UI_LC) {
         ui_lfo_cell(id, act);
+    } else if (id >= UI_SCUR && id <= UI_BBANK) {   /* SAVE's, the browser's */
+        ui_save_cell(id, act);
     } else if (id == UI_EQPT) {                     /* the EQ's point picked */
         ui_pill(EQPT[ui.eqpt < 3u ? ui.eqpt : 0u], ui.mod != 0, act);
         ui_text_c(0, 46, 60, &AF_XS, "POINT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
@@ -345,6 +357,11 @@ static void ui_draw_foot(void)
     cv_begin(240, 28, sk.ground);
     if (ui.toast[0]) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.toast, sk.text, sk.ground);
+    } else if (ui_sec() == SEC_SAVE) {
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.sv_sym ? "OCT+ ABC \xB7 OCT- DEL \xB7 SAVE: WRITE"
+                                                            : "OCT+ 123 \xB7 OCT- DEL \xB7 SAVE: WRITE", sk.dim, sk.ground);
+    } else if (ui_sec() == SEC_BROWSE) {
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 HOME: DONE", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_MENU) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 1: COLOR \xB7 KNOB 2: ACCEL", sk.dim, sk.ground);
     } else if (UI_PG[ui.page].id[0] == UI_LPT && !ui.mod) {
@@ -879,6 +896,10 @@ static void ui_g_home(void)
         t[1] = (char)('0' + num % 10u);
         x = cv_text_r(x, WY + 7, &AF_XS, t, sk.text, sk.display);
         cv_text_r(x - 4, WY + 7, &AF_XS, bank, sk.dim, sk.display);
+    } else if (num) {                               /* "USER 12" */
+        sp_fix(t, (int32_t)num, 0u, 0);
+        x = cv_text_r(x, WY + 7, &AF_XS, t, sk.text, sk.display);
+        cv_text_r(x - 4, WY + 7, &AF_XS, bank, sk.dim, sk.display);
     } else {
         cv_text_r(x, WY + 7, &AF_XS, bank, sk.dim, sk.display);
     }
@@ -932,6 +953,8 @@ static void ui_draw_disp(uint32_t r0)
     case G_REVERB: ui_g_reverb(); break;
     case G_OTT: ui_g_ott(); break;
     case G_EQ: ui_g_eq(); break;
+    case G_SAVE: ui_g_save(); break;
+    case G_BROWSE: ui_g_browse(); break;
     default: ui_g_list(); break;
     }
     cv_blit_from(0, R_DISP_Y, r0);

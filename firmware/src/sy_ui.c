@@ -36,14 +36,27 @@ static int32_t sy_app_oct(void);
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
 static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
+#define SY_NFACT (sizeof SOUNDS / sizeof SOUNDS[0] + 1u)   /* .. the factory's presets: the starter sounds, INIT */
+#define SY_USER 0x100u                              /* .. a user slot's preset id: SY_USER + its slot */
+static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids);   /* .. the presets of a bank, category */
+static const char *sy_app_entry(uint32_t id, uint8_t *cat);                /* .. a preset's name, category */
+static uint32_t sy_app_entry_now(void);                                     /* .. the one playing */
+static void sy_app_entry_load(uint32_t id);
+static int32_t sy_app_slot(void);                   /* .. the user slot the sound playing is from (-1 none) */
+static int32_t sy_app_slot_free(void);
+static const char *sy_app_slot_name(uint32_t s);
+static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SAVE (sy_ui_saved when done) */
 
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
-enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ };
+enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ,
+       UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK };   /* (SAVE's, the browser's: sy_ui_save.c) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
+#define SEC_SAVE (SEC_COUNT + 2)
+#define SEC_BROWSE (SEC_COUNT + 3)
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -95,18 +108,20 @@ static const ui_page_t UI_PG[] = {
     {SEC_EQ, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},
     {SEC_EQ, G_EQ, "GAINS", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_ACCEL, -1, -1}},
+    {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
+    {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
 
 /* the families: the sections each button shows (0xFF ends) */
-enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_N };
+enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_N };
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
     {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_MATRIX, 0xFF}, {SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, 0xFF},
-    {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
+    {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF}, {SEC_SAVE, SEC_BROWSE, 0xFF},
 };
 #define UI_NFX 6u                                   /* the effects, SEC_DRIVE .. SEC_EQ */
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB};
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB, NB};
 
 /* the MOD layer's white keys, F3 .. G5: the sources (black keys: none) */
 static const uint8_t UI_KEY_SRC[27] = {
@@ -129,7 +144,7 @@ static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", 
 static struct {
     uint16_t page;
     uint16_t fpage[FAM_N];                          /* the page a family returns to */
-    uint16_t spage[SEC_COUNT + 2];                  /* the page a section returns to (ALGORITHM) */
+    uint16_t spage[SEC_COUNT + 4];                  /* the page a section returns to (ALGORITHM) */
     uint8_t fam;
     uint8_t dirty;                                  /* D_*: what to draw */
     uint8_t pal, accel;                             /* MENU: the palette, the knobs' feel */
@@ -157,6 +172,14 @@ static struct {
     char toast[32];                                 /* a word in the footer, until toast_t */
     uint32_t toast_t;
     uint32_t live_t;                                /* a live graph's last frame */
+    uint16_t sv_ret;                                /* SAVE, the browser: the page to go back to */
+    char sv_name[17];                               /* SAVE: the name typed, its length, the cursor, the category */
+    uint8_t sv_len, sv_cur, sv_cat, sv_slot;        /* .. the slot it goes to */
+    uint8_t sv_sym, sv_ver, sv_over, saving;        /* .. symbols on the keys; a new version; over its own; writing */
+    uint8_t sv_key;                                 /* .. the key typed last (lit a moment; 0xFF none) */
+    uint32_t sv_key_t, sv_tap_t;                    /* .. when; SAVE tapped once, its screen at this time (0 none) */
+    uint8_t br_cat, br_bank;                        /* the browser: the category (0 all), the bank (all, factory, user) */
+    uint16_t br_want;                               /* .. a preset to load (its id + 1; 0 none) */
 } ui;
 
 static void ui_toast(const char *s)
@@ -171,7 +194,19 @@ static void ui_toast(const char *s)
 
 /* ------------------------------------------------------------------------------------------ helpers --- */
 static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
-static const char *ui_sec_name(uint32_t s) { return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : "GLOBAL"; }
+static const char *ui_sec_name(uint32_t s)
+{
+    return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
+                                                                                                     : "PRESETS";
+}
+static void ui_save_open(void);                     /* sy_ui_save.c */
+static void ui_save_over(void);
+static void ui_save_write(void);
+static void ui_save_del(void);
+static int ui_save_key(uint32_t k);
+static void ui_save_item_turn(int32_t item, int32_t s);
+static void ui_browse_open(void);
+static void ui_save_ms(void);
 
 static int32_t ui_sec_power(uint32_t s)            /* a section's ON (its header light), -1 none */
 {
@@ -756,6 +791,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
     } else if (item == UI_ACCEL) {
         ui.accel = s > 0;
         ui.dirty |= D_KNOBS | D_DISP;
+    } else if (item >= UI_SCUR && item <= UI_BBANK) {   /* SAVE's, the browser's */
+        ui_save_item_turn(item, s);
     } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */
         ui.eqpt = (uint8_t)((ui.eqpt + (uint32_t)(s % 3 + 3)) % 3u);   /* whose depths KNOB 2-4 set) */
         ui.dirty |= D_KNOBS | D_DISP;
@@ -871,6 +908,15 @@ static void ui_press(uint32_t b)
 {
     if (b != ui.cd_btn)
         ui_cd_stop();
+    if ((b == B_OCTDN || b == B_OCTUP) && ui_sec() == SEC_SAVE) {   /* SAVE's screen: OCT+ the symbols, OCT- deletes */
+        if (b == B_OCTUP) {
+            ui.sv_sym ^= 1u;
+            ui.dirty |= D_DISP | D_HEAD | D_FOOT;
+        } else {
+            ui_save_del();
+        }
+        return;
+    }
     if (b == B_OCTDN || b == B_OCTUP) {
         char t[16] = "KEYS OCT ";
         uint16_t held = (uint16_t)(ui.bt_down & UI_CHORD);
@@ -890,8 +936,13 @@ static void ui_press(uint32_t b)
     }
 }
 
-static void ui_hold(uint32_t b)                     /* held past HOLD: its layer */
+static void ui_hold(uint32_t b)                     /* held past HOLD: its layer (none on SAVE's or the browser's) */
 {
+    if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
+        if (b == B_HOME)
+            ui_cd_arm(B_HOME);
+        return;
+    }
     if (b == B_REC && !ui.mod)
         ui_mod_open(B_REC, ui.mod_pick, 0);
     else if (b == B_ENV && !ui.mod)
@@ -907,9 +958,31 @@ static void ui_release(uint32_t b, int held)
     uint32_t f;
     if (b == ui.cd_btn)
         ui_cd_stop();                               /* (let go before the end: nothing happens) */
-    if (held) {                                     /* a held layer closes (a latched one stays) */
-        if (ui.mod == 1u && ui.mod_btn == b)
+    if (held) {                                     /* a held layer closes (a latched one stays); SAVE held and */
+        if (ui.mod == 1u && ui.mod_btn == b)        /* let go, no OCT meanwhile (undo, redo): the browser */
             ui_mod_close();
+        if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && ui_sec() != SEC_SAVE)
+            ui_browse_open();
+        return;
+    }
+    if (b == B_SAVE) {                              /* SAVE: on its screen, write; in the browser, its screen; else */
+        ui.sv_tap_t = 0;                            /* once: its screen (when no second tap comes), twice: over */
+        if (ui.mod)                                 /* its own slot */
+            return;
+        if (ui_sec() == SEC_SAVE)
+            ui_save_write();
+        else if (ui_sec() == SEC_BROWSE)
+            ui_save_open();
+        else if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS)
+            ui_save_over();
+        else
+            ui.sv_tap_t = (fm1_ms + UI_DTAP_MS) | 1u;
+        ui.tap_t[b] = ui.sv_tap_t ? fm1_ms : 0u;
+        return;
+    }
+    if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {
+        ui.tap_t[b] = fm1_ms;                       /* HOME: back, unsaved */
+        ui_go(ui.sv_ret);
         return;
     }
     if (ui_has_layer(b) && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod) {   /* a double tap: latched */
@@ -970,6 +1043,8 @@ static void ui_buttons(void)
  * the keys play, to hear what ENV 2 does) */
 static int sy_ui_key(uint32_t k)
 {
+    if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
+        return ui_save_key(k);
     if (!ui.mod || ui.mod_btn != B_REC)
         return 0;
     if (k < 27u && UI_KEY_SRC[k]) {
@@ -1002,15 +1077,46 @@ static void sy_ui_ms(void)
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);
+    ui_save_ms();
     if (ui.toast[0] && (int32_t)(fm1_ms - ui.toast_t) >= 0) {
         ui.toast[0] = 0;
         ui.dirty |= D_FOOT;
     }
 }
 
-/* panel.c's settings hooks: the palette (SETTINGS > COLOR), their save (Phase 4, part 2: flash) */
+/* panel.c's settings hooks: the palette (SETTINGS > COLOR); saved by sy_app.c when they change (sy_ui_settings) */
 static void palette_apply(void) { sy_palette(ui.pal); }
 static void settings_save(void) {}
+
+/* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
+ * HOLD time. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
+#define SS_SETTINGS_LEN 11u
+static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
+{
+    if (!n) {
+        b[0] = 'S', b[1] = 'E', b[2] = 'T', b[3] = '1';
+        b[4] = ui.pal;
+        b[5] = ui.accel;
+        b[6] = (uint8_t)ui.bpm;
+        b[7] = (uint8_t)(ui.bpm >> 8);
+        b[8] = ui.tsb;
+        b[9] = ui.tsn;
+        b[10] = settings_hold;
+        return SS_SETTINGS_LEN;
+    }
+    if (n != SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
+        return 0;
+    ui.pal = (uint8_t)(b[4] % SY_NPAL);
+    ui.accel = b[5] != 0;
+    ui.bpm = (uint16_t)sy_clampi(b[6] | b[7] << 8, 20, 300);
+    ui.tsb = (uint8_t)sy_clampi(b[8], 1, 16);
+    ui.tsn = (uint8_t)sy_clampi(b[9], 0, 4);
+    settings_hold = (uint8_t)(b[10] % 4u);
+    sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+    sy_palette(ui.pal);
+    ui.dirty = D_ALL;
+    return 1;
+}
 
 static void sy_ui_boot(void)
 {
@@ -1019,6 +1125,7 @@ static void sy_ui_boot(void)
     ui.mod_pick = SRC_LFO1;
     ui.cd_btn = NB;
     ui.act_k = 0xFF;
+    ui.sv_key = 0xFF;
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;
