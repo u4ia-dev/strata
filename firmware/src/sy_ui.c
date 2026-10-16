@@ -41,6 +41,7 @@ static int32_t sy_app_load(void);                   /* .. the audio's load in %,
 static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids);   /* .. the presets of a bank, category */
 static const char *sy_app_entry(uint32_t id, uint8_t *cat);                /* .. a preset's name, category */
 static uint32_t sy_app_entry_now(void);                                     /* .. the one playing */
+static void sy_app_entry_mark(uint32_t id);                                 /* .. undo, redo: the one a state was */
 static void sy_app_entry_load(uint32_t id);
 static int32_t sy_app_slot(void);                   /* .. the user slot the sound playing is from (-1 none) */
 static int32_t sy_app_slot_free(void);
@@ -452,12 +453,21 @@ static int32_t ui_accel(uint32_t e, int32_t s, int32_t range)
 /* the patch's history: SAVE + OCT- steps back, SAVE + OCT+ forward again. A state goes on it when an edit gesture
  * starts (nothing edited for UI_GESTURE_MS before: a knob, the MOD layer, an LFO's points) and before a sound
  * loads; full, the oldest goes. A state taken back is written as the knobs write (the engine fades what would
- * click). States 0 .. h_at - 1 are undo's, h_at + 1 .. h_cnt - 1 redo's (h_at the patch's own, kept once undone) */
+ * click), with the preset it was (a load undone: the sound is the one before again, and SAVE held writes over its
+ * slot, not the one loaded). States 0 .. h_at - 1 are undo's, h_at + 1 .. h_cnt - 1 redo's (h_at the patch's own,
+ * kept once undone) */
 #define UI_NHIST 8u
 #define UI_GESTURE_MS 1000u
 static sy_patch_t ui_hist[UI_NHIST];                /* (4.7 KB) */
+static uint16_t ui_hist_id[UI_NHIST];               /* .. the preset each was (sy_app_entry_now) */
 
-static sy_patch_t *ui_hist_at(uint32_t j) { return &ui_hist[(ui.h_first + j) % UI_NHIST]; }
+static uint32_t ui_hist_ix(uint32_t j) { return (ui.h_first + j) % UI_NHIST; }
+static sy_patch_t *ui_hist_at(uint32_t j) { return &ui_hist[ui_hist_ix(j)]; }
+static void ui_hist_put(uint32_t j)                 /* the patch as it is, with the preset it is, into state j */
+{
+    *ui_hist_at(j) = sy_patch;
+    ui_hist_id[ui_hist_ix(j)] = (uint16_t)sy_app_entry_now();
+}
 static void ui_hist_drop(void)                      /* (full: the oldest goes) */
 {
     ui.h_first = (uint8_t)((ui.h_first + 1u) % UI_NHIST);
@@ -470,7 +480,7 @@ static void ui_hist_push(void)
     ui.h_cnt = ui.h_at;
     if (ui.h_cnt == UI_NHIST)
         ui_hist_drop();
-    *ui_hist_at(ui.h_at) = sy_patch;
+    ui_hist_put(ui.h_at);
     ui.h_cnt++;
     ui.h_at++;
 }
@@ -509,7 +519,7 @@ static void ui_undo(int redo)
         if (ui.h_at == ui.h_cnt) {
             if (ui.h_cnt == UI_NHIST)
                 ui_hist_drop();
-            *ui_hist_at(ui.h_at) = sy_patch;
+            ui_hist_put(ui.h_at);
             ui.h_cnt++;
         }
         ui.h_at--;
@@ -521,6 +531,7 @@ static void ui_undo(int redo)
         ui.h_at++;
     }
     ui_hist_take(ui_hist_at(ui.h_at));
+    sy_app_entry_mark(ui_hist_id[ui_hist_ix(ui.h_at)]);
     ui.edit_t = 0;                                  /* (the next edit: a gesture of its own) */
     ui_toast(redo ? "REDO" : "UNDO");
 }

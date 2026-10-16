@@ -230,6 +230,15 @@ static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids)
     return n;
 }
 static uint32_t sy_app_entry_now(void) { return sy_slot >= 0 ? SY_USER + (uint32_t)sy_slot : sy_sound; }
+static void sy_app_entry_mark(uint32_t id)       /* undo, redo: the sound is preset id again (its values: the history's) */
+{
+    if (id >= SY_USER && id - SY_USER < SS_NUSER) {
+        sy_slot = (int16_t)(id - SY_USER);
+        return;
+    }
+    sy_slot = -1;
+    sy_sound = id < SY_NFACT ? id : 0u;
+}
 static int32_t sy_app_slot(void) { return sy_slot; }
 static const char *sy_app_slot_name(uint32_t s) { return s < SS_NUSER && sy_uidx[s].used ? sy_uidx[s].name : 0; }
 static int32_t sy_app_slot_free(void)            /* the first empty slot, -1 all full */
