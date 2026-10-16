@@ -365,9 +365,82 @@ def check(img, syms, dis, rt):
     return errors, notes
 
 
+# STRATA: the interrupts run on the system stack (app.ld _sstack_lo .. _sstack_top, 7,936 B) and TIMER5 nests into
+# the audio's render, so both chains add up. Each function's frame from the listing: every push ([--sp] = {...}, 4 B a
+# register) and every sp += -N in it, summed (an over-count where a body pushes twice); its depth: its frame and its
+# deepest callee's (a call, or a goto to another function's start: a tail call). A call through a register is allowed
+# only where ISR_ICALLS names the table it goes through: every function in that table's initializer (read from the
+# source, so a new kernel counts at once) is a callee. A "call" next to an <unknown instruction> is a jump table's
+# data the listing decoded (a '.' label inside a function), not a call.
+ISR_ROOTS_STACK = ("fm1_alnk0_irq", "fm1_timer5_irq")
+ISR_ICALLS = {"fm1_alnk0_irq": ("sy_fx.c", "RUN"),            # fx_block: the effects in their order
+              "osc_run": ("sy_osc.c", "OSC_KS"),               # the oscillator kernels
+              "flt_block": ("sy_filter.c", "FLT_SVF")}         # the SVF types
+ISR_WRAP = 28                       # hal/fm1_isr.S: {psr, rets, reti} and {r3-r0} before the C body
+ISR_STACK_MAX = 4096                # half the system stack: room for what the count cannot see
+
+
+def isr_table(src, name):
+    """the functions a table's initializer names (firmware/src/SRC: NAME[...] = {...};)"""
+    m = re.search(r"\b" + name + r"\[[^=;]*=\s*\{(.*?)\};", (FW / "src" / src).read_text(), re.S)
+    if not m:
+        raise SystemExit(f"build.py ISR_ICALLS: no table {name} in firmware/src/{src}")
+    return set(re.findall(r"[A-Za-z_]\w*", re.sub(r"/\*.*?\*/", " ", m.group(1), flags=re.S)))
+
+
 def isr_stack_check(dis):
-    """(placeholder until the listing's prologues are known)"""
-    return [], []
+    fn_re = re.compile(r"^([A-Za-z_$][\w.$]*):$")
+    push_re = re.compile(r"\[--sp\] = \{([^}]*)\}|\[--sp\] = (\w+)\s*$")
+    adj_re = re.compile(r"\bsp \+= (-\d+)")
+    call_re = re.compile(r"\b(call|goto) -?\d+ <([\w.$]+?)(\+0x[0-9A-Fa-f]+)? :")
+    icall_re = re.compile(r"\bcall r\d+\b")
+    lines = dis.splitlines()
+    funcs, cur = {}, None
+    for i, ln in enumerate(lines):
+        m = fn_re.match(ln)                 # (a label that starts with '.': a jump table inside the function)
+        if m:
+            cur = funcs.setdefault(m.group(1), {"frame": 0, "calls": set(), "icalls": 0})
+            continue
+        if cur is None:
+            continue
+        m = push_re.search(ln)
+        if m:
+            regs = m.group(1) if m.group(1) is not None else m.group(2)
+            for it in regs.split(","):
+                r = re.fullmatch(r"\s*r(\d+)-r(\d+)\s*", it)
+                cur["frame"] += 4 * (abs(int(r.group(1)) - int(r.group(2))) + 1 if r else 1)
+        m = adj_re.search(ln)
+        if m:
+            cur["frame"] -= int(m.group(1))
+        m = call_re.search(ln)
+        if m and (m.group(1) == "call" or not m.group(3)):
+            cur["calls"].add(m.group(2))
+        if icall_re.search(ln) and not any("<unknown instruction>" in x for x in lines[max(0, i - 2):i + 3]):
+            cur["icalls"] += 1
+    for f, (src, table) in ISR_ICALLS.items():
+        if f in funcs:
+            funcs[f]["calls"] |= isr_table(src, table) & set(funcs)
+    errors, memo = [], {}
+
+    def depth(f, path):
+        if f in memo:
+            return memo[f]
+        if f in path:
+            errors.append("interrupt stack: recursion " + " > ".join(path + (f,)))
+            return 0
+        d = funcs.get(f)
+        if d is None:
+            return 0
+        if d["icalls"] and f not in ISR_ICALLS:
+            errors.append(f"interrupt stack: {f} calls through a register; name its targets in build.py ISR_ICALLS")
+        memo[f] = d["frame"] + max([depth(c, path + (f,)) for c in d["calls"] if c != f] or [0])
+        return memo[f]
+    a, t = (depth(r, ()) for r in ISR_ROOTS_STACK)
+    total = ISR_WRAP + a + ISR_WRAP + t
+    if total > ISR_STACK_MAX:
+        errors.append(f"interrupt stack {total} B (audio {a}, TIMER5 {t}, wrappers) > {ISR_STACK_MAX} B")
+    return errors, [f"interrupt stack ~{total} B of {ISR_STACK_MAX} allowed (7,936): audio {a} B, TIMER5 nested "
+                    f"{t} B, wrappers {2 * ISR_WRAP} B"]
 
 
 # Every hardware register access lives in hal/. In src/, engines/src/ and loader/ (comments stripped):
