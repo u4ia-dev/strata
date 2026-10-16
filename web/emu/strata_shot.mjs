@@ -5,7 +5,7 @@
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
 // one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
 // chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
-// the matrix (SEQ), the SETTINGS (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
+// the keys' scale (SCL), the matrix (SEQ), the SETTINGS (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
 // NAME IT from it (a rename, the numbers, written), HOME with a user preset, and the wave page in each palette. It
 // prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
@@ -237,6 +237,23 @@ png("eq_gains.png");
 run(1.2);
 set(106, 0); set(107, 0); set(108, 0);
 for (const id of [130, 135, 141, 149, 158, 169]) set(id, 0);
+tap(1);                                         // SCL: D dorian, SNAP (a key off the scale plays the note below)
+ex.web_enc(E.K1, 3);
+run(0.12);
+ex.web_enc(E.K2, 2);
+run(0.12);
+ex.web_enc(E.K3, 1);
+run(0.12);
+png("keys.png");
+ex.web_enc(E.K3, 1);                            // WHITE: the white keys walk the scale
+run(0.12);
+png("keys_white.png");
+ex.web_enc(E.K1, -3);                           // (back: chromatic, C, OFF)
+run(0.12);
+ex.web_enc(E.K2, -2);
+run(0.12);
+ex.web_enc(E.K3, -2);
+run(0.12);
 tap(9);                                         // SEQ: the matrix; slot 2 made: ENV 2, negative, onto OSC B's FINE
 ex.web_enc(E.K1, 1);
 run(0.12);

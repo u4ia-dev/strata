@@ -558,6 +558,71 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
         s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b, 22, 136) > 300);
 }
+{                                               // SCL: the keys' scale, its root, how they fit it, their velocity
+  const u = await boot(), ut = () => cstr(u, u.web_test_toast());
+  const utap = (b) => { u.web_buttons(1 << b); play(u, 0.03); u.web_buttons(0); play(u, 0.35); };
+  const ukey = (k) => {                         // a key pressed and let go: the note it started, the voices then
+    u.web_keys(1 << k);
+    play(u, 0.05);
+    const r = [u.web_test_key_note(), u.web_test_voices()];
+    u.web_keys(0);
+    play(u, 0.3);
+    return r;
+  };
+  play(u, 0.2);
+  const plain = ukey(3);                        // (G#3 as it is: 56)
+  utap(B.SCL);
+  const sec = u.web_test_page_section(), pg = cstr(u, u.web_test_page_name());
+  u.web_enc(E.K1, 1);                           // KNOB 1: MAJOR; KNOB 2: D; KNOB 3: SNAP
+  play(u, 0.12);
+  u.web_enc(E.K2, 2);
+  play(u, 0.12);
+  u.web_enc(E.K3, 1);
+  play(u, 0.12);
+  const snap = ukey(3), own = ukey(1);          // G#3: off D major, down to G3; F#3: on it, as it is
+  check(`SCL: its page (section ${u.web_test_page_section()}, ${pg}); MAJOR, D, SNAP (${u.web_test_scl(0)}, ${u.web_test_scl(1)}, ${u.web_test_scl(2)}): G#3 plays ${plain[0]} before, ${snap[0]} now; F#3 ${own[0]}`,
+        sec === 22 && pg === "SCALE" && u.web_test_scl(0) === 1 && u.web_test_scl(1) === 2 && u.web_test_scl(2) === 1 &&
+        plain[0] === 56 && snap[0] === 55 && own[0] === 54);
+  u.web_enc(E.K3, 1);                           // WHITE: the white keys walk the scale from the root at C4
+  play(u, 0.12);
+  const c4 = ukey(7), d4 = ukey(9), f3 = ukey(0), cs4 = ukey(8);
+  check(`.. WHITE: C4 plays ${c4[0]} (the root, D4), D4 ${d4[0]} (E4), F3 ${f3[0]} (four degrees under the root: G3), C#4 nothing (${cs4[1]} voices)`,
+        c4[0] === 62 && d4[0] === 64 && f3[0] === 55 && cs4[1] === 0);
+  for (let i = 0; i < 10; i++) { u.web_enc(E.K4, 5); play(u, 0.004); }   // KNOB 4: the velocity, up to 127
+  play(u, 0.1);
+  ukey(7);
+  const vel = u.web_test_key_vel();
+  u.web_buttons(1 << B.SCL);                    // SCL held: a word, then a key is the root (no note)
+  play(u, 0.6);
+  const word = ut();
+  u.web_keys(1 << 4);                           // A3
+  play(u, 0.05);
+  const quiet = u.web_test_voices();
+  u.web_keys(0);
+  play(u, 0.05);
+  const rt = [u.web_test_scl(1), ut()];
+  u.web_buttons(0);
+  play(u, 0.3);
+  check(`.. KNOB 4: the keys' velocity ${u.web_test_scl(3)} (a key's: ${vel}); SCL held ("${word}") + A3: the root ${rt[0]} ("${rt[1]}"), no note (${quiet} voices); the page stays (${u.web_test_page_section()})`,
+        u.web_test_scl(3) === 127 && vel === 127 && word === "SCL HELD: A KEY IS THE ROOT" && rt[0] === 9 &&
+        rt[1] === "ROOT A" && quiet === 0 && u.web_test_page_section() === 22);
+  u.web_enc(E.K3, -2);                          // FIT OFF: A major on the keys' LEDs
+  play(u, 0.2);
+  const mid = u.web_mid_keys(), dim = u.web_dim_keys(), bit = (m, k) => (m >>> k) & 1;
+  check(`.. the LEDs, A major: A3 and A4 at the mid level (${bit(mid, 4)}, ${bit(mid, 16)}), C#4 glowing (${bit(dim, 8)}), C4 dark (${bit(dim, 7)}${bit(mid, 7)})`,
+        bit(mid, 4) && bit(mid, 16) && bit(dim, 8) && !bit(dim, 7) && !bit(mid, 7) && !bit(dim, 4));
+  play(u, 3.8);                                 // (3 s of quiet: the settings written) a power cycle: they come back
+  const nor = new Uint8Array(u.memory.buffer, u.web_nor(), u.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const u2 = instance.exports;
+  if (u2._initialize) u2._initialize();
+  new Uint8Array(u2.memory.buffer, u2.web_nor(), u2.web_nor_size()).set(nor);
+  u2.web_master(700);
+  u2.web_boot();
+  play(u2, 0.3);
+  check(`.. after a power cycle: the scale ${u2.web_test_scl(0)}, the root ${u2.web_test_scl(1)}, the fit ${u2.web_test_scl(2)}, the velocity ${u2.web_test_scl(3)}`,
+        u2.web_test_scl(0) === 1 && u2.web_test_scl(1) === 9 && u2.web_test_scl(2) === 0 && u2.web_test_scl(3) === 127);
+}
 {                                               // the chorus's taps: still in silence, moving with a note
   tap(ex, B.FX);
   ex.web_enc(E.ALGO, SEC.CHORUS - ex.web_test_page_section());

@@ -51,7 +51,7 @@ static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {      /* as hal/fm1_input.h: key 
     { 0,  1, 15, 14, 17, 16, 19, 18, 20, 21, 22},
     {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 };
-static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL];
+static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL], fm1_led_mid[FM1_NCOL];
 static struct { volatile uint32_t notes, buttons; } fm1_in;
 static uint32_t web_pressed, web_released;
 static int32_t web_enc_steps[7];
@@ -277,9 +277,9 @@ EXPORT uint32_t web_lit_keys(void) { return led_keys(fm1_led); }
 EXPORT uint32_t web_dim_buttons(void) { return led_buttons(fm1_led_dim); }
 EXPORT uint32_t web_dim_keys(void) { return led_keys(fm1_led_dim); }
 EXPORT uint32_t web_dim_level(void) { return 0; }
-EXPORT uint32_t web_breath_buttons(void) { return 0; }
-EXPORT uint32_t web_breath_keys(void) { return 0; }
-EXPORT uint32_t web_mid_keys(void) { return 0; }
+EXPORT uint32_t web_breath_buttons(void) { return led_buttons(fm1_led_breath); }   /* (a layer's button) */
+EXPORT uint32_t web_breath_keys(void) { return led_keys(fm1_led_breath); }
+EXPORT uint32_t web_mid_keys(void) { return led_keys(fm1_led_mid); }   /* (SCL: the root's keys) */
 EXPORT uint8_t *web_anim_levels(void) { return 0; }
 
 EXPORT uint16_t *web_screen(void) { return web_fb; }
@@ -299,6 +299,10 @@ EXPORT uint32_t web_test_voices(void)
     return n;
 }
 EXPORT uint32_t web_test_page(void) { return ui.page; }
+/* SCL: f 0 the scale, 1 the root, 2 the fit, 3 the keys' velocity; the last note a key started, its velocity */
+EXPORT int32_t web_test_scl(uint32_t f) { return f == 0u ? ui.scale : f == 1u ? ui.root : f == 2u ? ui.fit : ui.kvel; }
+EXPORT int32_t web_test_key_note(void) { return sy_key_note; }
+EXPORT int32_t web_test_key_vel(void) { return sy_key_vel; }
 /* page p shown at once (not SAVE's, the browser's: they open from SAVE); the pages' count */
 EXPORT uint32_t web_test_go(uint32_t p)
 {
