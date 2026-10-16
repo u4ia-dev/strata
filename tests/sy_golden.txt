@@ -1,8 +1,8 @@
-supersaw 313b2d64b4e8ac93
-pluck 59b5f0cb7cb682eb
-pad 1518f7a48a2d2e83
+supersaw 284145f7c795d28c
+pluck 4605fc07be25e7af
+pad 9d0be6833a249aab
 fm keys 46f87a855530bbe9
-sync lead 4ec27ca9e02c0537
+sync lead 167492882f2572d0
 ladder bass 5f88ad79594138c7
 vowel pad 50b55101f3d06c50
 ott growl 7867f10690d47fc5

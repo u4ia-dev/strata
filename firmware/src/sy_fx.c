@@ -206,7 +206,7 @@ static void fx_delay(float *l, float *r)
     float target = sy_clampf(secs * SY_FS * 0.5f, 2.0f, (float)(FX_DLY_N - 4u));
     float fb = 0.95f * mod_get(sy_goff, SP_DL_FDBK);
     float klp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_DL_LP)) * 2.0f / SY_FS);
-    float khp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_DL_HP)) * 0.1f * 2.0f / SY_FS);
+    float khp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_DL_HP)) * 2.0f / SY_FS);
     if (!fx_mixes(2, SP_DL_ON, mod_get(sy_goff, SP_DL_MIX), &m0))
         return;
     if (fx.dly_t <= 0.0f)
@@ -267,7 +267,7 @@ static void fx_reverb(float *l, float *r)
     float size = 0.45f + 0.55f * mod_get(sy_goff, SP_RV_SIZE);
     float rt = 0.3f * sy_exp2f(6.0589f * mod_get(sy_goff, SP_RV_DECAY));          /* 0.3 .. 20 s */
     float damp = 1.0f - 0.85f * mod_get(sy_goff, SP_RV_DAMP), width = mod_get(sy_goff, SP_RV_WIDTH);
-    float khp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_RV_LOCUT)) * 0.05f / SY_FS);
+    float khp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_RV_LOCUT)) * 2.0f / SY_FS);
     uint32_t pre = (uint32_t)(sp_n[SP_RV_PRE] * (float)(FX_RV_PRE - 1u));
     float gain[FX_RV_NL], len[FX_RV_NL], l1, l4, d1, d4, dd1, dd4;
     uint32_t base = 0;
