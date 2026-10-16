@@ -377,6 +377,7 @@ static int sy_cpu(uint32_t load_q8)
  * when ready, the audio side writes them only when armed: no sample is read while it is written */
 #define SY_SCOPE_N 212u
 #define SY_SCOPE_WAIT 8192u
+static volatile uint16_t sy_out_pk;          /* the last block's output peak, Q15 (every 4th frame) */
 static struct {
     volatile uint8_t st;                     /* 0 idle, 1 armed (the audio side's), 2 ready (the main loop's) */
     uint8_t step, low;                       /* samples a point (1..16); the sum has been under -1 % */
@@ -512,6 +513,15 @@ static void sy_block(int32_t *out)
     }
     if (sy_scope.st == 1u)
         sy_scope_block(out);
+    {                                                /* the block's level, every 4th frame (the screen: sounding) */
+        int32_t pk = 0;
+        for (i = 0; i < 2u * SY_BLK; i += 8u) {
+            int32_t a = out[i] < 0 ? -out[i] : out[i], c = out[i + 1u] < 0 ? -out[i + 1u] : out[i + 1u];
+            pk = a > pk ? a : pk;
+            pk = c > pk ? c : pk;
+        }
+        sy_out_pk = (uint16_t)pk;
+    }
 }
 
 /* ------------------------------------------------------------------------------------ the sound --- */
