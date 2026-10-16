@@ -63,6 +63,22 @@ static const char *sy_app_slot_name(uint32_t s);
 static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SAVE (sy_ui_saved when done) */
 static void sy_app_bend(uint32_t v);                /* .. the panel's bend (0 .. 16383, 8192 the middle) */
 static void sy_app_cc(uint32_t cc, uint32_t v);     /* .. a controller (the mod wheel) */
+/* .. and the platform's: BENCH (SETTINGS > BENCH, the console's `bench`), what it measured, the peaks since CLEAR
+ * (sy_app.c fills the audio's; known 0: no clock of its own within a half, the emulator: only the counts mean
+ * something) */
+static struct {
+    uint32_t known;                              /* 1: the FM-1's figures */
+    uint32_t boot_ms;                            /* power-on to the first frame */
+    uint32_t half_us, half_max_us, late;         /* a half's render: the last, the longest; halves the DMA had left */
+    uint32_t frame_us, frame_max_us;             /* a frame's drawing: the last, the longest */
+    uint32_t gap_max_us;                         /* the longest between two of the main loop's millisecond passes:
+                                                  * the keys, MIDI and the knobs wait this long at most */
+    uint32_t step_max_us, build_max_ms;          /* a wavetable build: its longest step (a frame), its whole time */
+    uint32_t erase_n, erase_max_us, prog_max_us; /* the flash: erases, the longest (4 KiB), a page's program */
+    uint32_t stack_isr, stack_main;              /* bytes of the interrupts' and the main loop's stacks ever used */
+    uint32_t run_int_us, run_flt_us;             /* RUN: a fixed integer loop and a float loop, each timed */
+    uint8_t run;                                 /* RUN: 1 asked (the platform's main loop runs it), 2 done */
+} sy_bench;
 
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
@@ -70,7 +86,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,   /* (SAVE's, the browser's: sy_ui_save.c) */
        UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT,           /* (the matrix's: the slot picked, its source, place, amount) */
        UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL,            /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
-       UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC };   /* (the SETTINGS' others) */
+       UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC,   /* (the SETTINGS' others) */
+       UI_BRUN, UI_BCLR };                            /* (BENCH's: RUN, CLEAR the peaks) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -78,7 +95,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 #define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI, G_BENCH };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -132,6 +149,7 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_HELP, UI_GLOW, -1}},
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
+    {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
@@ -981,6 +999,25 @@ static void ui_set_turn(int32_t item, int32_t s)
     ui.dirty |= D_KNOBS | D_DISP | D_FOOT;
 }
 
+/* BENCH: RUN (the platform's main loop times its loops, the sound hushed a moment: sy_app.c sy_bench), CLEAR the
+ * peaks (the longest half, frame, wait, build step; the halves late) */
+static void ui_bench_turn(int32_t item)
+{
+    if (item == UI_BRUN) {
+        if (!sy_bench.known) {
+            ui_toast("RUN TIMES THE FM-1 ONLY");
+        } else if (sy_bench.run != 1u) {
+            sy_bench.run = 1;
+            ui_toast("RUNNING: A MOMENT'S SILENCE");
+        }
+    } else {
+        sy_bench.half_max_us = sy_bench.frame_max_us = sy_bench.gap_max_us = sy_bench.step_max_us = 0;
+        sy_bench.late = 0;
+        ui_toast("THE PEAKS CLEARED");
+    }
+    ui.dirty |= D_KNOBS | D_DISP | D_FOOT;
+}
+
 /* every millisecond: a CC MIDI LEARN heard, set to the parameter picked ("CC 74: FLT CUTOFF") */
 static void ui_learn_ms(void)
 {
@@ -1019,6 +1056,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (item >= UI_HELP && item <= UI_MPC) {   /* the SETTINGS' others */
         ui_set_turn(item, s);
+    } else if (item == UI_BRUN || item == UI_BCLR) {   /* BENCH's */
+        ui_bench_turn(item);
     } else if (item >= UI_SCUR && item <= UI_BBANK) {   /* SAVE's, the browser's */
         ui_save_item_turn(item, s);
     } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */

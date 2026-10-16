@@ -340,9 +340,14 @@ static void ui_set_cell(int32_t id, int act)
 {
     static const char *const NAME[7] = {"HELP", "GLOW", "HOLD", "CHANNEL", "LEARN", "CLEAR", "PROGRAM"};
     char t[16];
-    const char *v = t, *n = id == UI_COLOR ? "COLOR" : id == UI_ACCEL ? "ACCEL" : NAME[(id - UI_HELP) % 7];
+    const char *v = t, *n = id == UI_COLOR ? "COLOR" : id == UI_ACCEL ? "ACCEL" : id == UI_BRUN ? "RUN"
+                            : id == UI_BCLR ? "PEAKS" : NAME[(id - UI_HELP) % 7];
     uint32_t c = ml_count();
-    if (id == UI_COLOR)
+    if (id == UI_BRUN)
+        v = sy_bench.run == 1u ? "..." : sy_bench.run ? "AGAIN" : "TURN";
+    else if (id == UI_BCLR)
+        v = "CLEAR";
+    else if (id == UI_COLOR)
         v = SY_PAL[ui.pal].name;
     else if (id == UI_ACCEL)
         v = ui.accel ? "ON" : "OFF";
@@ -481,6 +486,7 @@ static void ui_draw_foot(void)
         uint32_t g = UI_PG[ui.page].graph;
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, g == G_COLOR ? "KNOB 1 COLOR \xB7 2 HELP \xB7 3 GLOW"
                                                   : g == G_PANEL ? "KNOB 1 ACCEL \xB7 2 HOLD"
+                                                  : g == G_BENCH ? "KNOB 1 RUN \xB7 2 CLEAR THE PEAKS"
                                                                  : "LEARN ON: TURN A KNOB, MOVE A CC",
                   sk.dim, sk.ground);
     } else if (ui.learn) {                          /* MIDI LEARN, on any other page: what it waits for */
@@ -1163,6 +1169,53 @@ static void ui_g_midi(void)
     }
 }
 
+/* SETTINGS > BENCH: what the platform measured (sy_bench), a row each, the last and the longest where both: the
+ * audio's half (and the halves that came late); the load, the guard's steps and the voices it shed; a frame's
+ * drawing; the longest wait of the keys, MIDI and the knobs; a wavetable build (a step, the whole); the flash; the
+ * stacks; RUN's two loops. The emulator has no clock of its own: it says so */
+static char *ui_ms2(char *e, uint32_t us) { return sp_fix(e, (int32_t)(us / 10u), 2u, 0); }
+static void ui_g_bench(void)
+{
+    static const char *const ROW[8] = {"AUDIO", "CPU", "SCREEN", "KEYS", "TABLES", "FLASH", "STACKS", "RUN"};
+    char t[48], *e;
+    uint32_t i;
+    if (!sy_bench.known) {
+        cv_text_on(WX + 8, WY + 6, &AF_SB, "BENCH TIMES THE FM-1", sk.text, sk.display);
+        cv_text_on(WX + 8, WY + 24, &AF_XS, "THE EMULATOR HAS NO CLOCK OF ITS OWN", sk.label, sk.display);
+        return;
+    }
+    for (i = 0; i < 8u; i++) {
+        int32_t y = WY + 2 + (int32_t)i * 13;
+        e = t;
+        if (i == 0u) {                              /* "1.12 / 2.40 MS · 0 LATE" */
+            e = ui_ms2(sp_put(ui_ms2(e, sy_bench.half_us), " / "), sy_bench.half_max_us);
+            sp_put(sp_fix(sp_put(e, " MS \xB7 "), (int32_t)sy_bench.late, 0u, 0), " LATE");
+        } else if (i == 1u) {                       /* "38 % · GUARD 0 · SHED 0" */
+            e = sp_put(sp_fix(e, sy_app_load(), 0u, 0), " % \xB7 GUARD ");
+            sp_fix(sp_put(sp_fix(e, sy_g.level + sy_g.fx_lo, 0u, 0), " \xB7 SHED "), (int32_t)sy_g.shed, 0u, 0);
+        } else if (i == 2u) {                       /* "4.10 / 9.80 MS" */
+            sp_put(ui_ms2(sp_put(ui_ms2(e, sy_bench.frame_us), " / "), sy_bench.frame_max_us), " MS");
+        } else if (i == 3u) {                       /* "11.20 MS AT MOST" */
+            sp_put(ui_ms2(e, sy_bench.gap_max_us), " MS AT MOST");
+        } else if (i == 4u) {                       /* "STEP 3.20 · ALL 48 MS" */
+            e = ui_ms2(sp_put(e, "STEP "), sy_bench.step_max_us);
+            sp_put(sp_fix(sp_put(e, " \xB7 ALL "), (int32_t)sy_bench.build_max_ms, 0u, 0), " MS");
+        } else if (i == 5u) {                       /* "ERASE 21.00 · PAGE 0.60" */
+            ui_ms2(sp_put(ui_ms2(sp_put(e, "ERASE "), sy_bench.erase_max_us), " \xB7 PAGE "), sy_bench.prog_max_us);
+        } else if (i == 6u) {                       /* "IRQ 2.1 · MAIN 3.4 KB" */
+            e = sp_fix(sp_put(e, "IRQ "), (int32_t)(sy_bench.stack_isr * 10u / 1024u), 1u, 0);
+            sp_put(sp_fix(sp_put(e, " \xB7 MAIN "), (int32_t)(sy_bench.stack_main * 10u / 1024u), 1u, 0), " KB");
+        } else if (sy_bench.run == 2u) {            /* "INT 5.10 · FLOAT 9.80 MS" */
+            e = ui_ms2(sp_put(e, "INT "), sy_bench.run_int_us);
+            sp_put(ui_ms2(sp_put(e, " \xB7 FLOAT "), sy_bench.run_flt_us), " MS");
+        } else {
+            sp_put(e, sy_bench.run ? "RUNNING" : "KNOB 1: TWO LOOPS TIMED");
+        }
+        cv_text_on(WX + 6, y, &AF_XS, ROW[i], sk.label, sk.display);
+        cv_text_on(WX + 52, y, &AF_XS, t, i == 7u && sy_bench.run != 2u ? sk.faint : sk.text, sk.display);
+    }
+}
+
 /* SEQ's MATRIX: the eight slots, each its source, where it goes (the destination's section and name) and how much
  * (positive in VALUE, negative in MOD-), the one picked raised (KNOB 2-4 set it); a slot without a source: EMPTY */
 static void ui_g_matrix(void)
@@ -1341,6 +1394,7 @@ static void ui_draw_disp(uint32_t r0)
     case G_KEYS: ui_g_keys(); break;
     case G_PANEL: ui_g_panel(); break;
     case G_MIDI: ui_g_midi(); break;
+    case G_BENCH: ui_g_bench(); break;
     default: ui_g_list(); break;
     }
     for (y = r0; y < cv_h; y++) {
@@ -1490,6 +1544,18 @@ static void sy_ui_frame(void)
         sy_scope.st = 0;                            /* (another page: no capture) */
     }
     was_nv = (uint8_t)nv;
+    if (g == G_BENCH && fm1_ms - load_t >= 250u) {  /* BENCH: its figures, four times a second when they move */
+        static uint32_t sum;
+        const uint32_t *w = (const uint32_t *)(const void *)&sy_bench;
+        uint32_t s = (uint32_t)sy_app_load() * 31u + sy_g.level + sy_g.fx_lo * 7u + sy_g.shed * 131u;
+        for (i = 0; i < sizeof sy_bench / 4u; i++)
+            s = s * 33u + w[i];
+        load_t = fm1_ms;
+        if (s != sum) {
+            sum = s;
+            ui.dirty |= D_DISP | D_KNOB(0);
+        }
+    }
     if (g == G_WT3D || g == G_WT2D || g == G_UNI) {
         uint8_t busy = wt_tab[ui_osc()].busy;
         if (busy != was_busy)

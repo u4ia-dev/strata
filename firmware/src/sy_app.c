@@ -5,7 +5,8 @@
 /* STRATA on the FM-1: the app around the synth (docs/ARCHITECTURE.md §3).
  *   - The audio interrupt (fm1_alnk0_irq): each I2S half, 128 frames, is four engine blocks; before each block the
  *     events (notes, bend, controllers) from two rings, one the main loop fills from the panel and one MIDI fills, so
- *     only the interrupt ever touches the voices; then Q15 -> 24 bit, and the half's load into the CPU guard.
+ *     only the interrupt ever touches the voices; MASTER's level (a ramp a half), each block to the platform's tap
+ *     (the USB audio input); then Q15 -> 24 bit, and the half's load into the CPU guard and BENCH (sy_bench).
  *   - The main loop: sy_app_ms every millisecond (the keys -> notes, the UI's buttons and knobs (sy_ui.c), a step of a
  *     wavetable build), sy_app_frame about 60 times a second (the screen where it changed, the LEDs: sy_ui_draw.c).
  *     A value a knob turns is a 16-bit store into the patch: the engine's smoother takes it at its next block.
@@ -23,8 +24,26 @@
 #define SY_LOAD_KNOWN 1                          /* 0: the clock does not run within a half (the emulator's) */
 #endif
 _Static_assert(SY_HALF % SY_BLK == 0u, "a half is whole blocks");
+_Static_assert(SY_HALF == 128u, "MASTER's ramp steps a half in 128ths (sy_master_blk)");
 
 static int32_t sy_abuf[2u * SY_HALF_WORDS] __attribute__((aligned(4)));
+
+/* the platform's hooks into the audio interrupt (the FM-1's in sy_main.c; none in the emulator): its entry and exit
+ * (TIMER5 nests in it), a half's start and each block as the DAC gets it, Q15 (the USB audio input), and the TIMER4
+ * ticks TIMER5 spent nested in it (taken off the load) */
+#ifndef SY_ISR_ENTER
+#define SY_ISR_ENTER()
+#define SY_ISR_EXIT()
+#define SY_HALF_START()
+#define SY_BLOCK_TAP(o, n)
+#define SY_NESTED_TICKS() 0u
+#endif
+
+/* MASTER: the level the platform reads from the pot, Q12 (4096: as rendered; the emulator's page sets its own and
+ * leaves this), ramped over each half from the one before (no steps) */
+static volatile int32_t sy_master_q12 = 4096;
+static int32_t sy_master_now = 4096;
+
 
 /* ------------------------------------------------------------------------------------------ events --- */
 /* a ring with one producer and the audio interrupt as its consumer: the panel's (main loop) and MIDI's */
@@ -74,26 +93,52 @@ static void sy_ev_drain(sy_ring_t *g)
 static uint32_t sy_load_q8;                      /* the last halves' load, 256 = all of a half (the guard's) */
 static int32_t sy_app_load(void) { return SY_LOAD_KNOWN ? (int32_t)(sy_g.load_q8 * 100u / 256u) : -1; }   /* (HOME) */
 
+/* MASTER on a block of the half: from the level the last half ended at to the one asked for, b its first frame */
+static void sy_master_blk(int32_t *o, int32_t g0, int32_t g1, uint32_t b)
+{
+    uint32_t i;
+    if (g0 == 4096 && g1 == 4096)
+        return;
+    for (i = 0; i < SY_BLK; i++) {
+        int32_t g = g0 + (((g1 - g0) * (int32_t)(b + i)) >> 7);
+        o[2u * i] = o[2u * i] * g >> 12;
+        o[2u * i + 1u] = o[2u * i + 1u] * g >> 12;
+    }
+}
+
 void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S), or the emulator's clock */
 {
-    uint8_t p = fm1_audio_pending();
-    uint32_t t0 = fm1_ticks();
+    uint8_t p;
+    uint32_t t0;
+    SY_ISR_ENTER();
+    p = fm1_audio_pending();
+    t0 = fm1_ticks();
     fm1_audio_ack_aux(p);
     if (p & FM1_AUDIO_HALF) {
         uint32_t half = fm1_audio_free_half(), b, i, us;
-        int32_t *o = &sy_abuf[half * SY_HALF_WORDS];
+        int32_t *o = &sy_abuf[half * SY_HALF_WORDS], g0 = sy_master_now, g1 = sy_master_q12;
+        SY_HALF_START();
         for (b = 0; b < SY_HALF; b += SY_BLK) {
             sy_ev_drain(&sy_ev_ui);
             sy_ev_drain(&sy_ev_midi);
             sy_block(o + 2u * b);
+            sy_master_blk(o + 2u * b, g0, g1, b);
+            SY_BLOCK_TAP(o + 2u * b, SY_BLK);
         }
+        sy_master_now = g1;
         for (i = 0; i < 2u * SY_HALF; i++)
             o[i] *= 1 << SY_OUT_SHIFT;
         fm1_audio_ack_half();
-        us = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
+        us = (fm1_ticks() - t0 - SY_NESTED_TICKS()) / FM1_TICKS_PER_US;
         sy_load_q8 = us * 256u / (SY_HALF * 1000000u / 44118u);
         sy_cpu(sy_load_q8);
+        sy_bench.half_us = us;
+        if (us > sy_bench.half_max_us)
+            sy_bench.half_max_us = us;
+        if (fm1_audio_free_half() != half)
+            sy_bench.late++;                     /* (the DMA moved on while this half rendered) */
     }
+    SY_ISR_EXIT();
 }
 extern void isr_alnk0(void);
 
@@ -390,8 +435,10 @@ static void sy_flash_ms(void)
     }
 }
 
-/* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held: a way back to a
- * start, should a sound ever stop the unit) */
+/* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held, or the platform
+ * says the boot before this one died, sy_boot_safe: a way back to a start, should a sound ever stop the unit) */
+static uint8_t sy_boot_safe;                     /* the platform's: a crash, a hang or a failed boot came before */
+static uint8_t sy_boot_skipped;                  /* .. so the sound was not restored (the UI says so) */
 static void sy_flash_boot(void)
 {
     uint8_t b[SS_SETTINGS_LEN + SP_PACK_MAX + 3u];
@@ -401,8 +448,10 @@ static void sy_flash_boot(void)
     sy_uidx_scan();
     if ((n = ss_load(SS_SETTINGS, b, sizeof b)) > 0 && sy_ui_settings(b, (uint32_t)n))
         sy_fl.set_crc = ss_crc32(b, (uint32_t)n);
-    if (fm1_in.buttons & (1u << panel.btn[B_HOME]))
+    if (sy_boot_safe || (fm1_in.buttons & (1u << panel.btn[B_HOME]))) {
+        sy_boot_skipped = 1;
         return;
+    }
     n = ss_load(SS_EDIT, b, sizeof b);
     if (n > 3 && sp_unpack(&p, b + 3, (uint32_t)n - 3u)) {
         sy_slot = (int16_t)(b[0] | b[1] << 8);
@@ -467,6 +516,8 @@ static void sy_app_boot(void)
     sy_slot = -1;
     sy_ui_boot();
     sy_flash_boot();
+    if (sy_boot_skipped)
+        ui_toast(sy_boot_safe ? "SAFE START: SOUND NOT RESTORED" : "HOME HELD: SOUND NOT RESTORED");
     sp_snap();
     lfo_dr_seq = 1u;                             /* (the sound's drawn shapes: taken at the first block) */
     sy_tables_now();
