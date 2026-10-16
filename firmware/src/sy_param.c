@@ -180,7 +180,9 @@ enum {                           /* units: the display and the DSP's reading of 
     X(EQ_MFREQ, "MID FREQ", SEC_EQ, 0, 1000, 567, U_HZ, FMG, 0)                                           \
     X(EQ_Q, "MID Q", SEC_EQ, 0, 1000, 400, U_Q, FMG, 0)                                                   \
     X(EQ_HFREQ, "HI FREQ", SEC_EQ, 0, 1000, 767, U_HZ, FMG, 0)                                            \
-    X(FX_ORDER, "FX ORDER", SEC_DRIVE, 0, 719, 0, U_ORDER, 0, 0)
+    X(FX_ORDER, "FX ORDER", SEC_DRIVE, 0, 719, 0, U_ORDER, 0, 0)                                         \
+    X(EQ_LQ, "LO Q", SEC_EQ, 0, 1000, 300, U_Q, FMG, 0)                                                   \
+    X(EQ_HQ, "HI Q", SEC_EQ, 0, 1000, 300, U_Q, FMG, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,

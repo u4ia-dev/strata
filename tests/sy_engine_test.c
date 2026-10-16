@@ -1164,7 +1164,8 @@ static void t_eq(void)
         set(PT[k].on, PT[k].db);
         snap();
         g = eq_gain_db(PT[k].f);
-        c = fx_eq_db(t, sp_cut_hz(sp_n[hz]), (float)PT[k].db * 0.1f, sp_q(sp_n[SP_EQ_Q]), (float)PT[k].f);
+        c = fx_eq_db(t, sp_cut_hz(sp_n[hz]), (float)PT[k].db * 0.1f,
+                     sp_q(sp_n[t == EQ_LS ? SP_EQ_LQ : t == EQ_PK ? SP_EQ_Q : SP_EQ_HQ]), (float)PT[k].f);
         printf("engine: EQ %-4s %+5.1f dB at %7.1f Hz: %+6.2f dB (its curve %+6.2f, the design %+5.1f)\n",
                SP[PT[k].on].name, PT[k].db * 0.1, PT[k].f, g, c, PT[k].want);
         worst = fmax(worst, fabs(g - PT[k].want) - PT[k].tol);

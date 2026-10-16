@@ -470,17 +470,18 @@ static void fx_ott(float *l, float *r)
 /* a band: the filter's trapezoidal SVF (sy_filter.c), out = m0 v0 + m1 v1 + m2 v2 of its input, band and low (Simper's
  * shelves and peak). With A = 10^(dB / 40) (A^2 the gain at a shelf's far side, at the peak's centre): LOW SHELF 1,
  * k (A - 1), A^2 - 1, its corner g / sqrt A; PEAK 1, k (A^2 - 1), 0 with k = 1 / (Q A); HIGH SHELF A^2, k (1 - A) A,
- * 1 - A^2, its corner g sqrt A. The shelves at Q 0.707 (no overshoot), FREQ where their slope is halfway in dB */
+ * 1 - A^2, its corner g sqrt A; a shelf's k = 1 / Q (LO Q, HI Q: 0.707 none over or under, more a bump at the corner
+ * and a dip before it). FREQ is where a shelf's slope is halfway in dB */
 enum { EQ_LS, EQ_PK, EQ_HS };
 static void fx_eq_shape(uint32_t type, float hz, float db, float q, float *gk, float *m)   /* g, k; m0 m1 m2 */
 {
-    float a = sy_exp2f(db * 0.08304820f), s = sy_exp2f(db * 0.04152410f), g = flt_g(hz), k = 1.41421356f;
+    float a = sy_exp2f(db * 0.08304820f), s = sy_exp2f(db * 0.04152410f), g = flt_g(hz), k = 1.0f / q;
     if (type == EQ_LS)
         g /= s;
     else if (type == EQ_HS)
         g = sy_minf(g * s, FLT_GMAX);
     else
-        k = 1.0f / (q * a);
+        k /= a;
     gk[0] = g;
     gk[1] = k;
     m[0] = type == EQ_HS ? a * a : 1.0f;
@@ -554,7 +555,8 @@ static SY_NOINLINE void fx_eq_band_k(float *restrict x, float *st, const float *
 static void fx_eq(float *l, float *r)
 {
     static const uint8_t DB[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH}, HZ[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ};
-    float m0, wet[2][SY_BLK], *ch[2] = {l, r}, *w[2], q = sp_q(mod_get(sy_goff, SP_EQ_Q));
+    static const uint8_t Q[3] = {SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ};
+    float m0, wet[2][SY_BLK], *ch[2] = {l, r}, *w[2];
     uint32_t b, c, run = 0;
     int full;
     if (!fx_mixes(5, SP_EQ_ON, 1.0f, &m0))
@@ -571,7 +573,7 @@ static void fx_eq(float *l, float *r)
         float db = sp_lin(DB[b], mod_get(sy_goff, DB[b])) * 0.1f, c1[6];
         if (sy_absf(db) < 0.01f)
             continue;
-        fx_eq_coef(b, sp_cut_hz(mod_get(sy_goff, HZ[b])), db, q, c1);
+        fx_eq_coef(b, sp_cut_hz(mod_get(sy_goff, HZ[b])), db, sp_q(mod_get(sy_goff, Q[b])), c1);
         if (!((fx.eq_run >> b) & 1u)) {
             sy_copyf(fx.eq_c[b], c1, 3u);
             fx.eq_c[b][3] = 1.0f;
