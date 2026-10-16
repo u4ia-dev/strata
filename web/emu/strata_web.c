@@ -272,7 +272,10 @@ static uint32_t led_keys(const uint8_t *l)
         m |= led_on(l, 14u + k) << k;
     return m;
 }
-EXPORT uint32_t web_lit_buttons(void) { return led_buttons(fm1_led); }
+EXPORT uint32_t web_lit_buttons(void)            /* (bit 14: PLAY's green LED, as Felucca's page reads it) */
+{
+    return led_buttons(fm1_led) | ((fm1_led[UI_LED_PLAY_GREEN >> 3] >> (UI_LED_PLAY_GREEN & 7u)) & 1u) << 14;
+}
 EXPORT uint32_t web_lit_keys(void) { return led_keys(fm1_led); }
 EXPORT uint32_t web_dim_buttons(void) { return led_buttons(fm1_led_dim); }
 EXPORT uint32_t web_dim_keys(void) { return led_keys(fm1_led_dim); }
@@ -305,6 +308,9 @@ EXPORT int32_t web_test_key_note(void) { return sy_key_note; }
 EXPORT int32_t web_test_key_vel(void) { return sy_key_vel; }
 /* the hold layers: the one open (LAY_*); PERFORM's bend as the engine has it (x 1000, -1000 .. 1000) and its wheel */
 EXPORT uint32_t web_test_lay(void) { return ui.lay; }
+/* PLAY: the transport running; a FREE LFO's phase (its top 16 bits) */
+EXPORT uint32_t web_test_run(void) { return ui.run; }
+EXPORT uint32_t web_test_lfo_phase(uint32_t k) { return sy_glfo[k & 1u].ph >> 16; }
 EXPORT int32_t web_test_bend(void) { return (int32_t)(sy_bend_v * 1000.0f + (sy_bend_v < 0.0f ? -0.5f : 0.5f)); }
 EXPORT uint32_t web_test_wheel(void) { return sy_wheel; }
 /* page p shown at once (not SAVE's, the browser's: they open from SAVE); the pages' count */

@@ -695,6 +695,27 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         jmp[0] === 4 && jmp[1] === 1 && jmp[2] === 1 && s1 === 22 && s2 === SEC.GLOBAL && bpm2 === bpm &&
         h.web_test_page_section() === SEC.GLOBAL && h.web_test_lay() === 0);
 }
+{                                               // PLAY: the transport (the FREE LFOs from the beat), its LEDs; ARP
+  const r = await boot(), rt = () => cstr(r, r.web_test_toast());
+  const rtap = (b) => { r.web_buttons(1 << b); play(r, 0.03); r.web_buttons(0); };
+  play(r, 0.77);                                // (the LFOs running)
+  const ph0 = r.web_test_lfo_phase(0);
+  rtap(B.PLAY);
+  play(r, 0.01);
+  const ph1 = r.web_test_lfo_phase(0), run = r.web_test_run(), word = rt();
+  play(r, 0.04);                                // (a frame: the LEDs)
+  const green = (r.web_lit_buttons() >> 14) & 1;
+  let on = 0;
+  for (let i = 0; i < 100; i++) { play(r, 0.01); on += (r.web_lit_buttons() >> B.PLAY) & 1; }
+  rtap(B.PLAY);
+  play(r, 0.1);
+  const off = [r.web_test_run(), (r.web_lit_buttons() >> 14) & 1, rt()];
+  rtap(B.ARP);
+  play(r, 0.05);
+  check(`PLAY: the transport on (${run}, "${word}"), LFO 1 from its start (phase ${ph0} -> ${ph1} of 65536), the green LED (${green}), PLAY lit a quarter of each beat (${on} of 100 at 120 BPM); again, off (${off[0]}, green ${off[1]}, "${off[2]}"); ARP: "${rt()}"`,
+        run === 1 && word === "PLAY" && ph0 > 8000 && ph1 < 4000 && green === 1 && on >= 18 && on <= 32 &&
+        off[0] === 0 && off[1] === 0 && off[2] === "STOP" && rt() === "ARP: IN A LATER VERSION");
+}
 {                                               // the chorus's taps: still in silence, moving with a note
   tap(ex, B.FX);
   ex.web_enc(E.ALGO, SEC.CHORUS - ex.web_test_page_section());
