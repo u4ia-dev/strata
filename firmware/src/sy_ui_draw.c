@@ -96,6 +96,23 @@ static void ui_draw_head(void)
     char t[32], *e;
     uint32_t n, of, s;
     int32_t x, pw;
+    if (ui.lay) {                                   /* a hold layer's banner: its name, what it does */
+        static const char *const NAME[5] = {"", "PERFORM", "MACROS", "MOMENTARY", "JUMP"};
+        if (ui.lay == LAY_MOM) {
+            if (ui.mom_n)
+                sp_put(sp_fix(t, ui.mom_n, 0u, 0), " CHANGED");
+            else
+                sp_put(t, "A KNOB: FOR NOW");
+        } else {
+            sp_put(t, ui.lay == LAY_PERF ? "KNOB 1 BEND \xB7 2 WHEEL" : ui.lay == LAY_MAC ? "KEYS: THE EFFECTS"
+                                                                                 : "A KEY: ITS SECTION");
+        }
+        cv_begin(240, 22, sk.banner);
+        cv_text_on(8, CAP_IN(SB, 22), &AF_SB, NAME[ui.lay % 5u], sk.bink, sk.banner);
+        cv_text_r(232, CAP_IN(XS, 22), &AF_XS, t, sk.bsub, sk.banner);
+        cv_blit(0, 0);
+        return;
+    }
     if (ui.mod) {                                   /* the MOD banner */
         const char *src = SRC_NAMES[ui.mod_src];
         int32_t w = text_w(&AF_XS, src) + 10;
@@ -318,6 +335,31 @@ static void ui_tempo_cell(int32_t id, int act)
     ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
 }
 
+/* PERFORM's cells: the bend (both ways from the middle, in semitones) and the mod wheel, GLIDE and VOLUME; MACROS':
+ * MACRO 1-4 under their names */
+static void ui_lay_cell(uint32_t k)
+{
+    char t[SP_TEXT_N + 4];
+    if (ui.lay == LAY_PERF && k == 0u) {
+        int32_t st = ui.bend * (ui.bend >= 0 ? sy_patch.p[SP_V_BUP] : sy_patch.p[SP_V_BDN]) * 10 / 8192;
+        ui_dial_at(0.5f + (float)ui.bend * (0.5f / 8192.0f), 1, 0, 0);
+        sp_put(sp_fix(t, st, 1u, st != 0), " ST");
+        ui_cell_value(t, sk.text, 0);
+        ui_text_c(0, 46, 60, &AF_XS, "BEND", sk.label, sk.ground);
+    } else if (ui.lay == LAY_PERF && k == 1u) {
+        ui_dial_at((float)ui.wheel * (1.0f / 127.0f), 0, 0, 0);
+        sp_fix(t, ui.wheel, 0u, 0);
+        ui_cell_value(t, sk.text, 0);
+        ui_text_c(0, 46, 60, &AF_XS, "WHEEL", sk.label, sk.ground);
+    } else {
+        uint32_t id = ui.lay == LAY_MAC ? SP_MAC1 + k : k == 2u ? SP_V_GLIDE : SP_V_VOL;
+        ui_dial(id, 0, 0);
+        sp_text(id, sy_patch.p[id], t);
+        ui_cell_value(t, sk.text, 0);
+        ui_text_c(0, 46, 60, &AF_XS, ui.lay == LAY_MAC ? sy_patch.macro[k] : SP[id].name, sk.label, sk.ground);
+    }
+}
+
 /* SCL's cells: the scale, the root, the fit (pills), the keys' velocity (a dial) */
 static void ui_keys_cell(int32_t id, int act)
 {
@@ -342,7 +384,9 @@ static void ui_draw_knob(uint32_t k)
     int act = ui.act_k == k && !ui.mod;             /* (the knob turning) */
     char t[SP_TEXT_N + 4];
     cv_begin(60, 76, sk.ground);
-    if (id >= UI_BPM && id <= UI_TSN) {
+    if (ui.lay == LAY_PERF || ui.lay == LAY_MAC) {
+        ui_lay_cell(k);
+    } else if (id >= UI_BPM && id <= UI_TSN) {
         ui_tempo_cell(id, act);
     } else if (id >= UI_LPT && id <= UI_LC) {
         ui_lfo_cell(id, act);
@@ -394,6 +438,12 @@ static void ui_draw_foot(void)
     cv_begin(240, 28, sk.ground);
     if (ui.toast[0]) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.toast, sk.text, sk.ground);
+    } else if (ui.lay) {                            /* a hold layer: how it ends */
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS,
+                  ui.lay == LAY_PERF ? "LET GO OF GLO: THE BEND BACK TO 0"
+                  : ui.lay == LAY_MAC ? "F3 .. D4: AN EFFECT ON OR OFF"
+                  : ui.lay == LAY_MOM ? "LET GO OF LFO: EVERY CHANGE BACK" : "LET GO OF EDIT: THE PAGE",
+                  sk.dim, sk.ground);
     } else if (ui_sec() == SEC_SAVE) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.sv_sym ? "OCT+ ABC \xB7 OCT- DEL \xB7 SAVE: WRITE"
                                                             : "OCT+ 123 \xB7 OCT- DEL \xB7 SAVE: WRITE", sk.dim, sk.ground);
@@ -867,6 +917,117 @@ static void ui_g_list(void)
     }
 }
 
+/* a bar of t (0 .. 1) in w px from x, or from its middle when bip (t -1 .. 1), in SOUND on the track */
+static void ui_bar(int32_t x, int32_t y, int32_t w, float t, int bip)
+{
+    int32_t m = x + w / 2, e;
+    cv_rrect(x, y, w, 8, 3, sk.track, sk.display);
+    if (bip) {
+        e = m + sy_floori(t * (float)(w / 2) + 0.5f);
+        cv_rect(e < m ? e : m, y + 1, (e < m ? m - e : e - m) + 1, 6, sk.sound);
+        cv_rect(m, y - 2, 1, 12, sk.label);
+    } else if (t > 0.0f) {
+        cv_rrect(x + 1, y + 1, sy_floori(t * (float)(w - 2) + 0.5f), 6, 2, sk.sound, sk.track);
+    }
+}
+
+/* GLO held, PERFORM: the bend from the middle and the mod wheel as bars, with GLIDE and VOLUME as they are */
+static void ui_g_perf(void)
+{
+    char t[SP_TEXT_N + 8];
+    int32_t st = ui.bend * (ui.bend >= 0 ? sy_patch.p[SP_V_BUP] : sy_patch.p[SP_V_BDN]) * 10 / 8192;
+    cv_text_on(WX + 8, WY + 6, &AF_XS, "BEND", sk.label, sk.display);
+    sp_put(sp_fix(t, st, 1u, st != 0), " SEMITONES");
+    cv_text_r(WX + WW - 8, WY + 6, &AF_XS, t, ui.bend ? sk.text : sk.dim, sk.display);
+    ui_bar(WX + 8, WY + 20, WW - 16, (float)ui.bend * (1.0f / 8192.0f), 1);
+    cv_text_on(WX + 8, WY + 38, &AF_XS, "MOD WHEEL", sk.label, sk.display);
+    sp_fix(t, ui.wheel, 0u, 0);
+    cv_text_r(WX + WW - 8, WY + 38, &AF_XS, t, ui.wheel ? sk.text : sk.dim, sk.display);
+    ui_bar(WX + 8, WY + 52, WW - 16, (float)ui.wheel * (1.0f / 127.0f), 0);
+    sp_text(SP_V_GLIDE, sy_patch.p[SP_V_GLIDE], t);
+    cv_text_on(WX + 8, WY + 74, &AF_XS, "GLIDE", sk.label, sk.display);
+    cv_text_on(WX + 60, WY + 74, &AF_XS, t, sk.text, sk.display);
+    sp_text(SP_V_VOL, sy_patch.p[SP_V_VOL], t);
+    cv_text_on(WX + 120, WY + 74, &AF_XS, "VOLUME", sk.label, sk.display);
+    cv_text_r(WX + WW - 8, WY + 74, &AF_XS, t, sk.text, sk.display);
+    cv_text_on(WX + 8, WY + 92, &AF_XS, "THE KEYS PLAY ON", sk.faint, sk.display);
+}
+
+/* FX held, MACROS: the six effects in their order, each lit when on, with the key that turns it on and off; the four
+ * macros as bars under their names */
+static void ui_g_mac(void)
+{
+    static const char *const KEY[6] = {"F3", "G3", "A3", "B3", "C4", "D4"};
+    uint8_t o[SP_NFX];
+    uint32_t i;
+    char t[SP_TEXT_N + 4];
+    sp_order(sy_patch.p[SP_FX_ORDER], o);
+    for (i = 0; i < SP_NFX; i++) {
+        uint32_t sec = SEC_DRIVE + o[i];
+        int on = sy_patch.p[ui_sec_power(sec)] != 0;
+        int32_t x = WX + 4 + (int32_t)i * 37;
+        cv_rrect(x, WY + 4, 34, 18, 3, on ? sk.wmid : sk.rline, sk.display);
+        cv_rrect(x + 1, WY + 5, 32, 16, 2, on ? sk.wtint : sk.display, on ? sk.wmid : sk.rline);
+        ui_text_c(x, WY + 5 + CAP_IN(XS, 16), 34, &AF_XS, SEC_SHORT[sec], on ? sk.sound : sk.faint,
+                  on ? sk.wtint : sk.display);
+        ui_text_c(x, WY + 26, 34, &AF_XS, KEY[o[i]], sk.dim, sk.display);
+    }
+    for (i = 0; i < 4u; i++) {
+        int32_t y = WY + 44 + (int32_t)i * 15;
+        cv_text_on(WX + 8, y, &AF_XS, sy_patch.macro[i], sk.label, sk.display);
+        ui_bar(WX + 74, y + 1, 100, (float)sy_patch.p[SP_MAC1 + i] * 0.001f, 0);
+        sp_text(SP_MAC1 + i, sy_patch.p[SP_MAC1 + i], t);
+        cv_text_r(WX + WW - 8, y, &AF_XS, t, sk.text, sk.display);
+    }
+}
+
+/* EDIT held, JUMP: the keys and the section each opens (the one shown in NOW); a white key's code in two letters,
+ * one over the other (13 px is too narrow for both side by side) */
+static void ui_g_jump(void)
+{
+    static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0};   /* from F */
+    static const char *const CODE[SEC_N] = {"A", "B", "SB", "NZ", "FL", "E1", "E2", "L1", "L2", "V", "H", "MX",
+                                            "DR", "CH", "DL", "RV", "OT", "EQ", "S", "G", "", "", "K"};
+    uint32_t k, w, pass, cur = ui_sec();
+    char t[32];
+    int32_t y = WY + 44;
+    sp_put(sp_put(t, "NOW: "), ui_sec_name(cur));
+    cv_text_on(WX + 6, WY + 3, &AF_SB, t, sk.text, sk.display);
+    cv_text_on(WX + 6, WY + 21, &AF_XS, "H HOME \xB7 V VOICE \xB7 G GLOBAL", sk.faint, sk.display);
+    cv_text_on(WX + 6, WY + 31, &AF_XS, "K KEYS \xB7 S SETTINGS", sk.faint, sk.display);
+    for (pass = 0; pass < 2u; pass++)               /* the white keys, then the black over them */
+        for (k = 0, w = 0; k < 27u; k++) {
+            int black = BLACK[k % 12u], on = UI_KEY_JUMP[k] == cur, has = UI_KEY_JUMP[k] != 0xFF;
+            uint16_t fill = on ? sk.now : has ? (black ? sk.ground : sk.raised) : sk.display;
+            uint16_t edge = on ? sk.now : has ? sk.rline2 : sk.track;
+            if (!black) {
+                if (!pass) {
+                    int32_t kx = WX + 5 + (int32_t)(w * 27u) / 2;
+                    cv_rrect(kx, y, 13, 56, 2, edge, sk.display);
+                    cv_rrect(kx + 1, y + 1, 11, 54, 1, fill, edge);
+                    if (has) {
+                        const char *c = CODE[UI_KEY_JUMP[k]];
+                        char a[2] = {c[0], 0}, b[2] = {c[0] ? c[1] : 0, 0};
+                        uint16_t ink = on ? sk.ground : sk.text;
+                        if (b[0]) {
+                            ui_text_c(kx, y + 30, 13, &AF_XS, a, ink, fill);
+                            ui_text_c(kx, y + 41, 13, &AF_XS, b, ink, fill);
+                        } else {
+                            ui_text_c(kx, y + 41, 13, &AF_XS, a, ink, fill);
+                        }
+                    }
+                }
+                w++;
+            } else if (pass) {
+                int32_t kx = WX + 5 + (int32_t)(w * 27u) / 2 - 5;
+                cv_rrect(kx, y, 9, 32, 2, edge, sk.raised);
+                cv_rrect(kx + 1, y + 1, 7, 30, 1, fill, edge);
+                if (has)
+                    ui_text_c(kx, y + 19, 9, &AF_XS, CODE[UI_KEY_JUMP[k]], on ? sk.ground : sk.label, fill);
+            }
+        }
+}
+
 /* SCL's KEYS: the root and the scale by name, its notes from the root, and the 27 keys as they play with FIT: the
  * root's in NOW, the scale's in SOUND, the rest plain; each white key names the note it plays (SNAP: a key off the
  * scale, the note below; WHITE: the scale's notes, the black keys silent and dark) */
@@ -1060,7 +1221,15 @@ static void ui_draw_disp(uint32_t r0)
     cv_begin(240, 114, sk.ground);
     cv_rrect(6, 3, 228, 110, 4, line, sk.ground);
     cv_rrect(7, 4, 226, 108, 3, sk.display, line);
-    switch (UI_PG[ui.page].graph) {
+    switch (ui.lay == LAY_PERF || ui.lay == LAY_MAC || ui.lay == LAY_JUMP ? 0xFFu : UI_PG[ui.page].graph) {
+    case 0xFFu:                                     /* (a hold layer's own) */
+        if (ui.lay == LAY_PERF)
+            ui_g_perf();
+        else if (ui.lay == LAY_MAC)
+            ui_g_mac();
+        else
+            ui_g_jump();
+        break;
     case G_WT3D: ui_g_wt3d(); break;
     case G_WT2D: ui_g_wt2d(0); break;
     case G_UNI: ui_g_wt2d(1); break;
@@ -1107,6 +1276,17 @@ static void ui_led(uint8_t *l, uint32_t id)         /* matrix id: a button's (pa
             if (FM1_KEYMAP[r][c] == (int8_t)id)
                 l[c] |= (uint8_t)(1u << r);
 }
+static void ui_led_breathe(uint32_t id)             /* .. breathing: neither lit nor glowing */
+{
+    uint32_t c, r;
+    for (c = 0; c < FM1_NCOL; c++)
+        for (r = 1; r < 5u; r++)
+            if (FM1_KEYMAP[r][c] == (int8_t)id) {
+                fm1_led[c] &= (uint8_t)~(1u << r);
+                fm1_led_dim[c] &= (uint8_t)~(1u << r);
+                fm1_led_breath[c] |= (uint8_t)(1u << r);
+            }
+}
 
 /* the keys held (REC's MOD layer: the picked source lit, the sources in use dim), the page's family button lit,
  * the other family buttons dim, REC or ENV lit while its layer is on */
@@ -1121,6 +1301,10 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led, 14u + k);
             else if (UI_KEY_SRC[k] && ui_src_used(UI_KEY_SRC[k]))
                 ui_led(fm1_led_dim, 14u + k);
+        } else if (ui.lay == LAY_MAC && UI_KEY_FX[k] >= 0) {   /* MACROS: the effects' keys, lit when on */
+            ui_led(sy_patch.p[ui_sec_power(SEC_DRIVE + (uint32_t)UI_KEY_FX[k])] ? fm1_led : fm1_led_dim, 14u + k);
+        } else if (ui.lay == LAY_JUMP && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the keys that open a section, */
+            ui_led(UI_KEY_JUMP[k] == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
@@ -1140,6 +1324,10 @@ static void sy_ui_leds(void)
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
     else
         ui_led(fm1_led_dim, panel.btn[B_REC]);
+    if (ui.mod == 2u)                               /* a latched MOD layer's button, a hold layer's: breathing */
+        ui_led_breathe(panel.btn[ui.mod_btn]);
+    else if (ui.lay)
+        ui_led_breathe(panel.btn[ui.lay_btn]);
 }
 
 /* ------------------------------------------------------------------------------------------ frame --- */

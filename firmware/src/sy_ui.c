@@ -27,6 +27,12 @@
  *   - The MOD layer: REC held (a double tap latches it, a tap lets it go). A white key picks the source, a knob
  *     sets that source's depth on its parameter: a matrix slot, made when needed and freed when the layer closes
  *     at 0. ENV held: the same for ENV 2 (an envelope onto a knob).
+ *   - The other hold layers, while their button is held: GLO, PERFORM (KNOB 1 the bend, back to the middle when GLO
+ *     is let go; 2 the mod wheel; 3 GLIDE; 4 VOLUME); FX, MACROS (KNOB 1-4 MACRO 1-4; the white keys F3 .. D4 turn
+ *     the six effects on and off; ALGORITHM moves the effect shown along the chain); LFO, MOMENTARY (a knob's
+ *     change lasts until LFO is let go; on an LFO's POINTS page LFO held deletes a point instead); EDIT, JUMP (a
+ *     key opens its section: the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS).
+ *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
  * Still to come: the LFO, FX, GLO and SCL layers, MIDI learn, help, the rest of the SETTINGS, the matrix's
@@ -50,6 +56,8 @@ static int32_t sy_app_slot(void);                   /* .. the user slot the soun
 static int32_t sy_app_slot_free(void);
 static const char *sy_app_slot_name(uint32_t s);
 static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SAVE (sy_ui_saved when done) */
+static void sy_app_bend(uint32_t v);                /* .. the panel's bend (0 .. 16383, 8192 the middle) */
+static void sy_app_cc(uint32_t cc, uint32_t v);     /* .. a controller (the mod wheel) */
 
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
@@ -155,6 +163,15 @@ static const uint8_t UI_KEY_SRC[27] = {
     SRC_ENV1, 0, SRC_ENV2, 0, SRC_LFO1, 0, SRC_LFO2, SRC_MAC1, 0, SRC_MAC2, 0, SRC_MAC3, SRC_MAC4, 0,
     SRC_VEL, 0, SRC_NOTE, 0, SRC_RAND, SRC_ALT, 0, SRC_WHEEL, 0, SRC_BEND, SRC_AT, 0, SRC_EXPR,
 };
+/* FX held (MACROS): the white keys F3 .. D4 turn the effects on and off (DRIVE .. EQ; -1 none) */
+static const int8_t UI_KEY_FX[27] = {0, -1, 1, -1, 2, -1, 3, 4, -1, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                     -1, -1, -1, -1, -1, -1};
+/* EDIT held (JUMP): the section each key opens (0xFF none): the white keys in the panel's order, five black keys
+ * the rest */
+static const uint8_t UI_KEY_JUMP[27] = {
+    SEC_OSCA, SEC_MACRO, SEC_OSCB, SEC_VOICE, SEC_SUB, SEC_GLOBAL, SEC_NOISE, SEC_FILTER, SEC_KEYS, SEC_ENV1, SEC_MENU,
+    SEC_ENV2, SEC_LFO1, 0xFF, SEC_LFO2, 0xFF, SEC_MATRIX, 0xFF, SEC_DRIVE, SEC_CHORUS, 0xFF, SEC_DELAY, 0xFF,
+    SEC_REVERB, SEC_OTT, 0xFF, SEC_EQ};
 /* the footer's sources (the design's chips) */
 static const uint8_t UI_CHIP_SRC[8] = {SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_MAC1, SRC_MAC2, SRC_MAC3, SRC_MAC4};
 static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", "M3", "M4"};
@@ -168,6 +185,7 @@ static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", 
 #define D_ALL 127u
 #define D_LIVE 128u                                 /* the display's live rows alone (HOME's scope) */
 #define UI_DTAP_MS 300u                             /* a second tap within this: a double tap (it latches) */
+enum { LAY_NONE, LAY_PERF, LAY_MAC, LAY_MOM, LAY_JUMP };   /* the hold layers besides MOD: GLO, FX, LFO, EDIT */
 static struct {
     uint16_t page;
     uint16_t fpage[FAM_N];                          /* the page a family returns to */
@@ -180,6 +198,12 @@ static struct {
     uint8_t mod_src;                                /* the source it sets */
     uint8_t mod_pick;                               /* REC's pick (kept across layers) */
     uint8_t mod_made;                               /* slots this layer made (freed at 0 when it closes) */
+    uint8_t lay, lay_btn;                           /* another hold layer (LAY_*) and its button */
+    int16_t bend;                                   /* PERFORM: the panel's bend (-8192 .. 8191), its mod wheel */
+    uint8_t wheel;
+    uint8_t mom_n;                                  /* MOMENTARY: the parameters changed, as they were */
+    uint16_t mom_id[16];
+    int16_t mom_v[16];
     int16_t mod_last;                               /* the parameter it set last (the banner), -1 none */
     uint32_t bt_t[NB], tap_t[NB];                   /* a button's press, its last tap */
     uint16_t bt_down, bt_held;                      /* buttons down; held past HOLD (their layer on) */
@@ -906,7 +930,7 @@ static void ui_act(uint32_t k)
 static int32_t ui_act_id(void)
 {
     int32_t id;
-    if (ui.act_k >= 4u || ui.mod)
+    if (ui.act_k >= 4u || ui.mod || ui.lay)
         return -1;
     id = ui_virt(UI_PG[ui.page].id[ui.act_k]);
     return id >= 0 && id < UI_ITEM ? ui_eff(id) : id;
@@ -914,9 +938,65 @@ static int32_t ui_act_id(void)
 /* the patch as it was before the turn (the gesture's first state on the history), while a knob turns; 0 none */
 static const sy_patch_t *ui_ghost(void)
 {
-    if (ui.act_k >= 4u || ui.mod || !ui.edit_t || fm1_ms - ui.edit_t > UI_GESTURE_MS || !ui.h_at)
+    if (ui.act_k >= 4u || ui.mod || ui.lay || !ui.edit_t || fm1_ms - ui.edit_t > UI_GESTURE_MS || !ui.h_at)
         return 0;
     return ui_hist_at(ui.h_at - 1u);
+}
+
+/* the hold layers besides MOD: open while their button is held; let go, PERFORM's bend springs back to the middle
+ * and MOMENTARY puts back what it changed */
+static void ui_lay_open(uint32_t lay, uint32_t b)
+{
+    ui.lay = (uint8_t)lay;
+    ui.lay_btn = (uint8_t)b;
+    ui.mom_n = 0;
+    ui.dirty = D_ALL;
+}
+static void ui_lay_close(void)
+{
+    uint32_t i;
+    if (ui.lay == LAY_PERF && ui.bend) {
+        ui.bend = 0;
+        sy_app_bend(8192u);
+    }
+    for (i = 0; i < ui.mom_n; i++)
+        sy_patch.p[ui.mom_id[i]] = ui.mom_v[i];
+    ui.mom_n = 0;
+    ui.lay = LAY_NONE;
+    ui.dirty = D_ALL;
+}
+/* PERFORM's and MACROS' knobs: the bend (16 detents from the middle to an end), the mod wheel, GLIDE, VOLUME;
+ * MACRO 1-4 (an edit: undo takes it back) */
+static void ui_lay_knob(uint32_t k, int32_t s, uint32_t e)
+{
+    if (ui.lay == LAY_PERF && k == 0u) {
+        ui.bend = (int16_t)sy_clampi(ui.bend + s * 512, -8192, 8191);
+        sy_app_bend((uint32_t)(ui.bend + 8192));
+    } else if (ui.lay == LAY_PERF && k == 1u) {
+        ui.wheel = (uint8_t)sy_clampi(ui.wheel + ui_accel(e, s, 127), 0, 127);
+        sy_app_cc(1u, ui.wheel);
+    } else {
+        uint32_t id = ui.lay == LAY_MAC ? SP_MAC1 + k : k == 2u ? SP_V_GLIDE : SP_V_VOL;
+        ui_edit();
+        sy_patch.p[id] = sp_clamp(id, sy_patch.p[id] + ui_accel(e, s, SP[id].hi - SP[id].lo));
+    }
+    ui.dirty |= D_KNOB(k) | D_DISP;
+}
+/* MOMENTARY: parameter id as it was before the layer's first change to it, kept to put back (1: room for it) */
+static int ui_mom_keep(uint32_t id)
+{
+    uint32_t i;
+    for (i = 0; i < ui.mom_n; i++)
+        if (ui.mom_id[i] == id)
+            return 1;
+    if (ui.mom_n >= 16u) {
+        ui_toast("MOMENTARY: 16 AT MOST");
+        return 0;
+    }
+    ui.mom_id[ui.mom_n] = (uint16_t)id;
+    ui.mom_v[ui.mom_n++] = sy_patch.p[id];
+    ui.dirty |= D_HEAD;                             /* (the banner counts them) */
+    return 1;
 }
 
 static void ui_knob(uint32_t k, int32_t s)
@@ -924,9 +1004,15 @@ static void ui_knob(uint32_t k, int32_t s)
     int32_t id = ui_virt(UI_PG[ui.page].id[k]);     /* (the EQ's POINTS: the picked point's own) */
     const sp_desc_t *d;
     ui_cd_stop();
+    if (ui.lay == LAY_PERF || ui.lay == LAY_MAC) {
+        ui_lay_knob(k, s, EN_K1 + k);
+        return;
+    }
+    if (ui.lay == LAY_JUMP)                         /* (the map covers the page: nothing changes unseen) */
+        return;
     if (id < 0)
         return;
-    if (!ui.mod)
+    if (!ui.mod && !ui.lay)
         ui_act(k);
     if (id >= UI_ITEM) {
         ui_item_turn(id, s, EN_K1 + k);
@@ -953,7 +1039,12 @@ static void ui_knob(uint32_t k, int32_t s)
     } else if (!ui_list((uint32_t)id)) {
         s = ui_accel(EN_K1 + k, s, d->hi - d->lo);
     }
-    ui_edit();
+    if (ui.lay == LAY_MOM) {                        /* (MOMENTARY: kept to put back; no undo of its own) */
+        if (!ui_mom_keep((uint32_t)id))
+            return;
+    } else {
+        ui_edit();
+    }
     sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
     ui.dirty |= D_KNOB(k) | D_DISP;
     if (id == SP_L1_SYNC || id == SP_L2_SYNC || id == SP_DL_SYNC)
@@ -1019,6 +1110,16 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
         ui_cd_arm(B_HOME);                          /* (5 s: the SETTINGS) */
     else if (b == B_LFO && UI_PG[ui.page].id[0] == UI_LPT && !ui.mod)
         ui_lfo_del_arm();
+    else if (ui.mod || ui.lay)
+        return;
+    else if (b == B_GLO)
+        ui_lay_open(LAY_PERF, b);
+    else if (b == B_FX)
+        ui_lay_open(LAY_MAC, b);
+    else if (b == B_LFO)
+        ui_lay_open(LAY_MOM, b);
+    else if (b == B_EDIT)
+        ui_lay_open(LAY_JUMP, b);
     else if (b == B_SAVE && !ui.mod)
         ui_save_hold();                             /* (5 s: over its own slot) */
     else if (b == B_SCL && !ui.mod)
@@ -1033,6 +1134,8 @@ static void ui_release(uint32_t b, int held)
     if (held) {                                     /* a held layer closes (a latched one stays); SAVE held on a */
         if (ui.mod == 1u && ui.mod_btn == b)        /* sound from no user slot, no OCT meanwhile (undo, redo): */
             ui_mod_close();                         /* nothing to save over */
+        if (ui.lay && ui.lay_btn == b)
+            ui_lay_close();
         if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && sy_app_slot() < 0 &&
             ui_sec() != SEC_SAVE && ui_sec() != SEC_BROWSE)
             ui_toast("NOTHING TO SAVE OVER: TAP SAVE");
@@ -1154,6 +1257,21 @@ static int sy_ui_key(uint32_t k)
 {
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
+    if (ui.lay == LAY_MAC && k < 27u && UI_KEY_FX[k] >= 0) {   /* MACROS: an effect on or off */
+        char t[24];
+        uint32_t sec = SEC_DRIVE + (uint32_t)UI_KEY_FX[k], pw = (uint32_t)ui_sec_power(sec);
+        ui_edit();
+        sy_patch.p[pw] = !sy_patch.p[pw];
+        sp_put(sp_put(sp_put(t, SEC_NAMES[sec]), " "), sy_patch.p[pw] ? "ON" : "OFF");
+        ui_toast(t);
+        ui.dirty |= D_HEAD | D_DISP;
+        return 1;
+    }
+    if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section */
+        uint32_t sec = UI_KEY_JUMP[k];
+        ui_go(UI_PG[ui.spage[sec]].sec == sec ? ui.spage[sec] : ui_first_page(sec));
+        return 1;
+    }
     if ((ui.bt_down & (1u << B_SCL)) && !ui.mod) {  /* SCL held: a key is the root (no note; SCL's tap none) */
         char t[16];
         ui.root = (uint8_t)((UI_KEY0 + (int32_t)k) % 12);

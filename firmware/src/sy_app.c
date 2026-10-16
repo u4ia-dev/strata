@@ -104,6 +104,10 @@ static void sy_audio_init(void)
     fm1_audio_init(sy_abuf, SY_HALF_WORDS, isr_alnk0, 3);
 }
 
+/* the UI's performance: the panel's bend and a controller (GLO's PERFORM), as MIDI's would come */
+static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u, (v >> 7) & 127u); }
+static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
+
 /* -------------------------------------------------------------------------------------------- MIDI --- */
 /* a channel message (any channel): notes, bend and the engine's controllers into the MIDI ring; a controller a
  * parameter has as its default CC sets that parameter (a 16-bit store; the table's 0 is no CC, so CC 0, bank
