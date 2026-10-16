@@ -6,7 +6,8 @@
  *   display 240 x 114 at (0, 22): the window (228 x 110) and the page's graph: the table in 3D (its frames, the
  *     current one, the range its modulation sweeps), one frame in 2D (warped, the unwarped one behind) with the
  *     unison's voices, an envelope (the other one behind, the voices on it), an LFO's cycle (its points, the one
- *     picked, the segment KNOB 4 curves; where the voices are), a list of the section, the palettes;
+ *     picked, the segment KNOB 4 curves; where the voices are), the tempo and the time signature (a bar's beats),
+ *     a list of the section, the palettes;
  *   knob cells 60 x 76 at (60 k, 136): a dial (the value's arc, the modulation's halos, the pointer) or a list's pill,
  *     the name, the value (the MOD layer: the picked source's depth);
  *   footer 240 x 28 at (0, 212): the mod sources' chips (lit: moving something on this page; the MOD layer's pick
@@ -208,23 +209,44 @@ static void ui_lfo_cell(int32_t id)
     ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_LPT], dim ? sk.faint : sk.label, sk.ground);
 }
 
+/* GLOBAL, KNOB 1-3: BPM (a dial), TS-BEAT, TS-NOTE (pills) */
+static void ui_tempo_cell(int32_t id)
+{
+    static const char *const NAME[3] = {"BPM", "TS-BEAT", "TS-NOTE"};
+    char t[8];
+    int dim = ui.mod != 0;
+    if (id == UI_BPM) {
+        cv_arc(30.0f, 24.0f, 14.0f, 3.0f, 0.0f, 1.0f, sk.track);
+        ui_dial_at((float)(ui.bpm - 20u) * (1.0f / 280.0f), 0, dim);
+        sp_fix(t, ui.bpm, 0u, 0);
+        ui_text_c(0, 58, 60, &AF_S, t, dim ? sk.dim : sk.text, sk.ground);
+    } else {
+        sp_fix(t, id == UI_TSB ? ui.tsb : UI_TSN_VAL[ui.tsn], 0u, 0);
+        ui_pill(t, dim);
+    }
+    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : sk.label, sk.ground);
+}
+
 static void ui_draw_knob(uint32_t k)
 {
     int32_t id = UI_PG[ui.page].id[k];
     char t[SP_TEXT_N + 4];
     cv_begin(60, 76, sk.ground);
-    if (id >= UI_LPT) {
+    if (id >= UI_BPM) {
+        ui_tempo_cell(id);
+    } else if (id >= UI_LPT) {
         ui_lfo_cell(id);
     } else if (id >= UI_ITEM) {                     /* the MENU's items */
         ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0);
         ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", sk.label, sk.ground);
     } else if (id >= 0) {
         int dim = ui.mod && !(SP[id].flags & F_MOD);
-        if (ui_list((uint32_t)id)) {
-            sp_text((uint32_t)id, sy_patch.p[id], t);
+        int32_t e = ui_eff(id);                     /* (RATE, TIME with SYNC FIXED: the note value, under their name) */
+        if (ui_list((uint32_t)e)) {
+            sp_text((uint32_t)e, sy_patch.p[e], t);
             ui_pill(t, dim);
         } else {
-            ui_dial((uint32_t)id, dim);
+            ui_dial((uint32_t)e, dim);
             if (ui.mod) {                           /* the picked source's depth here */
                 int32_t a = dim ? 0 : ui_depth(ui.mod_src, (uint32_t)id);
                 if (a)
@@ -233,7 +255,7 @@ static void ui_draw_knob(uint32_t k)
                     sp_put(t, "-");
                 ui_text_c(0, 58, 60, &AF_S, t, a ? sk.mnear : sk.dim, sk.ground);
             } else {
-                sp_text((uint32_t)id, sy_patch.p[id], t);
+                sp_text((uint32_t)e, sy_patch.p[e], t);
                 ui_text_c(0, 58, 60, &AF_S, t, sk.text, sk.ground);
             }
         }
@@ -548,7 +570,7 @@ static void ui_g_lfo(void)
 {
     uint32_t k = ui_lfo(), b = UI_LB(k), shape = (uint32_t)sy_patch.p[SP_L1_SHAPE + b], i;
     uint32_t mode = (uint32_t)sy_patch.p[SP_L1_MODE + b], sync = (uint32_t)sy_patch.p[SP_L1_SYNC + b];
-    int rnd = ui_lfo_rnd(shape), pts = UI_PG[ui.page].id[0] == UI_LPT && !rnd, drawn = rnd || shape == LFO_DRAW;
+    int rnd = ui_lfo_rnd(shape), pts = UI_PG[ui.page].id[0] == UI_LPT, drawn = rnd || shape == LFO_DRAW;
     sp_draw_t tp;
     const sp_draw_t *d = ui_pts(k, &tp);
     lfo_draw_t dr;
@@ -601,14 +623,42 @@ static void ui_g_lfo(void)
                 break;
         }
     ui_label(0, 1, LFO_NAMES[shape < LFO_NSHAPE ? shape : 0], sk.dim);
-    if (sync && sync < 18u)
-        sp_put(w, SYNC_NAMES[sync]);
+    if (sync)                                       /* FIXED: the note value */
+        sp_text(k ? SP_L2_NOTE : SP_L1_NOTE, sy_patch.p[k ? SP_L2_NOTE : SP_L1_NOTE], w);
     else
         sp_text(SP_L1_RATE + b, sy_patch.p[SP_L1_RATE + b], w);
     ui_label(-1, 1, w, sk.dim);
     sp_text(SP_L1_MODE + b, (int32_t)mode, w);
     ui_label(0, 0, w, sk.faint);
     ui_label(-1, 0, rnd ? "RANDOM \xB7 5 CYCLES" : "1 CYCLE", sk.faint);
+}
+
+/* GLOBAL: the tempo and the time signature, large; a bar's beats (the first marked); how long a beat and a bar last */
+static void ui_g_tempo(void)
+{
+    uint32_t i, n = ui.tsb, note = UI_TSN_VAL[ui.tsn];
+    int32_t x, bw, gap = n > 8u ? 3 : 5, x0, y = WY + 10;
+    float beat = 60.0f / (float)ui.bpm;
+    char w[32], *e;
+    sp_fix(w, ui.bpm, 0u, 0);
+    x = cv_text_on(WX + 14, y, &AF_L, w, sk.text, sk.display);
+    cv_text_on(x + 6, y + AF_L_CAP_Y + AF_L_CAP_H - AF_XS_CAP_Y - AF_XS_CAP_H, &AF_XS, "BPM", sk.dim, sk.display);
+    sp_fix(sp_put(sp_fix(w, (int32_t)n, 0u, 0), "/"), (int32_t)note, 0u, 0);
+    cv_text_r(WX + WW - 14, y, &AF_L, w, sk.sound, sk.display);
+    bw = sy_clampi((WW - 28 - (int32_t)(n - 1u) * gap) / (int32_t)n, 6, 26);
+    x0 = WX + (WW - ((int32_t)n * bw + (int32_t)(n - 1u) * gap)) / 2;
+    for (i = 0; i < n; i++) {                       /* the bar's beats: the first marked */
+        int32_t bx = x0 + (int32_t)i * (bw + gap);
+        cv_rrect(bx, WY + 54, bw, 18, 3, i ? sk.wmid : sk.sound, sk.display);
+        if (i)
+            cv_rrect(bx + 1, WY + 55, bw - 2, 16, 2, sk.display, sk.wmid);
+    }
+    e = sp_put(w, "BEAT 1/");
+    e = sp_fix(e, (int32_t)note, 0u, 0);
+    sp_secs(sp_put(e, " \xB7 "), beat);
+    ui_label(0, 0, w, sk.dim);
+    sp_secs(sp_put(w, "BAR "), beat * (float)n);
+    ui_label(-1, 0, w, sk.dim);
 }
 
 /* a section's parameters as a list, the page's rows marked */
@@ -684,6 +734,7 @@ static void ui_draw_disp(void)
     case G_UNI: ui_g_wt2d(1); break;
     case G_ENV: ui_g_env(); break;
     case G_LFO: ui_g_lfo(); break;
+    case G_TEMPO: ui_g_tempo(); break;
     case G_COLOR: ui_g_color(); break;
     default: ui_g_list(); break;
     }

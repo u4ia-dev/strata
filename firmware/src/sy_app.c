@@ -155,6 +155,8 @@ static void sy_sound_load(uint32_t k)
         return;
     }
     sy_sound_patch(k, &p);
+    ui_hist_push();                              /* (SAVE + OCT- takes the sound before back) */
+    ui.edit_t = 0;
     sy_patch_load(&p);
     sy_sound = k;
     sy_sound_want = -1;
