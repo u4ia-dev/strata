@@ -124,6 +124,8 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)
 /* ------------------------------------------------------------------------------ the app and the synth --- */
 #include "../../firmware/src/gfx.c"                /* (its fonts, palettes and keycaps: build/gen) */
 static uint8_t fx_lowcut;                        /* (panel.c's settings_init sets Felucca's low cut: not Strata's) */
+static uint32_t web_dim_lo;
+static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the HAL's: the glow's level) */
 #include "../../firmware/src/panel.c"
 #include "../../firmware/src/sy_core.h"
 #include "../../firmware/src/sy_wt.c"
@@ -279,7 +281,7 @@ EXPORT uint32_t web_lit_buttons(void)            /* (bit 14: PLAY's green LED, a
 EXPORT uint32_t web_lit_keys(void) { return led_keys(fm1_led); }
 EXPORT uint32_t web_dim_buttons(void) { return led_buttons(fm1_led_dim); }
 EXPORT uint32_t web_dim_keys(void) { return led_keys(fm1_led_dim); }
-EXPORT uint32_t web_dim_level(void) { return 0; }
+EXPORT uint32_t web_dim_level(void) { return web_dim_lo; }
 EXPORT uint32_t web_breath_buttons(void) { return led_buttons(fm1_led_breath); }   /* (a layer's button) */
 EXPORT uint32_t web_breath_keys(void) { return led_keys(fm1_led_breath); }
 EXPORT uint32_t web_mid_keys(void) { return led_keys(fm1_led_mid); }   /* (SCL: the root's keys) */
@@ -310,6 +312,16 @@ EXPORT int32_t web_test_key_vel(void) { return sy_key_vel; }
 EXPORT uint32_t web_test_lay(void) { return ui.lay; }
 /* PLAY: the transport running; a FREE LFO's phase (its top 16 bits) */
 EXPORT uint32_t web_test_run(void) { return ui.run; }
+/* the SETTINGS: f 0 HELP, 1 GLOW, 2 HOLD, 3 MIDI's channel, 4 PROGRAM, 5 LEARN, 6 the learned CCs, 7 the parameter
+ * LEARN picked (v >= 0: HELP set to v first); the parameter a CC is learned to (-1 none) */
+EXPORT int32_t web_test_set_get(uint32_t f, int32_t v)
+{
+    if (f == 0u && v >= 0)
+        ui.help = v != 0;
+    return f == 0u ? ui.help : f == 1u ? ui.glow : f == 2u ? settings_hold : f == 3u ? ui.mch : f == 4u ? ui.mpc
+           : f == 5u ? ui.learn : f == 6u ? (int32_t)ml_count() : ui.ml_pick;
+}
+EXPORT int32_t web_test_learned(uint32_t cc) { return sy_ui_learned(cc & 127u); }
 EXPORT uint32_t web_test_lfo_phase(uint32_t k) { return sy_glfo[k & 1u].ph >> 16; }
 EXPORT int32_t web_test_bend(void) { return (int32_t)(sy_bend_v * 1000.0f + (sy_bend_v < 0.0f ? -0.5f : 0.5f)); }
 EXPORT uint32_t web_test_wheel(void) { return sy_wheel; }

@@ -5,7 +5,8 @@
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
 // one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
 // chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
-// the keys' scale (SCL), the matrix (SEQ), the hold layers (PERFORM, MACROS, JUMP, MOMENTARY), the SETTINGS (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
+// the keys' scale (SCL), the matrix (SEQ), the hold layers (PERFORM, MACROS, JUMP, MOMENTARY), the SETTINGS (SCREEN,
+// PANEL, MIDI with a CC learned; LEARN's footer; a HELP hint) (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
 // NAME IT from it (a rename, the numbers, written), HOME with a user preset, and the wave page in each palette. It
 // prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
@@ -19,6 +20,7 @@ if (ex._initialize) ex._initialize();
 ex.web_nor_erase();
 ex.web_master(700);
 ex.web_boot();
+ex.web_test_set_get(0, 0);                      // (HELP's hints off: one shot below shows one)
 const run = (s) => { for (let n = Math.max(1, Math.round(s * 44118 / 128)); n > 0; n--) ex.web_render(128); };
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
@@ -294,6 +296,33 @@ run(5.2);
 ex.web_buttons(0);
 run(0.1);
 png("settings.png");
+ex.web_enc(E.SELECT, 1);                        // PANEL; MIDI with LEARN on, a knob picked, CC 74 learned to it
+run(0.1);
+png("settings_panel.png");
+ex.web_enc(E.SELECT, 1);
+run(0.1);
+ex.web_enc(E.K2, 1);
+run(0.13);
+tap(B.EDIT);
+ex.web_enc(E.K1, 1);
+run(0.13);
+png("learn.png");
+ex.web_midi(0xB0, 74, 64);
+run(0.05);
+ex.web_buttons(1 << B.HOME);
+run(5.2);
+ex.web_buttons(0);
+run(0.1);
+ex.web_enc(E.SELECT, 2);
+run(0.1);
+png("settings_midi.png");
+ex.web_enc(E.K2, -1);                           // (LEARN off)
+run(0.13);
+ex.web_test_set_get(0, 1);                      // HELP on: a section's hint as it opens
+tap(B.FX);
+png("help.png");
+ex.web_test_set_get(0, 0);
+run(2.1);
 const btn = (b, t = 0.03) => { ex.web_buttons(1 << b); run(t); ex.web_buttons(0); run(0.03); };
 const key = (k) => { ex.web_keys(1 << k); run(0.03); ex.web_keys(0); run(0.03); };
 tap(B.EDIT);                                    // SAVE once: a new preset at once (its next version, USER 1)

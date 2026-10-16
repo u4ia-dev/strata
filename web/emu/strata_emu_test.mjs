@@ -54,6 +54,7 @@ async function boot() {
   ex.web_nor_erase();
   ex.web_master(700);
   ex.web_boot();
+  ex.web_test_set_get(0, 0);                    // (HELP's hints off: the tests read the footer; one test turns them on)
   return ex;
 }
 function play(ex, secs) {                       // renders secs of audio: its peak and an FNV hash of it
@@ -715,6 +716,100 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`PLAY: the transport on (${run}, "${word}"), LFO 1 from its start (phase ${ph0} -> ${ph1} of 65536), the green LED (${green}), PLAY lit a quarter of each beat (${on} of 100 at 120 BPM); again, off (${off[0]}, green ${off[1]}, "${off[2]}"); ARP: "${rt()}"`,
         run === 1 && word === "PLAY" && ph0 > 8000 && ph1 < 4000 && green === 1 && on >= 18 && on <= 32 &&
         off[0] === 0 && off[1] === 0 && off[2] === "STOP" && rt() === "ARP: IN A LATER VERSION");
+}
+{                                               // the SETTINGS: SCREEN, PANEL, MIDI (its channel, program changes,
+  const g = await boot(), gt = () => cstr(g, g.web_test_toast()), gn = () => cstr(g, g.web_test_page_name());   // LEARN)
+  const gb = (b) => { g.web_buttons(1 << b); play(g, 0.03); g.web_buttons(0); play(g, 0.05); };
+  play(g, 0.2);
+  g.web_buttons(1 << B.HOME);                   // HOME held 5 s: the SETTINGS
+  play(g, 5.2);
+  g.web_buttons(0);
+  play(g, 0.1);
+  const pages = [gn()];
+  g.web_enc(E.K3, 1);                           // SCREEN: KNOB 3 the LEDs' glow, low
+  play(g, 0.13);
+  const glow = [g.web_test_set_get(1, -1), g.web_dim_level()];
+  g.web_enc(E.SELECT, 1);                       // PANEL: KNOB 2 the hold time, 500 ms
+  play(g, 0.1);
+  pages.push(gn());
+  g.web_enc(E.K2, 1);
+  play(g, 0.13);
+  const hold = g.web_test_set_get(2, -1);
+  g.web_enc(E.SELECT, 1);                       // MIDI: KNOB 1 the channel (2), KNOB 4 PROGRAM on
+  play(g, 0.1);
+  pages.push(gn());
+  g.web_enc(E.K1, 2);
+  play(g, 0.13);
+  g.web_enc(E.K4, 1);
+  play(g, 0.13);
+  const ch = g.web_test_set_get(3, -1), pc = g.web_test_set_get(4, -1);
+  g.web_midi(0x90, 60, 100);                    // channel 1: not heard; channel 2: played
+  play(g, 0.1);
+  const v1 = g.web_test_voices();
+  g.web_midi(0x80, 60, 0);
+  g.web_midi(0x91, 60, 100);
+  play(g, 0.1);
+  const v2 = g.web_test_voices();
+  g.web_midi(0x81, 60, 0);
+  play(g, 0.3);
+  g.web_midi(0xC1, 3, 0);                       // a program change, 3: the fourth starter sound
+  play(g, 0.3);
+  const snd = [g.web_test_sound(), cstr(g, g.web_test_patch_name())];
+  check(`the SETTINGS' pages (${pages.join(", ")}); GLOW low (${glow[0]}, the LEDs' level ${glow[1]}); HOLD ${hold} (500 ms); MIDI on channel ${ch}: channel 1's note not heard (${v1} voices), channel 2's played (${v2}); PROGRAM ${pc}: program change 3, the fourth starter sound (${snd[0]}, "${snd[1]}")`,
+        pages.join() === "SCREEN,PANEL,MIDI" && glow[0] === 1 && glow[1] === 1 && hold === 2 && ch === 2 && v1 === 0 &&
+        v2 === 1 && pc === 1 && snd[0] === 3);
+  g.web_enc(E.K2, 1);                           // LEARN on; on a sound's page KNOB 1 picks its parameter, a CC is
+  play(g, 0.13);                                // learned to it; OCT+ done; the CC then sets it
+  const lw = gt();
+  gb(B.EDIT);
+  const K1 = g.web_test_page_virt(0), pg = gn();
+  g.web_enc(E.K1, 1);
+  play(g, 0.13);
+  const pick = g.web_test_set_get(7, -1);
+  g.web_midi(0xB1, 20, 64);
+  play(g, 0.05);
+  const lt = gt(), learned = g.web_test_learned(20);
+  gb(B.OCTUP);
+  const off = [g.web_test_set_get(5, -1), gt()];
+  g.web_midi(0xB1, 20, 0);
+  play(g, 0.05);
+  const lo = g.web_test_value(K1);
+  g.web_midi(0xB1, 20, 127);
+  play(g, 0.05);
+  const hi = g.web_test_value(K1);
+  check(`MIDI LEARN on ("${lw}"); KNOB 1 on ${pg} picks its parameter (${pick}); CC 20 learned to it ("${lt}"); OCT+ ends it (${off[0]}, "${off[1]}"); CC 20 then sets it (0: ${lo}, 127: ${hi})`,
+        lw === "LEARN: TURN A KNOB" && K1 >= 0 && K1 < 1000 && pick === K1 && learned === K1 && lt.startsWith("CC 20: ") &&
+        off[0] === 0 && off[1] === "LEARN OFF" && hi > lo);
+  g.web_test_set_get(0, 1);                     // HELP on: entering the effects, their hint
+  tap(g, B.FX);
+  const hint = gt();
+  g.web_test_set_get(0, 0);
+  play(g, 3.8);                                 // (3 s of quiet: the settings written) a power cycle
+  const nor = new Uint8Array(g.memory.buffer, g.web_nor(), g.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const g2 = instance.exports;
+  if (g2._initialize) g2._initialize();
+  new Uint8Array(g2.memory.buffer, g2.web_nor(), g2.web_nor_size()).set(nor);
+  g2.web_master(700);
+  g2.web_boot();
+  play(g2, 0.3);
+  const back = [0, 1, 2, 3, 4].map((f) => g2.web_test_set_get(f, -1));
+  check(`HELP: entering the effects, the footer's hint ("${hint}"); after a power cycle: HELP ${back[0]}, GLOW ${back[1]}, HOLD ${back[2]}, the channel ${back[3]}, PROGRAM ${back[4]}, CC 20 learned (${g2.web_test_learned(20)})`,
+        hint === "FX HELD: MACROS \u00b7 + ALGO: MOVE" && back.join() === "0,1,2,2,1" && g2.web_test_learned(20) === K1);
+  g.web_buttons(1 << B.HOME);                   // CLEAR: turned once, a word; again within 2 s, every learned CC
+  play(g, 5.2);
+  g.web_buttons(0);
+  play(g, 0.1);
+  g.web_enc(E.SELECT, 2);
+  play(g, 0.1);
+  g.web_enc(E.K3, 1);
+  play(g, 0.13);
+  const c1 = [gt(), g.web_test_set_get(6, -1)];
+  g.web_enc(E.K3, 1);
+  play(g, 0.13);
+  check(`.. CLEAR on ${gn()}: once "${c1[0]}" (${c1[1]} learned), again "${gt()}" (${g.web_test_set_get(6, -1)})`,
+        c1[0] === "TURN AGAIN: ALL CLEARED" && c1[1] === 1 && gt() === "THE LEARNED CCS CLEARED" &&
+        g.web_test_set_get(6, -1) === 0);
 }
 {                                               // the chorus's taps: still in silence, moving with a note
   tap(ex, B.FX);
