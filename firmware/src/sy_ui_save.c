@@ -267,7 +267,7 @@ static void ui_save_ms(void)                        /* every millisecond: a pres
 static void ui_save_cell(int32_t id, int act)
 {
     static const char *const NAME[7] = {"CURSOR", "LETTER", "CATEGORY", "SLOT", "CATEGORY", "PRESET", "BANK"};
-    static const char *const BANK[3] = {"ALL", "FACTORY", "USER"};
+    static const char *const BANK[3] = {"ALL", "STARTER", "USER"};   /* (as HOME and the list name them) */
     char t[16];
     if (id == UI_SCUR) {
         sp_fix(t, (int32_t)ui.sv_cur + 1, 0u, 0);
