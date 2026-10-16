@@ -74,3 +74,13 @@ static inline float mod_get(const float *off, uint32_t id)
     uint32_t d = mod_idx[id];
     return d == 0xFF ? sp_n[id] : sy_clampf(sp_n[id] + off[d], 0.0f, 1.0f);
 }
+
+/* a note value (NOTE_Q) moved by parameter id's offset (an LFO's RATE: faster; the delay's TIME: longer), in whole
+ * values: 100 % across all of them */
+static inline uint32_t mod_note(const float *off, uint32_t id, int32_t note, int32_t dir)
+{
+    uint32_t d = mod_idx[id];
+    if (off && d != 0xFF)
+        note += dir * sy_floori(off[d] * (float)(SY_NNOTE - 1u) + 0.5f);
+    return (uint32_t)sy_clampi(note, 0, (int32_t)SY_NNOTE - 1);
+}

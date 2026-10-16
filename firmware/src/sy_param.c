@@ -25,7 +25,7 @@ enum {                           /* units: the display and the DSP's reading of 
     U_DB,                        /* volume: 0 = off, else (v - 600) / 10 dB: -60.0 .. +6.0 */
     U_TABLE,                     /* a factory wavetable (WT_NAMES) */
     U_SRC, U_DST,                /* a modulation source (SRC_*), a destination (a parameter id) */
-    U_SYNC,                      /* a note value (SYNC_*), 0 = free */
+    U_SYNC,                      /* a note value (NOTE_NAMES: 8 BAR .. 1/32), an LFO's or the delay's SYNC FIXED */
     U_MS,                        /* the delay's time: 0..1000 = 10 .. 750 ms, exponential */
     U_DBX                        /* a level in 0.1 dB (the OTT's bands: -24.0 .. +24.0) */
 };
@@ -75,7 +75,7 @@ enum {                           /* units: the display and the DSP's reading of 
 #define SP_LFO(X, L, S, rate)                                                                             \
     X(L##_SHAPE, "SHAPE", S, 0, 12, 0, U_LIST, 0, 0)                                                      \
     X(L##_RATE, "RATE", S, 0, 1000, rate, U_LFOHZ, FMV, 0)                                                \
-    X(L##_SYNC, "SYNC", S, 0, 17, 0, U_SYNC, 0, 0)                                                        \
+    X(L##_SYNC, "SYNC", S, 0, 1, 0, U_LIST, 0, 0)                                                         \
     X(L##_MODE, "MODE", S, 0, 2, 1, U_LIST, 0, 0)                                                         \
     X(L##_DELAY, "DELAY", S, 0, 1000, 0, U_TIME0, 0, 0)                                                   \
     X(L##_RISE, "RISE", S, 0, 1000, 0, U_TIME0, 0, 0)                                                     \
@@ -145,7 +145,7 @@ enum {                           /* units: the display and the DSP's reading of 
     X(DL_ON, "ON", SEC_DELAY, 0, 1, 0, U_ONOFF, 0, 0)                                                     \
     X(DL_MODE, "MODE", SEC_DELAY, 0, 1, 1, U_LIST, 0, 0)                                                  \
     X(DL_TIME, "TIME", SEC_DELAY, 0, 1000, 600, U_MS, FMG, 0)                                             \
-    X(DL_SYNC, "SYNC", SEC_DELAY, 0, 17, 11, U_SYNC, 0, 0)                                                \
+    X(DL_SYNC, "SYNC", SEC_DELAY, 0, 1, 1, U_LIST, 0, 0)                                                  \
     X(DL_FDBK, "FEEDBACK", SEC_DELAY, 0, 1000, 400, U_PCT, FMG, 0)                                        \
     X(DL_LP, "LP", SEC_DELAY, 0, 1000, 800, U_HZ, FMG, 0)                                                 \
     X(DL_HP, "HP", SEC_DELAY, 0, 1000, 150, U_HZ, FMG, 0)                                                 \
@@ -166,7 +166,10 @@ enum {                           /* units: the display and the DSP's reading of 
     X(OT_DOWN, "DOWNWARD", SEC_OTT, 0, 1000, 1000, U_PCT, FMG, 0)                                         \
     X(OT_LOW, "LOW", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                                \
     X(OT_MID, "MID", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                                \
-    X(OT_HIGH, "HIGH", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)
+    X(OT_HIGH, "HIGH", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                              \
+    X(L1_NOTE, "NOTE", SEC_LFO1, 0, 16, 8, U_SYNC, 0, 0)                                                  \
+    X(L2_NOTE, "NOTE", SEC_LFO2, 0, 16, 8, U_SYNC, 0, 0)                                                  \
+    X(DL_NOTE, "NOTE", SEC_DELAY, 0, 16, 10, U_SYNC, 0, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
@@ -366,12 +369,14 @@ static inline float sp_lfo_hz(float n) { return 0.01f * sy_exp2f(n * 11.9658f); 
 static inline float sp_dly_s(float n) { return 0.010f * sy_exp2f(n * 6.22882f); }         /* 10 .. 750 ms */
 static inline float sp_db_gain(int32_t v) { return v <= 0 ? 0.0f : sy_exp2f((float)(v - 600) * 0.0166096f); }
 
-/* note values (U_SYNC): beats (quarter notes) a cycle. 0 = free */
-static const float SYNC_BEATS[18] = {0.0f, 32.0f, 16.0f, 8.0f, 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f,
-                                     2.0f / 3.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f};
-static const char *const SYNC_NAMES[18] = {"FREE", "8 BAR", "4 BAR", "2 BAR", "1 BAR", "1/2D", "1/2", "1/2T",
-                                           "1/4D", "1/4", "1/4T", "1/8D", "1/8", "1/8T", "1/16D", "1/16",
-                                           "1/16T", "1/32"};
+/* note values (U_SYNC: an LFO's RATE, the delay's TIME with SYNC FIXED), longest first: quarter notes a cycle; the
+ * bars (0 at the top four) follow the time signature (sy_lfo.c sy_note_q) */
+#define SY_NNOTE 17u
+static const float NOTE_Q[SY_NNOTE] = {0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f, 2.0f / 3.0f,
+                                       0.75f, 0.5f, 1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f};
+static const char *const NOTE_NAMES[SY_NNOTE] = {"8 BAR", "4 BAR", "2 BAR", "1 BAR", "1/2D", "1/2", "1/2T", "1/4D",
+                                                 "1/4", "1/4T", "1/8D", "1/8", "1/8T", "1/16D", "1/16", "1/16T",
+                                                 "1/32"};
 
 /* ------------------------------------------------------------------------------------------ presets --- */
 /* a patch as bytes (presets, autosave): "SY", the version, the count of values, the values (int16, little endian,

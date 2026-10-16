@@ -195,8 +195,10 @@ static void fx_chorus(float *l, float *r)
 static void fx_delay(float *l, float *r)
 {
     float m0, m, dm, *ch[2] = {l, r};
-    uint32_t i, c, pp = sy_patch.p[SP_DL_MODE] != 0, sync = (uint32_t)sy_patch.p[SP_DL_SYNC];
-    float secs = sync && sync < 18u ? SYNC_BEATS[sync] * 60.0f / sy_tempo : sp_dly_s(mod_get(sy_goff, SP_DL_TIME));
+    uint32_t i, c, pp = sy_patch.p[SP_DL_MODE] != 0;
+    float secs = sy_patch.p[SP_DL_SYNC]                 /* SYNC FIXED: a note value (TIME's modulation steps it) */
+                     ? sy_note_q(mod_note(sy_goff, SP_DL_TIME, sy_patch.p[SP_DL_NOTE], -1)) * 60.0f / sy_tempo
+                     : sp_dly_s(mod_get(sy_goff, SP_DL_TIME));
     float target = sy_clampf(secs * SY_FS * 0.5f, 2.0f, (float)(FX_DLY_N - 4u));
     float fb = 0.95f * mod_get(sy_goff, SP_DL_FDBK);
     float klp = sy_minf(1.0f, 6.2831853f * sp_cut_hz(mod_get(sy_goff, SP_DL_LP)) * 2.0f / SY_FS);

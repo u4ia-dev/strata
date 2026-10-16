@@ -492,6 +492,15 @@ static void sy_patch_swap(void)
     sy_next_st = 0;
 }
 
+/* main loop: GLOBAL's tempo and time signature. BPM counts beats of TS-NOTE (1 a whole note .. 16 a sixteenth); a
+ * bar is TS-BEAT beats. The audio side reads quarter notes a minute and a bar in quarter notes (a float store each:
+ * the next block takes them) */
+static void sy_set_tempo(uint32_t bpm, uint32_t beat, uint32_t note)
+{
+    sy_tempo = (float)bpm * 4.0f / (float)note;
+    sy_bar_q = (float)beat * 4.0f / (float)note;
+}
+
 static void sy_init(void)
 {
     uint32_t i;
@@ -519,6 +528,7 @@ static void sy_init(void)
     wt_build_o = 0xFF;
     fx_lo = 0;
     sy_tempo = 120.0f;
+    sy_bar_q = 4.0f;
     for (i = 0; i < SY_NOSC; i++) {
         memset(&wt_tab[i], 0, sizeof wt_tab[i]);
         wt_tab[i].f = wt_pool[i * SY_NFRAME];

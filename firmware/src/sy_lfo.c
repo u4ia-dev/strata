@@ -32,13 +32,23 @@ typedef struct {
 } lfo_t;
 
 typedef struct {                 /* an LFO's settings for a block */
-    uint8_t shape, mode, sync;
+    uint8_t shape, mode, sync;       /* (sync: FIXED, its rate a note value) */
+    uint8_t note;                    /* FIXED: the note value (NOTE_Q), RATE's modulation stepped in */
     float rate;                  /* 0..1 (U_LFOHZ), modulated */
     float delay, rise, phase, smooth;   /* 0..1 */
     const lfo_draw_t *dr;        /* its drawn shape */
 } lfo_par_t;
 
-static float sy_tempo = 120.0f;  /* beats a minute: the internal clock or the MIDI clock (sy_engine.c) */
+static float sy_tempo = 120.0f;  /* quarter notes a minute: GLOBAL's BPM and TS-NOTE, or the MIDI clock */
+static float sy_bar_q = 4.0f;    /* a bar in quarter notes: GLOBAL's TS-BEAT and TS-NOTE (sy_set_tempo) */
+
+/* note value i's length in quarter notes (the bars by the time signature) */
+static float sy_note_q(uint32_t i)
+{
+    if (i >= SY_NNOTE)
+        i = SY_NNOTE - 1u;
+    return i < 4u ? (float)(8u >> i) * sy_bar_q : NOTE_Q[i];
+}
 
 /* ---------------------------------------------------------------------------------- the drawn shape --- */
 /* the patch's points as the audio side reads them (whatever they hold: n, the places' order and the ranges kept) */
@@ -125,8 +135,8 @@ static float lfo_shape(const lfo_t *l, const lfo_par_t *p, float x)
 /* cycles a second */
 static float lfo_hz(const lfo_par_t *p)
 {
-    if (p->sync && p->sync < 18u)
-        return sy_tempo * (1.0f / 60.0f) / SYNC_BEATS[p->sync];
+    if (p->sync)
+        return sy_tempo * (1.0f / 60.0f) / sy_note_q(p->note);
     return sp_lfo_hz(p->rate);
 }
 

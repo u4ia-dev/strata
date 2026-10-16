@@ -275,6 +275,7 @@ static void voice_lfo_par(const float *off, uint32_t k, lfo_par_t *lp)
     lp->shape = (uint8_t)sy_patch.p[SP_L1_SHAPE + b];
     lp->mode = (uint8_t)sy_patch.p[SP_L1_MODE + b];
     lp->sync = (uint8_t)sy_patch.p[SP_L1_SYNC + b];
+    lp->note = (uint8_t)mod_note(off, SP_L1_RATE + b, sy_patch.p[k ? SP_L2_NOTE : SP_L1_NOTE], 1);
     lp->rate = off ? mod_get(off, SP_L1_RATE + b) : sp_n[SP_L1_RATE + b];
     lp->delay = sp_n[SP_L1_DELAY + b];
     lp->rise = sp_n[SP_L1_RISE + b];

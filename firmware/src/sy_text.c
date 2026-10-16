@@ -14,6 +14,7 @@ static const char *const PHMODE_NAMES[2] = {"RETRIG", "FREE"};
 static const char *const UMODE_NAMES[2] = {"LINEAR", "SUPER"};
 static const char *const ROUTE_NAMES[2] = {"FILTER", "DIRECT"};
 static const char *const LFOM_NAMES[3] = {"FREE", "RETRIG", "ENV"};
+static const char *const SYNCM_NAMES[2] = {"FREE", "FIXED"};
 static const char *const VMODE_NAMES[3] = {"POLY", "MONO", "LEGATO"};
 static const char *const GLMODE_NAMES[2] = {"ALWAYS", "LEGATO"};
 
@@ -27,6 +28,7 @@ static const char *const *sp_list(uint32_t id, uint32_t *n)
     case SP_A_ROUTE: case SP_B_ROUTE: case SP_SUB_ROUTE: case SP_NZ_ROUTE: *n = 2u; return ROUTE_NAMES;
     case SP_L1_SHAPE: case SP_L2_SHAPE: *n = LFO_NSHAPE; return LFO_NAMES;
     case SP_L1_MODE: case SP_L2_MODE: *n = 3u; return LFOM_NAMES;
+    case SP_L1_SYNC: case SP_L2_SYNC: case SP_DL_SYNC: *n = 2u; return SYNCM_NAMES;
     case SP_SUB_SHAPE: *n = SUB_NSHAPE; return SUB_NAMES;
     case SP_NZ_TYPE: *n = 3u; return NZ_NAMES;
     case SP_F_TYPE: *n = FT_COUNT; return FT_NAMES;
@@ -143,7 +145,7 @@ static void sp_text(uint32_t id, int32_t v, char *b)
         else
             sp_put(sp_put(sp_put(b, SEC_SHORT[SP[v].sec]), " "), SP[v].name);
         break;
-    case U_SYNC: sp_put(b, v >= 0 && v < 18 ? SYNC_NAMES[v] : "?"); break;
+    case U_SYNC: sp_put(b, v >= 0 && v < (int32_t)SY_NNOTE ? NOTE_NAMES[v] : "?"); break;
     case U_MS: sp_real(b, sp_dly_s(n) * 1000.0f, 0u, " ms"); break;
     default: sp_fix(b, v, 0u, 0); break;                       /* U_INT */
     }

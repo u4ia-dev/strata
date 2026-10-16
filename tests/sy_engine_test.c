@@ -13,8 +13,9 @@
  *    note; VOICES limits them; the same note takes its own voice again; releases end; sustain holds and lets go;
  *    MONO's stack (back to the held note, no restart), LEGATO (no restart while held), MONO restarts; glide's
  *    time; the unison budget trims the oldest voice; the CPU guard steps the budget down and back, sheds a voice;
- * 4. envelopes and LFOs: attack and release times; a FREE LFO's rate; a synced LFO at 120 BPM; the built-in
- *    shapes as points (on their shapes); a drawn shape plays, its edits reach the audio whole, a patch load's too;
+ * 4. envelopes and LFOs: attack and release times; a FREE LFO's rate; a synced LFO at 120 BPM (SYNC FIXED); RATE's
+ *    modulation steps the note value; the time signature's bars, BPM in TS-NOTE beats; the built-in shapes as
+ *    points (on their shapes); a drawn shape plays, its edits reach the audio whole, a patch load's too;
  * 5. clicks: a sine patch, every event that could step the output (note on / off, steal, retrigger, MONO, table
  *    swap, patch change, knob and CC jumps, unison count, sources and the filter switched, filter type and warp
  *    changed, bend jumps): the largest step between samples near the event against the steady sine's (<= 2x);
@@ -24,7 +25,8 @@
  *    cycles taken out, and the infrasonic thump of a note's attack and release printed for each;
  * 7. determinism and golden renders: eight test sounds play a phrase; the same twice in a run, and as recorded
  *    in tests/sy_golden.txt (a change must be intended: GOLDEN_UPDATE=1); WAVs into DEMODIR;
- * 8. effects: OTT's bands sum back to the input; the synced delay's echo at 1/4 of 120 BPM; every module bounded
+ * 8. effects: OTT's bands sum back to the input; the synced delay's echo at 1/4 of 120 BPM, TIME's modulation
+ *    stepping its note value; every module bounded
  *    and finite on full-scale noise; the limiter holds peaks under 1;
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
 #define SY_ENGINE 1
@@ -127,7 +129,9 @@ static void t_params(void)
     }
     lists &= SP[SP_A_WARP].hi == WARP_COUNT - 1 && SP[SP_B_WARP].hi == WARP_COUNT - 1;
     lists &= SP[SP_SUB_SHAPE].hi == SUB_NSHAPE - 1 && SP[SP_NZ_TYPE].hi == 2 && SP[SP_F_TYPE].hi == FT_COUNT - 1;
-    lists &= SP[SP_L1_SHAPE].hi == LFO_NSHAPE - 1 && SP[SP_L1_SYNC].hi == 17 && SP[SP_DR_TYPE].hi == 3;
+    lists &= SP[SP_L1_SHAPE].hi == LFO_NSHAPE - 1 && SP[SP_L1_SYNC].hi == 1 && SP[SP_DL_SYNC].hi == 1;
+    lists &= SP[SP_L1_NOTE].hi == (int16_t)(SY_NNOTE - 1u) && SP[SP_DL_NOTE].hi == (int16_t)(SY_NNOTE - 1u);
+    lists &= SP[SP_DR_TYPE].hi == 3;
     lists &= SP[SP_M1_SRC].hi == SRC_COUNT - 1 && SP[SP_A_TABLE].hi == (int16_t)(WT_NFACT - 1);
     check("every parameter: lo < hi, default in range, name <= 8, a section", ok);
     check("list parameters span their lists (warps, shapes, types, sources, tables)", lists);
@@ -461,7 +465,8 @@ static void t_env_lfo(void)
         eng_reset();
         set(SP_L1_MODE, LFOM_FREE);
         set(SP_L1_SHAPE, LFO_SAWUP);
-        set(SP_L1_SYNC, 9);                               /* 1/4 */
+        set(SP_L1_SYNC, 1);                               /* FIXED, 1/4 */
+        set(SP_L1_NOTE, 8);
         snap();
         cyc = 0;
         last = 0.0f;
@@ -472,6 +477,65 @@ static void t_env_lfo(void)
             last = sy_glfo_v[0];
         }
         check("a synced LFO (1/4 at 120 BPM: 2 Hz): 20 cycles in 10 s (+-1)", cyc >= 19u && cyc <= 21u);
+        eng_reset();                                      /* RATE's modulation steps the note value */
+        set(SP_L1_MODE, LFOM_RETRIG);
+        set(SP_L1_SHAPE, LFO_SAWUP);
+        set(SP_L1_SYNC, 1);
+        set(SP_L1_NOTE, 8);                               /* 1/4 */
+        set(SP_M1_SRC, SRC_MAC1);
+        set(SP_M1_DST, SP_L1_RATE);
+        set(SP_M1_AMT, 1000);
+        set(SP_MAC1, 250);                                /* 25 % of the 17 values: 4 on, 1/8T */
+        snap();
+        sy_note_on(60, 100);
+        cyc = 0;
+        last = 0.0f;
+        for (b = 0; b < blocks(10.0f); b++) {
+            const sy_voice_t *v = &sy_v[0];
+            uint32_t i;
+            run(1, 0);
+            for (i = 0; i < SY_NVOICE; i++)
+                if (sy_v[i].on)
+                    v = &sy_v[i];
+            if (v->src[SRC_LFO1] < last - 1.0f)
+                cyc++;
+            last = v->src[SRC_LFO1];
+        }
+        printf("engine: FIXED 1/4, RATE + 25 %%: %u cycles in 10 s\n", cyc);
+        check("FIXED: RATE's modulation steps the note value (1/4 + 25 %: 1/8T, 6 Hz): 60 cycles in 10 s (+-1)",
+              cyc >= 59u && cyc <= 61u);
+    }
+    {                                                     /* the tempo and the time signature (GLOBAL) */
+        uint32_t cyc = 0, b;
+        float last = 0.0f, bar34, bar68, q68, bar716;
+        eng_reset();
+        sy_set_tempo(120, 3, 4);
+        bar34 = sy_note_q(3);
+        sy_set_tempo(120, 6, 8);
+        bar68 = sy_note_q(3);
+        q68 = sy_tempo;
+        sy_set_tempo(120, 7, 16);
+        bar716 = sy_note_q(3);
+        sy_set_tempo(120, 6, 8);
+        set(SP_L1_MODE, LFOM_FREE);
+        set(SP_L1_SHAPE, LFO_SAWUP);
+        set(SP_L1_SYNC, 1);
+        set(SP_L1_NOTE, 8);                               /* 1/4: 1 s when a beat is an eighth at 120 */
+        snap();
+        for (b = 0; b < blocks(10.0f); b++) {
+            run(1, 0);
+            if (sy_glfo_v[0] < last - 1.0f)
+                cyc++;
+            last = sy_glfo_v[0];
+        }
+        printf("engine: 1 BAR in quarter notes: 3/4 %.2f, 6/8 %.2f, 7/16 %.2f; 120 BPM in 6/8: a quarter at %.0f a "
+               "minute, a FIXED 1/4 LFO %u cycles in 10 s\n", (double)bar34, (double)bar68, (double)bar716, (double)q68,
+               cyc);
+        check("time signature: 1 BAR is TS-BEAT beats of TS-NOTE (3/4: 3, 6/8: 3, 7/16: 1.75 quarter notes)",
+              bar34 == 3.0f && bar68 == 3.0f && bar716 == 1.75f);
+        check("BPM counts TS-NOTE beats (120 in 6/8: a quarter note a second; a FIXED 1/4 LFO 10 cycles in 10 s +-1)",
+              q68 == 60.0f && cyc >= 9u && cyc <= 11u);
+        sy_set_tempo(120, 4, 4);
     }
     {                                                     /* the built-in shapes as points (DRAWN starts from them) */
         uint32_t s, j, len = 0;
@@ -1012,6 +1076,29 @@ static double chorus_noise(void)
     return db;
 }
 
+/* the delay as set, an impulse through it: its echo's distance in ms (the matrix mapped, MACRO 1 a source) */
+static double delay_echo_ms(void)
+{
+    uint32_t at = 10u * SY_BLK, k, b, i, best = 0;
+    float bp = 0.0f, l[SY_BLK], r[SY_BLK];
+    memset(L, 0, sizeof L);
+    for (b = 0; b < blocks(1.0f); b++) {
+        for (i = 0; i < SY_BLK; i++)
+            l[i] = r[i] = (b == 10u && i == 0u) ? 1.0f : 0.0f;
+        sp_block();
+        mod_map();
+        sy_src_g[SRC_MAC1] = sp_n[SP_MAC1];
+        mod_offsets(sy_goff, 0, 0);
+        fx_delay(l, r);
+        for (i = 0; i < SY_BLK; i++)
+            L[b * SY_BLK + i] = l[i];
+    }
+    for (k = at + 1000u; k < blocks(1.0f) * SY_BLK; k++)
+        if (fabsf(L[k]) > bp)
+            bp = fabsf(L[k]), best = k;
+    return (double)(best - at) * 1000.0 / (double)SY_FS;
+}
+
 static void t_fx(void)
 {
     {                                                     /* the chorus as clean after 10 minutes as at the start */
@@ -1057,33 +1144,28 @@ static void t_fx(void)
     printf("engine: OTT flat (no compression): the bands sum back within %.2e\n", err);
     check("OTT: the three bands sum back to the input", err < 1e-5);
     {
-        uint32_t at, k, best = 0;
-        float bp = 0.0f;
+        double e1, e2;
         eng_reset();
         set(SP_DL_ON, 1);
-        set(SP_DL_SYNC, 9);                               /* 1/4 at 120 BPM: 0.5 s */
+        set(SP_DL_SYNC, 1);                               /* FIXED 1/4 at 120 BPM: 0.5 s */
+        set(SP_DL_NOTE, 8);
         set(SP_DL_MIX, 1000);
         set(SP_DL_FDBK, 0);
         set(SP_DL_LP, 1000);
         set(SP_DL_HP, 0);
         set(SP_DL_MODE, 0);
         snap();
-        memset(L, 0, sizeof L);
-        for (b = 0; b < blocks(1.0f); b++) {
-            for (i = 0; i < SY_BLK; i++)
-                l[i] = r[i] = (b == 10u && i == 0u) ? 1.0f : 0.0f;
-            mod_offsets(sy_goff, 0, 0);
-            sp_block();
-            fx_delay(l, r);
-            for (i = 0; i < SY_BLK; i++)
-                L[b * SY_BLK + i] = l[i];
-        }
-        at = 10u * SY_BLK;
-        for (k = at + 1000u; k < blocks(1.0f) * SY_BLK; k++)
-            if (fabsf(L[k]) > bp)
-                bp = fabsf(L[k]), best = k;
-        printf("engine: delay 1/4 at 120 BPM: the echo %.2f ms after the impulse\n", (double)(best - at) * 1000.0 / (double)SY_FS);
-        check("delay synced: the echo at 500 ms (+-1 ms)", fabs((best - at) * 1000.0 / (double)SY_FS - 500.0) < 1.0);
+        e1 = delay_echo_ms();
+        set(SP_M1_SRC, SRC_MAC1);                         /* TIME's modulation, -25 %: 4 values shorter, 1/8T */
+        set(SP_M1_DST, SP_DL_TIME);
+        set(SP_M1_AMT, -1000);
+        set(SP_MAC1, 250);
+        snap();
+        e2 = delay_echo_ms();
+        printf("engine: delay FIXED 1/4 at 120 BPM: the echo %.2f ms after the impulse; TIME - 25 %%: %.2f ms\n", e1, e2);
+        check("delay synced: the echo at 500 ms (+-1 ms)", fabs(e1 - 500.0) < 1.0);
+        check("delay FIXED: TIME's modulation steps the note value (1/4 - 25 %: 1/8T, 166.7 ms +-1 ms)",
+              fabs(e2 - 500.0 / 3.0) < 1.0);
     }
     eng_reset();
     set(SP_DR_ON, 1);
