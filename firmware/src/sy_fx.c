@@ -350,8 +350,13 @@ static void fx_reverb(float *l, float *r)
             fx.rv_lp[k] += (sv - fx.rv_lp[k]) * damp;  /* DAMP */
             y[k] = fx.rv_lp[k] * gain[k];
         }
-        o[0] = y[0] - y[2] + y[4] - y[6] * (nl > 4u);  /* the outputs before the mixing */
-        o[1] = y[1] - y[3] + (y[5] - y[7]) * (nl > 4u);
+        if (nl == 8u) {                                 /* the outputs before the mixing (4 lines: theirs only; */
+            o[0] = y[0] - y[2] + y[4] - y[6];           /* y[4..7] were never set) */
+            o[1] = y[1] - y[3] + (y[5] - y[7]);
+        } else {
+            o[0] = y[0] - y[2];
+            o[1] = y[1] - y[3];
+        }
         if (nl == 8u) {                                 /* Hadamard 8 (scaled 1 / sqrt 8) */
             float a0 = y[0] + y[1], a1 = y[0] - y[1], a2 = y[2] + y[3], a3 = y[2] - y[3];
             float a4 = y[4] + y[5], a5 = y[4] - y[5], a6 = y[6] + y[7], a7 = y[6] - y[7];

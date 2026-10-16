@@ -1301,8 +1301,39 @@ static void t_fx_order(void)
           near < 2.0 * fmax(st, st2) && fx.code == 595);
 }
 
+static void stack_poison(void)                            /* the stack below its caller full of NaN: an unset */
+{                                                         /* local there reads one */
+    volatile float junk[8192];
+    uint32_t i;
+    for (i = 0; i < 8192u; i++)
+        junk[i] = NAN;
+    (void)junk[8191];
+}
+
 static void t_fx(void)
 {
+    {                                                     /* the reverb on 4 lines (PLATE, or HALL under the CPU */
+        float l[SY_BLK], r[SY_BLK];                       /* guard) reads its 4 only (it once added a 5th, never */
+        uint32_t b2, j;                                   /* set: the stack's leftovers, a NaN at worst) */
+        int quiet = 1;
+        eng_reset();
+        set(SP_RV_ON, 1);
+        set(SP_RV_TYPE, 0);
+        set(SP_RV_MIX, 1000);
+        snap();
+        mod_map();
+        for (b2 = 0; b2 < 200u; b2++) {
+            sy_zerof(l, SY_BLK);
+            sy_zerof(r, SY_BLK);
+            mod_offsets(sy_goff, 0, 0);
+            stack_poison();
+            fx_reverb(l, r);
+            for (j = 0; j < SY_BLK; j++)
+                quiet &= l[j] == 0.0f && r[j] == 0.0f;
+        }
+        check("REVERB on 4 lines (PLATE): silence in, silence out with the stack full of NaN (no unset line read)",
+              quiet);
+    }
     {                                                     /* the chorus as clean after 10 minutes as at the start */
         float z[2][SY_BLK];                               /* (its read position once came from a count of every */
         uint32_t b;                                       /* sample played: a float of it lost the fraction) */
