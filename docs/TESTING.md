@@ -305,7 +305,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 60 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 63 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -350,13 +350,15 @@ and sent at once) and the flash's (a write takes no time). **Verified in emulato
 | Live only with sound | CHORUS on: its taps still in a second of silence (0 blits), moving with a note (7 in 0.5 s), still again after it |
 | HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows sent 10 times); on another page no capture |
 | The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,766 pixels of the display), the frame before the turn kept |
-| SAVE, never saved | a tap: its screen, the sound's name to edit, USER 1 (the first free); OCT− deletes, the keys type "WARM PAD", OCT+ the numbers ("WARM PAD2") |
-| .. written | "SAVED: USER 1"; back on the page; the sound is USER 1, slot 1 holds "WARM PAD"; 22 flash writes, none refused |
-| SAVE, saved before | the next version, "WARM PAD v2", in USER 2; HOME leaves unsaved (slot 2 empty) |
-| SAVE twice | over USER 1 at once ("SAVED OVER USER 1"): the slot's stored WT POS follows the edit; no screen |
-| The browser | SAVE held and let go; KNOB 2 loads as it turns (INIT before, then WARM PAD from the flash, its WT POS as saved); SAVE + OCT− undoes a load there, the browser stays; HOME back |
+| SAVE once | a starter sound (PLUCK) saved at once as "PLUCK v2" in USER 1 ("SAVED: PLUCK v2 · USER 1"); the page stays; flash written, none refused. Once more: "PLUCK v3" in USER 2, USER 1 kept |
+| SAVE held | a countdown ("HOLD: SAVE OVER USER 2 IN 3" at 2.3 s); let go then: USER 2 untouched; held 5 s: over USER 2 ("SAVED OVER USER 2"), its stored WT POS the sound's |
+| .. with OCT | SAVE held + OCT−: undo (KNOB 1's edit taken back); held on past 5 s: USER 2 not saved over |
+| .. a starter sound | held and let go: "NOTHING TO SAVE OVER: TAP SAVE", nothing written |
+| SAVE twice | the browser, nothing saved; KNOB 2 loads as it turns (USER 1, then USER 2 again from the flash, its WT POS as saved over) |
+| .. SAVE there | NAME IT for the sound playing ("PLUCK v3" in its own USER 2); OCT− deletes, the keys type "WARM PAD", OCT+ the numbers ("WARM PAD2"); SAVE: "SAVED: WARM PAD · USER 2", the slot renamed, back in the browser |
+| .. undo there | a load taken back (SAVE + OCT−): the sound before, as USER 2 again; the browser stays; SAVE twice or HOME: back |
 | The allow-list | an erase at `0x00000` (the boot) or `0xE8000` (the stock firmware's backup) refused (−8) |
-| A power cycle | the flash image into a new instance: USER 1 kept, the sound that was playing back, the palette |
+| A power cycle | the flash image into a new instance: USER 1 and USER 2 kept, the sound that was playing back, the palette |
 | Efficiency | every page (45), SAVE's and the browser's: nothing drawn in a second of silence. Every live graph live (the chorus and OTT on, LFO 1 on the EQ's MID) and a note held, each page's share of the SPI's time (12 MHz): CHORUS 24 %, HOME 21 %, EQ 12 %, OTT 9–10 %, an LFO 4–6 %, an envelope 3–5 %, the rest 0 (each live one 51 % before only changed rows were sent) |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
@@ -368,11 +370,14 @@ then drawn: a point lowered, one added and curved, a key held: the voice on its 
 sample cycles and with SYNC FIXED (RATE 1/8), the delete's countdown, GLOBAL's TEMPO at 132 BPM in 6/8, HOME with a
 chord (the scope), the WAVE page's AMOUNT turning, the filter's TONE (CUTOFF turning, ENV 2 on it) and MORE (KEYTRACK
 turning), each effect with a knob turning (DRIVE, CHORUS's DEPTH, DELAY's FEEDBACK, its TONE's LP, REVERB's DECAY, OTT's
-DEPTH with a chord, the EQ's MID and MID FREQ, its POINTS with LFO 1 on MID), the SETTINGS, each palette, SAVE's
-screens (naming, the symbols, a new version, saved), the browser (all, a category), HOME with a user preset). Bugs the tests
-found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
-ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
-double-tap rule, so the session taps slower.
+DEPTH with a chord, the EQ's MID and MID FREQ, its POINTS with LFO 1 on MID), the SETTINGS, each palette, SAVE (once:
+the footer's "SAVED"; held: the countdown), the browser (all, a category), NAME IT from it (a rename, the symbols,
+written), HOME with a user preset). Bugs the tests found: the table's CC 0 means "no CC", so a CC 0 message (bank
+select) set the first parameter without one (OSC A's ON); the lookup now skips CC 0. A script tapping ENV twice within
+300 ms latched ENV's layer: right, by Felucca's double-tap rule, so the session taps slower. And undo kept a state's
+values but not which preset it was: a load undone left the sound marked as the preset loaded, so PRESETS stepped from
+the wrong place and SAVE held would have written over another preset's slot. Each state now carries its preset. The
+browser also wrote user names in capitals ("SUPERSAW V2"): only the starter sounds' table names are raised now.
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 

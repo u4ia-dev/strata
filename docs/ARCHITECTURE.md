@@ -459,19 +459,24 @@ order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (
   Integration adds Felucca's boot guard: a crashed boot skips it too.
 - **Undo** (built): a history of 8 patches in RAM (4.8 KB, `.bss`); a state goes on it when an edit gesture starts
   (nothing edited for 1 s before: a knob, the MOD layer, an LFO's points) and before a sound loads. SAVE + OCT−
-  steps back, SAVE + OCT+ forward again; a state taken back is written as the knobs write.
-- **SAVE** (built; verified in emulator): a tap opens the SAVE screen (NAME IT). A patch never saved (INIT, a starter
-  sound) is named first: the keys type (F3 to F#5 A to Z, G5 a space; OCT+ letters / numbers and symbols, OCT− deletes),
-  KNOB 1 the cursor, KNOB 2 the character (at the end: ADD), KNOB 3 the category, KNOB 4 the slot (the first free one
-  offered; one in use shows what it replaces); 16 characters in capitals. A patch saved before offers its next version,
-  "NAME v2" (lowercase v, one above the highest saved), in the next free slot, its own slot kept. SAVE writes (behind
-  the hush, §3: "SAVED: USER 3", or "SAVE FAILED" with the store's code), HOME leaves without. A double tap writes
-  over the patch's own slot at once ("SAVED OVER USER 3"; a patch never saved: named first). Held and let go without
-  OCT: the preset browser.
+  steps back, SAVE + OCT+ forward again; a state taken back is written as the knobs write, and the sound is again the
+  preset that state was (an undone load: the one before, so SAVE held writes over its slot, not the one loaded).
+- **SAVE** (built; the user's map after the Phase 4 checkpoint; verified in emulator): **once**, the sound is saved at
+  once as a new preset: its next version, "NAME v2" (lowercase v, one above the highest its base has in a user slot; a
+  starter sound's "SUPERSAW v2"), in the first free slot, its category kept. Nothing opens and the keys keep playing;
+  the footer says "SAVED: WARM PAD v2 · USER 3" (or "SAVE FAILED" with the store's code). **Held 5 s**: written over
+  its own slot, a countdown in the footer from the hold time ("HOLD: SAVE OVER USER 3 IN 4"; letting go, OCT, a knob
+  or another button stop it; a sound from no user slot has none: "NOTHING TO SAVE OVER: TAP SAVE"). **Twice**: the
+  preset browser. A single tap waits out the double tap's 300 ms before it saves. Every write is behind the hush (§3).
 - **The browser** (built): the categories with their counts at the left (ALL first), the presets of the one picked at
   the right (the starter sounds, INIT, the user slots, each marked with its bank); KNOB 1 the category, KNOB 2 the
-  preset, loaded as it turns (SAVE + OCT− takes a load back), KNOB 3 the bank (ALL, STARTER, USER); HOME back, SAVE:
-  the SAVE screen. PRESETS on any other page steps the same list (the factory sounds, then the user's).
+  preset, loaded as it turns (SAVE + OCT− takes a load back), KNOB 3 the bank (ALL, STARTER, USER); SAVE twice or HOME:
+  back. **SAVE once there: NAME IT** for the sound playing: its name to edit (the keys type: F3 to F#5 A to Z, G5 a
+  space; OCT+ letters / numbers and symbols, OCT− deletes; 16 characters in capitals), KNOB 1 the cursor, KNOB 2 the
+  character (at the end: ADD), KNOB 3 the category, KNOB 4 the slot: its own (a rename, "RENAME" in the header), or for
+  a sound from no user slot the first free one (one in use shows what it replaces). SAVE writes it and goes back to
+  the browser; HOME goes back unsaved. PRESETS on any other page steps the same list (the factory sounds, then the
+  user's).
 - **Settings** (built): Strata's own record (`SET1`: the palette, the knobs' acceleration, BPM, the time signature, the
   buttons' hold time; MIDI channel and the rest as they come) in Felucca's settings pair `0xFC000/0xFD000`, written as
   the edit buffer is: after 3 s without sound, when changed.
@@ -548,7 +553,9 @@ ON). Each point's gain, frequency and Q are matrix destinations, so the MOD laye
 the point picked; the curve then moves with its sources while sound plays, the range each point sweeps drawn as a bar.
 What moves on the screen moves only while sound plays: the voices on an envelope or an LFO, the chorus's taps, OTT's
 levels, the EQ's modulated points and HOME's scope (sounding: a voice on, or the output over −70 dBFS; once more when
-it stops). SAVE, its names and versions, the browser, the user slots, the settings and the sound's restore (§16).
+it stops). SAVE, its names and versions, the browser, the user slots, the settings and the sound's restore (§16;
+after the checkpoint the user remapped SAVE: once, a new version at once; held 5 s, over its own slot; twice, the
+browser, where SAVE names and renames).
 
 **Efficiency** (the user's ask: no background work at the sound's cost). The audio interrupt does the UI two favours
 only: on HOME while sound plays, the scope's capture (a sample copied every few, 212 points a frame); and each block's
@@ -583,7 +590,7 @@ changed, in strips, so the 12 MHz display keeps up.
 | FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ in the patch's order (built: two or three pages each, ALGORITHM picks the effect) | + ALGORITHM: moves the effect shown along the chain (built); **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
 | GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built); tune, panel velocity to come | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
 | SCL | KEYS (scale and root shown on the LEDs, octave, panel velocity) | the root by key, as Felucca |
-| SAVE | the SAVE screen (naming a patch never saved; "NAME v2" for one saved before); double tap: write over its slot at once (built) | let go: the preset browser; SAVE + OCT− undo, SAVE + OCT+ redo (built) |
+| SAVE | once: the sound saved as a new preset at once (its next version, "NAME v2"); twice: the preset browser, where SAVE opens NAME IT (built) | 5 s: over its own slot, a countdown first (built); SAVE + OCT− undo, SAVE + OCT+ redo (built) |
 | ARP | (v1: the arpeggiator) | — |
 | PLAY | starts and stops the internal clock (synced LFOs and delays; the arp in v1) | — |
 | OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); in dialogs back / confirm | both 5 s: UBOOT (Felucca) |

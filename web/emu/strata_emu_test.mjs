@@ -14,7 +14,8 @@
 // 4 8 16); a screen region drawn only when it changes; FX (six effects, the order, the EQ's pages), the chorus's
 // taps and HOME's scope live only with sound; the warp drawn; SAVE (a name, a version, over), the browser, the
 // flash's allow-list, a power cycle; every page drawing nothing in silence, a note held sending only the rows that
-// change (the SPI's share); Web MIDI and its CCs; the same input twice, the same sound.
+// change (the SPI's share); Web MIDI and its CCs; the same input twice, the same sound. SAVE: once a new version at
+// once, held 5 s over its own slot (SAVE + OCT: undo, not that), twice the browser (SAVE there: NAME IT, a rename).
 //   node web/emu/strata_emu_test.mjs [build/emu_strata/strata.wasm]      (from the repo root, after build_strata.sh)
 import { readFileSync } from "node:fs";
 
@@ -588,15 +589,68 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_test_set(ID.A_WAMT, 0);
   play(ex, 1.2);
 }
-{                                               // SAVE: a sound never saved is named, into the first free slot
-  const toast = () => cstr(ex, ex.web_test_toast()), sname = () => cstr(ex, ex.web_test_save_name());
-  const key = (k) => { ex.web_keys(1 << k); play(ex, 0.03); ex.web_keys(0); play(ex, 0.03); };
+{                                               // SAVE: once, a new preset at once; held 5 s, over its own slot;
+  const toast = () => cstr(ex, ex.web_test_toast()), sname = () => cstr(ex, ex.web_test_save_name());   // twice, the
+  const key = (k) => { ex.web_keys(1 << k); play(ex, 0.03); ex.web_keys(0); play(ex, 0.03); };          // browser
   const btn = (b, t = 0.03) => { ex.web_buttons(1 << b); play(ex, t); ex.web_buttons(0); play(ex, 0.03); };
+  const name = () => cstr(ex, ex.web_test_patch_name()), slotName = (s) => cstr(ex, ex.web_test_slot_name(s));
+  const hold = (secs) => { ex.web_buttons(1 << B.SAVE); play(ex, secs); };
   tap(ex, B.EDIT);
-  const w0 = ex.web_flash_writes_count(), name0 = cstr(ex, ex.web_test_patch_name());
+  const w0 = ex.web_flash_writes_count(), name0 = name();        // (a starter sound)
   btn(B.SAVE);
+  play(ex, 0.5);
+  const s1 = [toast(), ex.web_test_page_section(), ex.web_test_user_slot(), slotName(0), name()];
+  check(`SAVE once: saved at once as a new preset ("${s1[0]}"): "${name0}" is "${s1[4]}" in USER ${s1[2] + 1}; the page stays (section ${s1[1]}); ${ex.web_flash_writes_count() - w0} flash writes, ${ex.web_test_refused()} refused`,
+        s1[0] === `SAVED: ${name0} v2 · USER 1` && s1[1] === SEC.OSCA && s1[2] === 0 && s1[3] === `${name0} v2` &&
+        s1[4] === `${name0} v2` && ex.web_flash_writes_count() > w0 && ex.web_test_refused() === 0);
+  btn(B.SAVE);
+  play(ex, 0.5);
+  check(`.. once more: its next version, "${name()}" in USER ${ex.web_test_user_slot() + 1} ("${toast()}"); USER 1 kept ("${slotName(0)}")`,
+        name() === `${name0} v3` && ex.web_test_user_slot() === 1 && slotName(0) === `${name0} v2` &&
+        slotName(1) === `${name0} v3`);
+  const POS = ID.A_POS, p0 = ex.web_test_slot_value(1, POS);    // held: WT POS changed first
+  ex.web_test_set(POS, p0 > 500 ? p0 - 40 : p0 + 40);
+  const p1 = ex.web_test_value(POS);
+  hold(2.3);
+  const cd = toast();
+  ex.web_buttons(0);
   play(ex, 0.4);
-  const sec = ex.web_test_page_section(), n0 = sname(), slot0 = ex.web_test_save_slot();
+  const early = [ex.web_test_slot_value(1, POS), toast()];
+  hold(5.3);
+  ex.web_buttons(0);
+  play(ex, 0.3);
+  check(`SAVE held: a countdown ("${cd}"); let go at 2.3 s, USER 2 untouched (WT POS ${early[0]}, the footer "${early[1]}"); held 5 s, over USER 2 ("${toast()}"): its WT POS ${p0} -> ${ex.web_test_slot_value(1, POS)}`,
+        cd === "HOLD: SAVE OVER USER 2 IN 3" && early[0] === p0 && early[1] === "" && toast() === "SAVED OVER USER 2" &&
+        ex.web_test_slot_value(1, POS) === p1);
+  ex.web_test_set(POS, p1 > 500 ? p1 - 20 : p1 + 20);   // (a change USER 2 does not have)
+  const p3 = ex.web_test_value(POS);
+  play(ex, 1.2);
+  const K1P = ex.web_test_page_param(0), k0 = ex.web_test_value(K1P);
+  ex.web_enc(E.K1, 3);                          // KNOB 1: an edit to undo
+  play(ex, 1.2);
+  const k1 = ex.web_test_value(K1P);
+  hold(0.7);
+  chord(B.SAVE, B.OCTDN);                       // SAVE + OCT-: undo; the countdown stops
+  play(ex, 5.0);
+  ex.web_buttons(0);
+  play(ex, 0.3);
+  check(`.. SAVE held + OCT-: undo (KNOB 1 ${k0} -> ${k1} -> ${ex.web_test_value(K1P)}); held on past 5 s, USER 2 not saved over (its WT POS ${ex.web_test_slot_value(1, POS)}, the sound's ${p3})`,
+        k1 !== k0 && ex.web_test_value(K1P) === k0 && p3 !== p1 && ex.web_test_slot_value(1, POS) === p1);
+  btn(B.SAVE);                                  // twice: the browser, nothing saved
+  btn(B.SAVE);
+  play(ex, 0.5);
+  const bsec = ex.web_test_page_section(), none = slotName(2);
+  ex.web_enc(E.K2, -1);                         // KNOB 2: the preset before (USER 1), loaded; then USER 2 again
+  play(ex, 0.3);
+  const before = name(), us1 = ex.web_test_user_slot();
+  ex.web_enc(E.K2, 1);
+  play(ex, 0.3);
+  check(`SAVE twice: the browser (section ${bsec}), nothing saved (USER 3 "${none}"); KNOB 2 loads as it turns ("${before}", USER ${us1 + 1}), then "${name()}" from USER ${ex.web_test_user_slot() + 1} (WT POS ${ex.web_test_value(POS)})`,
+        bsec === SEC.BROWSE && none === "" && before === `${name0} v2` && us1 === 0 && name() === `${name0} v3` &&
+        ex.web_test_user_slot() === 1 && ex.web_test_value(POS) === p1);
+  btn(B.SAVE);                                  // SAVE there: NAME IT for the sound playing, in its own slot
+  play(ex, 0.5);
+  const nsec = ex.web_test_page_section(), n0 = sname(), ns = ex.web_test_save_slot();
   for (let i = 0; i < 16; i++) btn(B.OCTDN);    // OCT-: deleted, then typed: WARM PAD
   for (const k of [22, 0, 17, 12, 26, 15, 0, 3]) key(k);
   const typed = sname();
@@ -608,53 +662,41 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_enc(E.K3, 1);                          // KNOB 3: the category
   play(ex, 0.12);
   btn(B.SAVE);
-  play(ex, 0.3);
-  const saved = [toast(), ex.web_test_page_section(), ex.web_test_user_slot(), cstr(ex, ex.web_test_slot_name(0))];
-  check(`SAVE tapped: its screen (section ${sec}), "${n0}" to name, USER ${slot0 + 1}; OCT- deletes, the keys type "${typed}", OCT+ numbers ("${two}")`,
-        sec === SEC.SAVE && n0 === name0 && slot0 === 0 && typed === "WARM PAD" && two === "WARM PAD2");
-  check(`.. SAVE writes it ("${saved[0]}"): back (section ${saved[1]}), the sound USER ${saved[2] + 1}, slot 1 "${saved[3]}", ${ex.web_flash_writes_count() - w0} flash writes, ${ex.web_test_refused()} refused`,
-        saved[0] === "SAVED: USER 1" && saved[1] !== SEC.SAVE && saved[2] === 0 && saved[3] === "WARM PAD" &&
-        ex.web_flash_writes_count() > w0 && ex.web_test_refused() === 0 && cstr(ex, ex.web_test_patch_name()) === "WARM PAD");
-  btn(B.SAVE);                                  // saved before: its next version offered, in the next slot
   play(ex, 0.4);
-  const v2 = [sname(), ex.web_test_save_slot(), ex.web_test_page_section()];
-  btn(B.HOME);                                  // HOME: back unsaved
-  play(ex, 0.1);
-  check(`SAVE again: the next version, "${v2[0]}" in USER ${v2[1] + 1}; HOME: back unsaved (section ${ex.web_test_page_section()}, slot 2 "${cstr(ex, ex.web_test_slot_name(1))}")`,
-        v2[0] === "WARM PAD v2" && v2[1] === 1 && v2[2] === SEC.SAVE && ex.web_test_page_section() !== SEC.SAVE &&
-        cstr(ex, ex.web_test_slot_name(1)) === "");
-  const POS = ID.A_POS, p0 = ex.web_test_value(POS);   // tapped twice: over its own slot (WT POS changed first)
-  ex.web_test_set(POS, p0 > 500 ? p0 - 40 : p0 + 40);
-  const p1 = ex.web_test_value(POS);
-  play(ex, 0.4);
-  btn(B.SAVE);
-  btn(B.SAVE);
+  const saved = [toast(), ex.web_test_page_section(), slotName(1), name(), ex.web_test_user_slot()];
+  check(`.. SAVE there: NAME IT (section ${nsec}), "${n0}" in its own USER ${ns + 1}; OCT- deletes, the keys type "${typed}", OCT+ numbers ("${two}")`,
+        nsec === SEC.SAVE && n0 === `${name0} v3` && ns === 1 && typed === "WARM PAD" && two === "WARM PAD2");
+  check(`.. SAVE writes it ("${saved[0]}"): USER 2 renamed ("${saved[2]}"), the sound "${saved[3]}"; back in the browser (section ${saved[1]})`,
+        saved[0] === "SAVED: WARM PAD · USER 2" && saved[1] === SEC.BROWSE && saved[2] === "WARM PAD" &&
+        saved[3] === "WARM PAD" && saved[4] === 1);
+  ex.web_enc(E.K2, -1);                         // a load, undone there (SAVE held + OCT-), the browser staying
   play(ex, 0.3);
-  check(`SAVE tapped twice: over USER 1 at once ("${toast()}"): its stored WT POS ${p0} -> ${ex.web_test_slot_value(0, POS)}; no screen (section ${ex.web_test_page_section()})`,
-        toast() === "SAVED OVER USER 1" && ex.web_test_slot_value(0, POS) === p1 && ex.web_test_page_section() !== SEC.SAVE);
-  ex.web_buttons(1 << B.SAVE);                  // SAVE held, let go: the browser
-  play(ex, 0.7);
-  ex.web_buttons(0);
-  play(ex, 0.1);
-  const bsec = ex.web_test_page_section();
-  ex.web_enc(E.K2, -1);                         // KNOB 2: the preset before (INIT), loaded; then WARM PAD again, from the flash
-  play(ex, 0.3);
-  const before = cstr(ex, ex.web_test_patch_name()), us1 = ex.web_test_user_slot();
-  ex.web_enc(E.K2, 1);
-  play(ex, 0.3);
-  check(`SAVE held: the browser (section ${bsec}); KNOB 2 loads as it turns ("${before}", user slot ${us1}), then "${cstr(ex, ex.web_test_patch_name())}" from USER ${ex.web_test_user_slot() + 1} (WT POS ${ex.web_test_value(POS)})`,
-        bsec === SEC.BROWSE && before === "INIT" && us1 === -1 && cstr(ex, ex.web_test_patch_name()) === "WARM PAD" &&
-        ex.web_test_user_slot() === 0 && ex.web_test_value(POS) === p1);
-  ex.web_buttons(1 << B.SAVE);                  // SAVE held + OCT-: undo, no browser
-  play(ex, 0.7);
+  const ld = name();
+  hold(0.7);
   chord(B.SAVE, B.OCTDN);
   ex.web_buttons(0);
   play(ex, 0.2);
-  const und = [toast(), cstr(ex, ex.web_test_patch_name())];
-  btn(B.HOME);
+  const und = [toast(), name(), ex.web_test_page_section(), ex.web_test_user_slot()];
+  btn(B.SAVE);                                  // twice in the browser: back
+  btn(B.SAVE);
+  play(ex, 0.3);
+  const back1 = ex.web_test_page_section();
+  btn(B.SAVE);
+  btn(B.SAVE);
+  play(ex, 0.3);
+  btn(B.HOME);                                  // HOME in it: back
   play(ex, 0.1);
-  check(`.. SAVE held + OCT-: undo ("${und[0]}": "${und[1]}"), the browser stays (section ${bsec}); HOME: back`,
-        und[0] === "UNDO" && und[1] === "INIT" && ex.web_test_page_section() !== SEC.BROWSE);
+  check(`.. in the browser: SAVE held + OCT- undoes a load ("${ld}" -> "${und[1]}" of USER ${und[3] + 1} again, "${und[0]}", section ${und[2]}); SAVE twice: back (section ${back1}); HOME: back (${ex.web_test_page_section()})`,
+        ld === `${name0} v2` && und[0] === "UNDO" && und[1] === "WARM PAD" && und[3] === 1 && und[2] === SEC.BROWSE &&
+        back1 === SEC.OSCA && ex.web_test_page_section() === SEC.OSCA);
+  ex.web_enc(E.PRESET, 1);                      // PRESETS: from the last user preset round to the first starter
+  play(ex, 0.4);
+  const st = [name(), ex.web_test_user_slot()];
+  hold(1.0);
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  check(`SAVE held on a starter sound ("${st[0]}", user slot ${st[1]}): nothing to save over ("${toast()}"), nothing saved (USER 3 "${slotName(2)}")`,
+        st[1] === -1 && toast() === "NOTHING TO SAVE OVER: TAP SAVE" && slotName(2) === "");
   const ra = ex.web_test_erase(0), rb = ex.web_test_erase(0xE8000);
   check(`the flash's allow-list: an erase at 0x00000 (the boot) or 0xE8000 (the stock firmware's backup) refused (${ra}, ${rb}; ${ex.web_test_refused()} refused)`,
         ra === -8 && rb === -8 && ex.web_test_refused() === 2);
@@ -670,8 +712,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   b2.web_master(700);
   b2.web_boot();
   play(b2, 0.3);
-  check(`power off and on: USER 1 "${cstr(b2, b2.web_test_slot_name(0))}" kept; the sound playing back ("${cstr(b2, b2.web_test_patch_name())}"); the palette ${b2.web_test_palette(-1)}`,
-        cstr(b2, b2.web_test_slot_name(0)) === "WARM PAD" &&
+  check(`power off and on: USER 1 "${cstr(b2, b2.web_test_slot_name(0))}", USER 2 "${cstr(b2, b2.web_test_slot_name(1))}" kept; the sound playing back ("${cstr(b2, b2.web_test_patch_name())}"); the palette ${b2.web_test_palette(-1)}`,
+        cstr(b2, b2.web_test_slot_name(0)) === cstr(ex, ex.web_test_slot_name(0)) && cstr(b2, b2.web_test_slot_name(1)) === "WARM PAD" &&
         cstr(b2, b2.web_test_patch_name()) === cstr(ex, ex.web_test_patch_name()) && b2.web_test_palette(-1) === 3);
   ex.web_test_palette(0);
 }
@@ -715,11 +757,13 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   }
   z.web_test_go(0);
   hush();
-  z.web_buttons(1 << B.SAVE); play(z, 0.03); z.web_buttons(0);   // SAVE's screen, then the browser
-  const qs = idleDraws(), ss = z.web_test_page_section();
-  z.web_buttons(1 << B.HOME); play(z, 0.03); z.web_buttons(0); play(z, 0.3);
-  z.web_buttons(1 << B.SAVE); play(z, 0.7); z.web_buttons(0);
+  const zb = (b) => { z.web_buttons(1 << b); play(z, 0.03); z.web_buttons(0); play(z, 0.03); };
+  zb(B.SAVE);                                   // SAVE twice: the browser; once there: NAME IT
+  zb(B.SAVE);
   const qb = idleDraws(), sb = z.web_test_page_section();
+  zb(B.SAVE);
+  const qs = idleDraws(), ss = z.web_test_page_section();
+  zb(B.HOME);
   if (qs) busy.push(`SAVE ${qs}`);
   if (qb) busy.push(`BROWSE ${qb}`);
   console.log(`emu: a note held, the SPI's time a second each page takes: ${rows.join(", ")}`);
