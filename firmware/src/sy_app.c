@@ -28,7 +28,7 @@ static int32_t sy_abuf[2u * SY_HALF_WORDS] __attribute__((aligned(4)));
 
 /* ------------------------------------------------------------------------------------------ events --- */
 /* a ring with one producer and the audio interrupt as its consumer: the panel's (main loop) and MIDI's */
-enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_PANIC };
+enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC };
 typedef struct { uint8_t type, a, b; } sy_ev_t;
 #define SY_EVQ 64u
 typedef struct {
@@ -63,6 +63,7 @@ static void sy_ev_drain(sy_ring_t *g)
             break;
         case SY_EV_BEND: sy_bend((int32_t)(e->a | (uint32_t)e->b << 7)); break;
         case SY_EV_CC: sy_cc(e->a, e->b); break;
+        case SY_EV_AT: sy_at = e->a; break;
         default: sy_all_sound_off(); break;
         }
         g->r = g->r + 1u;
@@ -109,22 +110,41 @@ static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u
 static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
 
 /* -------------------------------------------------------------------------------------------- MIDI --- */
-/* a channel message (any channel): notes, bend and the engine's controllers into the MIDI ring; a controller a
- * parameter has as its default CC sets that parameter (a 16-bit store; the table's 0 is no CC, so CC 0, bank
- * select, sets nothing) */
+/* a channel message on the SETTINGS' channel (any): notes, bend, aftertouch and the engine's controllers into the
+ * MIDI ring; a controller MIDI LEARN set, or else a parameter has as its default CC, sets that parameter (a 16-bit
+ * store; the table's 0 is no CC); CC 0 is the bank (0 the factory's, else the user's) a program change loads from,
+ * when PROGRAM is on (the main loop loads it) */
+static volatile uint8_t sy_midi_bank;
+static volatile int32_t sy_pc_want = -1;         /* a program change's preset (sy_app_entry_load's id), -1 none */
 static void sy_midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t t = st & 0xF0u, id;
+    int32_t l;
     d1 &= 127u;
     d2 &= 127u;
+    if (t >= 0x80u && t < 0xF0u && !sy_ui_midi_ch(st & 15u))
+        return;
     if (t == 0x90u || t == 0x80u)
         sy_ev_push(&sy_ev_midi, SY_EV_NOTE, d1, t == 0x90u ? d2 : 0u);
     else if (t == 0xE0u)
         sy_ev_push(&sy_ev_midi, SY_EV_BEND, d1, d2);
+    else if (t == 0xD0u)
+        sy_ev_push(&sy_ev_midi, SY_EV_AT, d1, 0u);
+    else if (t == 0xC0u && sy_ui_pc_on())
+        sy_pc_want = sy_midi_bank ? (int32_t)(SY_USER + d1) : (int32_t)d1;
     else if (t == 0xB0u) {
-        for (id = 0; id < SP_COUNT; id++)
-            if (d1 && SP[id].cc == d1)
-                break;
+        if (!d1) {
+            sy_midi_bank = d2 != 0u;
+            return;
+        }
+        if (sy_ui_learn_cc(d1))                  /* (LEARN listening: this CC is the picked one's now) */
+            return;
+        if ((l = sy_ui_learned(d1)) >= 0 && l < (int32_t)SP_COUNT)
+            id = (uint32_t)l;
+        else
+            for (id = 0; id < SP_COUNT; id++)
+                if (SP[id].cc == d1)
+                    break;
         if (id < SP_COUNT) {
             sy_patch.p[id] = sp_clamp(id, SP[id].lo + (int32_t)((SP[id].hi - SP[id].lo) * (int32_t)d2 / 127));
             sy_ui_touch();
@@ -464,6 +484,12 @@ static void sy_app_ms(void)
     sy_service();
     if (sy_sound_want >= 0 && !sy_next_st)
         sy_sound_load((uint32_t)sy_sound_want);
+    if (sy_pc_want >= 0 && !sy_next_st) {        /* a program change: a starter sound, INIT or a user slot that holds one */
+        uint32_t id = (uint32_t)sy_pc_want;
+        sy_pc_want = -1;
+        if (id < SY_NFACT || (id >= SY_USER && id - SY_USER < SS_NUSER && sy_uidx[id - SY_USER].used))
+            sy_app_entry_load(id);
+    }
     sy_flash_ms();
 }
 

@@ -335,6 +335,35 @@ static void ui_tempo_cell(int32_t id, int act)
     ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
 }
 
+/* the SETTINGS' cells: a pill each */
+static void ui_set_cell(int32_t id, int act)
+{
+    static const char *const NAME[7] = {"HELP", "GLOW", "HOLD", "CHANNEL", "LEARN", "CLEAR", "PROGRAM"};
+    char t[16];
+    const char *v = t, *n = id == UI_COLOR ? "COLOR" : id == UI_ACCEL ? "ACCEL" : NAME[(id - UI_HELP) % 7];
+    uint32_t c = ml_count();
+    if (id == UI_COLOR)
+        v = SY_PAL[ui.pal].name;
+    else if (id == UI_ACCEL)
+        v = ui.accel ? "ON" : "OFF";
+    else if (id == UI_HELP)
+        v = ui.help ? "ON" : "OFF";
+    else if (id == UI_GLOW)
+        v = ui.glow ? "LOW" : "HIGH";
+    else if (id == UI_HOLD)
+        sp_put(sp_fix(t, HOLD_MS[settings_hold % 4u], 0u, 0), " ms");
+    else if (id == UI_MCH)
+        v = ui.mch ? (sp_fix(t, ui.mch, 0u, 0), t) : "ANY";
+    else if (id == UI_LEARN)
+        v = ui.learn ? "ON" : "OFF";
+    else if (id == UI_MCLR)
+        v = c ? (sp_put(sp_fix(t, (int32_t)c, 0u, 0), " CC"), t) : "NONE";
+    else
+        v = ui.mpc ? "ON" : "OFF";
+    ui_pill(v, 0, act);
+    ui_text_c(0, 46, 60, &AF_XS, n, act ? sk.now : sk.label, sk.ground);
+}
+
 /* PERFORM's cells: the bend (both ways from the middle, in semitones) and the mod wheel, GLIDE and VOLUME; MACROS':
  * MACRO 1-4 under their names */
 static void ui_lay_cell(uint32_t k)
@@ -402,8 +431,7 @@ static void ui_draw_knob(uint32_t k)
         ui_pill(t, ui.mod != 0, act);
         ui_text_c(0, 46, 60, &AF_XS, "SLOT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
     } else if (id >= UI_ITEM) {                     /* the SETTINGS' items */
-        ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0, act);
-        ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", act ? sk.now : sk.label, sk.ground);
+        ui_set_cell(id, act);
     } else if (id >= 0) {
         int dim = ui.mod && !(SP[id].flags & F_MOD);
         int32_t e = ui_eff(id);                     /* (RATE, TIME with SYNC FIXED: the note value, under their name) */
@@ -450,7 +478,18 @@ static void ui_draw_foot(void)
     } else if (ui_sec() == SEC_BROWSE) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 SAVE: NAME IT", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_MENU) {
-        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 1: COLOR \xB7 KNOB 2: ACCEL", sk.dim, sk.ground);
+        uint32_t g = UI_PG[ui.page].graph;
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, g == G_COLOR ? "KNOB 1 COLOR \xB7 2 HELP \xB7 3 GLOW"
+                                                  : g == G_PANEL ? "KNOB 1 ACCEL \xB7 2 HOLD"
+                                                                 : "LEARN ON: TURN A KNOB, MOVE A CC",
+                  sk.dim, sk.ground);
+    } else if (ui.learn) {                          /* MIDI LEARN, on any other page: what it waits for */
+        char t[40], *e = sp_put(t, "LEARN: ");
+        if (ui.ml_pick >= 0)
+            sp_put(sp_put(sp_put(sp_put(e, SEC_SHORT[SP[ui.ml_pick].sec]), " "), SP[ui.ml_pick].name), ", MOVE A CC");
+        else
+            sp_put(e, "TURN A KNOB");
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, t, sk.now, sk.ground);
     } else if (ui_sec() == SEC_KEYS) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "SCL HELD + A KEY: THE ROOT", sk.dim, sk.ground);
     } else if (UI_PG[ui.page].id[0] == UI_LPT && !ui.mod) {
@@ -1073,6 +1112,57 @@ static void ui_g_keys(void)
         }
 }
 
+/* SETTINGS > PANEL: what ACCEL and HOLD do as they are set */
+static void ui_g_panel(void)
+{
+    char t[40];
+    cv_text_on(WX + 8, WY + 6, &AF_SB, "ACCEL", sk.text, sk.display);
+    cv_text_on(WX + 8, WY + 24, &AF_XS, ui.accel ? "SLOW: 0.1 % A DETENT, QUICK: 5 %" : "1 % A DETENT, AT ANY SPEED",
+               sk.label, sk.display);
+    cv_text_on(WX + 8, WY + 34, &AF_XS, "(A LIST: ONE ENTRY A DETENT)", sk.faint, sk.display);
+    cv_text_on(WX + 8, WY + 58, &AF_SB, "HOLD", sk.text, sk.display);
+    sp_put(sp_put(sp_fix(sp_put(t, "HELD "), HOLD_MS[settings_hold % 4u], 0u, 0), " MS"), ": A BUTTON'S LAYER");
+    cv_text_on(WX + 8, WY + 76, &AF_XS, t, sk.label, sk.display);
+    cv_text_on(WX + 8, WY + 86, &AF_XS, "(REC, ENV, LFO, FX, GLO, EDIT, SCL)", sk.faint, sk.display);
+}
+
+/* SETTINGS > MIDI: the channel and PROGRAM, what LEARN waits for, and the CCs learned with what each sets */
+static void ui_g_midi(void)
+{
+    uint32_t i, row = 0, n = ml_count();
+    char t[40], *e;
+    e = sp_put(t, "CHANNEL ");
+    e = ui.mch ? sp_fix(e, ui.mch, 0u, 0) : sp_put(e, "ANY");
+    sp_put(sp_put(e, " \xB7 PROGRAM "), ui.mpc ? "ON" : "OFF");
+    cv_text_on(WX + 8, WY + 5, &AF_XS, t, sk.label, sk.display);
+    if (!ui.learn)
+        sp_put(t, "LEARN OFF");
+    else if (ui.ml_pick < 0)
+        sp_put(t, "LEARN: TURN A KNOB ON ANY PAGE");
+    else
+        sp_put(sp_put(sp_put(sp_put(t, "LEARN: "), SEC_SHORT[SP[ui.ml_pick].sec]), " "), SP[ui.ml_pick].name);
+    cv_text_on(WX + 8, WY + 18, &AF_XS, t, ui.learn ? sk.now : sk.dim, sk.display);
+    cv_rect(WX + 6, WY + 30, WW - 12, 1, sk.dline);
+    if (!n) {
+        cv_text_on(WX + 8, WY + 38, &AF_XS, "NO CC LEARNED", sk.faint, sk.display);
+        return;
+    }
+    for (i = 0; i < ML_N && row < (n > 6u ? 5u : 6u); i++) {
+        int32_t y = WY + 36 + (int32_t)row * 11;
+        if (ml_cc[i] == 0xFFu)
+            continue;
+        sp_fix(sp_put(t, "CC "), ml_cc[i], 0u, 0);
+        cv_text_on(WX + 8, y, &AF_XS, t, sk.text, sk.display);
+        sp_put(sp_put(sp_put(t, SEC_SHORT[SP[ml_id[i]].sec]), " "), SP[ml_id[i]].name);
+        cv_text_on(WX + 60, y, &AF_XS, t, ml_id[i] == (uint16_t)ui.ml_pick ? sk.now : sk.label, sk.display);
+        row++;
+    }
+    if (n > row) {
+        sp_put(sp_fix(sp_put(t, "+ "), (int32_t)(n - row), 0u, 0), " MORE");
+        cv_text_r(WX + WW - 8, WY + 36 + 5 * 11, &AF_XS, t, sk.faint, sk.display);
+    }
+}
+
 /* SEQ's MATRIX: the eight slots, each its source, where it goes (the destination's section and name) and how much
  * (positive in VALUE, negative in MOD-), the one picked raised (KNOB 2-4 set it); a slot without a source: EMPTY */
 static void ui_g_matrix(void)
@@ -1249,6 +1339,8 @@ static void ui_draw_disp(uint32_t r0)
     case G_BROWSE: ui_g_browse(); break;
     case G_MATRIX: ui_g_matrix(); break;
     case G_KEYS: ui_g_keys(); break;
+    case G_PANEL: ui_g_panel(); break;
+    case G_MIDI: ui_g_midi(); break;
     default: ui_g_list(); break;
     }
     for (y = r0; y < cv_h; y++) {

@@ -35,10 +35,13 @@
  *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
  *   - PLAY: the transport on and off (the FREE LFOs start on the beat; PLAY's green LED on, its own blinking each
  *     beat). ARP: a word (the arpeggiator comes in v1).
+ *   - The SETTINGS (HOME held 5 s): SCREEN (the palette, HELP: a hint in the footer entering a section, the LEDs'
+ *     GLOW), PANEL (ACCEL, the HOLD time), MIDI (its CHANNEL, LEARN, CLEAR the learned CCs, PROGRAM changes).
+ *     MIDI LEARN on: the next knob turned on any page picks its parameter, the next CC is set to it (OCT- takes
+ *     the picked one's away, OCT+ ends it); a learned CC is set before a parameter's own.
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
- * Still to come: the LFO, FX, GLO and SCL layers, MIDI learn, help, the rest of the SETTINGS, the matrix's
- * graph. Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
+ * MIDI's clock, start and stop come with integration (the real MIDI path). Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
  * sy_text.c. */
 
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
@@ -66,7 +69,8 @@ static void sy_app_cc(uint32_t cc, uint32_t v);     /* .. a controller (the mod 
 enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ,
        UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,   /* (SAVE's, the browser's: sy_ui_save.c) */
        UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT,           /* (the matrix's: the slot picked, its source, place, amount) */
-       UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL };          /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
+       UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL,            /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
+       UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC };   /* (the SETTINGS' others) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -74,7 +78,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 #define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -125,7 +129,9 @@ static const ui_page_t UI_PG[] = {
     {SEC_OTT, G_OTT, "BANDS", {SP_OT_LOW, SP_OT_MID, SP_OT_HIGH, SP_OT_ON}},
     {SEC_EQ, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},
     {SEC_EQ, G_EQ, "GAINS", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
-    {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_ACCEL, -1, -1}},
+    {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_HELP, UI_GLOW, -1}},
+    {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
+    {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
@@ -159,6 +165,37 @@ static const char *const UI_NOTE_NAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#
 enum { UI_FIT_OFF, UI_FIT_SNAP, UI_FIT_WHITE, UI_NFIT };
 static const char *const UI_FIT_NAME[UI_NFIT] = {"OFF", "SNAP", "WHITE"};
 #define UI_KEY0 53                                  /* the lowest key, F3 (sy_app.c SY_KEY0) */
+
+/* MIDI LEARN's map: a CC each (0xFF none) and the parameter it sets, kept with the settings. MIDI's side (sy_app.c, an
+ * interrupt on the FM-1) reads it and asks for a learn through ml_heard; the main loop writes it, the parameter first
+ * and then the CC that makes an entry count */
+#define ML_N 32u
+static volatile uint8_t ml_cc[ML_N];
+static volatile uint16_t ml_id[ML_N];
+static volatile uint8_t ml_heard;                   /* a CC heard while LEARN listens: its number + 1 (0 none) */
+static int ml_never(uint32_t cc) { return cc == 0u || cc == 32u || cc == 64u || cc >= 120u; }   /* (bank, sustain, */
+static int32_t sy_ui_learned(uint32_t cc)           /* the parameter cc sets, -1 none */      /* the modes) */
+{
+    uint32_t i;
+    for (i = 0; i < ML_N; i++)
+        if (ml_cc[i] == cc)
+            return ml_id[i];
+    return -1;
+}
+static uint32_t ml_count(void)
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < ML_N; i++)
+        n += ml_cc[i] != 0xFFu;
+    return n;
+}
+static void ml_drop(uint32_t cc, int32_t id)        /* the entries of cc or of parameter id go */
+{
+    uint32_t i;
+    for (i = 0; i < ML_N; i++)
+        if (ml_cc[i] != 0xFFu && (ml_cc[i] == cc || (int32_t)ml_id[i] == id))
+            ml_cc[i] = 0xFFu;
+}
 
 /* the MOD layer's white keys, F3 .. G5: the sources (black keys: none) */
 static const uint8_t UI_KEY_SRC[27] = {
@@ -214,6 +251,11 @@ static struct {
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
     uint8_t mslot;                                  /* the matrix's slot picked (SEQ), 0 .. NSLOT - 1 */
+    uint8_t help, glow;                             /* SETTINGS: a section's hint on entering it; the LEDs' glow (LO) */
+    uint8_t mch, mpc;                               /* .. MIDI's channel (0 any, 1 .. 16); program changes taken */
+    uint8_t learn;                                  /* .. MIDI LEARN on (the next knob picks, the next CC goes to it) */
+    int16_t ml_pick;                                /* .. the parameter picked, -1 none */
+    uint32_t clr_t;                                 /* .. CLEAR turned once: a second turn within 2 s clears; 0 none */
     uint8_t run;                                    /* PLAY: the transport running, since run_t */
     uint32_t run_t;
     uint8_t scale, root, fit, kvel;                 /* SCL: the keys' scale, its root (0 C .. 11 B), how a key fits */
@@ -250,6 +292,18 @@ static void ui_toast(const char *s)
     ui.toast_t = fm1_ms + 1500u;
     ui.dirty |= D_FOOT;
 }
+
+/* MIDI's (sy_app.c sy_midi_in): this CC is for LEARN (1: taken, nothing else to do with it); channel ch (0 .. 15)
+ * heard; program changes taken */
+static int sy_ui_learn_cc(uint32_t cc)
+{
+    if (!ui.learn || ui.ml_pick < 0 || ml_never(cc))
+        return 0;
+    ml_heard = (uint8_t)(cc + 1u);
+    return 1;
+}
+static int sy_ui_midi_ch(uint32_t ch) { return !ui.mch || ch + 1u == ui.mch; }
+static int sy_ui_pc_on(void) { return ui.mpc; }
 
 /* ------------------------------------------------------------------------------------------ helpers --- */
 static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
@@ -386,15 +440,48 @@ static int ui_src_used(uint32_t src)                /* .. anything */
 }
 
 /* ---------------------------------------------------------------------------------------- navigation --- */
+/* HELP: a section's hint in the footer as it opens, 2 s (0 none: its footer says it, or it needs none) */
+static const char *ui_hint(uint32_t sec)
+{
+    if (sec == SEC_OSCA || sec == SEC_OSCB)
+        return "REC HELD + A KEY: MODULATE IT";
+    if (sec == SEC_SUB || sec == SEC_NOISE)
+        return "OUTPUT: FILTERED OR DIRECT";
+    if (sec == SEC_FILTER)
+        return "ENV HELD + A KNOB: ENV 2 ON IT";
+    if (sec == SEC_ENV1 || sec == SEC_ENV2)
+        return "ENV HELD: ENV 2 ONTO A KNOB";
+    if (sec == SEC_LFO1 || sec == SEC_LFO2)
+        return "LFO HELD: A CHANGE FOR NOW";
+    if (sec == SEC_VOICE)
+        return "GLO HELD: BEND, WHEEL, GLIDE";
+    if (sec == SEC_MACRO)
+        return "SAVE: KEEP IT \xB7 TWICE: BROWSE";
+    if (sec == SEC_MATRIX)
+        return "KNOB 1: THE SLOT TO SET";
+    if (sec >= SEC_DRIVE && sec < SEC_DRIVE + SP_NFX)
+        return "FX HELD: MACROS \xB7 + ALGO: MOVE";
+    if (sec == SEC_GLOBAL)
+        return "PLAY: THE LFOS ON THE BEAT";
+    if (sec == SEC_MENU)
+        return "HOME: BACK TO THE SOUND";
+    return 0;
+}
+
 static void ui_go(uint32_t page)
 {
-    uint32_t f = ui_fam_of(UI_PG[page].sec);
+    uint32_t f = ui_fam_of(UI_PG[page].sec), was = UI_PG[ui.page].sec;
+    const char *h;
     ui.page = (uint16_t)page;
     ui.fam = (uint8_t)f;
     ui.fpage[f] = (uint16_t)page;
     if (UI_PG[page].sec < SEC_N)
         ui.spage[UI_PG[page].sec] = (uint16_t)page;
     ui.dirty = D_ALL;
+    if (ui.help && UI_PG[page].sec != was && !ui.mod && !ui.lay && (h = ui_hint(UI_PG[page].sec)) != 0) {
+        ui_toast(h);
+        ui.toast_t = fm1_ms + 2000u;
+    }
 }
 
 /* family f's sections in the order they show (FX's: the rack's, FX ORDER), into sec; their count */
@@ -862,6 +949,64 @@ static void ui_mod_close(void)
     ui.dirty = D_ALL;
 }
 
+/* the SETTINGS' items besides COLOR and ACCEL: HELP, GLOW, HOLD, MIDI's CHANNEL, LEARN, CLEAR (turned twice within
+ * 2 s), PROGRAM */
+static void ui_set_turn(int32_t item, int32_t s)
+{
+    if (item == UI_HELP) {
+        ui.help = s > 0;
+    } else if (item == UI_GLOW) {
+        ui.glow = s > 0;
+        fm1_led_dim_level(ui.glow);
+    } else if (item == UI_HOLD) {
+        settings_hold = (uint8_t)sy_clampi(settings_hold + s, 0, 3);
+    } else if (item == UI_MCH) {
+        ui.mch = (uint8_t)sy_clampi(ui.mch + s, 0, 16);
+    } else if (item == UI_LEARN) {
+        ui.learn = s > 0;
+        ui.ml_pick = -1;
+        ui_toast(ui.learn ? "LEARN: TURN A KNOB" : "LEARN OFF");
+    } else if (item == UI_MCLR) {
+        if (ui.clr_t && fm1_ms - ui.clr_t < 2000u) {
+            memset((void *)ml_cc, 0xFF, sizeof ml_cc);
+            ui.clr_t = 0;
+            ui_toast("THE LEARNED CCS CLEARED");
+        } else {
+            ui.clr_t = fm1_ms | 1u;
+            ui_toast(ml_count() ? "TURN AGAIN: ALL CLEARED" : "NONE LEARNED");
+        }
+    } else {
+        ui.mpc = s > 0;
+    }
+    ui.dirty |= D_KNOBS | D_DISP | D_FOOT;
+}
+
+/* every millisecond: a CC MIDI LEARN heard, set to the parameter picked ("CC 74: FLT CUTOFF") */
+static void ui_learn_ms(void)
+{
+    uint32_t cc, i;
+    char t[32];
+    if (!ml_heard)
+        return;
+    cc = ml_heard - 1u;
+    ml_heard = 0;
+    if (!ui.learn || ui.ml_pick < 0)
+        return;
+    ml_drop(cc, ui.ml_pick);
+    for (i = 0; i < ML_N && ml_cc[i] != 0xFFu; i++)
+        ;
+    if (i == ML_N) {
+        ui_toast("LEARN: 32 AT MOST");
+        return;
+    }
+    ml_id[i] = (uint16_t)ui.ml_pick;               /* (the parameter, then the CC that makes it count) */
+    ml_cc[i] = (uint8_t)cc;
+    sp_put(sp_put(sp_put(sp_put(sp_fix(sp_put(t, "CC "), (int32_t)cc, 0u, 0), ": "), SEC_SHORT[SP[ui.ml_pick].sec]),
+                  " "), SP[ui.ml_pick].name);
+    ui_toast(t);
+    ui.dirty |= D_DISP | D_FOOT;
+}
+
 /* the items: the MENU's; an LFO's points and GLOBAL's tempo (not in the MOD layer: nothing there to modulate) */
 static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
 {
@@ -872,6 +1017,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
     } else if (item == UI_ACCEL) {
         ui.accel = s > 0;
         ui.dirty |= D_KNOBS | D_DISP;
+    } else if (item >= UI_HELP && item <= UI_MPC) {   /* the SETTINGS' others */
+        ui_set_turn(item, s);
     } else if (item >= UI_SCUR && item <= UI_BBANK) {   /* SAVE's, the browser's */
         ui_save_item_turn(item, s);
     } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */
@@ -1028,6 +1175,11 @@ static void ui_knob(uint32_t k, int32_t s)
     }
     id = ui_eff(id);
     d = &SP[id];
+    if (ui.learn && ui.ml_pick != id) {             /* (MIDI LEARN: this knob's parameter picked, the footer */
+        ui.ml_pick = (int16_t)id;                   /* saying so at once) */
+        ui.toast[0] = 0;
+        ui.dirty |= D_FOOT | D_DISP;
+    }
     if (d->unit == U_DST) {                         /* a destination: the next parameter that can be modulated */
         int32_t v = sy_patch.p[id], dir = s > 0 ? 1 : -1, n = s > 0 ? s : -s;
         while (n--) {
@@ -1090,6 +1242,17 @@ static void ui_press(uint32_t b)
         if (held) {
             ui.bt_chord |= held;
             ui_step_pages(b == B_OCTUP ? 1 : -1, 1);
+            return;
+        }
+        if (ui.learn) {                             /* MIDI LEARN: OCT- the picked one's CC away, OCT+ done */
+            if (b == B_OCTUP) {
+                ui.learn = 0;
+                ui_toast("LEARN OFF");
+            } else if (ui.ml_pick >= 0) {
+                ml_drop(0xFFu, ui.ml_pick);
+                ui_toast("ITS CC TAKEN AWAY");
+            }
+            ui.dirty |= D_FOOT | D_DISP | D_KNOBS;
             return;
         }
         sy_app_octave(b == B_OCTUP ? 1 : -1);
@@ -1330,6 +1493,7 @@ static void sy_ui_ms(void)
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);
     ui_save_ms();
+    ui_learn_ms();
     if (ui.toast[0] && (int32_t)(fm1_ms - ui.toast_t) >= 0) {
         ui.toast[0] = 0;
         ui.dirty |= D_FOOT;
@@ -1341,13 +1505,15 @@ static void palette_apply(void) { sy_palette(ui.pal); }
 static void settings_save(void) {}
 
 /* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
- * HOLD time; then SCL's scale, root, fit and velocity. Fields are only added at the end: a shorter record (an older
- * build's, 11 bytes at least) leaves the rest as they were. n 0: written into b, their length; else b's (n bytes)
- * taken: 1 (0: not these) */
-#define SS_SETTINGS_LEN 15u
+ * HOLD time; SCL's scale, root, fit and velocity; HELP, GLOW, MIDI's channel and PROGRAM; MIDI LEARN's map (a CC
+ * and a parameter, 2 bytes, each). Fields are only added at the end: a shorter record (an older build's, 11 bytes at
+ * least) leaves the rest as they were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not
+ * these) */
+#define SS_SETTINGS_LEN (19u + 3u * ML_N)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
+        uint32_t i;
         b[0] = 'S', b[1] = 'E', b[2] = 'T', b[3] = '1';
         b[4] = ui.pal;
         b[5] = ui.accel;
@@ -1360,6 +1526,15 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         b[12] = ui.root;
         b[13] = ui.fit;
         b[14] = ui.kvel;
+        b[15] = ui.help;
+        b[16] = ui.glow;
+        b[17] = ui.mch;
+        b[18] = ui.mpc;
+        for (i = 0; i < ML_N; i++) {
+            b[19u + 3u * i] = ml_cc[i];
+            b[20u + 3u * i] = (uint8_t)ml_id[i];
+            b[21u + 3u * i] = (uint8_t)(ml_id[i] >> 8);
+        }
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -1376,6 +1551,23 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         ui.fit = (uint8_t)(b[13] % UI_NFIT);
         ui.kvel = (uint8_t)sy_clampi(b[14], 1, 127);
     }
+    if (n >= 19u) {
+        ui.help = b[15] != 0;
+        ui.glow = b[16] != 0;
+        ui.mch = (uint8_t)(b[17] <= 16u ? b[17] : 0u);
+        ui.mpc = b[18] != 0;
+        fm1_led_dim_level(ui.glow);
+    }
+    if (n >= SS_SETTINGS_LEN) {
+        uint32_t i;
+        for (i = 0; i < ML_N; i++) {
+            uint32_t cc = b[19u + 3u * i], id = b[20u + 3u * i] | (uint32_t)b[21u + 3u * i] << 8;
+            ml_cc[i] = 0xFFu;
+            ml_id[i] = (uint16_t)id;
+            if (cc < 128u && !ml_never(cc) && id < SP_COUNT)
+                ml_cc[i] = (uint8_t)cc;
+        }
+    }
     sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
     sy_palette(ui.pal);
     ui.dirty = D_ALL;
@@ -1391,6 +1583,9 @@ static void sy_ui_boot(void)
     ui.act_k = 0xFF;
     ui.sv_key = 0xFF;
     ui.kvel = 100;                                  /* SCL: chromatic from C, the keys as they are, 100 */
+    ui.help = 1;                                    /* SETTINGS: hints on, any MIDI channel, no program changes */
+    ui.ml_pick = -1;
+    memset((void *)ml_cc, 0xFF, sizeof ml_cc);
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;
