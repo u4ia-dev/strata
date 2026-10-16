@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
-/* STRATA effects (docs/ARCHITECTURE.md §14): DRIVE -> CHORUS -> DELAY -> REVERB -> OTT -> LIMITER, global,
- * stereo, float; each with ON and a MIX (OTT: DEPTH). A module switched on or off fades over a block (its mix
+/* STRATA effects (docs/ARCHITECTURE.md §14): DRIVE -> CHORUS -> DELAY -> REVERB -> OTT -> EQ -> LIMITER, global,
+ * stereo, float; each with ON and a MIX (OTT: DEPTH; EQ: none). A module switched on or off fades over a block (its mix
  * ramps from or to 0); one that is off and silent costs nothing. Delay lines are int16 at 1/2 of full scale
  * (headroom for feedback) in the pool. The delay and the reverb run at half the rate (22 kHz: twice the time in
  * the same memory, half the work; their tails stop near 10 kHz anyway): a 1-2-1 filter and every other sample
@@ -15,7 +15,8 @@
  * diffusers, PRE-DELAY up to 50 ms, WIDTH, LOW CUT. OTT: three bands split by complementary crossovers (low =
  * LP(x), the rest = x - low: the bands sum back to x exactly) at 88 Hz and 2.5 kHz, each compressed down above
  * -12 dB (DOWNWARD: to ~30:1) and up below -40 dB (UPWARD: to 3:1, at most +24 dB), a peak follower whose
- * times scale with TIME, the gains once a block, ramped; LOW MID HIGH set each band's level. LIMITER: a peak
+ * times scale with TIME, the gains once a block, ramped; LOW MID HIGH set each band's level. EQ: a low shelf, a
+ * peak and a high shelf, +-18 dB each, on trapezoidal state-variable filters (fx_eq). LIMITER: a peak
  * limiter at -0.5 dBFS, instant attack, 80 ms release, then a knee above 0.75 (transparent under it). */
 enum { DRV_SOFT, DRV_TUBE, DRV_HARD, DRV_FOLD };
 static const char *const DRV_NAMES[4] = {"SOFT", "TUBE", "HARD", "FOLD"};
@@ -57,6 +58,9 @@ static struct {
     uint32_t rv_ph;
     float ott_s[2][2][2];                 /* the crossovers' SVF states [crossover][channel][ic1 ic2] */
     float ott_env[3], ott_g[3];           /* each band's follower and its gain at the end of the last block */
+    float eq_s[3][2][2];                  /* the EQ's SVF states [band][channel][ic1 ic2] */
+    float eq_c[3][6];                     /* .. each band's coefficients at the end of the last block */
+    uint8_t eq_run;                       /* .. the bands that ran in it (a band at 0 dB is skipped) */
     uint8_t rv_nl;                        /* reverb lines running */
     float lim_g;                          /* the limiter's gain */
 } fx;
@@ -448,6 +452,120 @@ static void fx_ott(float *l, float *r)
         }
 }
 
+/* --------------------------------------------------------------------------------------------- EQ --- */
+/* a band: the filter's trapezoidal SVF (sy_filter.c), out = m0 v0 + m1 v1 + m2 v2 of its input, band and low (Simper's
+ * shelves and peak). With A = 10^(dB / 40) (A^2 the gain at a shelf's far side, at the peak's centre): LOW SHELF 1,
+ * k (A - 1), A^2 - 1, its corner g / sqrt A; PEAK 1, k (A^2 - 1), 0 with k = 1 / (Q A); HIGH SHELF A^2, k (1 - A) A,
+ * 1 - A^2, its corner g sqrt A. The shelves at Q 0.707 (no overshoot), FREQ where their slope is halfway in dB */
+enum { EQ_LS, EQ_PK, EQ_HS };
+static void fx_eq_shape(uint32_t type, float hz, float db, float q, float *gk, float *m)   /* g, k; m0 m1 m2 */
+{
+    float a = sy_exp2f(db * 0.08304820f), s = sy_exp2f(db * 0.04152410f), g = flt_g(hz), k = 1.41421356f;
+    if (type == EQ_LS)
+        g /= s;
+    else if (type == EQ_HS)
+        g = sy_minf(g * s, FLT_GMAX);
+    else
+        k = 1.0f / (q * a);
+    gk[0] = g;
+    gk[1] = k;
+    m[0] = type == EQ_HS ? a * a : 1.0f;
+    m[1] = type == EQ_LS ? k * (a - 1.0f) : type == EQ_PK ? k * (a * a - 1.0f) : k * (1.0f - a) * a;
+    m[2] = type == EQ_LS ? a * a - 1.0f : type == EQ_PK ? 0.0f : 1.0f - a * a;
+}
+static void fx_eq_coef(uint32_t type, float hz, float db, float q, float *c)   /* a1 a2 a3 m0 m1 m2 */
+{
+    float gk[2];
+    fx_eq_shape(type, hz, db, q, gk, c + 3);
+    c[0] = 1.0f / (1.0f + gk[0] * (gk[0] + gk[1]));
+    c[1] = gk[0] * c[0];
+    c[2] = gk[0] * c[1];
+}
+
+/* a band's gain in dB at f (the screen's EQ curve): the SVF's response is its analog prototype at the warped
+ * frequency tan(pi f / fs) / g, so this is what fx_eq_band plays, exactly */
+static float fx_eq_db(uint32_t type, float hz, float db, float q, float f)
+{
+    float gk[2], m[3], w, nr, ni, dr, di;
+    fx_eq_shape(type, hz, db, q, gk, m);
+    w = sy_tanpi(sy_minf(f, 0.468f * SY_FS) * (1.0f / SY_FS)) / gk[0];
+    dr = 1.0f - w * w;
+    di = gk[1] * w;
+    nr = m[0] * dr + m[2];
+    ni = (m[0] * gk[1] + m[1]) * w;
+    return 3.0103f * sy_log2f((nr * nr + ni * ni) / (dr * dr + di * di));
+}
+
+/* one band over a block of one channel, in place, the state st (ic1 ic2), the coefficients ramping c0 -> c1 (a1 a2
+ * a3 bounded as the filter's: a ramp passes only through tame filters) */
+static SY_NOINLINE void fx_eq_band(float *restrict x, float *st, const float *c0, const float *c1)
+{
+    float ic1 = st[0], ic2 = st[1], a1 = c0[0], a2 = c0[1], a3 = c0[2], m0 = c0[3], m1 = c0[4], m2 = c0[5];
+    const float inv = 1.0f / (float)SY_BLK;
+    float d1 = (c1[0] - a1) * inv, d2 = (c1[1] - a2) * inv, d3 = (c1[2] - a3) * inv;
+    float e0 = (c1[3] - m0) * inv, e1 = (c1[4] - m1) * inv, e2 = (c1[5] - m2) * inv;
+    uint32_t i;
+    for (i = 0; i < SY_BLK; i++) {
+        float v0 = x[i], v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+        ic1 = 2.0f * v1 - ic1;
+        ic2 = 2.0f * v2 - ic2;
+        x[i] = m0 * v0 + m1 * v1 + m2 * v2;
+        a1 += d1;
+        a2 += d2;
+        a3 += d3;
+        m0 += e0;
+        m1 += e1;
+        m2 += e2;
+    }
+    st[0] = ic1;
+    st[1] = ic2;
+}
+
+/* the three bands in series: a band at 0 dB is skipped (flat: as it is), and comes back from rest (its state 0, its
+ * coefficients ramping from flat); fully on, in place */
+static void fx_eq(float *l, float *r)
+{
+    static const uint8_t DB[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH}, HZ[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ};
+    float m0, wet[2][SY_BLK], *ch[2] = {l, r}, *w[2], q = sp_q(mod_get(sy_goff, SP_EQ_Q));
+    uint32_t b, c, run = 0;
+    int full;
+    if (!fx_mixes(5, SP_EQ_ON, 1.0f, &m0))
+        return;
+    if (m0 <= 0.0f)                                     /* (switched on: every band from rest) */
+        fx.eq_run = 0;
+    full = m0 >= 1.0f && fx.mix[5] >= 1.0f;
+    for (c = 0; c < 2u; c++) {
+        w[c] = full ? ch[c] : wet[c];
+        if (!full)
+            sy_copyf(wet[c], ch[c], SY_BLK);
+    }
+    for (b = 0; b < 3u; b++) {
+        float db = sp_lin(DB[b], mod_get(sy_goff, DB[b])) * 0.1f, c1[6];
+        if (sy_absf(db) < 0.01f)
+            continue;
+        fx_eq_coef(b, sp_cut_hz(mod_get(sy_goff, HZ[b])), db, q, c1);
+        if (!((fx.eq_run >> b) & 1u)) {
+            sy_copyf(fx.eq_c[b], c1, 3u);
+            fx.eq_c[b][3] = 1.0f;
+            fx.eq_c[b][4] = fx.eq_c[b][5] = 0.0f;
+            sy_zerof(fx.eq_s[b][0], 4u);
+        }
+        for (c = 0; c < 2u; c++)
+            fx_eq_band(w[c], fx.eq_s[b][c], fx.eq_c[b], c1);
+        sy_copyf(fx.eq_c[b], c1, 6u);
+        run |= 1u << b;
+    }
+    fx.eq_run = (uint8_t)run;
+    if (!full)
+        for (c = 0; c < 2u; c++)
+            fx_blend(ch[c], wet[c], m0, fx.mix[5]);
+    for (b = 0; b < 3u; b++)
+        for (c = 0; c < 2u; c++) {
+            SY_FLUSH(fx.eq_s[b][c][0]);
+            SY_FLUSH(fx.eq_s[b][c][1]);
+        }
+}
+
 /* ---------------------------------------------------------------------------------------- LIMITER --- */
 /* a knee: straight up to 0.75, then towards 1 (slope 1 at the knee, never above 1) */
 static inline float fx_knee(float x)
@@ -490,5 +608,6 @@ static void fx_block(float *l, float *r)
     fx_delay(l, r);
     fx_reverb(l, r);
     fx_ott(l, r);
+    fx_eq(l, r);
     fx_limit(l, r);
 }

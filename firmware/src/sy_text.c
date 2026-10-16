@@ -7,9 +7,9 @@
 
 static const char *const SEC_NAMES[SEC_COUNT] = {"OSC A", "OSC B", "SUB", "NOISE", "FILTER", "ENV 1", "ENV 2",
                                                  "LFO 1", "LFO 2", "VOICE", "MACROS", "MATRIX", "DRIVE", "CHORUS",
-                                                 "DELAY", "REVERB", "OTT"};
+                                                 "DELAY", "REVERB", "OTT", "EQ"};
 static const char *const SEC_SHORT[SEC_COUNT] = {"A", "B", "SUB", "NZ", "FLT", "E1", "E2", "L1", "L2", "VCE", "MAC",
-                                                 "MTX", "DRV", "CHO", "DLY", "REV", "OTT"};
+                                                 "MTX", "DRV", "CHO", "DLY", "REV", "OTT", "EQ"};
 static const char *const PHMODE_NAMES[2] = {"RETRIG", "FREE"};
 static const char *const UMODE_NAMES[2] = {"LINEAR", "SUPER"};
 static const char *const ROUTE_NAMES[2] = {"FILTER", "DIRECT"};
@@ -137,6 +137,7 @@ static void sp_text(uint32_t id, int32_t v, char *b)
             sp_put(sp_fix(b, v - 600, 1u, 1), " dB");
         break;
     case U_DBX: sp_put(sp_fix(b, v, 1u, 1), " dB"); break;
+    case U_Q: sp_real(b, sp_q(n), 2u, ""); break;
     case U_TABLE: sp_put(b, v >= 0 && v < (int32_t)WT_NFACT ? WT_NAMES[v] : "?"); break;
     case U_SRC: sp_put(b, v >= 0 && v < (int32_t)SRC_COUNT ? SRC_NAMES[v] : "?"); break;
     case U_DST:

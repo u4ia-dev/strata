@@ -26,8 +26,9 @@
  * 7. determinism and golden renders: eight test sounds play a phrase; the same twice in a run, and as recorded
  *    in tests/sy_golden.txt (a change must be intended: GOLDEN_UPDATE=1); WAVs into DEMODIR;
  * 8. effects: OTT's bands sum back to the input; the synced delay's echo at 1/4 of 120 BPM, TIME's modulation
- *    stepping its note value; every module bounded
- *    and finite on full-scale noise; the limiter holds peaks under 1;
+ *    stepping its note value; every module bounded and finite on full-scale noise; the limiter holds peaks under 1;
+ *    the EQ: flat it is its input bit for bit, each band's gain measured against its design and against the curve the
+ *    screen draws, bounded with every frequency jumping, its states 0 after silence;
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
 #define SY_ENGINE 1
 #include "sy_host.h"
@@ -215,7 +216,9 @@ static void t_params(void)
                     {SP_A_POS, 750, "75.0%"}, {SP_A_PAN, -250, "-25.0%"}, {SP_A_WARP, WARP_SYNC, "SYNC"},
                     {SP_F_TYPE, FT_LP24, "LP 24"}, {SP_L1_RATE, 0, "0.01 Hz"}, {SP_DL_TIME, 1000, "750 ms"},
                     {SP_DL_TIME, 0, "10 ms"}, {SP_OT_LOW, 30, "+3.0 dB"}, {SP_M1_DST, SP_F_CUT, "FLT CUTOFF"},
-                    {SP_M1_DST, SP_A_ON, "NONE"}, {SP_A_FINE, -7, "-7 ct"}, {SP_V_BUP, 12, "12 st"}};
+                    {SP_M1_DST, SP_A_ON, "NONE"}, {SP_A_FINE, -7, "-7 ct"}, {SP_V_BUP, 12, "12 st"},
+                    {SP_EQ_LFREQ, 292, "150 Hz"}, {SP_EQ_MFREQ, 567, "1.00 kHz"}, {SP_EQ_HFREQ, 767, "4.00 kHz"},
+                    {SP_EQ_Q, 400, "1.00"}, {SP_EQ_MID, -180, "-18.0 dB"}, {SP_M1_DST, SP_EQ_MID, "EQ MID"}};
         char t[SP_TEXT_N + 4u];
         uint32_t id, k, nl;
         int lists = 1, fits = 1, spot = 1;
@@ -1099,6 +1102,119 @@ static double delay_echo_ms(void)
     return (double)(best - at) * 1000.0 / (double)SY_FS;
 }
 
+/* a sine at hz (0.25) through the EQ alone as set: its gain in dB (power out over in, after 0.3 s) */
+static double eq_gain_db(double hz)
+{
+    float l[SY_BLK], r[SY_BLK], x[SY_BLK];
+    double ph = 0, pi = 0, po = 0;
+    uint32_t b, i;
+    memset(fx.eq_s, 0, sizeof fx.eq_s);
+    fx.eq_run = 0;
+    fx.mix[5] = 0.0f;
+    for (b = 0; b < blocks(0.6f); b++) {
+        for (i = 0; i < SY_BLK; i++, ph += hz / (double)SY_FS)
+            x[i] = l[i] = r[i] = (float)(0.25 * sin(2.0 * M_PI * ph));
+        sp_block();
+        mod_map();
+        mod_offsets(sy_goff, 0, 0);
+        fx_eq(l, r);
+        if (b >= blocks(0.3f))
+            for (i = 0; i < SY_BLK; i++) {
+                pi += (double)x[i] * (double)x[i];
+                po += (double)l[i] * (double)l[i];
+            }
+    }
+    return 10.0 * log10(po / pi);
+}
+
+/* the EQ: flat it is the input bit for bit; each band's gain, measured, against its curve (fx_eq_db: what the screen
+ * draws) and against its design; a sweep of every frequency at once, at +18 dB, stays bounded; silence decays to 0 */
+static void t_eq(void)
+{
+    static const struct { uint16_t on; int16_t db; double f, want, tol; } PT[] = {
+        {SP_EQ_MID, 120, 1004.7, 12.0, 0.15}, {SP_EQ_MID, 120, 100.0, 0.0, 0.3}, {SP_EQ_MID, -120, 1004.7, -12.0, 0.15},
+        {SP_EQ_LOW, 120, 30.0, 12.0, 0.5}, {SP_EQ_LOW, 120, 5000.0, 0.0, 0.3}, {SP_EQ_LOW, 120, 150.3, 6.0, 0.3},
+        {SP_EQ_HIGH, -120, 16000.0, -12.0, 0.6}, {SP_EQ_HIGH, -120, 300.0, 0.0, 0.3}, {SP_EQ_HIGH, -120, 3999.7, -6.0, 0.3},
+    };
+    uint32_t i, b, k, s = 5;
+    float l[SY_BLK], r[SY_BLK], x[SY_BLK], top = 0.0f;
+    double worst = 0, wcurve = 0;
+    int exact = 1, finite = 1, rest = 1;
+    eng_reset();
+    set(SP_EQ_ON, 1);
+    snap();
+    for (b = 0; b < blocks(1.0f); b++) {                  /* flat: on, every band at 0 dB */
+        for (i = 0; i < SY_BLK; i++)
+            x[i] = l[i] = r[i] = 0.5f * sy_randf(sy_rand(&s));
+        sp_block();
+        mod_map();
+        mod_offsets(sy_goff, 0, 0);
+        fx_eq(l, r);
+        for (i = 0; i < SY_BLK; i++)
+            exact &= l[i] == x[i] && r[i] == x[i];
+    }
+    check("EQ on and flat: the input bit for bit", exact);
+    for (k = 0; k < sizeof PT / sizeof PT[0]; k++) {
+        uint32_t t = PT[k].on == SP_EQ_LOW ? EQ_LS : PT[k].on == SP_EQ_MID ? EQ_PK : EQ_HS;
+        uint32_t hz = PT[k].on == SP_EQ_LOW ? SP_EQ_LFREQ : PT[k].on == SP_EQ_MID ? SP_EQ_MFREQ : SP_EQ_HFREQ;
+        double g, c;
+        eng_reset();
+        set(SP_EQ_ON, 1);
+        set(PT[k].on, PT[k].db);
+        snap();
+        g = eq_gain_db(PT[k].f);
+        c = fx_eq_db(t, sp_cut_hz(sp_n[hz]), (float)PT[k].db * 0.1f, sp_q(sp_n[SP_EQ_Q]), (float)PT[k].f);
+        printf("engine: EQ %-4s %+5.1f dB at %7.1f Hz: %+6.2f dB (its curve %+6.2f, the design %+5.1f)\n",
+               SP[PT[k].on].name, PT[k].db * 0.1, PT[k].f, g, c, PT[k].want);
+        worst = fmax(worst, fabs(g - PT[k].want) - PT[k].tol);
+        wcurve = fmax(wcurve, fabs(g - c));
+    }
+    check("EQ: each band's gain as designed (the peak's centre, the shelves' far sides, halfway at FREQ, flat away)",
+          worst <= 0.0);
+    check("EQ: the curve the screen draws is what plays (within 0.05 dB)", wcurve < 0.05);
+    eng_reset();
+    set(SP_EQ_ON, 1);
+    set(SP_EQ_LOW, 180);
+    set(SP_EQ_MID, 180);
+    set(SP_EQ_HIGH, 180);
+    set(SP_EQ_Q, 1000);
+    snap();
+    for (b = 0; b < blocks(3.0f); b++) {                  /* every frequency jumping 20 Hz <-> 20 kHz each block */
+        int32_t f = (b & 1u) ? 1000 : 0;
+        set(SP_EQ_LFREQ, f);
+        set(SP_EQ_MFREQ, 1000 - f);
+        set(SP_EQ_HFREQ, f);
+        snap();
+        mod_map();
+        for (i = 0; i < SY_BLK; i++)
+            l[i] = r[i] = 0.1f * sy_randf(sy_rand(&s));
+        mod_offsets(sy_goff, 0, 0);
+        fx_eq(l, r);
+        for (i = 0; i < SY_BLK; i++) {
+            finite &= isfinite(l[i]) && isfinite(r[i]);
+            top = fmaxf(top, fmaxf(fabsf(l[i]), fabsf(r[i])));
+        }
+    }
+    set(SP_EQ_LFREQ, SP[SP_EQ_LFREQ].def);                /* then silence, at the default frequencies and Q (a Q */
+    set(SP_EQ_MFREQ, SP[SP_EQ_MFREQ].def);                /* of 22 at 20 Hz rings on for minutes, far under */
+    set(SP_EQ_HFREQ, SP[SP_EQ_HFREQ].def);                /* hearing and never into denormals: the flush at 1e-15 */
+    set(SP_EQ_Q, SP[SP_EQ_Q].def);                        /* a block) */
+    snap();
+    for (b = 0; b < blocks(10.0f); b++) {
+        sy_zerof(l, SY_BLK);
+        sy_zerof(r, SY_BLK);
+        mod_offsets(sy_goff, 0, 0);
+        fx_eq(l, r);
+    }
+    for (b = 0; b < 3u; b++)
+        for (i = 0; i < 2u; i++)
+            rest &= fx.eq_s[b][i][0] == 0.0f && fx.eq_s[b][i][1] == 0.0f;
+    printf("engine: EQ at +18 dB with every frequency jumping 20 Hz <-> 20 kHz each block: largest output %.2f\n",
+           (double)top);
+    check("EQ: frequencies jumping each block at +18 dB: finite and bounded (noise at 0.1 under 4)", finite && top < 4.0f);
+    check("EQ: after silence its states are exactly 0 (no denormals)", rest);
+}
+
 static void t_fx(void)
 {
     {                                                     /* the chorus as clean after 10 minutes as at the start */
@@ -1178,6 +1294,10 @@ static void t_fx(void)
     set(SP_RV_DECAY, 1000);
     set(SP_RV_SIZE, 1000);
     set(SP_OT_ON, 1);
+    set(SP_EQ_ON, 1);
+    set(SP_EQ_LOW, 180);
+    set(SP_EQ_MID, 180);
+    set(SP_EQ_HIGH, 180);
     snap();
     for (b = 0; b < blocks(10.0f); b++) {
         for (i = 0; i < SY_BLK; i++)
@@ -1217,6 +1337,10 @@ static void t_cost(void)
             set(SP_DL_ON, 1);
             set(SP_RV_ON, 1);
             set(SP_OT_ON, 1);
+            set(SP_EQ_ON, 1);
+            set(SP_EQ_LOW, 30);
+            set(SP_EQ_MID, -30);
+            set(SP_EQ_HIGH, 30);
             snap();
             for (i = 0; i < 8u; i++)
                 sy_note_on(48 + 4 * i, 100);
@@ -1249,6 +1373,7 @@ int main(int argc, char **argv)
     t_dc_sources();
     t_golden(argc > 1 ? argv[1] : "tests/sy_golden.txt");
     t_fx();
+    t_eq();
     t_cost();
     return t_done();
 }

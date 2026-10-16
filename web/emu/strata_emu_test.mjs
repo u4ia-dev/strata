@@ -24,7 +24,7 @@ function check(what, ok) {
 }
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, DRIVE: 12, CHORUS: 13, DELAY: 14, MENU: 17, GLOBAL: 18 };   // SEC_*, SEC_MENU, SEC_GLOBAL
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, DRIVE: 12, CHORUS: 13, DELAY: 14, MENU: 18, GLOBAL: 19 };   // SEC_*, SEC_MENU, SEC_GLOBAL
 const ID = { A_TABLE: 1, A_POS: 2, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,                        // sy_param.c SP_*
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*

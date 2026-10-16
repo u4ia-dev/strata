@@ -9,7 +9,7 @@
  * its offsets to the normalised value (an amount of 100 % moves a destination across its whole range). */
 
 enum { SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, SEC_ENV1, SEC_ENV2, SEC_LFO1, SEC_LFO2, SEC_VOICE,
-       SEC_MACRO, SEC_MATRIX, SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_COUNT };
+       SEC_MACRO, SEC_MATRIX, SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, SEC_COUNT };
 
 enum {                           /* units: the display and the DSP's reading of a value */
     U_INT,                       /* an integer as it is */
@@ -27,7 +27,8 @@ enum {                           /* units: the display and the DSP's reading of 
     U_SRC, U_DST,                /* a modulation source (SRC_*), a destination (a parameter id) */
     U_SYNC,                      /* a note value (NOTE_NAMES: 8 BAR .. 1/32), an LFO's or the delay's SYNC FIXED */
     U_MS,                        /* the delay's time: 0..1000 = 10 .. 750 ms, exponential */
-    U_DBX                        /* a level in 0.1 dB (the OTT's bands: -24.0 .. +24.0) */
+    U_DBX,                       /* a level in 0.1 dB (the OTT's bands: -24.0 .. +24.0; the EQ's: -18.0 .. +18.0) */
+    U_Q                          /* a band's Q: 0..1000 = 0.25 .. 8, exponential (sp_q) */
 };
 
 #define F_MOD 1u                 /* a modulation destination */
@@ -169,7 +170,15 @@ enum {                           /* units: the display and the DSP's reading of 
     X(OT_HIGH, "HIGH", SEC_OTT, -240, 240, 0, U_DBX, FMG, 0)                                              \
     X(L1_NOTE, "NOTE", SEC_LFO1, 0, 16, 8, U_SYNC, 0, 0)                                                  \
     X(L2_NOTE, "NOTE", SEC_LFO2, 0, 16, 8, U_SYNC, 0, 0)                                                  \
-    X(DL_NOTE, "NOTE", SEC_DELAY, 0, 16, 10, U_SYNC, 0, 0)
+    X(DL_NOTE, "NOTE", SEC_DELAY, 0, 16, 10, U_SYNC, 0, 0)                                                \
+    X(EQ_ON, "ON", SEC_EQ, 0, 1, 0, U_ONOFF, 0, 0)                                                        \
+    X(EQ_LOW, "LOW", SEC_EQ, -180, 180, 0, U_DBX, FMG, 0)                                                 \
+    X(EQ_MID, "MID", SEC_EQ, -180, 180, 0, U_DBX, FMG, 0)                                                 \
+    X(EQ_HIGH, "HIGH", SEC_EQ, -180, 180, 0, U_DBX, FMG, 0)                                               \
+    X(EQ_LFREQ, "LO FREQ", SEC_EQ, 0, 1000, 292, U_HZ, FMG, 0)                                            \
+    X(EQ_MFREQ, "MID FREQ", SEC_EQ, 0, 1000, 567, U_HZ, FMG, 0)                                           \
+    X(EQ_Q, "MID Q", SEC_EQ, 0, 1000, 400, U_Q, FMG, 0)                                                   \
+    X(EQ_HFREQ, "HI FREQ", SEC_EQ, 0, 1000, 767, U_HZ, FMG, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
@@ -367,6 +376,7 @@ static inline float sp_time_s(float n) { return 0.001f * sy_exp2f(n * 14.8727f);
 static inline float sp_cut_hz(float n) { return 20.0f * sy_exp2f(n * 9.96578f); }         /* 20 Hz .. 20 kHz */
 static inline float sp_lfo_hz(float n) { return 0.01f * sy_exp2f(n * 11.9658f); }         /* 0.01 .. 40 Hz */
 static inline float sp_dly_s(float n) { return 0.010f * sy_exp2f(n * 6.22882f); }         /* 10 .. 750 ms */
+static inline float sp_q(float n) { return 0.25f * sy_exp2f(n * 5.0f); }                  /* 0.25 .. 8 */
 static inline float sp_db_gain(int32_t v) { return v <= 0 ? 0.0f : sy_exp2f((float)(v - 600) * 0.0166096f); }
 
 /* note values (U_SYNC: an LFO's RATE, the delay's TIME with SYNC FIXED), longest first: quarter notes a cycle; the
