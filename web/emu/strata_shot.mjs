@@ -3,8 +3,9 @@
 // STRATA's screen on the simulated FM-1 as PNG files, to look at without a browser (twice the panel's size). A short
 // session, played as the panel would: the wave page (VOWELS, BEND+), REC held (LFO 1 picked by its white key, KNOB 1
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
-// one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), the MENU,
-// and the wave page in each palette. It prints what the session set.
+// one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
+// chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
+// the SETTINGS (HOME held 5 s) and the wave page in each palette. It prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -143,14 +144,98 @@ ex.web_enc(E.K3, 1);
 run(0.1);
 png("tempo.png");
 console.log(`GLOBAL: ${ex.web_test_tempo(0)} BPM ${ex.web_test_tempo(1)}/${ex.web_test_tempo(2)}`);
-ex.web_buttons(1 << B.HOME);                    // HOME held: the MENU
+const sect = () => ex.web_test_page_section();
+const to = (sec) => { ex.web_enc(E.ALGO, sec - sect()); run(0.05); };   // ALGORITHM: a section of the family
+const turn = (k, n, dt = 0.12) => { for (let i = 0; i < Math.abs(n); i++) { ex.web_enc(E.K1 + k, n > 0 ? 1 : -1); run(dt); } };
+const set = (id, v) => ex.web_test_set(id, v);
+tap(B.HOME);                                    // HOME: a chord playing, the scope live
+ex.web_keys((1 << 7) | (1 << 11) | (1 << 14));
 run(0.6);
+png("home.png");
+ex.web_keys(0);
+run(0.5);
+tap(B.EDIT);                                    // OSC A WAVE: AMOUNT turning (BEND+ 30 % -> more)
+ex.web_enc(E.SELECT, -1);
+run(0.05);
+turn(3, 4);
+png("wave_warp.png");
+run(1.2);
+tap(B.EDIT);
+to(4);                                          // FILTER TONE: LP 24, ENV 2 on the cutoff, CUTOFF turning
+const F = ex.web_test_page_param(1);            // (SP_F_CUT; ON just before it in the table)
+set(F - 2, 1);
+set(F - 1, 1);
+set(F + 1, 320);
+set(106, 2); set(107, F); set(108, 250);        // slot 1: ENV 2 -> CUTOFF +25 %
+run(0.1);
+turn(1, 4);
+png("filter_tone.png");
+run(1.2);
+ex.web_enc(E.SELECT, 1);                        // MORE: KEYTRACK turning
+run(0.05);
+turn(0, 6, 0.004);
+png("filter_more.png");
+run(1.2);
+set(106, 0); set(107, 0); set(108, 0);
+tap(B.FX);                                      // DRIVE: TUBE, DRIVE turning
+to(12);
+set(130, 1); set(131, 1);
+run(0.05);
+turn(1, 4);
+png("drive.png");
+run(1.2);
+to(13);                                         // CHORUS: DEPTH turning, its taps moving
+set(135, 1);
+run(0.3);
+turn(1, 4);
+png("chorus.png");
+run(1.2);
+to(14);                                         // DELAY: PING-PONG 1/8D, FEEDBACK turning
+set(141, 1);
+run(0.05);
+turn(3, 4);
+png("delay.png");
+run(1.2);
+ex.web_enc(E.SELECT, 1);                        // its TONE page: LP turning
+run(0.05);
+turn(0, -5, 0.004);
+png("delay_tone.png");
+run(1.2);
+to(15);                                         // REVERB: HALL, DECAY turning
+set(149, 1);
+run(0.05);
+turn(2, 4);
+png("reverb.png");
+run(1.2);
+to(16);                                         // OTT: a chord through it, DEPTH turning
+set(158, 1);
+ex.web_keys((1 << 2) | (1 << 9) | (1 << 14));
+run(0.8);
+turn(0, -6, 0.004);
+png("ott.png");
+ex.web_keys(0);
+run(1.2);
+to(17);                                         // EQ: the three bands, MID turning
+set(169, 1); set(170, 60); set(171, -40); set(172, 30);
+run(0.05);
+turn(1, -3);
+png("eq.png");
+run(1.2);
+ex.web_enc(E.SELECT, 1);                        // its FREQ page: MID FREQ turning
+run(0.05);
+turn(1, 6, 0.004);
+png("eq_freq.png");
+run(1.2);
+for (const id of [130, 135, 141, 149, 158, 169]) set(id, 0);
+ex.web_buttons(1 << B.HOME);                    // HOME held 5 s: the SETTINGS
+run(5.2);
 ex.web_buttons(0);
 run(0.1);
-png("menu.png");
-tap(B.EDIT);                                    // back to OSC A
+png("settings.png");
+tap(B.EDIT);                                    // back to OSC A (its WAVE page)
+to(0);
 run(0.1);
-for (let p = 0; p < 7; p++) {
+for (let p = 0; p < 8; p++) {
   ex.web_test_palette(p);
   run(0.05);
   png(`pal${p}.png`);

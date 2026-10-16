@@ -103,6 +103,7 @@ static uint8_t fx_lowcut;                        /* (panel.c's settings_init set
 #include "../../firmware/src/sy_gfx.c"
 #include "../../firmware/src/sy_ui.c"
 #include "../../firmware/src/sy_ui_draw.c"
+#include "../../firmware/src/sy_ui_fx.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #include "../../firmware/src/sy_app.c"
 
@@ -278,6 +279,7 @@ EXPORT uint32_t web_test_palette(int32_t i)
     }
     return ui.pal;
 }
+EXPORT const char *web_test_palette_name(void) { return SY_PAL[ui.pal].name; }
 EXPORT uint32_t web_test_dirty(void) { return ui.dirty; }
 EXPORT int32_t web_test_oct(void) { return sy_app_oct(); }
 /* LFO k's drawn shape: f 0 its count of points, 1 .. 3 point i's x, y, curve */
@@ -297,3 +299,7 @@ EXPORT int32_t web_test_tempo(uint32_t f)
     return f == 0u ? ui.bpm : f == 1u ? ui.tsb : f == 2u ? UI_TSN_VAL[ui.tsn] : (int32_t)(sy_tempo * 100.0f + 0.5f);
 }
 EXPORT const char *web_test_toast(void) { return ui.toast; }
+/* the knob turning (0xFF none), whether a shape before the turn is kept (the ghost), HOME's scope captures taken */
+EXPORT uint32_t web_test_act(void) { return ui.act_k; }
+EXPORT uint32_t web_test_ghost(void) { return ui_ghost() != 0; }
+EXPORT uint32_t web_test_scope(void) { return sy_scope.frames; }

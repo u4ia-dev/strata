@@ -24,8 +24,9 @@ function check(what, ok) {
 }
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, DRIVE: 12, CHORUS: 13, DELAY: 14, MENU: 18, GLOBAL: 19 };   // SEC_*, SEC_MENU, SEC_GLOBAL
-const ID = { A_TABLE: 1, A_POS: 2, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,                        // sy_param.c SP_*
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19 };   // SEC_*
+const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
+             EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 
@@ -163,9 +164,18 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   check(`REC: a tap nothing (${one}), a double tap latches the layer (${latched}), a tap lets it go (${ex.web_test_mod()})`,
         one === 0 && latched === 2 && ex.web_test_mod() === 0);
 }
-{                                               // the MENU, its palettes
+{                                               // the SETTINGS (HOME held 5 s), its palettes
+  const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page();
   ex.web_buttons(1 << B.HOME);
-  play(ex, 0.6);
+  play(ex, 1.5);
+  const count = toast(), early = ex.web_test_page_section();
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  const after = [ex.web_test_page(), toast()];
+  check(`HOME held: a countdown ("${count}"); let go at 1.5 s, nothing opens (section ${early}, the page kept, the footer "${after[1]}")`,
+        count === "HOLD: SETTINGS IN 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "");
+  ex.web_buttons(1 << B.HOME);
+  play(ex, 5.2);
   ex.web_buttons(0);
   play(ex, 0.05);
   const sec = ex.web_test_page_section(), p0 = ex.web_test_palette(-1);
@@ -174,10 +184,18 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   ex.web_enc(E.K1, 1);
   play(ex, 0.05);
   const p1 = ex.web_test_palette(-1), moved = screen().filter((v, i) => v !== before[i]).length;
-  ex.web_enc(E.K1, -1);
+  ex.web_enc(E.K1, -2);
   play(ex, 0.05);
-  check(`HOME held: the MENU (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1} -> ${ex.web_test_palette(-1)}), ${moved} pixels with it`,
-        sec === SEC.MENU && p0 === 0 && p1 === 1 && ex.web_test_palette(-1) === 0 && moved > 2000);
+  const p7 = ex.web_test_palette(-1), mono = cstr(ex, ex.web_test_palette_name());
+  const grey = screen().filter((v, i) => {                 // (outside the window: its swatches show the others)
+    const s = ((v & 0xFF) << 8) | (v >> 8), r = s >> 11, g = (s >> 5) & 63, b = s & 31, y = Math.floor(i / 240);
+    return (y < 22 || y >= 136) && (Math.abs(r * 2 - g) > 2 || Math.abs(b * 2 - g) > 2);
+  }).length;
+  ex.web_enc(E.K1, 1);
+  play(ex, 0.05);
+  check(`HOME held 5 s: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
+        sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p7 === 7 && mono === "MONO" && grey === 0 &&
+        ex.web_test_palette(-1) === 0);
   tap(ex, B.EDIT);
 }
 const name = () => cstr(ex, ex.web_test_page_name());
@@ -433,6 +451,68 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   undo(B.OCTDN);
   check(`.. a sound's load undone ("${s0}" -> "${s1}" -> "${cstr(ex, ex.web_test_patch_name())}", WT POS ${ex.web_test_value(pos)})`,
         s1 !== s0 && cstr(ex, ex.web_test_patch_name()) === s0 && ex.web_test_value(pos) === v1);
+}
+const scr = () => new Uint16Array(ex.memory.buffer, ex.web_screen(), 240 * 240).slice();
+const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >= y0 * 240 && i < y1 * 240).length;
+{                                               // FX: six effects, the EQ's pages; a knob turning lit, the curve before it kept
+  tap(ex, B.FX);                                // (FX shows the effect it showed last: DRIVE first)
+  ex.web_enc(E.ALGO, SEC.DRIVE - ex.web_test_page_section());
+  play(ex, 0.03);
+  const secs = [];
+  for (let i = 0; i < 6; i++) { secs.push(ex.web_test_page_section()); ex.web_enc(E.ALGO, 1); play(ex, 0.03); }
+  const round = ex.web_test_page_section();
+  ex.web_enc(E.ALGO, -1);
+  play(ex, 0.03);
+  const pg = () => [name(), ...[0, 1, 2, 3].map((k) => ex.web_test_page_param(k))];
+  const eq1 = pg();
+  ex.web_enc(E.SELECT, 1);
+  play(ex, 0.03);
+  const eq2 = pg();
+  ex.web_enc(E.SELECT, -1);
+  play(ex, 0.03);
+  check(`FX: ALGORITHM through six effects (${secs}), round (${round}); the EQ's pages ${eq1[0]} (${eq1.slice(1)}), ${eq2[0]} (${eq2.slice(1)})`,
+        secs.join() === [12, 13, 14, 15, 16, 17].join() && round === SEC.DRIVE && eq1[0] === "GAIN" &&
+        eq1.slice(1).join() === [ID.EQ_LOW, ID.EQ_MID, ID.EQ_HIGH, ID.EQ_ON].join() && eq2[0] === "FREQ" &&
+        eq2.slice(1).join() === [ID.EQ_LFREQ, ID.EQ_MFREQ, ID.EQ_Q, ID.EQ_HFREQ].join());
+  const before = scr();
+  for (let i = 0; i < 3; i++) { ex.web_enc(E.K2, 1); play(ex, 0.12); }
+  const act = ex.web_test_act(), ghost = ex.web_test_ghost(), mid = ex.web_test_value(ID.EQ_MID), lit = scr();
+  play(ex, 1.2);
+  const act2 = ex.web_test_act(), ghost2 = ex.web_test_ghost(), rest = scr();
+  check(`EQ GAIN: KNOB 2 turned (MID ${mid}): its cell lit (knob ${act + 1}), the curve before the turn kept (${ghost}), ${changed(before, lit)} pixels; a second on, let go (${act2 === 255 ? "none" : act2}, ${ghost2}): ${changed(lit, rest)} pixels back`,
+        mid === 3 && act === 1 && ghost === 1 && changed(before, lit) > 200 && act2 === 255 && ghost2 === 0 &&
+        changed(lit, rest) > 200);
+  ex.web_test_set(ID.EQ_MID, 0);
+  tap(ex, B.EDIT);
+}
+{                                               // HOME: the sound and its output, live
+  tap(ex, B.HOME);
+  const sec = ex.web_test_page_section(), s0 = ex.web_test_scope(), d0 = ex.web_screen_draws();
+  ex.web_keys(1 << 7);
+  play(ex, 0.5);
+  const s1 = ex.web_test_scope(), d1 = ex.web_screen_draws();
+  ex.web_keys(0);
+  play(ex, 1.5);
+  tap(ex, B.EDIT);
+  const s2 = ex.web_test_scope();
+  play(ex, 0.5);
+  check(`HOME (section ${sec}): a note playing, the scope live (${s1 - s0} captures in 0.5 s, ${d1 - d0} blits); another page, none (${ex.web_test_scope() - s2})`,
+        sec === SEC.MACRO && s1 - s0 >= 8 && d1 - d0 >= 5 && ex.web_test_scope() - s2 <= 1);
+}
+{                                               // OSC A's WAVE page: the frames drawn through the warp
+  const n0 = name();
+  ex.web_test_set(ID.A_WARP, 2);                // BEND+
+  ex.web_test_set(ID.A_WAMT, 0);
+  play(ex, 0.1);
+  const a = scr();
+  for (let i = 0; i < 12; i++) { ex.web_enc(E.K4, 1); play(ex, 0.004); }
+  play(ex, 0.05);
+  const b = scr(), amt = ex.web_test_value(ID.A_WAMT), ghost = ex.web_test_ghost();
+  check(`${n0}: WARP BEND+, KNOB 4 (AMOUNT ${amt}) draws the table's frames warped (${changed(a, b, 22, 136)} pixels of the display), the frame before the turn kept (${ghost})`,
+        n0 === "WAVE" && amt > 100 && changed(a, b, 22, 136) > 1500 && ghost === 1);
+  ex.web_test_set(ID.A_WARP, 0);
+  ex.web_test_set(ID.A_WAMT, 0);
+  play(ex, 1.2);
 }
 {
   ex.web_midi(0x90, 64, 100);
