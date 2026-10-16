@@ -572,7 +572,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(u, 0.2);
   const plain = ukey(3);                        // (G#3 as it is: 56)
   utap(B.SCL);
-  const sec = u.web_test_page_section(), pg = cstr(u, u.web_test_page_name());
+  const sec = u.web_test_page_section(), pg = cstr(u, u.web_test_page_name()), sclLit = (u.web_lit_buttons() >> B.SCL) & 1;
   u.web_enc(E.K1, 1);                           // KNOB 1: MAJOR; KNOB 2: D; KNOB 3: SNAP
   play(u, 0.12);
   u.web_enc(E.K2, 2);
@@ -580,8 +580,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   u.web_enc(E.K3, 1);
   play(u, 0.12);
   const snap = ukey(3), own = ukey(1);          // G#3: off D major, down to G3; F#3: on it, as it is
-  check(`SCL: its page (section ${u.web_test_page_section()}, ${pg}); MAJOR, D, SNAP (${u.web_test_scl(0)}, ${u.web_test_scl(1)}, ${u.web_test_scl(2)}): G#3 plays ${plain[0]} before, ${snap[0]} now; F#3 ${own[0]}`,
-        sec === 22 && pg === "SCALE" && u.web_test_scl(0) === 1 && u.web_test_scl(1) === 2 && u.web_test_scl(2) === 1 &&
+  check(`SCL: its page (section ${u.web_test_page_section()}, ${pg}), SCL lit (${sclLit}); MAJOR, D, SNAP (${u.web_test_scl(0)}, ${u.web_test_scl(1)}, ${u.web_test_scl(2)}): G#3 plays ${plain[0]} before, ${snap[0]} now; F#3 ${own[0]}`,
+        sec === 22 && pg === "SCALE" && sclLit === 1 && u.web_test_scl(0) === 1 && u.web_test_scl(1) === 2 && u.web_test_scl(2) === 1 &&
         plain[0] === 56 && snap[0] === 55 && own[0] === 54);
   u.web_enc(E.K3, 1);                           // WHITE: the white keys walk the scale from the root at C4
   play(u, 0.12);

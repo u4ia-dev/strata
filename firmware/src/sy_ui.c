@@ -54,14 +54,15 @@ static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SA
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
 enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ,
-       UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,
+       UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,   /* (SAVE's, the browser's: sy_ui_save.c) */
        UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT,           /* (the matrix's: the slot picked, its source, place, amount) */
-       UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL };          /* (SCL's: the keys' scale, its root, how keys fit, velocity) */   /* (SAVE's, the browser's: sy_ui_save.c) */
+       UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL };          /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
 #define SEC_BROWSE (SEC_COUNT + 3)
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
+#define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
        G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
@@ -170,7 +171,7 @@ static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", 
 static struct {
     uint16_t page;
     uint16_t fpage[FAM_N];                          /* the page a family returns to */
-    uint16_t spage[SEC_COUNT + 4];                  /* the page a section returns to (ALGORITHM) */
+    uint16_t spage[SEC_N];                          /* the page a section returns to (ALGORITHM) */
     uint8_t fam;
     uint8_t dirty;                                  /* D_*: what to draw */
     uint8_t pal, accel;                             /* MENU: the palette, the knobs' feel */
@@ -363,7 +364,8 @@ static void ui_go(uint32_t page)
     ui.page = (uint16_t)page;
     ui.fam = (uint8_t)f;
     ui.fpage[f] = (uint16_t)page;
-    ui.spage[UI_PG[page].sec] = (uint16_t)page;
+    if (UI_PG[page].sec < SEC_N)
+        ui.spage[UI_PG[page].sec] = (uint16_t)page;
     ui.dirty = D_ALL;
 }
 
