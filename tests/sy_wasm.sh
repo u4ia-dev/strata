@@ -36,6 +36,9 @@ run "engine: a chord (wasm)" "$OUT/sy_smoke.js"
 $EMCC -Ibuild/gen -o "$OUT/sy_filter_test.js" tests/sy_filter_test.c -lm
 run "filter (wasm)" "$OUT/sy_filter_test.js"
 
+$EMCC -Ibuild/gen -o "$OUT/sy_store_test.js" tests/sy_store_test.c -lm
+run "store (wasm)" "$OUT/sy_store_test.js"
+
 $EMCC -Ibuild/gen -o "$OUT/sy_engine_test.js" tests/sy_engine_test.c -lm
 run "engine, golden renders included (wasm)" "$OUT/sy_engine_test.js" tests/sy_golden.txt
 

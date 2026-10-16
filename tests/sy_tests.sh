@@ -15,6 +15,9 @@
 #   FILTER    (tests/sy_filter_test.c) every type's response against its design (cutoff, slopes, resonance, notch,
 #             peak, ladder, formant, stereo spread), stability at every corner with the cutoff jumping, no denormal
 #             state, exact silence after the input stops, MIX 0 bit for bit, cost.
+#   STORE     (tests/sy_store_test.c) Strata's flash (firmware/src/sy_store.c) on a simulated NOR that refuses anything
+#             outside the allow-list: load, save, the copies alternating, a write torn after any byte, a protected
+#             part, Felucca's records as none, the 128 user slots.
 #   ENGINE    (tests/sy_engine_test.c) the parameter table and the preset format, the matrix, voices (POLY steals,
 #             VOICES, MONO / LEGATO, glide, sustain, the unison budget, the CPU guard), envelope and LFO times,
 #             clicks (17 events against the steady signal), health (40 random patches), DC (the blockers, every
@@ -42,6 +45,9 @@ run "engine: a chord through the default patch" "$OUT/sy_smoke"
 
 $CC -Ibuild/gen -o "$OUT/sy_filter_test" tests/sy_filter_test.c -lm
 run "filter: responses, stability at the corners, no denormals, silence, cost" "$OUT/sy_filter_test"
+
+$CC -Ibuild/gen -o "$OUT/sy_store_test" tests/sy_store_test.c -lm
+run "store: Strata's flash, torn writes, the allow-list, the user slots" "$OUT/sy_store_test"
 
 $CC -Ibuild/gen -o "$OUT/sy_engine_test" tests/sy_engine_test.c -lm
 run "engine: parameters, matrix, voices, timing, clicks, health, DC, golden renders, effects, cost" \
