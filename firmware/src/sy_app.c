@@ -70,6 +70,7 @@ static void sy_ev_drain(sy_ring_t *g)
 
 /* ------------------------------------------------------------------------------------------- audio --- */
 static uint32_t sy_load_q8;                      /* the last halves' load, 256 = all of a half (the guard's) */
+static int32_t sy_app_load(void) { return SY_LOAD_KNOWN ? (int32_t)(sy_g.load_q8 * 100u / 256u) : -1; }   /* (HOME) */
 
 void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S), or the emulator's clock */
 {
@@ -140,6 +141,7 @@ static void sy_sound_patch(uint32_t k, sy_patch_t *p)
         return;
     for (i = 0; SOUNDS[k].kv[i][0] >= 0; i++)
         p->p[SOUNDS[k].kv[i][0]] = sp_clamp((uint32_t)SOUNDS[k].kv[i][0], SOUNDS[k].kv[i][1]);
+    p->cat = SOUNDS[k].cat;
     for (n = 0; n < 16u && SOUNDS[k].name[n]; n++)
         p->name[n] = (char)(SOUNDS[k].name[n] >= 'a' && SOUNDS[k].name[n] <= 'z' ? SOUNDS[k].name[n] - 32
                                                                                   : SOUNDS[k].name[n]);
@@ -161,6 +163,17 @@ static void sy_sound_load(uint32_t k)
     sy_sound = k;
     sy_sound_want = -1;
     sy_ui_touch();
+}
+
+/* the sound playing as HOME shows it: its bank, its number (from 1) and the bank's count; INIT: none (0) */
+static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n)
+{
+    *n = sizeof SOUNDS / sizeof SOUNDS[0];
+    *i = sy_sound + 1u;
+    if (sy_sound < *n)
+        return "STARTER";
+    *i = *n = 0;
+    return "INIT";
 }
 
 /* PRESETS: the next or an earlier starter sound (INIT after the last) */

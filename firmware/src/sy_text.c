@@ -10,6 +10,7 @@ static const char *const SEC_NAMES[SEC_COUNT] = {"OSC A", "OSC B", "SUB", "NOISE
                                                  "DELAY", "REVERB", "OTT", "EQ"};
 static const char *const SEC_SHORT[SEC_COUNT] = {"A", "B", "SUB", "NZ", "FLT", "E1", "E2", "L1", "L2", "VCE", "MAC",
                                                  "MTX", "DRV", "CHO", "DLY", "REV", "OTT", "EQ"};
+static const char *const CAT_NAMES[CAT_COUNT] = {"BASS", "LEAD", "PAD", "PLUCK", "KEYS", "FX", "SEQ", "OTHER"};
 static const char *const PHMODE_NAMES[2] = {"RETRIG", "FREE"};
 static const char *const UMODE_NAMES[2] = {"LINEAR", "SUPER"};
 static const char *const ROUTE_NAMES[2] = {"FILTER", "DIRECT"};

@@ -2,17 +2,20 @@
  * Copyright (C) 2026 brandonmbarone */
 /* STRATA's screen: sy_ui.c's five regions, each drawn on gfx.c's canvas with sy_gfx.c's shapes and sent on its own:
  *   header 240 x 22 at (0, 0): the section, its power light, the page; at the right the oscillator's OCT SEM FIN,
- *     an envelope's or LFO's tabs, the effects that are on; in the MOD layer the banner (the source, what it set);
- *   display 240 x 114 at (0, 22): the window (228 x 110) and the page's graph: the table in 3D (its frames, the
- *     current one, the range its modulation sweeps), one frame in 2D (warped, the unwarped one behind) with the
- *     unison's voices, an envelope (the other one behind, the voices on it), an LFO's cycle (its points, the one
- *     picked, the segment KNOB 4 curves; where the voices are), the tempo and the time signature (a bar's beats),
- *     a list of the section, the palettes;
+ *     an envelope's or LFO's tabs, the effects that are on, the sources into the filter; HOME: the tempo, the voices
+ *     sounding, the load; in the MOD layer the banner (the source, what it set);
+ *   display 240 x 114 at (0, 22): the window (228 x 110) and the page's graph: HOME's sound and its output live (a
+ *     scope), the table in 3D (its frames warped as they play, the current one, the range its modulation sweeps),
+ *     one frame in 2D (warped, the unwarped one behind) with the unison's voices, an envelope (the other one behind,
+ *     the voices on it), an LFO's cycle (its points, the one picked, the segment KNOB 4 curves; where the voices
+ *     are), the tempo and the time signature (a bar's beats), the filter's and the effects' (sy_ui_fx.c), a list of
+ *     the section, the palettes;
  *   knob cells 60 x 76 at (60 k, 136): a dial (the value's arc, the modulation's halos, the pointer) or a list's pill,
- *     the name, the value (the MOD layer: the picked source's depth);
+ *     the name, the value (the MOD layer: the picked source's depth); the knob turning in NOW, its value bold;
  *   footer 240 x 28 at (0, 212): the mod sources' chips (lit: moving something on this page; the MOD layer's pick
- *     filled), or a word for a moment, or a hint (the MENU, an LFO's POINTS);
- * and sy_ui_frame: what changed, the live graphs (voices on an envelope or an LFO, a table being built), the LEDs. */
+ *     filled), or a word for a moment, or a hint (the SETTINGS, an LFO's POINTS);
+ * and sy_ui_frame: what changed, the live graphs (voices on an envelope or an LFO, the scope, the chorus's taps,
+ * OTT's levels, a table being built), the knob turning let go, the LEDs. */
 
 #define R_DISP_Y 22
 #define R_KNOB_Y 136
@@ -21,6 +24,14 @@
 #define WY 4
 #define WW 226
 #define WH 108
+static void ui_g_filter(void);                      /* sy_ui_fx.c: the filter's and the effects' graphs */
+static void ui_g_drive(void);
+static void ui_g_chorus(void);
+static void ui_g_delay(void);
+static void ui_g_reverb(void);
+static void ui_g_ott(void);
+static void ui_g_eq(void);
+static void ui_flag(int32_t x, int32_t y, const char *s);
 
 /* s centred in w px from x0 (y: its line top), cut with an ellipsis when it is wider */
 static void ui_text_c(int32_t x0, int32_t y, int32_t w, const aafont_t *f, const char *s, uint16_t fg, uint16_t bg)
@@ -87,6 +98,26 @@ static void ui_draw_head(void)
     }
     cv_begin(240, 22, sk.ground);
     cv_rect(0, 21, 240, 1, sk.rule);
+    if (pg->graph == G_HOME) {                      /* HOME: the tempo, the voices sounding, the load */
+        int32_t y = CAP_IN(XS, 21), ld = sy_app_load();
+        for (n = 0, s = 0; s < SY_NVOICE; s++)
+            n += sy_v[s].on != 0;
+        cv_text_on(8, CAP_IN(SB, 21), &AF_SB, "HOME", sk.text, sk.ground);
+        x = 232;
+        if (ld >= 0) {
+            sp_put(sp_fix(t, ld, 0u, 0), "%");
+            x = cv_text_r(x, y, &AF_XS, t, sk.text, sk.ground) - 3;
+            x = cv_text_r(x, y, &AF_XS, "CPU", sk.dim, sk.ground) - 8;
+        }
+        x = cv_text_r(x, y, &AF_XS, n == 1u ? "VOICE" : "VOICES", sk.dim, sk.ground) - 3;
+        sp_fix(t, (int32_t)n, 0u, 0);
+        x = cv_text_r(x, y, &AF_XS, t, sk.text, sk.ground) - 8;
+        x = cv_text_r(x, y, &AF_XS, "BPM", sk.dim, sk.ground) - 3;
+        sp_fix(t, ui.bpm, 0u, 0);
+        cv_text_r(x, y, &AF_XS, t, sk.text, sk.ground);
+        cv_blit(0, 0);
+        return;
+    }
     x = 8;
     if ((pw = ui_sec_power(pg->sec)) >= 0) {        /* the power light */
         if (sy_patch.p[pw]) {
@@ -122,12 +153,28 @@ static void ui_draw_head(void)
         case SEC_DELAY:
         case SEC_REVERB:
         case SEC_OTT:
-            for (n = 0, s = SEC_DRIVE; s <= SEC_OTT; s++)
+        case SEC_EQ:
+            for (n = 0, s = SEC_DRIVE; s < SEC_DRIVE + UI_NFX; s++)
                 n += sy_patch.p[ui_sec_power(s)] != 0;
-            e = sp_fix(t, (int32_t)n, 0u, 0);
-            sp_put(e, " OF 5 ON");
-            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, t, sk.dim, sk.ground);
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, " OF 6 ON", sk.dim, sk.ground);
+            sp_fix(t, (int32_t)n, 0u, 0);
+            r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
             break;
+        case SEC_FILTER: {                          /* the sources through it: lit */
+            static const uint16_t ON[4] = {SP_A_ON, SP_B_ON, SP_SUB_ON, SP_NZ_ON};
+            static const uint16_t RT[4] = {SP_A_ROUTE, SP_B_ROUTE, SP_SUB_ROUTE, SP_NZ_ROUTE};
+            static const char *const CH[4] = {"A", "B", "S", "N"};
+            for (s = 0; s < 4u; s++) {
+                int on = sy_patch.p[ON[s]] && !sy_patch.p[RT[s]];
+                int32_t cx = 232 - 13 - (int32_t)(3u - s) * 16;
+                cv_rrect(cx, 4, 13, 13, 2, on ? sk.wmid : sk.track, sk.ground);
+                cv_rrect(cx + 1, 5, 11, 11, 2, on ? sk.wtint : sk.ground, on ? sk.wmid : sk.track);
+                ui_text_c(cx, 4 + CAP_IN(XS, 13), 13, &AF_XS, CH[s], on ? sk.sound : sk.faint,
+                          on ? sk.wtint : sk.ground);
+            }
+            r = 232 - 4 * 16 + 3;
+            break;
+        }
         }
         ui_page_of(ui.page, &n, &of);               /* the page, and its number where there is room */
         e = sp_put(t, pg->name);
@@ -143,35 +190,43 @@ static void ui_draw_head(void)
 }
 
 /* ----------------------------------------------------------------------------------- knob cells --- */
-/* a list's value in its pill, the arrows each side (a long value: the whole pill, no arrows) */
-static void ui_pill(const char *s, int dim)
+/* a list's value in its pill, the arrows each side (a long value: the whole pill, no arrows); act: turning (NOW) */
+static void ui_pill(const char *s, int dim, int act)
 {
-    uint16_t bd = dim ? sk.rule : sk.rline, bg = dim ? sk.pdim : sk.raised, ch = dim ? sk.faint : sk.dim;
+    uint16_t bd = dim ? sk.rule : act ? sk.now : sk.rline, bg = dim ? sk.pdim : sk.raised, ch = dim ? sk.faint : sk.dim;
+    uint16_t fg = dim ? sk.faint : act ? sk.now : sk.text;
     cv_rrect(3, 13, 54, 22, 4, bd, sk.ground);
     cv_rrect(4, 14, 52, 20, 3, bg, bd);
     if (text_w(&AF_XS, s) > 36) {
-        ui_text_c(5, 14 + CAP_IN(XS, 20), 50, &AF_XS, s, dim ? sk.faint : sk.text, bg);
+        ui_text_c(5, 14 + CAP_IN(XS, 20), 50, &AF_XS, s, fg, bg);
         return;
     }
     cv_seg(8.5f, 20.5f, 6.0f, 24.0f, 1.2f, ch);
     cv_seg(6.0f, 24.0f, 8.5f, 27.5f, 1.2f, ch);
     cv_seg(51.5f, 20.5f, 54.0f, 24.0f, 1.2f, ch);
     cv_seg(54.0f, 24.0f, 51.5f, 27.5f, 1.2f, ch);
-    ui_text_c(9, 14 + CAP_IN(XS, 20), 42, &AF_XS, s, dim ? sk.faint : sk.text, bg);
+    ui_text_c(9, 14 + CAP_IN(XS, 20), 42, &AF_XS, s, fg, bg);
 }
 
-/* a dial at t (0..1): the value's arc (bip: from the middle), the knob, the pointer */
-static void ui_dial_at(float t, int bip, int dim)
+/* a dial at t (0..1): the value's arc (bip: from the middle), the knob, the pointer; act: turning (NOW) */
+static void ui_dial_at(float t, int bip, int dim, int act)
 {
     float dx, dy;
-    cv_arc(30.0f, 24.0f, 14.0f, 3.0f, bip ? 0.5f : 0.0f, t, dim ? sk.faint : sk.value);
-    cv_disc(30.0f, 24.0f, 10.0f, sk.dl);
+    cv_arc(30.0f, 24.0f, 14.0f, 3.0f, bip ? 0.5f : 0.0f, t, dim ? sk.faint : act ? sk.now : sk.value);
+    cv_disc(30.0f, 24.0f, 10.0f, act ? sk.now : sk.dl);
     cv_disc(30.0f, 24.0f, 9.0f, sk.disc);
     sy_dial_dir(t, &dx, &dy);
-    cv_seg(30.0f + 3.5f * dx, 24.0f + 3.5f * dy, 30.0f + 8.5f * dx, 24.0f + 8.5f * dy, 1.6f, dim ? sk.dim : sk.text);
+    cv_seg(30.0f + 3.5f * dx, 24.0f + 3.5f * dy, 30.0f + 8.5f * dx, 24.0f + 8.5f * dy, 1.6f,
+           dim ? sk.dim : act ? sk.now : sk.text);
 }
 
-static void ui_dial(uint32_t id, int dim)           /* id's value: its arc, its modulation, the pointer */
+/* a cell's value under its dial: the knob turning in NOW and bold */
+static void ui_cell_value(const char *v, uint16_t c, int act)
+{
+    ui_text_c(0, 58, 60, act ? &AF_SB : &AF_S, v, act ? sk.now : c, sk.ground);
+}
+
+static void ui_dial(uint32_t id, int dim, int act)  /* id's value: its arc, its modulation, the pointer */
 {
     const sp_desc_t *d = &SP[id];
     float t = (float)(sy_patch.p[id] - d->lo) / (float)(d->hi - d->lo), olo, ohi, plo, phi;
@@ -181,12 +236,12 @@ static void ui_dial(uint32_t id, int dim)           /* id's value: its arc, its 
         cv_arc(30.0f, 24.0f, 19.0f, 2.5f, t + olo, t + ohi, ui.mod ? sk.modoff : ohi > 0.0f ? sk.mod : sk.modneg);
     if (phi > plo)
         cv_arc(30.0f, 24.0f, 19.0f, 2.5f, t + plo, t + phi, phi > 0.0f ? sk.mod : sk.modneg);
-    ui_dial_at(t, d->lo < 0, dim);
+    ui_dial_at(t, d->lo < 0, dim, act);
 }
 
 /* an LFO's POINTS page, KNOB 1-4: the point picked of the points (a pill), its place, its level, the curve from it
  * (the last point: into it); the place dim for the first and the last (they stay at the ends) */
-static void ui_lfo_cell(int32_t id)
+static void ui_lfo_cell(int32_t id, int act)
 {
     static const char *const NAME[4] = {"POINT", "TIME", "LEVEL", "CURVE"};
     uint32_t k = ui_lfo(), i;
@@ -197,56 +252,58 @@ static void ui_lfo_cell(int32_t id)
     i = ui_lpt(k, d);
     if (id == UI_LPT) {
         sp_fix(sp_put(sp_fix(t, (int32_t)i + 1, 0u, 0), "/"), d->n, 0u, 0);
-        ui_pill(t, dim);
+        ui_pill(t, dim, act);
     } else {
         int32_t v = id == UI_LX ? d->x[i] : id == UI_LY ? d->y[i] : d->c[i + 1u < d->n ? i : i - 1u];
         int still = dim || (id == UI_LX && (i == 0u || i + 1u == d->n));
         cv_arc(30.0f, 24.0f, 14.0f, 3.0f, 0.0f, 1.0f, sk.track);
-        ui_dial_at(id == UI_LX ? (float)v * 0.001f : (float)(v + 1000) * 0.0005f, id != UI_LX, still);
+        ui_dial_at(id == UI_LX ? (float)v * 0.001f : (float)(v + 1000) * 0.0005f, id != UI_LX, still, act && !still);
         sp_put(sp_fix(t, v, 1u, id != UI_LX), "%");
-        ui_text_c(0, 58, 60, &AF_S, t, still ? sk.dim : sk.text, sk.ground);
+        ui_cell_value(t, still ? sk.dim : sk.text, act && !still);
     }
-    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_LPT], dim ? sk.faint : sk.label, sk.ground);
+    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_LPT], dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
 }
 
 /* GLOBAL, KNOB 1-3: BPM (a dial), TS-BEAT, TS-NOTE (pills) */
-static void ui_tempo_cell(int32_t id)
+static void ui_tempo_cell(int32_t id, int act)
 {
     static const char *const NAME[3] = {"BPM", "TS-BEAT", "TS-NOTE"};
     char t[8];
     int dim = ui.mod != 0;
     if (id == UI_BPM) {
         cv_arc(30.0f, 24.0f, 14.0f, 3.0f, 0.0f, 1.0f, sk.track);
-        ui_dial_at((float)(ui.bpm - 20u) * (1.0f / 280.0f), 0, dim);
+        ui_dial_at((float)(ui.bpm - 20u) * (1.0f / 280.0f), 0, dim, act);
         sp_fix(t, ui.bpm, 0u, 0);
-        ui_text_c(0, 58, 60, &AF_S, t, dim ? sk.dim : sk.text, sk.ground);
+        ui_cell_value(t, dim ? sk.dim : sk.text, act);
     } else {
         sp_fix(t, id == UI_TSB ? ui.tsb : UI_TSN_VAL[ui.tsn], 0u, 0);
-        ui_pill(t, dim);
+        ui_pill(t, dim, act);
     }
-    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : sk.label, sk.ground);
+    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_BPM], dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
 }
 
 static void ui_draw_knob(uint32_t k)
 {
     int32_t id = UI_PG[ui.page].id[k];
+    int act = ui.act_k == k && !ui.mod;             /* (the knob turning) */
     char t[SP_TEXT_N + 4];
     cv_begin(60, 76, sk.ground);
     if (id >= UI_BPM) {
-        ui_tempo_cell(id);
+        ui_tempo_cell(id, act);
     } else if (id >= UI_LPT) {
-        ui_lfo_cell(id);
-    } else if (id >= UI_ITEM) {                     /* the MENU's items */
-        ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0);
-        ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", sk.label, sk.ground);
+        ui_lfo_cell(id, act);
+    } else if (id >= UI_ITEM) {                     /* the SETTINGS' items */
+        ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0, act);
+        ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", act ? sk.now : sk.label, sk.ground);
     } else if (id >= 0) {
         int dim = ui.mod && !(SP[id].flags & F_MOD);
         int32_t e = ui_eff(id);                     /* (RATE, TIME with SYNC FIXED: the note value, under their name) */
+        const char *name = id >= SP_MAC1 && id <= SP_MAC4 ? sy_patch.macro[id - SP_MAC1] : SP[id].name;
         if (ui_list((uint32_t)e)) {
             sp_text((uint32_t)e, sy_patch.p[e], t);
-            ui_pill(t, dim);
+            ui_pill(t, dim, act);
         } else {
-            ui_dial((uint32_t)e, dim);
+            ui_dial((uint32_t)e, dim, act);
             if (ui.mod) {                           /* the picked source's depth here */
                 int32_t a = dim ? 0 : ui_depth(ui.mod_src, (uint32_t)id);
                 if (a)
@@ -256,10 +313,10 @@ static void ui_draw_knob(uint32_t k)
                 ui_text_c(0, 58, 60, &AF_S, t, a ? sk.mnear : sk.dim, sk.ground);
             } else {
                 sp_text((uint32_t)e, sy_patch.p[e], t);
-                ui_text_c(0, 58, 60, &AF_S, t, sk.text, sk.ground);
+                ui_cell_value(t, sk.text, act);
             }
         }
-        ui_text_c(0, 46, 60, &AF_XS, SP[id].name, dim ? sk.faint : sk.label, sk.ground);
+        ui_text_c(0, 46, 60, &AF_XS, name, dim ? sk.faint : act ? sk.now : sk.label, sk.ground);
     }
     cv_blit(60u * k, R_KNOB_Y);
 }
@@ -340,19 +397,45 @@ static int ui_mod_word(uint32_t id, char *t)
     return 0;
 }
 
-/* OSC: the table's frames in 3D, front to back up and to the right, the current one on top */
+/* the phases a warp reads across a frame's 132 columns (sy_osc.c osc_warp_q: what the oscillator plays; FM is no map:
+ * as it is) */
+static void ui_warp_cols(uint32_t mode, float amt, float *q)
+{
+    uint32_t j;
+    float slope;
+    for (j = 0; j < 132u; j++)
+        q[j] = mode == WARP_OFF || mode == WARP_FM ? (float)j / 131.0f : osc_warp_q(mode, amt, (float)j / 131.0f, &slope);
+}
+
+/* the frame playing (between two) through phases q, at its depth */
+static void ui_wt_now(const wt_table_t *t, float cur, const float *q, float base, float *ys)
+{
+    uint32_t n = t->n, k0 = (uint32_t)sy_floori(cur), k1 = k0 + 1u < n ? k0 + 1u : k0, j;
+    float u = cur - (float)k0;
+    const int16_t *f0 = wt_frame(t, k0, 2u), *f1 = wt_frame(t, k1, 2u);
+    for (j = 0; j < 132u; j++) {
+        float a = ui_wave_at(f0, q[j]);
+        ys[j] = base - (a + (ui_wave_at(f1, q[j]) - a) * u) * 18.0f;
+    }
+}
+
+/* OSC: the table's frames in 3D, front to back up and to the right, each through the warp as it plays, the current
+ * one on top; WARP or AMOUNT turning: the current frame before the turn dashed behind it */
 static void ui_g_wt3d(void)
 {
-    uint32_t o = ui_osc(), b = UI_OB(o), n, k, j;
+    uint32_t o = ui_osc(), b = UI_OB(o), n, k, j, mode = (uint32_t)sy_patch.p[SP_A_WARP + b];
     const wt_table_t *t = &wt_tab[o];
-    float ys[132], pos, cur, dcur, olo, ohi, plo, phi, lo, hi;
+    const sy_patch_t *gh = ui_ghost();
+    int32_t act = ui_act_id();
+    float ys[132], q[132], pos, cur, dcur, olo, ohi, plo, phi, lo, hi, amt = (float)sy_patch.p[SP_A_WAMT + b] * 0.001f;
     char w[32];
-    int emph;
+    int emph, warping = act == (int32_t)(SP_A_WARP + b) || act == (int32_t)(SP_A_WAMT + b);
     if (t->busy || !t->n) {
         ui_text_c(WX, WY + 46, WW, &AF_XS, "BUILDING THE TABLE", sk.dim, sk.display);
         return;
     }
     n = t->n;
+    ui_warp_cols(mode, amt, q);
     pos = (float)sy_patch.p[SP_A_POS + b] * 0.001f;
     cur = pos * (float)(n - 1u);
     dcur = n > 1u ? cur * 15.0f / (float)(n - 1u) : 0.0f;
@@ -367,7 +450,7 @@ static void ui_g_wt3d(void)
         int32_t x0 = sy_floori((float)WX + 10.0f + dep * 4.6f + 0.5f);
         uint16_t c;
         for (j = 0; j < 132u; j++)
-            ys[j] = base - ui_wave_at(f, (float)j / 131.0f) * 18.0f;
+            ys[j] = base - ui_wave_at(f, q[j]) * 18.0f;
         cv_under(x0, ys, 132u, base + 19.0f, sk.display);
         if (emph) {
             float d0 = sy_clampf(pos + plo, 0.0f, 1.0f) * 15.0f, d1 = sy_clampf(pos + phi, 0.0f, 1.0f) * 15.0f;
@@ -380,15 +463,23 @@ static void ui_g_wt3d(void)
         cv_curve(x0, ys, 132u, 1.0f, c);
     }
     {                                               /* the frame playing: between two, at its depth */
-        uint32_t k0 = (uint32_t)sy_floori(cur), k1 = k0 + 1u < n ? k0 + 1u : k0;
-        float u = cur - (float)k0, base = (float)WY + 80.0f - dcur * 3.4f;
-        const int16_t *f0 = wt_frame(t, k0, 2u), *f1 = wt_frame(t, k1, 2u);
+        float base = (float)WY + 80.0f - dcur * 3.4f;
         int32_t x0 = sy_floori((float)WX + 10.0f + dcur * 4.6f + 0.5f);
-        for (j = 0; j < 132u; j++) {
-            float p = (float)j / 131.0f, a = ui_wave_at(f0, p);
-            ys[j] = base - (a + (ui_wave_at(f1, p) - a) * u) * 18.0f;
+        if (gh && warping) {                        /* (before the turn) */
+            float g[132];
+            ui_warp_cols((uint32_t)gh->p[SP_A_WARP + b], (float)gh->p[SP_A_WAMT + b] * 0.001f, g);
+            ui_wt_now(t, cur, g, base, ys);
+            cv_curve_dash(x0, ys, 132u, 1.0f, sk.ghost, 3u, 2u);
         }
+        ui_wt_now(t, cur, q, base, ys);
         cv_curve(x0, ys, 132u, 1.6f, sk.now);
+        if (warping) {
+            char *e = sp_put(sp_put(w, WARP_NAMES[mode < WARP_COUNT ? mode : 0]), " ");
+            sp_put(sp_fix(e, sy_patch.p[SP_A_WAMT + b], 1u, 0), "%");
+            if (mode == WARP_OFF)
+                sp_put(w, "WARP OFF");
+            ui_flag(x0 + 40, sy_floori(base) - 36, w);
+        }
     }
     if (hi > lo) {                                  /* the range modulation sweeps: a bracket at the right */
         float d0 = sy_clampf(pos + lo, 0.0f, 1.0f) * 15.0f, d1 = sy_clampf(pos + hi, 0.0f, 1.0f) * 15.0f;
@@ -400,7 +491,13 @@ static void ui_g_wt3d(void)
     }
     sp_put(sp_put(sp_put(w, WT_NAMES[t->id]), " \xB7 "), WT_CATNAMES[WT_RECIPES[t->id].cat]);
     ui_label(0, 1, w, sk.dim);
-    ui_label(-1, 1, "3D", sk.dim);
+    if (mode != WARP_OFF) {                         /* the warp the frames show (FM: by the other oscillator) */
+        char *e = sp_put(sp_put(w, "3D \xB7 "), WARP_NAMES[mode < WARP_COUNT ? mode : 0]);
+        sp_put(sp_fix(sp_put(e, " "), sy_patch.p[SP_A_WAMT + b], 1u, 0), "%");
+        ui_label(-1, 1, w, warping ? sk.now : sk.dim);
+    } else {
+        ui_label(-1, 1, "3D", sk.dim);
+    }
     {
         char *e = sp_put(w, "FRAME ");
         int32_t x = WX + 6 + text_w(&AF_XS, w);
@@ -451,7 +548,7 @@ static void ui_g_wt2d(int strip)
     cv_text_on(WX + 6 + text_w(&AF_XS, "FRAME "), WY + 4, &AF_XS, e, sk.now, sk.display);
     e = sp_put(sp_put(w, "2D  "), WARP_NAMES[mode < WARP_COUNT ? mode : 0]);
     if (mode != WARP_OFF)
-        ui_pct(sp_put(e, " "), sy_patch.p[SP_A_WAMT + b]);
+        sp_put(sp_fix(sp_put(e, " "), sy_patch.p[SP_A_WAMT + b], 1u, 0), "%");
     ui_label(-1, 1, w, sk.dim);
     if (strip) {                                    /* the unison: n voices over +-DETUNE cents (150 x DETUNE^2) */
         uint32_t nv = (uint32_t)sy_patch.p[SP_A_UNI + b], umode = (uint32_t)sy_patch.p[SP_A_UMODE + b];
@@ -697,32 +794,106 @@ static void ui_g_list(void)
     }
 }
 
-/* MENU > COLOR: the palettes, each with its own ground, raised, sound, now, value and mod */
+/* SETTINGS > COLOR: the palettes, each with its own ground, raised, sound, now, value and mod */
 static void ui_g_color(void)
 {
     uint32_t i, j;
     for (i = 0; i < SY_NPAL; i++) {
-        int32_t y = WY + 3 + (int32_t)i * 15, cur = i == ui.pal;
+        int32_t y = WY + 2 + (int32_t)i * 13, cur = i == ui.pal;
         static const uint8_t ROLE[6] = {PR_GROUND, PR_RAISED, PR_SOUND, PR_NOW, PR_VALUE, PR_MOD};
-        static const char *const TAG[SY_NPAL] = {"DEFAULT", "", "", "", "LIGHT", "DIM", "CONTRAST"};
+        static const char *const TAG[SY_NPAL] = {"DEFAULT", "", "", "", "LIGHT", "DIM", "CONTRAST", "GREYS"};
         uint16_t bg = cur ? sk.raised : sk.display;
         if (cur) {
-            cv_rrect(WX + 2, y, WW - 4, 14, 2, sk.rline2, sk.display);
-            cv_rrect(WX + 3, y + 1, WW - 6, 12, 2, sk.raised, sk.rline2);
-            cv_seg((float)WX + 7.0f, (float)y + 4.0f, (float)WX + 9.5f, (float)y + 7.0f, 1.2f, sk.now);
-            cv_seg((float)WX + 9.5f, (float)y + 7.0f, (float)WX + 7.0f, (float)y + 10.0f, 1.2f, sk.now);
+            cv_rrect(WX + 2, y, WW - 4, 13, 2, sk.rline2, sk.display);
+            cv_rrect(WX + 3, y + 1, WW - 6, 11, 2, sk.raised, sk.rline2);
+            cv_seg((float)WX + 7.0f, (float)y + 3.5f, (float)WX + 9.5f, (float)y + 6.5f, 1.2f, sk.now);
+            cv_seg((float)WX + 9.5f, (float)y + 6.5f, (float)WX + 7.0f, (float)y + 9.5f, 1.2f, sk.now);
         }
-        cv_text_on(WX + 14, y + CAP_IN(XS, 14), &AF_XS, SY_PAL[i].name, cur ? sk.text : sk.text2, bg);
+        cv_text_on(WX + 14, y + CAP_IN(XS, 13), &AF_XS, SY_PAL[i].name, cur ? sk.text : sk.text2, bg);
         for (j = 0; j < 6u; j++) {
             int32_t x = WX + 70 + (int32_t)j * 13;
-            cv_rrect(x, y + 3, 11, 9, 2, sk.rline, bg);
-            cv_rrect(x + 1, y + 4, 9, 7, 1, sy_rgb(SY_PAL[i].c[ROLE[j]]), sk.rline);
+            cv_rrect(x, y + 3, 11, 8, 2, sk.rline, bg);
+            cv_rrect(x + 1, y + 4, 9, 6, 1, sy_rgb(SY_PAL[i].c[ROLE[j]]), sk.rline);
         }
-        cv_text_r(WX + WW - 8, y + CAP_IN(XS, 14), &AF_XS, TAG[i], cur ? sk.label : sk.faint, bg);
+        cv_text_r(WX + WW - 8, y + CAP_IN(XS, 13), &AF_XS, TAG[i], cur ? sk.label : sk.faint, bg);
     }
 }
 
-static void ui_draw_disp(void)
+/* HOME: the sound playing (its category, its bank and number, its name large) and its output, live: the left
+ * (SOUND) over the right, three periods of the newest voice's note across (sy_engine.c's scope, kept here) */
+#define UI_SCOPE_Y (WY + 87)                        /* the scope's 0 */
+#define UI_LIVE_R0 (WY + 68)                        /* .. its rows, from here: redrawn alone (D_LIVE) */
+static int16_t ui_scope[2][SY_SCOPE_N];
+static uint8_t ui_scope_ok;
+
+static uint32_t ui_scope_step(void)                 /* samples a point: three periods of the newest note across */
+{
+    const sy_voice_t *nv = 0;
+    uint32_t i;
+    float hz;
+    for (i = 0; i < SY_NVOICE; i++)
+        if (sy_v[i].on && (!nv || sy_v[i].age > nv->age))
+            nv = &sy_v[i];
+    if (!nv)
+        return 4u;
+    hz = 440.0f * sy_exp2f((nv->pitch - 69.0f) * (1.0f / 12.0f));
+    return (uint32_t)sy_clampi(sy_floori(3.0f * SY_FS / hz / (float)SY_SCOPE_N) + 1, 1, 16);
+}
+
+static void ui_g_home(void)
+{
+    uint32_t i, num, cnt;
+    const char *bank = sy_app_sound_bank(&num, &cnt);
+    const char *cat = CAT_NAMES[sy_patch.cat < CAT_COUNT ? sy_patch.cat : CAT_OTHER];
+    float yl[SY_SCOPE_N], yr[SY_SCOPE_N];
+    int32_t x, w = text_w(&AF_XS, cat) + 10;
+    char t[24];
+    cv_rrect(WX + 6, WY + 6, w, 14, 3, sk.rline, sk.display);   /* the category */
+    cv_rrect(WX + 7, WY + 7, w - 2, 12, 2, sk.raised, sk.rline);
+    ui_text_c(WX + 6, WY + 6 + CAP_IN(XS, 14), w, &AF_XS, cat, sk.label, sk.raised);
+    x = WX + WW - 6;                                /* "STARTER 02 / 08" */
+    if (cnt) {
+        t[0] = (char)('0' + cnt / 10u % 10u);
+        t[1] = (char)('0' + cnt % 10u);
+        t[2] = 0;
+        x = cv_text_r(x, WY + 7, &AF_XS, t, sk.dim, sk.display);
+        x = cv_text_r(x, WY + 7, &AF_XS, " / ", sk.dim, sk.display);
+        t[0] = (char)('0' + num / 10u % 10u);
+        t[1] = (char)('0' + num % 10u);
+        x = cv_text_r(x, WY + 7, &AF_XS, t, sk.text, sk.display);
+        cv_text_r(x - 4, WY + 7, &AF_XS, bank, sk.dim, sk.display);
+    } else {
+        cv_text_r(x, WY + 7, &AF_XS, bank, sk.dim, sk.display);
+    }
+    text_fit(t, sizeof t, sy_patch.name, &AF_L, WW - 12);   /* the name */
+    cv_text_on(WX + 6, WY + 24, &AF_L, t, sk.text, sk.display);
+    cv_seg((float)WX + 10.0f, (float)WY + 57.0f, (float)WX + 7.5f, (float)WY + 60.5f, 1.2f, sk.dim);
+    cv_seg((float)WX + 7.5f, (float)WY + 60.5f, (float)WX + 10.0f, (float)WY + 64.0f, 1.2f, sk.dim);
+    x = cv_text_on(WX + 14, WY + 55, &AF_XS, "PRESETS", sk.dim, sk.display) + 4;
+    cv_seg((float)x, (float)WY + 57.0f, (float)x + 2.5f, (float)WY + 60.5f, 1.2f, sk.dim);
+    cv_seg((float)x + 2.5f, (float)WY + 60.5f, (float)x, (float)WY + 64.0f, 1.2f, sk.dim);
+    cv_text_on(x + 10, WY + 55, &AF_XS, "TURN TO BROWSE", sk.faint, sk.display);
+    cv_text_r(WX + WW - 6, WY + 55, &AF_XS, "OUT L / R", sk.faint, sk.display);
+    cv_rect(WX + 7, UI_SCOPE_Y, SY_SCOPE_N, 1, sk.grid2);
+    {                                               /* the peak to 16 px (quiet: at most x4, full scale 17 px) */
+        int32_t pk = 2048;
+        float g;
+        for (i = 0; ui_scope_ok && i < 2u * SY_SCOPE_N; i++) {
+            int32_t v = ui_scope[i / SY_SCOPE_N][i % SY_SCOPE_N];
+            pk = v > pk ? v : -v > pk ? -v : pk;
+        }
+        g = sy_minf(16.0f / (float)pk, 68.0f / 32768.0f);
+        for (i = 0; i < SY_SCOPE_N; i++) {
+            yl[i] = (float)UI_SCOPE_Y + 0.5f - (ui_scope_ok ? (float)ui_scope[0][i] * g : 0.0f);
+            yr[i] = (float)UI_SCOPE_Y + 0.5f - (ui_scope_ok ? (float)ui_scope[1][i] * g : 0.0f);
+        }
+    }
+    cv_curve(WX + 7, yr, SY_SCOPE_N, 1.0f, sk.wmid);
+    cv_curve(WX + 7, yl, SY_SCOPE_N, 1.2f, sk.sound);
+}
+
+/* the display; from row r0 only (0: all of it): HOME's scope alone */
+static void ui_draw_disp(uint32_t r0)
 {
     uint16_t line = ui.mod ? sk.mline : sk.dline;
     cv_begin(240, 114, sk.ground);
@@ -736,9 +907,17 @@ static void ui_draw_disp(void)
     case G_LFO: ui_g_lfo(); break;
     case G_TEMPO: ui_g_tempo(); break;
     case G_COLOR: ui_g_color(); break;
+    case G_HOME: ui_g_home(); break;
+    case G_FILTER: ui_g_filter(); break;
+    case G_DRIVE: ui_g_drive(); break;
+    case G_CHORUS: ui_g_chorus(); break;
+    case G_DELAY: ui_g_delay(); break;
+    case G_REVERB: ui_g_reverb(); break;
+    case G_OTT: ui_g_ott(); break;
+    case G_EQ: ui_g_eq(); break;
     default: ui_g_list(); break;
     }
-    cv_blit(0, R_DISP_Y);
+    cv_blit_from(0, R_DISP_Y, r0);
 }
 
 /* ------------------------------------------------------------------------------------------ LEDs --- */
@@ -778,19 +957,48 @@ static void sy_ui_leds(void)
 }
 
 /* ------------------------------------------------------------------------------------------ frame --- */
-/* a frame (~60 a second): the live graphs, then each region that changed, then the LEDs */
+/* a frame (~60 a second): the knob turning let go, the live graphs, then each region that changed, then the LEDs */
 static void sy_ui_frame(void)
 {
-    uint32_t g = UI_PG[ui.page].graph, i, live = 0;
-    static uint8_t was_live, was_busy;
+    uint32_t g = UI_PG[ui.page].graph, i, live = 0, nv = 0;
+    static uint8_t was_live, was_busy, was_nv;
+    static uint32_t load_t;
+    if (ui.act_k < 4u && fm1_ms - ui.act_t >= UI_GESTURE_MS) {   /* (its cell, the graph as it rests) */
+        ui.dirty |= D_KNOB(ui.act_k) | D_DISP;
+        ui.act_k = 0xFF;
+    }
+    for (i = 0; i < SY_NVOICE; i++)
+        nv += sy_v[i].on != 0;
     if (g == G_ENV || g == G_LFO)
-        for (i = 0; i < SY_NVOICE; i++)
-            live |= sy_v[i].on;
+        live = nv != 0;
+    else if (g == G_CHORUS || g == G_OTT)           /* the chorus's taps, OTT's levels: while it is on */
+        live = sy_patch.p[g == G_CHORUS ? SP_CH_ON : SP_OT_ON] != 0;
     if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {   /* the voices move on the envelope, the LFO */
         ui.live_t = fm1_ms;
         ui.dirty |= D_DISP;
         was_live = (uint8_t)live;
     }
+    if (g == G_HOME) {                              /* the scope: a capture kept, the next asked for */
+        if (sy_scope.st == 2u) {
+            SY_CBAR();
+            memcpy(ui_scope, sy_scope.v, sizeof ui_scope);
+            ui_scope_ok = 1;
+            sy_scope_arm(ui_scope_step());
+            if (fm1_ms - ui.live_t >= 40u) {
+                ui.live_t = fm1_ms;
+                ui.dirty |= D_LIVE;
+            }
+        } else if (sy_scope.st == 0u) {
+            sy_scope_arm(ui_scope_step());
+        }
+        if (nv != was_nv || (sy_app_load() >= 0 && fm1_ms - load_t >= 500u)) {   /* the voices, the load */
+            load_t = fm1_ms;
+            ui.dirty |= D_HEAD;
+        }
+    } else if (sy_scope.st == 1u) {
+        sy_scope.st = 0;                            /* (another page: no capture) */
+    }
+    was_nv = (uint8_t)nv;
     if (g == G_WT3D || g == G_WT2D || g == G_UNI) {
         uint8_t busy = wt_tab[ui_osc()].busy;
         if (busy != was_busy)
@@ -807,8 +1015,11 @@ static void sy_ui_frame(void)
         ui_draw_head();
     }
     if (ui.dirty & D_DISP) {
-        ui.dirty &= (uint8_t)~D_DISP;
-        ui_draw_disp();
+        ui.dirty &= (uint8_t)~(D_DISP | D_LIVE);
+        ui_draw_disp(0u);
+    } else if (ui.dirty & D_LIVE) {
+        ui.dirty &= (uint8_t)~D_LIVE;
+        ui_draw_disp(UI_LIVE_R0);
     }
     if (ui.dirty & D_FOOT) {
         ui.dirty &= (uint8_t)~D_FOOT;

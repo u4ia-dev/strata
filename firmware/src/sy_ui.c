@@ -5,11 +5,15 @@
  *     draws. A family button shows its sections' pages: a tap, the next page (EDIT: of the section ALGORITHM
  *     picked; the other families through all of theirs); ALGORITHM picks the family's section, SELECT steps its
  *     pages; OCT- / OCT+ with a family button (or REC) held, the section's pages, round (the octave stays, the
- *     button's release and hold do nothing). HOME held: the MENU (COLOR: the palette; ACCEL: the knobs' feel).
- *     GLO's GLOBAL page: BPM (20-300), TS-BEAT (1-16 beats a bar), TS-NOTE (the note a beat is: 1 2 4 8 16).
+ *     button's release and hold do nothing). HOME: the sound playing, the macros, the output live; HOME held 5 s:
+ *     the SETTINGS (COLOR: the palette; ACCEL: the knobs' feel; a countdown in the footer from HOLD). FX: DRIVE,
+ *     CHORUS, DELAY, REVERB, OTT, EQ. GLO's GLOBAL page: BPM (20-300), TS-BEAT (1-16 beats a bar), TS-NOTE (the
+ *     note a beat is: 1 2 4 8 16).
  *   - Knobs: speed-sensitive (a slow turn 0.1 % a detent, a quick one up to 5 %; ACCEL OFF: 1 % a detent); a list,
  *     a count or a short range one value a detent. An LFO's RATE and the delay's TIME with SYNC FIXED set a note
- *     value (the MOD layer: RATE and TIME themselves, whose modulation steps it).
+ *     value (the MOD layer: RATE and TIME themselves, whose modulation steps it). A knob turning lights its cell, and
+ *     on the filter's and the effects' pages the part of the graph it moves, its value in a flag, the shape before
+ *     the turn dashed behind, until the gesture ends (UI_GESTURE_MS without a turn).
  *   - SAVE + OCT- undoes, SAVE + OCT+ redoes: the patch's last 8 states (an edit gesture or a sound's load each).
  *   - An LFO's POINTS page: KNOB 1 picks a point (round), KNOB 2 moves it along the cycle (between its
  *     neighbours; the first and last stay at the ends), KNOB 3 up and down, KNOB 4 curves the segment from it (the
@@ -22,21 +26,24 @@
  *     at 0. ENV held: the same for ENV 2 (an envelope onto a knob).
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
- * Still to come: the LFO, FX, GLO and SCL layers, presets and SAVE, MIDI learn, help, the rest of the MENU, the
- * graphs of the filter, the matrix and the rack. Needs sy_app.c's keys and sounds (declared here),
- * panel.c, gfx.c, sy_gfx.c, the engine and sy_text.c. */
+ * Still to come: the LFO, FX, GLO and SCL layers, presets and SAVE, MIDI learn, help, the rest of the SETTINGS,
+ * the matrix's graph. Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
+ * sy_text.c. */
 
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
 static void sy_app_octave(int32_t d);               /* .. OCT- / OCT+ */
 static int32_t sy_app_oct(void);
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
+static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
+static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
 
 /* ------------------------------------------------------------------------------------------- pages --- */
-#define UI_ITEM 1000                        /* an item that is no parameter: the MENU's, an LFO's points, GLOBAL's */
+#define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
 enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN };
-#define SEC_MENU SEC_COUNT                          /* (sections of the UI's own) */
+#define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
-enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR };
+enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
+       G_REVERB, G_OTT, G_EQ };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -63,8 +70,8 @@ static const ui_page_t UI_PG[] = {
     {SEC_SUB, G_LIST, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, SP_SUB_ON, -1}},
     {SEC_NOISE, G_LIST, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
     {SEC_NOISE, G_LIST, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, SP_NZ_ON, -1}},
-    {SEC_FILTER, G_LIST, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
-    {SEC_FILTER, G_LIST, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, SP_F_ON}},
+    {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
+    {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, SP_F_ON}},
     UI_ENV(E1, SEC_ENV1)
     UI_ENV(E2, SEC_ENV2)
     UI_LFO(L1, SEC_LFO1)
@@ -72,30 +79,33 @@ static const ui_page_t UI_PG[] = {
     {SEC_VOICE, G_LIST, "VOICE", {SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE}},
     {SEC_VOICE, G_LIST, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
-    {SEC_MACRO, G_LIST, "MACROS", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
+    {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
     {SEC_MATRIX, G_LIST, "SLOT 1", {SP_M1_SRC, SP_M1_DST, SP_M1_AMT, -1}},
-    {SEC_DRIVE, G_LIST, "DRIVE", {SP_DR_TYPE, SP_DR_AMT, SP_DR_TONE, SP_DR_MIX}},
-    {SEC_DRIVE, G_LIST, "POWER", {SP_DR_ON, -1, -1, -1}},
-    {SEC_CHORUS, G_LIST, "CHORUS", {SP_CH_RATE, SP_CH_DEPTH, SP_CH_DELAY, SP_CH_MIX}},
-    {SEC_CHORUS, G_LIST, "MORE", {SP_CH_FDBK, SP_CH_ON, -1, -1}},
-    {SEC_DELAY, G_LIST, "DELAY", {SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK}},
-    {SEC_DELAY, G_LIST, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, SP_DL_ON}},
-    {SEC_REVERB, G_LIST, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX}},
-    {SEC_REVERB, G_LIST, "TONE", {SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT}},
-    {SEC_REVERB, G_LIST, "POWER", {SP_RV_ON, -1, -1, -1}},
-    {SEC_OTT, G_LIST, "OTT", {SP_OT_DEPTH, SP_OT_TIME, SP_OT_UP, SP_OT_DOWN}},
-    {SEC_OTT, G_LIST, "BANDS", {SP_OT_LOW, SP_OT_MID, SP_OT_HIGH, SP_OT_ON}},
+    {SEC_DRIVE, G_DRIVE, "DRIVE", {SP_DR_TYPE, SP_DR_AMT, SP_DR_TONE, SP_DR_MIX}},
+    {SEC_DRIVE, G_DRIVE, "POWER", {SP_DR_ON, -1, -1, -1}},
+    {SEC_CHORUS, G_CHORUS, "CHORUS", {SP_CH_RATE, SP_CH_DEPTH, SP_CH_DELAY, SP_CH_MIX}},
+    {SEC_CHORUS, G_CHORUS, "MORE", {SP_CH_FDBK, SP_CH_ON, -1, -1}},
+    {SEC_DELAY, G_DELAY, "DELAY", {SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK}},
+    {SEC_DELAY, G_DELAY, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, SP_DL_ON}},
+    {SEC_REVERB, G_REVERB, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX}},
+    {SEC_REVERB, G_REVERB, "TONE", {SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT}},
+    {SEC_REVERB, G_REVERB, "POWER", {SP_RV_ON, -1, -1, -1}},
+    {SEC_OTT, G_OTT, "OTT", {SP_OT_DEPTH, SP_OT_TIME, SP_OT_UP, SP_OT_DOWN}},
+    {SEC_OTT, G_OTT, "BANDS", {SP_OT_LOW, SP_OT_MID, SP_OT_HIGH, SP_OT_ON}},
+    {SEC_EQ, G_EQ, "GAIN", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
+    {SEC_EQ, G_EQ, "FREQ", {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_Q, SP_EQ_HFREQ}},
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_ACCEL, -1, -1}},
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
 
 /* the families: the sections each button shows (0xFF ends) */
 enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_N };
-static const uint8_t FAM_SECS[FAM_N][6] = {
+static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
-    {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_MATRIX, 0xFF}, {SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, 0xFF},
+    {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_MATRIX, 0xFF}, {SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, 0xFF},
     {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
 };
+#define UI_NFX 6u                                   /* the effects, SEC_DRIVE .. SEC_EQ */
 static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB};
 
 /* the MOD layer's white keys, F3 .. G5: the sources (black keys: none) */
@@ -114,6 +124,7 @@ static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", 
 #define D_KNOBS 60u
 #define D_FOOT 64u
 #define D_ALL 127u
+#define D_LIVE 128u                                 /* the display's live rows alone (HOME's scope) */
 #define UI_DTAP_MS 300u                             /* a second tap within this: a double tap (it latches) */
 static struct {
     uint16_t page;
@@ -133,7 +144,9 @@ static struct {
     uint16_t bt_chord;                              /* .. held while OCT stepped the pages (no tap, no layer) */
     uint16_t prev_page;                             /* the page before the last tap (a double tap puts it back) */
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
-    uint8_t ldel, ldel_s;                           /* LFO held on POINTS: the delete's countdown; its seconds shown */
+    uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
+    uint8_t act_k;                                  /* the knob turning (its cell lit; 0xFF none) */
+    uint32_t act_t;                                 /* .. its last detent */
     uint16_t bpm;                                   /* GLOBAL: BPM, TS-BEAT, TS-NOTE (UI_TSN_VAL's index) */
     uint8_t tsb, tsn;
     uint8_t h_first, h_cnt, h_at;                   /* the history (ui_hist): its oldest, its states, the patch's place */
@@ -157,7 +170,7 @@ static void ui_toast(const char *s)
 
 /* ------------------------------------------------------------------------------------------ helpers --- */
 static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
-static const char *ui_sec_name(uint32_t s) { return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "MENU" : "GLOBAL"; }
+static const char *ui_sec_name(uint32_t s) { return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : "GLOBAL"; }
 
 static int32_t ui_sec_power(uint32_t s)            /* a section's ON (its header light), -1 none */
 {
@@ -172,6 +185,7 @@ static int32_t ui_sec_power(uint32_t s)            /* a section's ON (its header
     case SEC_DELAY: return SP_DL_ON;
     case SEC_REVERB: return SP_RV_ON;
     case SEC_OTT: return SP_OT_ON;
+    case SEC_EQ: return SP_EQ_ON;
     }
     return -1;
 }
@@ -530,10 +544,23 @@ static void ui_lfo_add(void)
     ui_pts_done(k);
 }
 
-/* LFO held UI_DEL_MS on the POINTS page: the point picked goes (not the first or the last), the one before it
- * picked. From HOLD a countdown in the footer; let go, a knob, another button, OCT's pages (a chord), another page
- * or the MOD layer stop it */
-#define UI_DEL_MS 5000u
+/* a long hold, UI_LONG_MS: LFO on the POINTS page deletes the point picked (not the first or the last; the one before
+ * it picked), HOME opens the SETTINGS. From HOLD a countdown in the footer; let go, a knob, another button, OCT's
+ * pages (a chord), another page or the MOD layer stop it */
+#define UI_LONG_MS 5000u
+static void ui_cd_arm(uint32_t b)
+{
+    ui.cd_btn = (uint8_t)b;
+    ui.cd_s = 0;
+}
+static void ui_cd_stop(void)
+{
+    if (ui.cd_btn == NB)
+        return;
+    ui.cd_btn = NB;
+    ui.toast[0] = 0;
+    ui.dirty |= D_FOOT;
+}
 static void ui_lfo_del_arm(void)                    /* (LFO's hold, on POINTS) */
 {
     uint32_t k = ui_lfo(), i;
@@ -544,16 +571,7 @@ static void ui_lfo_del_arm(void)                    /* (LFO's hold, on POINTS) *
         ui_toast("THE END POINTS STAY");
         return;
     }
-    ui.ldel = 1;
-    ui.ldel_s = 0;
-}
-static void ui_lfo_del_stop(void)
-{
-    if (!ui.ldel)
-        return;
-    ui.ldel = 0;
-    ui.toast[0] = 0;
-    ui.dirty |= D_FOOT;
+    ui_cd_arm(B_LFO);
 }
 static void ui_lfo_del(void)
 {
@@ -577,26 +595,36 @@ static void ui_lfo_del(void)
     sp_put(sp_fix(sp_put(s, "POINT "), (int32_t)i + 1, 0u, 0), " DELETED");
     ui_toast(s);
 }
-static void ui_lfo_del_tick(void)                   /* every millisecond while it counts */
+static void ui_cd_tick(void)                        /* every millisecond while it counts */
 {
-    uint32_t held = fm1_ms - ui.bt_t[B_LFO], left;
-    char s[32];
-    if (!(ui.bt_down & (1u << B_LFO)) || (ui.bt_chord & (1u << B_LFO)) || UI_PG[ui.page].id[0] != UI_LPT || ui.mod) {
-        ui_lfo_del_stop();
+    uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left;
+    char s[32], *e;
+    if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || ui.mod ||
+        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT)) {
+        ui_cd_stop();
         return;
     }
-    if (held >= UI_DEL_MS) {
-        ui.ldel = 0;
-        ui_lfo_del();
+    if (held >= UI_LONG_MS) {
+        ui.cd_btn = NB;
+        if (b == B_LFO) {
+            ui_lfo_del();
+        } else {
+            ui.toast[0] = 0;
+            ui_go(ui_first_page(SEC_MENU));
+        }
         return;
     }
-    left = (UI_DEL_MS - held + 999u) / 1000u;
-    if (left != ui.ldel_s) {                        /* "HOLD: DELETE POINT 3 IN 4" */
-        uint32_t k = ui_lfo();
-        sp_draw_t t;
-        char *e;
-        ui.ldel_s = (uint8_t)left;
-        e = sp_fix(sp_put(s, "HOLD: DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
+    left = (UI_LONG_MS - held + 999u) / 1000u;
+    if (left != ui.cd_s) {                          /* "HOLD: DELETE POINT 3 IN 4", "HOLD: SETTINGS IN 4" */
+        ui.cd_s = (uint8_t)left;
+        e = sp_put(s, "HOLD: ");
+        if (b == B_LFO) {
+            uint32_t k = ui_lfo();
+            sp_draw_t t;
+            e = sp_fix(sp_put(e, "DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
+        } else {
+            e = sp_put(e, "SETTINGS");
+        }
         sp_fix(sp_put(e, " IN "), (int32_t)left, 0u, 0);
         ui_toast(s);
     }
@@ -696,13 +724,41 @@ static int32_t ui_eff(int32_t id)
     return id;
 }
 
+/* the knob turning: its cell lit, and what it moves on the graph, until UI_GESTURE_MS pass without a detent
+ * (sy_ui_draw.c sy_ui_frame puts them back); the parameter it sets (its note value with SYNC FIXED) or item, -1 none */
+static void ui_act(uint32_t k)
+{
+    if (ui.act_k < 4u && ui.act_k != k)
+        ui.dirty |= D_KNOB(ui.act_k);
+    ui.act_k = (uint8_t)k;
+    ui.act_t = fm1_ms;
+    ui.dirty |= D_KNOB(k) | D_DISP;
+}
+static int32_t ui_act_id(void)
+{
+    int32_t id;
+    if (ui.act_k >= 4u || ui.mod)
+        return -1;
+    id = UI_PG[ui.page].id[ui.act_k];
+    return id >= 0 && id < UI_ITEM ? ui_eff(id) : id;
+}
+/* the patch as it was before the turn (the gesture's first state on the history), while a knob turns; 0 none */
+static const sy_patch_t *ui_ghost(void)
+{
+    if (ui.act_k >= 4u || ui.mod || !ui.edit_t || fm1_ms - ui.edit_t > UI_GESTURE_MS || !ui.h_at)
+        return 0;
+    return ui_hist_at(ui.h_at - 1u);
+}
+
 static void ui_knob(uint32_t k, int32_t s)
 {
     int32_t id = UI_PG[ui.page].id[k];
     const sp_desc_t *d;
-    ui_lfo_del_stop();
+    ui_cd_stop();
     if (id < 0)
         return;
+    if (!ui.mod)
+        ui_act(k);
     if (id >= UI_ITEM) {
         ui_item_turn(id, s, EN_K1 + k);
         return;
@@ -747,8 +803,8 @@ static int ui_has_layer(uint32_t b) { return b == B_REC || b == B_ENV; }
 
 static void ui_press(uint32_t b)
 {
-    if (b != B_LFO)
-        ui_lfo_del_stop();
+    if (b != ui.cd_btn)
+        ui_cd_stop();
     if (b == B_OCTDN || b == B_OCTUP) {
         char t[16] = "KEYS OCT ";
         uint16_t held = (uint16_t)(ui.bt_down & UI_CHORD);
@@ -774,8 +830,8 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
         ui_mod_open(B_REC, ui.mod_pick, 0);
     else if (b == B_ENV && !ui.mod)
         ui_mod_open(B_ENV, SRC_ENV2, 0);
-    else if (b == B_HOME)
-        ui_go(ui_first_page(SEC_MENU));
+    else if (b == B_HOME && !ui.mod)
+        ui_cd_arm(B_HOME);                          /* (5 s: the SETTINGS) */
     else if (b == B_LFO && UI_PG[ui.page].id[0] == UI_LPT && !ui.mod)
         ui_lfo_del_arm();
 }
@@ -783,8 +839,8 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
 static void ui_release(uint32_t b, int held)
 {
     uint32_t f;
-    if (b == B_LFO)
-        ui_lfo_del_stop();                          /* (let go before the end: nothing deleted) */
+    if (b == ui.cd_btn)
+        ui_cd_stop();                               /* (let go before the end: nothing happens) */
     if (held) {                                     /* a held layer closes (a latched one stays) */
         if (ui.mod == 1u && ui.mod_btn == b)
             ui_mod_close();
@@ -865,8 +921,8 @@ static void sy_ui_ms(void)
     uint32_t k;
     int32_t s;
     ui_buttons();
-    if (ui.ldel)
-        ui_lfo_del_tick();
+    if (ui.cd_btn != NB)
+        ui_cd_tick();
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0)
             ui_knob(k, s);
@@ -882,7 +938,7 @@ static void sy_ui_ms(void)
     }
 }
 
-/* panel.c's settings hooks: the palette (MENU > COLOR), their save (Phase 4, part 2: flash) */
+/* panel.c's settings hooks: the palette (SETTINGS > COLOR), their save (Phase 4, part 2: flash) */
 static void palette_apply(void) { sy_palette(ui.pal); }
 static void settings_save(void) {}
 
@@ -891,6 +947,8 @@ static void sy_ui_boot(void)
     ui.pal = 0;                                     /* STRATA */
     ui.accel = 1;
     ui.mod_pick = SRC_LFO1;
+    ui.cd_btn = NB;
+    ui.act_k = 0xFF;
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;
