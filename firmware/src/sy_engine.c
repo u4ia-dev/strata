@@ -378,6 +378,11 @@ static int sy_cpu(uint32_t load_q8)
 #define SY_SCOPE_N 212u
 #define SY_SCOPE_WAIT 8192u
 static volatile uint16_t sy_out_pk;          /* the last block's output peak, Q15 (every 4th frame) */
+#define SY_HUSH_BLKS 8u                      /* the hush's fade, and its silent blocks before it counts: two I2S */
+                                             /* halves (sy_app.c), the whole ring the DMA loops with the IRQs off */
+static volatile uint8_t sy_hush_req, sy_hushed;   /* the audio out for flash work: asked (main loop); out (audio) */
+static float sy_hush_g = 1.0f;               /* .. the output's gain at the end of the last block */
+static uint8_t sy_hush_n;                    /* .. silent blocks since it reached 0 */
 static struct {
     volatile uint8_t st;                     /* 0 idle, 1 armed (the audio side's), 2 ready (the main loop's) */
     uint8_t step, low;                       /* samples a point (1..16); the sum has been under -1 % */
@@ -511,6 +516,20 @@ static void sy_block(int32_t *out)
         sy_dc_store(sy_dc[2], a0, b0);
         sy_dc_store(sy_dc[3], a1, b1);
     }
+    {                                                /* hushed for flash work (sy_app.c): out over 8 blocks (5.8 ms), */
+        const float st = 1.0f / (float)SY_HUSH_BLKS;   /* held, back over 8 (as it plays: nothing to add otherwise). */
+        float g0 = sy_hush_g, g1 = sy_hush_req ? sy_maxf(0.0f, g0 - st) : sy_minf(1.0f, g0 + st);   /* Hushed once */
+        if (g0 < 1.0f || g1 < 1.0f) {               /* 8 blocks more are silent: an erase then loops only silence */
+            float g = g0, dg = (g1 - g0) * (1.0f / (float)SY_BLK);
+            for (i = 0; i < SY_BLK; i++, g += dg) {
+                out[2u * i] = (int32_t)((float)out[2u * i] * g);
+                out[2u * i + 1u] = (int32_t)((float)out[2u * i + 1u] * g);
+            }
+        }
+        sy_hush_g = g1;
+        sy_hush_n = (uint8_t)(g0 > 0.0f || g1 > 0.0f ? 0u : sy_hush_n < SY_HUSH_BLKS ? sy_hush_n + 1u : SY_HUSH_BLKS);
+        sy_hushed = (uint8_t)(sy_hush_req && sy_hush_n >= SY_HUSH_BLKS);
+    }
     if (sy_scope.st == 1u)
         sy_scope_block(out);
     {                                                /* the block's level, every 4th frame (the screen: sounding) */
@@ -589,6 +608,8 @@ static void sy_init(void)
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
     memset(&sy_scope, 0, sizeof sy_scope);
+    sy_hush_req = sy_hushed = sy_hush_n = 0;
+    sy_hush_g = 1.0f;
     sy_glfo_v[0] = sy_glfo_v[1] = 0.0f;
     lfo_dr_seq = 1u;                                 /* (the drawn shapes: taken at the first block) */
     sy_next_st = 0;

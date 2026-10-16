@@ -18,7 +18,8 @@
  *    points (on their shapes); a drawn shape plays, its edits reach the audio whole, a patch load's too;
  * 5. clicks: a sine patch, every event that could step the output (note on / off, steal, retrigger, MONO, table
  *    swap, patch change, knob and CC jumps, unison count, sources and the filter switched, filter type and warp
- *    changed, bend jumps): the largest step between samples near the event against the steady sine's (<= 2x);
+ *    changed, bend jumps): the largest step between samples near the event against the steady sine's (<= 2x); the
+ *    hush for a SAVE's flash write: out and back without a click, hushed only once the last two halves are silent;
  * 6. health: 40 random patches, notes and knob changes for 3 s each: finite, no denormal filter state (a held
  *    chord's windowed DC printed: slow envelopes and LFOs pass the blockers as slow movement); TUBE drive on a held
  *    chord: no DC at the output (-80 dBFS); offsets: the pulse sub's mean, PWM's, ASYM's and SYNC's over whole
@@ -735,6 +736,35 @@ static void t_clicks(void)
     }
     printf("engine: clicks: the worst %s at %.2f x\n", wname, worst);
     check("clicks: no event steps the output more than twice the steady sine", ok);
+}
+
+/* the hush for the flash's writes (sy_app.c): out and back in without a click; hushed only once the last two
+ * halves (256 samples: the ring the DMA loops while an erase holds the interrupts off) are silent; the voices play
+ * on under it */
+static void t_hush(void)
+{
+    uint32_t at, e0, e1, k, i, loud = 0, w5 = (uint32_t)(0.05 * (double)SY_FS), w15 = (uint32_t)(0.15 * (double)SY_FS);
+    double r0, r1;
+    click_patch();
+    sy_note_on(57, 100);
+    at = e0 = run(blocks(0.3f), 0);
+    sy_hush_req = 1;
+    for (k = 0; k < 64u && !sy_hushed; k++) {
+        at = run(1, at);
+        if (sy_hushed)
+            for (i = at - 256u; i < at; i++)
+                loud += L[i] != 0.0f || R[i] != 0.0f;
+    }
+    at = run(blocks(0.1f), at);
+    sy_hush_req = 0;
+    e1 = at;
+    at = run(blocks(0.3f), at);
+    r0 = click_ratio(e0 - 64u, e0 + w5, e0 - 64u, e0 + w15, e0 + w15);
+    r1 = click_ratio(e1 - 64u, e1 + w5, e1 - 64u, e1 + w15, at);
+    printf("engine: the hush: hushed after %u blocks (the last 256 samples: %u not silent); out %.2f x, back %.2f x the "
+           "steady sine's step\n", k, loud, r0, r1);
+    check("the hush (a SAVE's flash write): out and back without a click (<= 2x), hushed only with the ring silent",
+          k <= 2u * SY_HUSH_BLKS && loud == 0u && r0 <= 2.0 && r1 <= 2.0 && nvoices() == 1u);
 }
 
 /* ----------------------------------------------------------------------------------------- 6 health --- */
@@ -1486,6 +1516,7 @@ int main(int argc, char **argv)
     t_voices();
     t_env_lfo();
     t_clicks();
+    t_hush();
     t_health();
     t_dc_block();
     t_dc_sources();
