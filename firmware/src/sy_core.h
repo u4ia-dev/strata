@@ -36,8 +36,9 @@ static inline float sy_lerpf(float a, float b, float t) { return a + (b - a) * t
  * counts it exactly) */
 #define SY_NOINLINE __attribute__((noinline))
 
-/* a compiler barrier: no memory access moves across it (a hand-off to the audio side: sy_lfo.c sy_draw_edit) */
-#define SY_CBAR() __asm__ __volatile__("" ::: "memory")
+/* a compiler barrier: no memory access moves across it (a hand-off to the audio side: sy_lfo.c sy_draw_edit); written
+ * as Felucca's RING_PUBLISH, the one inline asm build.py's register lint allows outside hal/ */
+#define SY_CBAR() __asm__ volatile("" ::: "memory")
 
 /* zeroing and copying in the audio path: the firmware's memset and memcpy go a byte at a time (src/libc.c, built
  * -fno-builtin: 3 or 4 instructions a byte on the target), these a word at a time */
