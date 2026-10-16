@@ -307,10 +307,17 @@ amp envelope's value ramps linearly across the block. Envelopes retrigger from t
 voice reuse and retriggers do not click.
 
 **LFO 1, LFO 2** (MVP; 3–4 in v1): SHAPE (sine, triangle, saw up, saw down, square, sample & hold, smooth random,
-step 4, stairs, pulse, bounce, trapezoid, and DRAWN), RATE (0.01–40 Hz, or synced 8 bars … 1/32 with dotted and
-triplet), MODE (free: one phase for all voices, aligned to the MIDI clock when it runs; retrigger: per voice, from
-PHASE at the note; envelope: one cycle, then hold), DELAY and RISE (fade-in), PHASE, SMOOTH, and POLY / MONO.
-Evaluated per block, linear between blocks.
+step 4, stairs, pulse, bounce, trapezoid, and DRAWN), SYNC (FREE: RATE in Hz, 0.01–40; FIXED: RATE a note value, 8
+bars … 1/32 with dotted and triplet, each LFO keeping both), MODE (free: one phase for all voices, aligned to the MIDI
+clock when it runs; retrigger: per voice, from PHASE at the note; envelope: one cycle, then hold), DELAY and RISE
+(fade-in), PHASE, SMOOTH, and POLY / MONO. Evaluated per block, linear between blocks. With SYNC FIXED, RATE's
+modulation steps the note value (100 % across all 17), so the LFO stays on the beat.
+
+**Tempo and time signature** (GLO's GLOBAL page, global: not in the patch): BPM (20–300), TS-BEAT (1–16 beats a bar)
+and TS-NOTE (the note a beat is: 1, 2, 4, 8 or 16). BPM counts TS-NOTE beats (120 in 6/8: 120 eighth notes a minute),
+and a bar is TS-BEAT of them, so the note values' bars follow the time signature (in 3/4, 1 BAR is 3 beats). The
+audio side reads quarter notes a minute and a bar in quarter notes (`sy_set_tempo`); the MIDI clock, when it comes,
+sets the tempo instead.
 
 **Drawn shapes** (Phase 4, at the user's request): each LFO's shape as up to 16 points over a cycle (the first at its
 start, the last at its end, two at one place a step), with a curve between each two: the envelopes' `u / (u + (1 − u)
@@ -396,7 +403,7 @@ Global, stereo, float, fixed order, each with ON and MIX:
 | --- | --- | --- |
 | DRIVE | soft clip, tube-like asymmetric, hard clip, sine fold; pre-gain, tone (tilt), level compensation | no oversampling (cost) |
 | CHORUS | two modulated taps per side on one 4 KiB int16 line (23 ms a side), delay 2–15 ms, depth up to 3 ms, linear interpolation | RATE (Hz/sync), DEPTH, DELAY, FEEDBACK, tone |
-| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 750 ms a side (so the pool fits, §20) | TIME (10–750 ms or synced, dotted/triplet; a synced time longer than the line stops at it), FEEDBACK, LP/HP in the loop, OFFSET L/R |
+| DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 750 ms a side (so the pool fits, §20) | SYNC (FREE: TIME in ms, 10–750; FIXED: TIME a note value, dotted/triplet, TIME's modulation stepping it; a synced time longer than the line stops at it), FEEDBACK, LP/HP in the loop, OFFSET L/R |
 | REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
 | LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
@@ -430,8 +437,14 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
   wins, a torn write leaves the old copy). Six patches per object, 22 objects, 176 KiB of `0x97000–0xDFFFF`.
 - **Edit buffer and restore on boot**: the sound being played is autosaved (A/B, `0xE5000/0xE6000`, as Felucca's
   autosave) once nothing has sounded for 3 s after a change, and restored at power-on unless the last boot crashed.
-- **Undo**: a ring of 8 patch snapshots in RAM; a snapshot is taken when an edit gesture starts (a knob untouched for
-  1 s before) and on every load. SAVE held steps back.
+- **Undo** (built): a history of 8 patches in RAM (4.7 KB, `.bss`); a state goes on it when an edit gesture starts
+  (nothing edited for 1 s before: a knob, the MOD layer, an LFO's points) and before a sound loads. SAVE + OCT−
+  steps back, SAVE + OCT+ forward again; a state taken back is written as the knobs write.
+- **SAVE** (decided; its screens wait for the mockups' approval): a tap opens the SAVE screen; a patch never saved
+  (INIT, a factory or starter sound) is named first (the keys type letters: F3 to F#5 A to Z, G5 a space, OCT+
+  letters / numbers and symbols, OCT− deletes, KNOB 1 the cursor, KNOB 2 the character, SAVE writes, HOME cancels; 16
+  characters in capitals); a patch saved before offers its next version, "NAME v2" (lowercase v, one above the
+  highest saved). A double tap writes over the patch's own slot at once. Held: the preset browser.
 - **Settings** (MIDI channel, panel velocity, palette, LED mode, HOLD time, help on/off …) in Felucca's settings pair
   `0xFC000/0xFD000`.
 - **Flash safety**: only `storage.c` writes, through `FL_RANGE_OK` (the runtime guard in the RAM-resident driver, kept).
@@ -469,7 +482,15 @@ ends; KNOB 3 up and down; KNOB 4 the curve of the segment from it, the last poin
 points, the one picked and that segment), SHAPE (SHAPE, SYNC, RATE, MODE) and TIME (DELAY, RISE, PHASE, SMOOTH). A
 shape other than DRAWN shows its own points; the first edit draws from them ("DRAWN FROM SINE"). LFO tapped twice on
 the POINTS page adds a point left of the one picked (the first point picked: right of it), halfway to the point
-before, on the curve, and picks it (16 points at most; none where two points share a place).
+before, on the curve, and picks it (16 points at most; none where two points share a place). LFO held 5 s on the
+POINTS page deletes the point picked (not the first or the last) and picks the one before: from the hold time the
+footer counts down ("HOLD: DELETE POINT 3 IN 4"); letting go, a knob, another button or OCT's pages stop it.
+
+**Before the rest of Phase 4** (the user's decisions, verified in emulator): GLO's pages are VOICE, PLAY and GLOBAL's
+TEMPO (BPM, TS-BEAT, TS-NOTE; its graph the tempo, the time signature, a bar's beats, a beat's and a bar's length;
+§10). SYNC is FREE or FIXED for the LFOs and the delay: in FIXED, KNOB 3 (RATE, TIME) shows and steps the note value,
+one a detent (in the MOD layer it stays RATE or TIME, whose modulation steps the note). SAVE + OCT− / OCT+: undo and
+redo (§16). ARP and a step sequencer wait for v1; until then SEQ shows the matrix.
 
 Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the filter, matrix, rack and HOME graphs, presets
 (browser, user slots, save, undo, restore), MIDI learn, help, the rest of the MENU, and CONTROLS.md. The draft below
@@ -489,12 +510,12 @@ changed, in strips, so the 12 MHz display keeps up.
 | EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | quick jump: a key per section |
 | ENV | ENV 1, ENV 1 +, ENV 2, ENV 2 + | **assign ENV 2**: turn a knob to set its amount |
 | LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
-| SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount) | — |
+| SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount); v1: the step sequencer (the matrix moves) | — |
 | REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount |
 | FX | DRIVE, CHORUS, DELAY, DELAY +, REVERB, REVERB +, OTT, OTT + | **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
-| GLO | VOICE (mode, poly, glide, bend range), GLOBAL (tune, tempo, panel velocity) | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
+| GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built); tune, panel velocity to come | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
 | SCL | KEYS (scale and root shown on the LEDs, octave, panel velocity) | the root by key, as Felucca |
-| SAVE | SAVE (a user slot), PRESETS (browse by category) | UNDO |
+| SAVE | the SAVE screen (naming a patch never saved; "NAME v2" for one saved before); double tap: write over its slot at once | the preset browser; SAVE + OCT− undo, SAVE + OCT+ redo (built) |
 | ARP | (v1: the arpeggiator) | — |
 | PLAY | starts and stops the internal clock (synced LFOs and delays; the arp in v1) | — |
 | OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); in dialogs back / confirm | both 5 s: UBOOT (Felucca) |

@@ -24,7 +24,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-88 checks in five programs (`tests/sy_*.c`), all passing.
+92 checks in five programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -61,7 +61,7 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 59 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 63 checks; `sy_smoke`, 2)
 
 - **Parameters and presets**: 166 parameters; a patch packs into at most 582 bytes (the LFOs' drawn shapes included)
   and back unchanged; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
@@ -77,7 +77,10 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   held note), LEGATO (pitch only), glide (98 % of an octave in 97 ms for 100 ms), the unison budget (two voices of 2 × 16
   stay within 48 instances), the CPU guard (unison down over 70 %, cheaper effects over 78 %, a voice shed after two
   halves over 85 %, all undone under 55 %).
-- **Timing**: ATTACK and RELEASE 100 ms take 100.8 ms; LFO rates free and synced to the tempo.
+- **Timing**: ATTACK and RELEASE 100 ms take 100.8 ms; LFO rates free and synced to the tempo (SYNC FIXED, 1/4 at
+  120 BPM: 20 cycles in 10 s). RATE's modulation in FIXED steps the note value (1/4 + 25 %: 1/8T, 60 cycles in 10 s).
+  The time signature: 1 BAR is 3 quarter notes in 3/4 and 6/8, 1.75 in 7/16; BPM counts TS-NOTE beats (120 in 6/8: a
+  quarter note a second, a FIXED 1/4 LFO 10 cycles in 10 s).
 - **LFO shapes as points** (the start of a drawing): every built-in shape's points are whole, and the table is read to
   its end; the points' curves lie on the shapes exactly (within 0.0004 of the ±1 range) but for SINE (within 0.053: no
   one curve follows a quarter sine closer) and BOUNCE (0.105, its first bounce twice as tall). A drawn pulse, high for
@@ -91,7 +94,7 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   pulse sub's, PWM's, ASYM's and SYNC's offsets are taken out (means under 2 % of the peak), the infrasonic thump of a
   note's attack and release −41 (ASYM 100 %) to −68 dBFS.
 - **Effects**: the OTT's three bands sum back to the input within 3 × 10⁻⁸; a synced delay (1/4 at 120 BPM) lands at
-  500.00 ms; every effect at its extremes on full-scale noise stays finite and under 1.0 (the limiter); the chorus on
+  500.00 ms, and TIME's modulation steps its note value (−25 %: 1/8T, 166.85 ms); every effect at its extremes on full-scale noise stays finite and under 1.0 (the limiter); the chorus on
   a 1 kHz sine is as clean after 10 minutes of running as at the start (−81 / −88 dB away from the tone; the old
   chorus fell to −20 dB, §5.1).
 - **Determinism and golden renders**: eight test sounds (supersaw, pluck, pad, FM keys, sync lead, ladder bass, vowel pad,
@@ -190,7 +193,9 @@ From the probe object (`build/cost/sy.o`), the engine without the UI, after the 
 | `.text` | ~56,700 | code (with the probe's wrappers) |
 
 Felucca's pool is 368,640 B and its screen canvas takes 59,520 B: with the engine, 13,482 B stay free, over the
-8 KiB margin `tools/build.py` asks for (if Felucca's platform keeps no other pool buffers: integration confirms).
+8 KiB margin `tools/build.py` asks for (if Felucca's platform keeps no other pool buffers: integration confirms). The
+UI's undo history (8 patches of 588 B: 4,704 B) is in `.bss`, not the pool: Felucca's engines, sequencer and song
+freed far more `.bss` than that, but integration confirms the room.
 
 ## 5. The optimisation pass (end of Phase 2)
 
@@ -237,7 +242,7 @@ has also run in headless Chrome (§6.4); the workbench's page has not been opene
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
-The five host programs (§2) built with `emcc` and run under Node: 88 checks, all passing, the golden renders included.
+The five host programs (§2) built with `emcc` and run under Node: 92 checks, all passing, the golden renders included.
 The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
 multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
 workbench and the emulator sound as the host-verified engine does.
@@ -251,7 +256,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 31 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 42 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
 compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the audio halves as the DMA asks for
@@ -284,6 +289,10 @@ sent at once). **Verified in emulator**, under Node:
 | .. KNOB 2, KNOB 4 | point 2 along the cycle (250 -> 253 slow; quickly no further than the next point, 500); the last point stays at the end; KNOB 4 on it curves the segment into it (+0.8 % for 4 slow detents) |
 | .. LFO twice | a point left of the one picked, halfway (625 between 500 and 750), on the curve, picked; the page stays POINTS. The first point picked: the new one right of it (250, halfway to 500) |
 | .. not | LFO twice from another family's page: no point (the LFO's next page); STAIRS shown (16 points): no 17th; the MOD layer: KNOB 3 changes nothing |
+| .. LFO held | from the hold time a countdown ("HOLD: DELETE POINT 3 IN 4"); let go at 2 s: nothing deleted, the footer cleared; held 5 s: point 3 goes (STAIRS drawn, 15 points), point 2 picked, the page stays; the first point picked: "THE END POINTS STAY"; a knob turned during the countdown stops it |
+| Undo, redo | SAVE + OCT− twice takes back a level KNOB 3 set and the delete (SHAPE STAIRS, the drawn shape of 7 points); SAVE + OCT+ redoes the delete; SAVE let go: no page, no octave. On WT POS a gesture at a time (600 -> 606 in one, 607 a second later: undone 606, then 600; redone 606); a sound's load undone (PAD back to PLUCK) |
+| SYNC FIXED | LFO 1 SHAPE: SYNC FIXED, KNOB 3 steps the note value (1/4 -> 1/8D), RATE untouched; FREE: KNOB 3 the rate in Hz, the note value kept. DELAY: FIXED by default, KNOB 3 steps its note (1/8D -> 1/8); FREE: the time in ms |
+| GLOBAL | GLO tapped three times: the TEMPO page, 120 BPM 4/4; BPM 3 slow detents 123, held between 20 and 300; TS-BEAT 1-16; TS-NOTE 1, 2, 4, 8, 16; 300 BPM in eighths: 150 quarter notes a minute |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
@@ -291,7 +300,8 @@ sent at once). **Verified in emulator**, under Node:
 The screens were checked by eye from `strata_shot.mjs`'s PNGs (a session: the wave page with VOWELS and BEND+, REC
 held with LFO 1 on WT POS, the unison page, ENV 1 and ENV 2 with a key held, LFO 1's POINTS page (the sine's points;
 then drawn: a point lowered, one added and curved, a key held: the voice on its cycle), its SHAPE page with S&H's five
-sample cycles, the MENU, each palette). Bugs the tests
+sample cycles and with SYNC FIXED (RATE 1/8), the delete's countdown, GLOBAL's TEMPO at 132 BPM in 6/8, the MENU,
+each palette). Bugs the tests
 found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
 ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
 double-tap rule, so the session taps slower.
