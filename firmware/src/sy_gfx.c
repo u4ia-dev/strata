@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
 /* STRATA's drawing kit on gfx.c's canvas (docs/ARCHITECTURE.md §17; the screens of the design canvas):
- *   - the palettes (MENU > COLOR): thirteen base colours each, by role (ground, display, raised, text, label,
+ *   - the palettes (SETTINGS > COLOR): thirteen base colours each, by role (ground, display, raised, text, label,
  *     SOUND: waves and curves, NOW: the current frame, playheads, voices, VALUE: a knob's value, MOD: modulation,
  *     MOD -: negative, OTHER: a source not picked, the MOD banner and its ink), the rest derived as tints of them.
  *     gfx.c's own tokens follow (its text ramps, keycaps and hints);
@@ -12,7 +12,7 @@
  * Needs gfx.c and sy_core.h. */
 
 /* -------------------------------------------------------------------------------------- palettes --- */
-#define SY_NPAL 7u
+#define SY_NPAL 8u
 enum { PR_GROUND, PR_DISPLAY, PR_RAISED, PR_TEXT, PR_LABEL, PR_SOUND, PR_NOW, PR_VALUE, PR_MOD, PR_MODNEG, PR_MODOFF,
        PR_BANNER, PR_BINK, PR_N };
 static const struct { char name[8]; uint32_t c[PR_N]; } SY_PAL[SY_NPAL] = {   /* RGB888 as designed */
@@ -30,11 +30,13 @@ static const struct { char name[8]; uint32_t c[PR_N]; } SY_PAL[SY_NPAL] = {   /*
                0x5d4842, 0x6a35b8, 0xffffff}},
     {"HI-CON", {0x000000, 0x000000, 0x1a1a1a, 0xffffff, 0xd0d0d0, 0xffe600, 0xff4fd8, 0xffffff, 0x00d8ff, 0x9ff0ff,
                 0x808080, 0x00d8ff, 0x000000}},
+    {"MONO", {0x111111, 0x0a0a0a, 0x1d1d1d, 0xededed, 0x9a9a9a, 0xc4c4c4, 0xffffff, 0xe0e0e0, 0x8c8c8c, 0x5e5e5e,
+              0x454545, 0xe8e8e8, 0x000000}},                  /* greys only: the roles by lightness */
 };
 static struct {
     uint16_t ground, display, raised, text, label, sound, now, value, mod, modneg, modoff, banner, bink;   /* stored */
     uint16_t rule, dline, mline, grid, grid2, rline, rline2, track, disc, dl, sub, dim, faint, text2, ghost;
-    uint16_t wfar, wmid, wfill, wtint, dfar, dnear, mtint, mtext, mfar, mnear, bsub, chipl, pdim;   /* derived */
+    uint16_t wfar, wmid, wfill, wtint, dfar, dnear, mtint, mtext, mfar, mnear, bsub, chipl, pdim, mband;   /* derived */
     uint8_t idx;
 } sk;
 
@@ -90,6 +92,7 @@ static void sy_palette(uint32_t i)
     sk.bsub = ux_mix(sk.banner, sk.bink, 80);
     sk.chipl = ux_mix(sk.ground, sk.text, 7);
     sk.pdim = ux_mix(sk.ground, sk.raised, 40);
+    sk.mband = ux_mix(sk.display, sk.mod, 22);
     ux.bg = sk.ground;                                /* gfx.c's tokens: its text ramps (light or dark), keycaps */
     ux.surf = sk.raised;
     ux.text = sk.text;
@@ -270,4 +273,31 @@ static void cv_dash(int32_t x0, int32_t x1, int32_t y, int32_t on, int32_t off, 
     int32_t x;
     for (x = x0; x < x1; x += on + off)
         cv_rect(x, y, x + on > x1 ? x1 - x : on, 1, c);
+}
+
+/* .. a dashed column, from y0 to y1 */
+static void cv_vdash(int32_t x, int32_t y0, int32_t y1, int32_t on, int32_t off, uint16_t c)
+{
+    int32_t y;
+    for (y = y0; y < y1; y += on + off)
+        cv_rect(x, y, 1, y + on > y1 ? y1 - y : on, c);
+}
+
+/* a curve dashed: on columns drawn, off left (the shape before a knob's turn) */
+static void cv_curve_dash(int32_t x0, const float *ys, uint32_t n, float w, uint16_t c, uint32_t on, uint32_t off)
+{
+    uint32_t i;
+    for (i = 0; i < n; i += on + off)
+        cv_curve(x0 + (int32_t)i, ys + i, i + on <= n ? on : n - i, w, c);
+}
+
+/* the area between two curves (the range a modulation sweeps), in c */
+static void cv_band(int32_t x0, const float *ya, const float *yb, uint32_t n, uint16_t c)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        int32_t a = sy_floori(sy_minf(ya[i], yb[i]) + 0.5f), b = sy_floori(sy_maxf(ya[i], yb[i]) + 0.5f);
+        if (b > a)
+            cv_rect(x0 + (int32_t)i, a, 1, b - a, c);
+    }
 }
