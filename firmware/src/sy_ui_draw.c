@@ -37,6 +37,7 @@ static void ui_g_save(void);                        /* sy_ui_save.c: SAVE's scre
 static void ui_g_browse(void);
 static void ui_save_cell(int32_t id, int act);
 static void ui_save_head(char *t);
+static int ui_save_renaming(void);
 
 /* sound playing: a voice on, or the output still over -70 dBFS (a delay's or a reverb's tail). The live graphs move
  * only while it does; otherwise they stand still and nothing is redrawn */
@@ -199,8 +200,9 @@ static void ui_draw_head(void)
         }
         }
         ui_page_of(ui.page, &n, &of);               /* the page, and its number where there is room */
-        e = sp_put(t, pg->sec != SEC_SAVE ? pg->name : ui.sv_ver ? "NEW VERSION" : ui.sv_sym ? "NAME IT \xB7 123"
-                                                                                        : "NAME IT");
+        e = pg->sec != SEC_SAVE ? sp_put(t, pg->name) : sp_put(t, ui_save_renaming() ? "RENAME" : "NAME IT");
+        if (pg->sec == SEC_SAVE && ui.sv_sym)
+            e = sp_put(e, " \xB7 123");
         if (of > 1u) {
             e = sp_fix(sp_put(e, " "), (int32_t)n, 0u, 0);
             sp_fix(sp_put(e, "/"), (int32_t)of, 0u, 0);
@@ -362,7 +364,7 @@ static void ui_draw_foot(void)
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, ui.sv_sym ? "OCT+ ABC \xB7 OCT- DEL \xB7 SAVE: WRITE"
                                                             : "OCT+ 123 \xB7 OCT- DEL \xB7 SAVE: WRITE", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_BROWSE) {
-        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 HOME: DONE", sk.dim, sk.ground);
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 SAVE: NAME IT", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_MENU) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 1: COLOR \xB7 KNOB 2: ACCEL", sk.dim, sk.ground);
     } else if (UI_PG[ui.page].id[0] == UI_LPT && !ui.mod) {

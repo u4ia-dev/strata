@@ -2,15 +2,20 @@
  * Copyright (C) 2026 brandonmbarone */
 /* STRATA's SAVE and preset browser (the Strata Screen Design canvas, "Saving and presets", approved; ARCHITECTURE.md
  * §16), on sy_ui.c's pages and sy_ui_draw.c's regions:
- *   - SAVE tapped: its screen. A sound never saved is named first (its name to start from, the next free slot); one
- *     saved before is offered its next version, "NAME v2" (one above the highest a user slot holds), in the next
- *     free slot, the one before kept. The keys type at the cursor: F3 .. F#5 A .. Z, G5 a space; OCT+ the numbers
+ *   - SAVE tapped once (no second tap within UI_DTAP_MS): the sound saved at once as a new preset, its next version
+ *     ("WARM PAD v2": one above the highest its base has in a user slot; a starter sound's "SUPERSAW v2"), in the
+ *     first free slot, its category kept. Nothing opens: the keys keep playing.
+ *   - SAVE held 5 s: from the hold time a countdown in the footer, then the sound written over its own slot. Let go
+ *     before, an OCT (SAVE + OCT: undo, redo), a knob or another button stop it; a sound from no user slot has none
+ *     (let go: the footer says to tap).
+ *   - SAVE tapped twice: the browser. The categories with their counts, the presets of the one picked (the starter
+ *     sounds, then the user's), KNOB 1 the category, KNOB 2 the preset (it loads as it turns), KNOB 3 the bank (all,
+ *     starter, user); SAVE twice or HOME: back; SAVE once: NAME IT for the sound playing.
+ *   - NAME IT: the sound's name to edit. The keys type at the cursor: F3 .. F#5 A .. Z, G5 a space; OCT+ the numbers
  *     and symbols (and back), OCT- deletes; KNOB 1 the cursor, KNOB 2 the character there, KNOB 3 the category,
- *     KNOB 4 the slot. SAVE writes it (the audio hushed around the flash work: sy_app.c), HOME goes back unsaved.
- *   - SAVE tapped twice: the sound written over its own slot at once (one never saved: named first).
- *   - SAVE held and let go (no OCT meanwhile: SAVE + OCT is undo, redo): the browser. The categories with their
- *     counts, the presets of the one picked (factory, then the user's), KNOB 1 the category, KNOB 2 the preset (it
- *     loads as it turns), KNOB 3 the bank (all, factory, user); HOME back, SAVE the SAVE screen for what is loaded.
+ *     KNOB 4 the slot (its own: a rename; a sound from no user slot: the first free one). SAVE writes it, HOME goes
+ *     back to the browser unsaved.
+ * Every write: the audio hushed around the flash work (sy_app.c).
  * Needs sy_ui.c, sy_ui_draw.c (WX WY WW WH, ui_text_c, ui_pill), sy_gfx.c, sy_store.c and sy_app.c's presets
  * (declared in sy_ui.c). */
 
@@ -75,23 +80,50 @@ static void ui_save_version(const char *name, char *out)
 }
 
 /* ---------------------------------------------------------------------------------------------- SAVE --- */
+/* SAVE tapped once: the sound as a new preset at once, its next version in the first free slot (sy_ui_saved says
+ * where) */
+static void ui_save_new(void)
+{
+    int32_t fr = sy_app_slot_free();
+    if (fr < 0) {
+        ui_toast("ALL 128 USER SLOTS IN USE");
+        return;
+    }
+    ui_save_version(sy_patch.name, ui.sv_name);
+    ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
+    ui.sv_cat = sy_patch.cat < CAT_COUNT ? sy_patch.cat : CAT_OTHER;
+    ui.sv_slot = (uint8_t)fr;
+    if (ui.saving || sy_app_save((uint32_t)fr, ui.sv_name, ui.sv_cat)) {
+        ui_toast("BUSY: TRY AGAIN");
+        return;
+    }
+    ui.saving = 1;
+    ui.sv_over = 0;
+    ui_toast("SAVING");
+}
+
+/* SAVE held: the countdown to writing over its own slot (ui_cd_tick), when the sound has one */
+static void ui_save_hold(void)
+{
+    if (sy_app_slot() >= 0)
+        ui_cd_arm(B_SAVE);
+}
+
+/* the slot NAME IT writes to is the sound's own: a rename */
+static int ui_save_renaming(void) { return sy_app_slot() >= 0 && (uint32_t)sy_app_slot() == ui.sv_slot; }
+
+/* NAME IT (SAVE in the browser): the sound playing's name and category to edit, into its own slot (a rename) or,
+ * a sound from no user slot, the first free one */
 static void ui_save_open(void)
 {
     int32_t own = sy_app_slot(), fr = sy_app_slot_free();
-    uint32_t sec = ui_sec();
-    if (sec != SEC_SAVE && sec != SEC_BROWSE)
-        ui.sv_ret = ui.page;
-    ui.sv_ver = own >= 0;
-    if (ui.sv_ver)
-        ui_save_version(sy_patch.name, ui.sv_name);
-    else
-        sp_put(ui.sv_name, sy_patch.name);
+    sp_put(ui.sv_name, sy_patch.name);
     ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
     ui.sv_cur = ui.sv_len;
     ui.sv_cat = sy_patch.cat < CAT_COUNT ? sy_patch.cat : CAT_OTHER;
     ui.sv_sym = 0;
     ui.sv_key = 0xFF;
-    ui.sv_slot = (uint8_t)(fr >= 0 ? fr : own >= 0 ? own : 0);
+    ui.sv_slot = (uint8_t)(own >= 0 ? own : fr >= 0 ? fr : 0);
     ui_go(ui_first_page(SEC_SAVE));
 }
 
@@ -121,7 +153,7 @@ static void ui_save_del(void)                       /* OCT-: the character befor
     ui.dirty |= D_DISP | D_KNOBS;
 }
 
-static void ui_save_write(void)                     /* SAVE on its screen: the name, trimmed, into the slot */
+static void ui_save_write(void)                     /* SAVE on NAME IT: the name, trimmed, into the slot */
 {
     while (ui.sv_len && ui.sv_name[ui.sv_len - 1u] == ' ')
         ui.sv_name[--ui.sv_len] = 0;
@@ -140,13 +172,12 @@ static void ui_save_write(void)                     /* SAVE on its screen: the n
     ui_toast("SAVING");
 }
 
-/* SAVE tapped twice: over its own slot at once (one never saved: its screen, to name it) */
+/* SAVE held 5 s: over its own slot */
 static void ui_save_over(void)
 {
     int32_t own = sy_app_slot();
     if (own < 0) {
-        ui_save_open();
-        ui_toast("NAME IT FIRST");
+        ui_toast("NOTHING TO SAVE OVER: TAP SAVE");
         return;
     }
     if (ui.saving || sy_app_save((uint32_t)own, sy_patch.name, sy_patch.cat)) {
@@ -159,21 +190,31 @@ static void ui_save_over(void)
     ui_toast("SAVING");
 }
 
-/* sy_app.c: the SAVE asked for is done (rc 0) or failed */
+/* sy_app.c: the SAVE asked for is done (rc 0: "SAVED: WARM PAD v2 · USER 3", the name cut to fit, or "SAVED OVER
+ * USER 3"; NAME IT back to the browser) or failed */
 static void sy_ui_saved(int rc, uint32_t s)
 {
-    char t[32], *e;
+    char t[sizeof ui.toast], u[16], *e;
+    uint32_t k, room;
     ui.saving = 0;
     if (rc) {
         sp_fix(sp_put(t, "SAVE FAILED: "), rc, 0u, 0);
         ui_toast(t);
         return;
     }
-    e = sp_put(t, ui.sv_over ? "SAVED OVER USER " : "SAVED: USER ");
-    sp_fix(e, (int32_t)s + 1, 0u, 0);
+    if (ui.sv_over) {
+        sp_fix(sp_put(t, "SAVED OVER USER "), (int32_t)s + 1, 0u, 0);
+    } else {
+        sp_fix(sp_put(u, " \xB7 USER "), (int32_t)s + 1, 0u, 0);
+        e = sp_put(t, "SAVED: ");
+        room = (uint32_t)(sizeof t - 1u) - (uint32_t)(e - t) - ui_strlen(u);
+        for (k = 0; sy_patch.name[k] && k < room; k++)
+            *e++ = sy_patch.name[k];
+        sp_put(e, u);
+    }
     ui_toast(t);
     if (ui_sec() == SEC_SAVE)
-        ui_go(ui.sv_ret);
+        ui_go(ui_first_page(SEC_BROWSE));
     ui.dirty |= D_HEAD | D_DISP;
 }
 
@@ -252,9 +293,12 @@ static void ui_save_ms(void)                        /* every millisecond: a pres
         ui.br_want = 0;
         ui.dirty |= D_DISP | D_KNOBS | D_HEAD;
     }
-    if (ui.sv_tap_t && (int32_t)(fm1_ms - ui.sv_tap_t) >= 0) {   /* tapped once, no second: the screen */
-        ui.sv_tap_t = 0;
-        ui_save_open();
+    if (ui.sv_tap_t && (int32_t)(fm1_ms - ui.sv_tap_t) >= 0 && !ui.br_want && !sy_next_st) {   /* tapped once, no */
+        ui.sv_tap_t = 0;                            /* second (a load first): a new version; in the browser NAME IT */
+        if (ui_sec() == SEC_BROWSE)
+            ui_save_open();
+        else
+            ui_save_new();
     }
     if (ui.sv_key != 0xFF && fm1_ms - ui.sv_key_t > 300u) {
         ui.sv_key = 0xFF;
@@ -351,14 +395,14 @@ static void ui_save_keys(int32_t y)
         }
 }
 
-/* SAVE's screen: what it is (a new sound to name, the next version), the name with its cursor (a version's suffix in
- * SOUND), what happens to the slot, the keys' map */
+/* NAME IT: what it is (a rename, a sound to name), the name with its cursor (a version's suffix in SOUND), what
+ * happens to the slot, the keys' map */
 static void ui_g_save(void)
 {
     char t[40], *e;
     const char *occ = sy_app_slot_name(ui.sv_slot);
-    int32_t x, i, cx;
-    cv_text_on(WX + 4, WY + 3, &AF_XS, ui.sv_ver ? "SAVE THE NEXT VERSION" : "NAME THE SOUND", sk.dim, sk.display);
+    int32_t x, i, cx, own = ui_save_renaming();
+    cv_text_on(WX + 4, WY + 3, &AF_XS, own ? "RENAME THE SOUND" : "NAME THE SOUND", sk.dim, sk.display);
     sp_put(sp_fix(t, ui.sv_len, 0u, 0), "/16");
     cv_text_r(WX + WW - 4, WY + 3, &AF_XS, t, sk.faint, sk.display);
     cv_rrect(WX + 4, WY + 17, WW - 8, 24, 3, sk.rline2, sk.display);   /* the name, its cursor */
@@ -376,14 +420,16 @@ static void ui_g_save(void)
         (void)x;
         cv_rect(cx, WY + 22, 2, 15, sk.now);
     }
-    if (occ && !ui_streq(occ, ui.sv_name))          /* the slot: empty, or what it holds */
+    if (own)                                        /* the slot: its own (a rename), another's, empty (a copy: the */
+        e = occ && !ui_streq(occ, ui.sv_name) ? sp_put(sp_put(t, "RENAMES "), occ) : sp_put(t, "SAVES OVER ITSELF");
+    else if (occ)                                   /* sound's own slot kept) */
         e = sp_put(sp_put(t, "REPLACES "), occ);
-    else if (ui.sv_ver && sy_app_slot() >= 0 && (uint32_t)sy_app_slot() != ui.sv_slot)
-        e = sp_fix(sp_put(sp_put(sp_put(t, sy_patch.name), " STAYS IN USER "), ""), sy_app_slot() + 1, 0u, 0);
+    else if (sy_app_slot() >= 0)
+        e = sp_fix(sp_put(sp_put(t, sy_patch.name), " STAYS IN USER "), sy_app_slot() + 1, 0u, 0);
     else
-        e = sp_put(t, occ ? "WRITES OVER ITSELF" : "AN EMPTY SLOT");
+        e = sp_put(t, "AN EMPTY SLOT");
     (void)e;
-    ui_text_c(WX + 4, WY + 43, WW - 8, &AF_XS, t, occ && !ui_streq(occ, ui.sv_name) ? sk.label : sk.faint, sk.display);
+    ui_text_c(WX + 4, WY + 43, WW - 8, &AF_XS, t, occ && !own ? sk.label : sk.faint, sk.display);
     ui_save_keys(WY + 54);
 }
 
@@ -423,8 +469,8 @@ static void ui_g_browse(void)
         uint16_t bg = on ? sk.raised : sk.display;
         char up[17];
         uint32_t j;
-        for (j = 0; nm && nm[j] && j < 16u; j++)    /* (the starter sounds' names are lowercase in their table) */
-            up[j] = nm[j] >= 'a' && nm[j] <= 'z' ? (char)(nm[j] - 32) : nm[j];
+        for (j = 0; nm && nm[j] && j < 16u; j++)    /* (the starter sounds' names are lowercase in their table; */
+            up[j] = ids[k] < SY_USER && nm[j] >= 'a' && nm[j] <= 'z' ? (char)(nm[j] - 32) : nm[j];   /* a user's v2 stays) */
         up[j] = 0;
         if (on) {
             cv_rrect(WX + 78, y, 145, 16, 3, sk.rline2, sk.display);

@@ -14,7 +14,10 @@
  *     value (the MOD layer: RATE and TIME themselves, whose modulation steps it). A knob turning lights its cell, and
  *     on the filter's and the effects' pages the part of the graph it moves, its value in a flag, the shape before
  *     the turn dashed behind, until the gesture ends (UI_GESTURE_MS without a turn).
- *   - SAVE + OCT- undoes, SAVE + OCT+ redoes: the patch's last 8 states (an edit gesture or a sound's load each).
+ *   - SAVE (sy_ui_save.c): tapped once, the sound saved as a new preset at once (its next version, "NAME v2");
+ *     held 5 s, over its own slot (a countdown in the footer from HOLD); tapped twice, the browser (SAVE there:
+ *     NAME IT for the sound playing). SAVE + OCT- undoes, SAVE + OCT+ redoes: the patch's last 8 states (an edit
+ *     gesture or a sound's load each).
  *   - An LFO's POINTS page: KNOB 1 picks a point (round), KNOB 2 moves it along the cycle (between its
  *     neighbours; the first and last stay at the ends), KNOB 3 up and down, KNOB 4 curves the segment from it (the
  *     last point: the one into it). A shape other than DRAWN shows its points; the first edit draws from them
@@ -26,8 +29,8 @@
  *     at 0. ENV held: the same for ENV 2 (an envelope onto a knob).
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
- * Still to come: the LFO, FX, GLO and SCL layers, presets and SAVE, MIDI learn, help, the rest of the SETTINGS,
- * the matrix's graph. Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
+ * Still to come: the LFO, FX, GLO and SCL layers, MIDI learn, help, the rest of the SETTINGS, the matrix's
+ * graph. Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
  * sy_text.c. */
 
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
@@ -176,9 +179,10 @@ static struct {
     uint16_t sv_ret;                                /* SAVE, the browser: the page to go back to */
     char sv_name[17];                               /* SAVE: the name typed, its length, the cursor, the category */
     uint8_t sv_len, sv_cur, sv_cat, sv_slot;        /* .. the slot it goes to */
-    uint8_t sv_sym, sv_ver, sv_over, saving;        /* .. symbols on the keys; a new version; over its own; writing */
+    uint8_t sv_sym, sv_over, saving;                /* .. symbols on the keys; over its own slot; writing */
     uint8_t sv_key;                                 /* .. the key typed last (lit a moment; 0xFF none) */
-    uint32_t sv_key_t, sv_tap_t;                    /* .. when; SAVE tapped once, its screen at this time (0 none) */
+    uint32_t sv_key_t, sv_tap_t;                    /* .. when; SAVE tapped once: a new version (in the browser: */
+                                                    /* NAME IT) at this time, no second tap by then (0 none) */
     uint8_t br_cat, br_bank;                        /* the browser: the category (0 all), the bank (all, factory, user) */
     uint16_t br_want;                               /* .. a preset to load (its id + 1; 0 none) */
 } ui;
@@ -202,6 +206,7 @@ static const char *ui_sec_name(uint32_t s)
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
 static void ui_save_over(void);
+static void ui_save_hold(void);
 static void ui_save_write(void);
 static void ui_save_del(void);
 static int ui_save_key(uint32_t k);
@@ -654,8 +659,9 @@ static void ui_lfo_add(void)
 }
 
 /* a long hold, UI_LONG_MS: LFO on the POINTS page deletes the point picked (not the first or the last; the one before
- * it picked), HOME opens the SETTINGS. From HOLD a countdown in the footer; let go, a knob, another button, OCT's
- * pages (a chord), another page or the MOD layer stop it */
+ * it picked), HOME opens the SETTINGS, SAVE writes the sound over its own slot. From HOLD a countdown in the footer;
+ * let go, a knob, another button, OCT (its pages, or SAVE's undo and redo: a chord), another page or the MOD layer
+ * stop it */
 #define UI_LONG_MS 5000u
 static void ui_cd_arm(uint32_t b)
 {
@@ -709,7 +715,7 @@ static void ui_cd_tick(void)                        /* every millisecond while i
     uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left;
     char s[32], *e;
     if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || ui.mod ||
-        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT)) {
+        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT) || (b == B_SAVE && sy_app_slot() < 0)) {
         ui_cd_stop();
         return;
     }
@@ -717,6 +723,9 @@ static void ui_cd_tick(void)                        /* every millisecond while i
         ui.cd_btn = NB;
         if (b == B_LFO) {
             ui_lfo_del();
+        } else if (b == B_SAVE) {
+            ui.toast[0] = 0;
+            ui_save_over();
         } else {
             ui.toast[0] = 0;
             ui_go(ui_first_page(SEC_MENU));
@@ -724,13 +733,16 @@ static void ui_cd_tick(void)                        /* every millisecond while i
         return;
     }
     left = (UI_LONG_MS - held + 999u) / 1000u;
-    if (left != ui.cd_s) {                          /* "HOLD: DELETE POINT 3 IN 4", "HOLD: SETTINGS IN 4" */
+    if (left != ui.cd_s) {                          /* "HOLD: DELETE POINT 3 IN 4", "HOLD: SETTINGS IN 4", */
+                                                    /* "HOLD: SAVE OVER USER 3 IN 4" */
         ui.cd_s = (uint8_t)left;
         e = sp_put(s, "HOLD: ");
         if (b == B_LFO) {
             uint32_t k = ui_lfo();
             sp_draw_t t;
             e = sp_fix(sp_put(e, "DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
+        } else if (b == B_SAVE) {
+            e = sp_fix(sp_put(e, "SAVE OVER USER "), sy_app_slot() + 1, 0u, 0);
         } else {
             e = sp_put(e, "SETTINGS");
         }
@@ -962,6 +974,8 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
         ui_cd_arm(B_HOME);                          /* (5 s: the SETTINGS) */
     else if (b == B_LFO && UI_PG[ui.page].id[0] == UI_LPT && !ui.mod)
         ui_lfo_del_arm();
+    else if (b == B_SAVE && !ui.mod)
+        ui_save_hold();                             /* (5 s: over its own slot) */
 }
 
 static void ui_release(uint32_t b, int held)
@@ -969,31 +983,32 @@ static void ui_release(uint32_t b, int held)
     uint32_t f;
     if (b == ui.cd_btn)
         ui_cd_stop();                               /* (let go before the end: nothing happens) */
-    if (held) {                                     /* a held layer closes (a latched one stays); SAVE held and */
-        if (ui.mod == 1u && ui.mod_btn == b)        /* let go, no OCT meanwhile (undo, redo): the browser */
-            ui_mod_close();
-        if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && ui_sec() != SEC_SAVE)
-            ui_browse_open();
+    if (held) {                                     /* a held layer closes (a latched one stays); SAVE held on a */
+        if (ui.mod == 1u && ui.mod_btn == b)        /* sound from no user slot, no OCT meanwhile (undo, redo): */
+            ui_mod_close();                         /* nothing to save over */
+        if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && sy_app_slot() < 0 &&
+            ui_sec() != SEC_SAVE && ui_sec() != SEC_BROWSE)
+            ui_toast("NOTHING TO SAVE OVER: TAP SAVE");
         return;
     }
-    if (b == B_SAVE) {                              /* SAVE: on its screen, write; in the browser, its screen; else */
-        ui.sv_tap_t = 0;                            /* once: its screen (when no second tap comes), twice: over */
-        if (ui.mod)                                 /* its own slot */
+    if (b == B_SAVE) {                              /* SAVE: on NAME IT, written; else once (no second tap within */
+        ui.sv_tap_t = 0;                            /* UI_DTAP_MS) a new version, in the browser NAME IT; twice */
+        if (ui.mod)                                 /* the browser, in it back */
             return;
         if (ui_sec() == SEC_SAVE)
             ui_save_write();
-        else if (ui_sec() == SEC_BROWSE)
-            ui_save_open();
-        else if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS)
-            ui_save_over();
-        else
+        else if (fm1_ms - ui.tap_t[b] >= UI_DTAP_MS)
             ui.sv_tap_t = (fm1_ms + UI_DTAP_MS) | 1u;
+        else if (ui_sec() == SEC_BROWSE)
+            ui_go(ui.sv_ret);
+        else
+            ui_browse_open();
         ui.tap_t[b] = ui.sv_tap_t ? fm1_ms : 0u;
         return;
     }
     if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {
-        ui.tap_t[b] = fm1_ms;                       /* HOME: back, unsaved */
-        ui_go(ui.sv_ret);
+        ui.tap_t[b] = fm1_ms;                       /* HOME: NAME IT back to the browser, unsaved; the browser back */
+        ui_go(ui_sec() == SEC_SAVE ? ui_first_page(SEC_BROWSE) : ui.sv_ret);
         return;
     }
     if (ui_has_layer(b) && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod) {   /* a double tap: latched */
