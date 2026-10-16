@@ -26,6 +26,16 @@ integration (Phase 6).
 emulator** (78 checks, TESTING.md §6.3); [CONTROLS.md](CONTROLS.md) is the reference for the panel. Still on the FM-1's
 side: integration (Phase 6), the BENCH page, everything §20 marks for the hardware.
 
+**Hardware test build** (after Phase 4, before Phase 5, at your request): the FM-1 unit is built. `strata.c` includes
+Felucca's platform unchanged (the HAL, USB, TRS MIDI, the flash driver, the update entry `ota.c`; the update loader is
+Felucca's too) and Strata's sources; `sy_main.c` (power-on, the boot guard, the UBOOT entries, the update entry behind
+the hush, MIDI in, the main loop), `sy_hw.c` (the flash's and the update's hooks) and `sy_console.c` (the USB serial
+console) are the FM-1's glue. `tools/build.py --strata` builds `build/strata.fwsc` (`FM-1_900`) and checks it (the
+image, RAM, the pool, the interrupt stack counted from the listing); SETTINGS > BENCH measures on the unit; the flasher
+(`web/strata_flash`) is tested in a browser against a simulated FM-1 (TESTING.md §8). [FLASHING.md](FLASHING.md) is the
+procedure: a full backup first, the install, the test, the way back. Phase 6 keeps the rest: MIDI clock, start and
+stop, MIDI out, and what the hardware test finds.
+
 Contents: 1 constraints, 2 source layout, 3 real-time model, 4 signal flow, 5 number formats, 6 wavetables,
 7 oscillators, 8 sub and noise, 9 filter, 10 envelopes and LFOs, 11 modulation, 12 parameters, 13 voices and the
 CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 testing, 19 the second core, 20 risks.
@@ -53,8 +63,8 @@ voice's block), `sy_fx.c` and `sy_engine.c` (notes, allocation, the unison budge
 changes, table builds); tests in `tests/sy_*`. Phase 3 added `sy_text.c` (a value as its unit shows it, for the knob
 cards and the workbench), `sy_sounds.h` (the eight starter sounds, until Phase 5's factory presets) and `sy_app.c`
 (the app around the engine on Felucca's HAL, `panel.c` and `gfx.c`: the audio interrupt, the event rings, MIDI in, the
-pages, the LEDs, a placeholder screen); `strata.c`, the unit that includes Felucca's platform and `sy_app.c`, comes
-with integration. In the browser: `web/strata` (the workbench: the DSP alone) and `web/emu/strata_web.c` (the app on
+pages, the LEDs, a placeholder screen); `strata.c`, the unit that includes Felucca's platform and `sy_app.c`, came
+with the hardware test build, with the FM-1's glue (`sy_main.c`, `sy_hw.c`, `sy_console.c`). In the browser: `web/strata` (the workbench: the DSP alone) and `web/emu/strata_web.c` (the app on
 the simulated FM-1). Phase 4 adds the UI: `sy_gfx.c` (the palettes by colour role, anti-aliased arcs, discs,
 segments and curves on `gfx.c`'s canvas), `sy_ui.c` (pages, families, gestures, the knobs, the MOD layer) and
 `sy_ui_draw.c` (the five screen regions, the graphs, the LEDs); `sy_app.c` keeps the audio, the events, MIDI in, the
@@ -93,7 +103,8 @@ main loop  (~60 frames/s)     UI input and drawing, wavetable builds, storage, U
 
 - **Events** reach the voices only at block starts (0.73 ms granularity), as in Felucca. Panel keys and MIDI share one
   path: two rings with one producer each (the panel's from the main loop, MIDI's), which the audio interrupt drains
-  before each block (`sy_app.c`).
+  before each block (`sy_app.c`). On the FM-1 the main loop fills both: the panel's from the keys, MIDI's from
+  Felucca's USB and TRS ring, a pass at a time (`sy_main.c`).
 - **Main loop to ISR.** The UI never touches voice state. It writes the patch's parameter values (16-bit stores, atomic on
   this core) and posts commands (note panic, patch swap, table swap) into a small single-producer ring the ISR drains at
   a block start. A parameter written mid-block is picked up at the next block and smoothed (§12).
@@ -616,7 +627,7 @@ changed, in strips, so the 12 MHz display keeps up.
 | SAVE | once: the sound saved as a new preset at once (its next version, "NAME v2"); twice: the preset browser, where SAVE opens NAME IT (built) | 5 s: over its own slot, a countdown first (built); SAVE + OCT− undo, SAVE + OCT+ redo (built) |
 | ARP | (v1: the arpeggiator; built: a word saying so) | — |
 | PLAY | starts and stops the internal transport (built: the FREE LFOs start on the beat; MIDI clock at integration; the arp in v1) | — |
-| OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); on NAME IT letters / symbols and delete; while MIDI LEARN listens, its CC away / done (built) | both 5 s: UBOOT (Felucca; at integration) |
+| OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); on NAME IT letters / symbols and delete; while MIDI LEARN listens, its CC away / done (built) | both 5 s: UBOOT (built: the hardware test build) |
 
 PRESETS turns through presets from every page (built). SELECT steps the family's pages (built).
 
@@ -649,8 +660,10 @@ FM-1 in a browser; `strata_emu_test.mjs` drives it under Node, `strata_shot.mjs`
 also builds as WebAssembly for the host tests (`tests/sy_wasm.sh`) and for the workbench (`web/strata`, `wb_test.mjs`).
 Felucca's platform tests (storage, OTA, loader, USB, MIDI parser, input) keep running.
 
-**On the device** (needs your go-ahead, after a full backup): a BENCH page times each kernel with TIMER4 and reports
-the clock and instructions/µs, replacing the Phase 0 assumptions in this document.
+**On the device** (FLASHING.md: after a full backup, you install it and test): SETTINGS > BENCH (built for the
+hardware test) shows a half's render, the load and the guard, a frame's drawing, the keys' longest wait, a wavetable
+build, the flash's interrupts-off windows and both stacks' use, and times two loops whose instructions the listing
+counts (the clock and the instructions a µs), replacing the Phase 0 assumptions in this document.
 
 ## 19. The second core (v1)
 
@@ -673,4 +686,5 @@ whether Strata needs that is decided by the device test.
 | TRS MIDI out | not possible on stock hardware; dropped (§15) |
 | A flash erase longer than measured (the datasheet's maximum) | the hush holds silence in the ring for any length; the keys and MIDI wait meanwhile (a SAVE is deliberate; the background writes wait for 3 s of silence) |
 | Keys' latency while a live page draws (the main loop reads the keys) | only changed rows are sent (§17); the BENCH page times a frame; if needed the keys go to the TIMER5 tick as Felucca's input scan does |
+| The interrupt stack (7,936 B: the audio's render, TIMER5 nested in it) | `build.py --strata` counts it from the listing (~2.4 KiB, 4 KiB allowed); BENCH reads both stacks' use on the unit (painted at power-on) |
 | Strata's presets take Felucca's projects and samples area | said at install (§16); different magics, so neither misreads the other's records |

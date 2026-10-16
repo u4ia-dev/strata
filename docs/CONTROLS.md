@@ -50,7 +50,7 @@ A family button's tap shows its pages: the first tap the family's page shown las
 | GLO | VOICE | VOICE: MODE · VOICES · GLIDE · GL MODE; PLAY: BEND UP · BEND DN · VEL AMP · VOLUME |
 | | GLOBAL | TEMPO: BPM · TS-BEAT · TS-NOTE |
 | SCL | KEYS | SCALE: SCALE · ROOT · FIT · VELOCITY |
-| HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM |
+| HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
 2–4 that point's frequency, gain and Q) and the MATRIX (KNOB 1 the slot, 1–8; KNOB 2–4 its source, destination and
@@ -70,7 +70,7 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 
 | Button | Tap | Twice | Held | Held 5 s | With another control |
 | --- | --- | --- | --- | --- | --- |
-| HOME | HOME | | | the SETTINGS (a countdown from the hold) | held at power-on: the last sound is not brought back |
+| HOME | HOME | | | the SETTINGS (a countdown from the hold) | held at power-on: the last sound is not brought back (after a crash neither: SAFE START) |
 | EDIT | its pages | | JUMP | | + OCT−/OCT+: the section's pages |
 | ENV | its pages | the MOD layer for ENV 2, latched | the MOD layer for ENV 2 | | + OCT: the section's pages |
 | LFO | its pages | on POINTS: a point added | MOMENTARY (on POINTS: deletes the point picked) | on POINTS: the point picked deleted (a countdown) | + OCT: the section's pages |
@@ -82,7 +82,7 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 | SAVE | a new version, saved at once | the browser (in it: back) | | saved over its own slot (a countdown from the hold) | + OCT−: undo; + OCT+: redo |
 | PLAY | the transport on, off | | | | |
 | ARP | "in a later version" | | | | |
-| OCT− / OCT+ | the keys' octave | | | | with a family button or REC held: that section's pages; on NAME IT: OCT+ letters / symbols, OCT− deletes; while MIDI LEARN listens: OCT− takes the picked parameter's CC away, OCT+ ends LEARN |
+| OCT− / OCT+ | the keys' octave | | | | with a family button or REC held: that section's pages; on NAME IT: OCT+ letters / symbols, OCT− deletes; while MIDI LEARN listens: OCT− takes the picked parameter's CC away, OCT+ ends LEARN; **both held 5 s: UBOOT**, the chip's USB boot (a countdown in the footer from 2 s; letting go stops it; [FLASHING.md](FLASHING.md)) |
 
 ## The layers
 
@@ -171,6 +171,11 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 | SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO | HELP: a section's hint in the footer as it opens (on by default) | GLOW: the LEDs' glow, HIGH or LOW | |
 | PANEL | ACCEL: the knobs' speed sensitivity | HOLD: 300, 400, 500 or 600 ms before a held button's layer | | |
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
+| BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |
+
+BENCH shows what the FM-1 measures, a row each: AUDIO, CPU, SCREEN, KEYS, TABLES, FLASH, STACKS, RUN (what each
+means: [TESTING.md](TESTING.md) §8.3; how to use it in the hardware test: [FLASHING.md](FLASHING.md) §4). The
+emulator says it has no clock of its own.
 
 HOME leaves the SETTINGS. GLOBAL's TEMPO (BPM 20–300, TS-BEAT 1–16, TS-NOTE 1, 2, 4, 8, 16) and SCL's page are kept
 with the settings too, not with a sound.

@@ -3,7 +3,7 @@
 What is tested, how, and what the tests found. Status words as in [ARCHITECTURE.md](ARCHITECTURE.md):
 **verified on host** (the real DSP sources built with the PC's compiler and checked offline), **verified in emulator**,
 **needs hardware test**. Nothing here has run on an FM-1 yet: every figure about the device is an estimate until the
-BENCH page runs on a unit.
+BENCH page runs on a unit (the hardware test build, §8; [FLASHING.md](FLASHING.md)).
 
 ## 1. Running the tests
 
@@ -21,6 +21,8 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 | `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` | Strata on the simulated FM-1 into `build/emu_strata/`, and its test (§6.3); `node web/emu/strata_shot.mjs` writes the screen as PNG into `build/emu_strata/shots/` |
 | `python3 -m http.server -d build/emu_strata 8000` | the emulator in a browser, at `http://localhost:8000` |
 | `node web/emu/strata_browser_test.mjs` | the emulator's one-file page in headless Chrome or Edge under five content security policies (§6.4); on Windows with Windows' Node |
+| `tools/build.py --strata` | Strata for the FM-1: `build/strata.bin`, `strata.dis`, `strata.fwsc`, and the checks of §8.1 (the JieLi toolchain and the AC79 SDK, as Felucca's build) |
+| `python3 web/strata_flash/make_flasher.py`, then `node web/strata_flash/flash_test.mjs` | the flasher into `build/flasher/` (only a package rebuilt byte for byte from the app and the loader just built), and its test in headless Chrome against a simulated FM-1 (§8.2; Windows' Node on Windows; screenshots into `build/flasher_shots/`) |
 
 ## 2. Verified on host
 
@@ -406,7 +408,8 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 ## 7. Needs hardware test
 
 - The instruction rate of this engine's float code, the cost of a float divide, the instruction cache's effect: the
-  BENCH page (first integration build) times each kernel and the whole engine with the 24 MHz timer.
+  SETTINGS > BENCH (the hardware test build, §8.3) times two loops whose instructions the listing counts, and the
+  whole engine's halves, with the 24 MHz timer.
 - That the engine fits in RAM beside Felucca's platform, and the pool layout links.
 - A table's build time (§2.1) and the gap it leaves when a table or a preset changes.
 - The codec's output: levels, the −6 dBFS ceiling, DC at the jack.
@@ -418,4 +421,61 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 - The flash on the device: an erase's and a page's IRQ-off time against the hush (the ring silent before any write);
   a SAVE's write and the background writes after 3 s of silence; that nothing outside the allow-list is ever touched
   (the RAM driver's second guard). Before any of it: a full flash dump (the brief's `docs/02-update-and-recovery.md`
-  exists nowhere; FLASHING.md, Phase 7, builds on the tools PHASE0.md §7 found).
+  exists nowhere; [FLASHING.md](FLASHING.md), written for the hardware test, builds on the tools PHASE0.md §7 found).
+
+## 8. The FM-1 build and its flasher (the hardware test build)
+
+### 8.1 The build's checks (`tools/build.py --strata`)
+
+Felucca's checks, unchanged, on Strata's unit: `_start` at the app's address and the entry stub; the RAM code (the flash
+driver) with no calls into the flash; no reference into the chip's ROM; the image within the app slot (370,944 of
+581,564 bytes); `.data` + `.bss` with 4 KiB spare (48,288 of 73,728 bytes) and the pool with 8 KiB (359,396 of 368,640
+bytes: 9.2 KiB spare); every register access in `hal/`. That last one caught `SY_CBAR` (an empty barrier written in a
+form the lint does not take): Felucca's own build had failed on it since Phase 2.
+
+New for Strata, **the interrupt stack**. The audio's render and TIMER5, nested in it, share the system stack (7,936
+bytes). From the listing: each function's pushes and stack adjustments make its frame; its depth is its frame plus its
+deepest callee's (a call, or a tail call); calls through the oscillator kernels', the filter types' and the effects'
+tables take every function their initializers name (read from the source, so a new kernel counts at once), and any
+other call through a register fails the build. Now ~2.4 KiB (the audio 2,228 bytes, TIMER5 124, the two wrappers 56) of
+the 4 KiB allowed.
+
+The package has Felucca's identity (`FM-1_900`), update loader and layout: 610,090 bytes. The first device build also
+found three `strlen` calls in the effects' drawing (the host and Emscripten have one, the firmware not).
+
+### 8.2 The flasher (`web/strata_flash`, `flash_test.mjs`, 16 checks)
+
+The page as `make_flasher.py` makes it (Felucca's `fm1ota.js` and `fm1pkg.js`, unchanged, inlined), in headless Chrome
+against a simulated FM-1 on Web MIDI (after Felucca's `FakeFM1`: the handshake, step 1's reads, the reset into the
+update loader, step 2's reads, the reset into the new firmware; every byte served compared with the package) and a
+simulated console on Web Serial:
+
+| What | Checked |
+| --- | --- |
+| as it opens | the package's size, SHA-256 and identity checked; no confirmation, bar or report drawn; Find off until all four boxes are ticked; no exception |
+| an install over the official firmware | Find names it (`FM-1_015`, official) and draws its confirmation; both steps, every byte right (47 reads), `FM-1_900` back, the bar full |
+| the FM-1 in update mode | Find says so; the write finished (41 reads, every byte right) |
+| refusals | a device that is no FM-1 (nothing sent); no FM-1; Cancel (nothing sent); an "official" file that is not V15; the package changed by one byte (Find stays off) |
+| backup mode | a click on its button before its confirmation does nothing; after it, the soft key once and no update |
+| the report | `status` and `bench` read and shown, Copy on; RUN: `bench run`, then `status` and `bench` |
+| layout | no sideways scroll at 390 px; the dark scheme |
+
+Found by its screenshots: every confirmation was drawn from the start (a `display` rule beat the `hidden` attribute).
+The buttons behind two of them did nothing until Find; the backup mode's would have worked at once. Fixed (a
+`[hidden]` rule and the backup's own guard); the test now checks what is drawn, not the attribute.
+
+### 8.3 What BENCH measures (SETTINGS > BENCH, the console's `bench`)
+
+- **AUDIO**: a half's render in µs (TIMER5's nested time taken off), the last and the longest, and the halves the DMA
+  had already left when their render ended (late).
+- **CPU**: the guard's smoothed load, its budget steps and the voices it shed.
+- **SCREEN**: a frame's drawing (`sy_app_frame`), the last and the longest.
+- **KEYS**: the longest time between two of the main loop's millisecond passes: the keys, MIDI and the knobs wait at
+  most that long (frames and flash writes included).
+- **TABLES**: a wavetable build's longest step (a millisecond pass while it builds) and the whole build.
+- **FLASH**: the longest interrupts-off window of an erase and of a page's program (TIMER4 around the RAM driver's
+  call), and the erases so far.
+- **STACKS**: both stacks painted at power-on (below where the boot runs, 512 bytes clear), their unpainted depth.
+- **RUN**: two loops (100,000 integer and 50,000 float iterations) timed with the interrupts off behind the hush;
+  their instructions are counted in `build/strata.dis` (`sy_run_int`, `sy_run_flt`), so their times give the core's
+  rate.
