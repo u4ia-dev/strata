@@ -317,7 +317,7 @@ sent at once). **Verified in emulator**, under Node:
 | GLOBAL | GLO tapped three times: the TEMPO page, 120 BPM 4/4; BPM 3 slow detents 123, held between 20 and 300; TS-BEAT 1-16; TS-NOTE 1, 2, 4, 8, 16; 300 BPM in eighths: 150 quarter notes a minute |
 | FX | ALGORITHM through six effects (DRIVE .. EQ), round; the EQ's pages GAIN (LOW, MID, HIGH, ON) and FREQ (LO FREQ, MID FREQ, MID Q, HI FREQ) |
 | A knob turning | KNOB 2 on the EQ's GAIN page: its cell lit, the curve before the turn kept, 2,642 pixels; a second after the last detent both let go (3,253 pixels back) |
-| HOME | a note playing: the scope live (12 captures in 0.5 s, its rows redrawn 7 times); on another page no capture |
+| HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows redrawn 9 times); on another page no capture |
 | The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,871 pixels of the display), the frame before the turn kept |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |

@@ -487,6 +487,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
 }
 {                                               // HOME: the sound and its output, live
   tap(ex, B.HOME);
+  const dq = ex.web_screen_draws();
+  play(ex, 1.0);
+  const quiet = ex.web_screen_draws() - dq;     // (silence: the scope's flat capture, drawn once)
   const sec = ex.web_test_page_section(), s0 = ex.web_test_scope(), d0 = ex.web_screen_draws();
   ex.web_keys(1 << 7);
   play(ex, 0.5);
@@ -496,8 +499,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   tap(ex, B.EDIT);
   const s2 = ex.web_test_scope();
   play(ex, 0.5);
-  check(`HOME (section ${sec}): a note playing, the scope live (${s1 - s0} captures in 0.5 s, ${d1 - d0} blits); another page, none (${ex.web_test_scope() - s2})`,
-        sec === SEC.MACRO && s1 - s0 >= 8 && d1 - d0 >= 5 && ex.web_test_scope() - s2 <= 1);
+  check(`HOME (section ${sec}): silence, nothing redrawn (${quiet} blits in 1 s); a note playing, the scope live (${s1 - s0} captures in 0.5 s, ${d1 - d0} blits); another page, none (${ex.web_test_scope() - s2})`,
+        sec === SEC.MACRO && quiet === 0 && s1 - s0 >= 8 && d1 - d0 >= 5 && ex.web_test_scope() - s2 <= 1);
 }
 {                                               // OSC A's WAVE page: the frames drawn through the warp
   const n0 = name();

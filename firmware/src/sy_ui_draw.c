@@ -978,18 +978,23 @@ static void sy_ui_frame(void)
         ui.dirty |= D_DISP;
         was_live = (uint8_t)live;
     }
-    if (g == G_HOME) {                              /* the scope: a capture kept, the next asked for */
+    if (g == G_HOME) {                              /* the scope: a capture kept (drawn when it differs), the next */
+        static uint8_t fresh;                       /* asked for */
         if (sy_scope.st == 2u) {
             SY_CBAR();
-            memcpy(ui_scope, sy_scope.v, sizeof ui_scope);
+            if (!ui_scope_ok || memcmp(ui_scope, sy_scope.v, sizeof ui_scope)) {
+                memcpy(ui_scope, sy_scope.v, sizeof ui_scope);
+                fresh = 1;
+            }
             ui_scope_ok = 1;
             sy_scope_arm(ui_scope_step());
-            if (fm1_ms - ui.live_t >= 40u) {
-                ui.live_t = fm1_ms;
-                ui.dirty |= D_LIVE;
-            }
         } else if (sy_scope.st == 0u) {
             sy_scope_arm(ui_scope_step());
+        }
+        if (fresh && fm1_ms - ui.live_t >= 40u) {
+            ui.live_t = fm1_ms;
+            ui.dirty |= D_LIVE;
+            fresh = 0;
         }
         if (nv != was_nv || (sy_app_load() >= 0 && fm1_ms - load_t >= 500u)) {   /* the voices, the load */
             load_t = fm1_ms;
