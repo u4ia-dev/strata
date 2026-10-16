@@ -54,13 +54,14 @@ static int sy_app_save(uint32_t s, const char *name, uint32_t cat);   /* .. a SA
 /* ------------------------------------------------------------------------------------------- pages --- */
 #define UI_ITEM 1000                        /* an item that is no parameter: the SETTINGS', an LFO's points, GLOBAL's */
 enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB, UI_TSN, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ,
-       UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK };   /* (SAVE's, the browser's: sy_ui_save.c) */
+       UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT, UI_BCAT, UI_BPRE, UI_BBANK,
+       UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT };         /* (the matrix's: the slot picked, its source, place, amount) */   /* (SAVE's, the browser's: sy_ui_save.c) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
 #define SEC_BROWSE (SEC_COUNT + 3)
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -97,7 +98,7 @@ static const ui_page_t UI_PG[] = {
     {SEC_VOICE, G_LIST, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
     {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
-    {SEC_MATRIX, G_LIST, "SLOT 1", {SP_M1_SRC, SP_M1_DST, SP_M1_AMT, -1}},
+    {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
     {SEC_DRIVE, G_DRIVE, "DRIVE", {SP_DR_TYPE, SP_DR_AMT, SP_DR_TONE, SP_DR_MIX}},
     {SEC_DRIVE, G_DRIVE, "POWER", {SP_DR_ON, -1, -1, -1}},
     {SEC_CHORUS, G_CHORUS, "CHORUS", {SP_CH_RATE, SP_CH_DEPTH, SP_CH_DELAY, SP_CH_MIX}},
@@ -164,6 +165,7 @@ static struct {
     uint16_t prev_page;                             /* the page before the last tap (a double tap puts it back) */
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
+    uint8_t mslot;                                  /* the matrix's slot picked (SEQ), 0 .. NSLOT - 1 */
     uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
     uint8_t act_k;                                  /* the knob turning (its cell lit; 0xFF none) */
     uint32_t act_t;                                 /* .. its last detent */
@@ -264,12 +266,15 @@ static void ui_page_of(uint32_t page, uint32_t *n, uint32_t *of)
 }
 
 /* the EQ's POINTS page, KNOB 2-4: the point picked's FREQ, GAIN and Q (its parameters: the MOD layer sets their
- * depths, undo takes them back); any other id as it is */
+ * depths, undo takes them back); the matrix's, KNOB 2-4: the slot picked's SOURCE, DEST, AMOUNT; any other id as it
+ * is */
 static int32_t ui_virt(int32_t id)
 {
     static const uint8_t F[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ}, G[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH};
     static const uint8_t Q[3] = {SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ};
-    uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u;
+    uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u, m = 3u * (ui.mslot < NSLOT ? ui.mslot : 0u);
+    if (id >= UI_MSRC && id <= UI_MAMT)
+        return (int32_t)(SP_M1_SRC + m) + (id - UI_MSRC);
     return id == UI_EQF ? F[p] : id == UI_EQG ? G[p] : id == UI_EQQ ? Q[p] : id;
 }
 
@@ -819,6 +824,9 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
     } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */
         ui.eqpt = (uint8_t)((ui.eqpt + (uint32_t)(s % 3 + 3)) % 3u);   /* whose depths KNOB 2-4 set) */
         ui.dirty |= D_KNOBS | D_DISP;
+    } else if (item == UI_MSLOT) {                  /* the matrix's slot, round */
+        ui.mslot = (uint8_t)((ui.mslot + (uint32_t)(s % (int32_t)NSLOT + (int32_t)NSLOT)) % NSLOT);
+        ui.dirty |= D_KNOBS | D_DISP;
     } else if (ui.mod) {
         return;
     } else if (item >= UI_BPM && item <= UI_TSN) {
@@ -915,8 +923,9 @@ static void ui_knob(uint32_t k, int32_t s)
     ui.dirty |= D_KNOB(k) | D_DISP;
     if (id == SP_L1_SYNC || id == SP_L2_SYNC || id == SP_DL_SYNC)
         ui.dirty |= D_KNOBS;                        /* (RATE, TIME: Hz or ms, or a note value) */
-    if (ui_sec_power(ui_sec()) == id || UI_PG[ui.page].graph == G_WT3D || UI_PG[ui.page].graph == G_WT2D)
-        ui.dirty |= D_HEAD;                         /* (the light; OCT SEM FIN) */
+    if (ui_sec_power(ui_sec()) == id || UI_PG[ui.page].graph == G_WT3D || UI_PG[ui.page].graph == G_WT2D ||
+        ui_sec() == SEC_MATRIX)
+        ui.dirty |= D_HEAD;                         /* (the light; OCT SEM FIN; the slots in use) */
 }
 
 /* a parameter changed from elsewhere (MIDI, a sound): what shows it */

@@ -178,6 +178,13 @@ static void ui_draw_head(void)
             sp_fix(t, (int32_t)n, 0u, 0);
             r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
             break;
+        case SEC_MATRIX:                            /* the slots in use (a source and an amount) */
+            for (n = 0, s = 0; s < NSLOT; s++)
+                n += sy_patch.p[SP_M1_SRC + 3u * s] > SRC_NONE && sy_patch.p[SP_M1_AMT + 3u * s] != 0;
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, " OF 8 IN USE", sk.dim, sk.ground);
+            sp_fix(t, (int32_t)n, 0u, 0);
+            r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
+            break;
         case SEC_SAVE:                              /* SAVE: the slot it goes to; the browser: the category, the */
         case SEC_BROWSE:                            /* place in it */
             ui_save_head(t);
@@ -323,6 +330,10 @@ static void ui_draw_knob(uint32_t k)
     } else if (id == UI_EQPT) {                     /* the EQ's point picked */
         ui_pill(EQPT[ui.eqpt < 3u ? ui.eqpt : 0u], ui.mod != 0, act);
         ui_text_c(0, 46, 60, &AF_XS, "POINT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
+    } else if (id == UI_MSLOT) {                    /* the matrix's slot picked */
+        sp_fix(t, (int32_t)ui.mslot + 1, 0u, 0);
+        ui_pill(t, ui.mod != 0, act);
+        ui_text_c(0, 46, 60, &AF_XS, "SLOT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
     } else if (id >= UI_ITEM) {                     /* the SETTINGS' items */
         ui_pill(id == UI_COLOR ? SY_PAL[ui.pal].name : ui.accel ? "ON" : "OFF", 0, act);
         ui_text_c(0, 46, 60, &AF_XS, id == UI_COLOR ? "COLOR" : "ACCEL", act ? sk.now : sk.label, sk.ground);
@@ -831,6 +842,36 @@ static void ui_g_list(void)
     }
 }
 
+/* SEQ's MATRIX: the eight slots, each its source, where it goes (the destination's section and name) and how much
+ * (positive in VALUE, negative in MOD-), the one picked raised (KNOB 2-4 set it); a slot without a source: EMPTY */
+static void ui_g_matrix(void)
+{
+    uint32_t s;
+    char t[SP_TEXT_N + 8];
+    for (s = 0; s < NSLOT; s++) {
+        int32_t y = WY + 2 + (int32_t)s * 13, ty = y + CAP_IN(XS, 13), src = sy_patch.p[SP_M1_SRC + 3u * s];
+        int32_t amt = sy_patch.p[SP_M1_AMT + 3u * s];
+        int on = s == ui.mslot, used = src > SRC_NONE && src < (int32_t)SRC_COUNT;
+        uint16_t bg = on ? sk.raised : sk.display;
+        if (on)
+            cv_rrect(WX + 2, y, WW - 4, 13, 2, sk.raised, sk.display);
+        sp_fix(t, (int32_t)s + 1, 0u, 0);
+        cv_text_on(WX + 7, ty, &AF_XS, t, on ? sk.now : sk.faint, bg);
+        if (!used) {
+            cv_text_on(WX + 20, ty, &AF_XS, "EMPTY", sk.faint, bg);
+            continue;
+        }
+        cv_text_on(WX + 20, ty, &AF_XS, SRC_NAMES[src], on ? sk.text : sk.text2, bg);
+        cv_rect(WX + 79, y + 6, 7, 1, amt ? sk.label : sk.faint);   /* (an arrow: source to where it goes) */
+        cv_rect(WX + 84, y + 5, 1, 3, amt ? sk.label : sk.faint);
+        cv_rect(WX + 83, y + 4, 1, 5, amt ? sk.label : sk.faint);
+        sp_text(SP_M1_DST + 3u * s, sy_patch.p[SP_M1_DST + 3u * s], t);
+        cv_text_fit(WX + 91, ty, &AF_XS, t, on ? sk.text : sk.text2, bg, 86);
+        ui_pct(t, amt);
+        cv_text_r(WX + WW - 6, ty, &AF_XS, t, amt > 0 ? sk.value : amt < 0 ? sk.modneg : sk.faint, bg);
+    }
+}
+
 /* SETTINGS > COLOR: the palettes, each with its own ground, raised, sound, now, value and mod */
 static void ui_g_color(void)
 {
@@ -967,6 +1008,7 @@ static void ui_draw_disp(uint32_t r0)
     case G_EQ: ui_g_eq(); break;
     case G_SAVE: ui_g_save(); break;
     case G_BROWSE: ui_g_browse(); break;
+    case G_MATRIX: ui_g_matrix(); break;
     default: ui_g_list(); break;
     }
     for (y = r0; y < cv_h; y++) {
