@@ -72,7 +72,7 @@ static int32_t fm1_enc_take(uint32_t e)
 
 /* ------------------------------------------------------------------------------------------- the screen --- */
 static uint16_t web_fb[240 * 240];               /* RGB565 as the panel gets it (high byte first) */
-static uint32_t web_draws;
+static uint32_t web_draws, web_px;              /* blits, and the pixels they sent (the SPI's load on the FM-1) */
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *p)
 {
     uint32_t i, j;
@@ -80,6 +80,7 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
         for (i = 0; i < w && x + i < 240u; i++)
             web_fb[(y + j) * 240u + x + i] = p[j * w + i];
     web_draws++;
+    web_px += w * h;
 }
 static void lcd_sync(void) {}
 
@@ -283,6 +284,7 @@ EXPORT uint8_t *web_anim_levels(void) { return 0; }
 
 EXPORT uint16_t *web_screen(void) { return web_fb; }
 EXPORT uint32_t web_screen_draws(void) { return web_draws; }
+EXPORT uint32_t web_screen_px(void) { return web_px; }
 EXPORT uint32_t web_now_ms(void) { return fm1_ms; }
 EXPORT uint32_t web_playing(void) { return 0; }
 EXPORT uint32_t web_sample_rate(void) { return 44118u; }
@@ -297,6 +299,13 @@ EXPORT uint32_t web_test_voices(void)
     return n;
 }
 EXPORT uint32_t web_test_page(void) { return ui.page; }
+/* page p shown at once (not SAVE's, the browser's: they open from SAVE); the pages' count */
+EXPORT uint32_t web_test_go(uint32_t p)
+{
+    if (p < UI_NPG && UI_PG[p].sec != SEC_SAVE && UI_PG[p].sec != SEC_BROWSE)
+        ui_go(p);
+    return UI_NPG;
+}
 EXPORT uint32_t web_test_page_section(void) { return UI_PG[ui.page].sec; }
 EXPORT const char *web_test_page_name(void) { return UI_PG[ui.page].name; }
 EXPORT int32_t web_test_page_param(uint32_t k) { return k < 4u ? UI_PG[ui.page].id[k] : -1; }

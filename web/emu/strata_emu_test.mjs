@@ -11,7 +11,10 @@
 // curve; 16 at most; nothing in the MOD layer; LFO held 5 s deletes the point picked, a countdown first, stopped by a
 // release or a knob, the end points kept); SAVE + OCT- / OCT+ (undo, redo: a gesture at a time, a sound's load);
 // SYNC FIXED (RATE and the delay's TIME step note values); GLO's GLOBAL page (BPM 20-300, TS-BEAT 1-16, TS-NOTE 1 2
-// 4 8 16); a screen region drawn only when it changes; Web MIDI and its CCs; the same input twice, the same sound.
+// 4 8 16); a screen region drawn only when it changes; FX (six effects, the order, the EQ's pages), the chorus's
+// taps and HOME's scope live only with sound; the warp drawn; SAVE (a name, a version, over), the browser, the
+// flash's allow-list, a power cycle; every page drawing nothing in silence, a note held sending only the rows that
+// change (the SPI's share); Web MIDI and its CCs; the same input twice, the same sound.
 //   node web/emu/strata_emu_test.mjs [build/emu_strata/strata.wasm]      (from the repo root, after build_strata.sh)
 import { readFileSync } from "node:fs";
 
@@ -24,8 +27,8 @@ function check(what, ok) {
 }
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19,
-              SAVE: 20, BROWSE: 21 };                                                         // SEC_*
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, OTT: 16, EQ: 17,
+              MENU: 18, GLOBAL: 19, SAVE: 20, BROWSE: 21 };                                   // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
@@ -671,6 +674,59 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         cstr(b2, b2.web_test_slot_name(0)) === "WARM PAD" &&
         cstr(b2, b2.web_test_patch_name()) === cstr(ex, ex.web_test_patch_name()) && b2.web_test_palette(-1) === 3);
   ex.web_test_palette(0);
+}
+{                                               // every page: in silence nothing drawn; a note held, the pixels sent
+  const z = await boot(), n = z.web_test_go(0), SPI = 12e6 / 8 / 2;   // (the FM-1's SPI1: 12 MHz, 2 bytes a pixel)
+  const SECN = ["OSC A", "OSC B", "SUB", "NOISE", "FILTER", "ENV 1", "ENV 2", "LFO 1", "LFO 2", "VOICE", "HOME",
+                "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "MENU", "GLOBAL", "SAVE", "BROWSE"];
+  const here = () => `${SECN[z.web_test_page_section()]} ${cstr(z, z.web_test_page_name())}`;
+  const hush = () => { for (let k = 0; k < 40 && play(z, 0.25).peak > 1e-5; k++); play(z, 0.3); };
+  const idleDraws = () => { play(z, 1.2); const d0 = z.web_screen_draws(); play(z, 1.0); return z.web_screen_draws() - d0; };
+  const param = (sec, nm, k) => {               // a page's k-th parameter, found by its section and name
+    for (let q = 0; q < n; q++) {
+      z.web_test_go(q);
+      if (z.web_test_page_section() === sec && cstr(z, z.web_test_page_name()) === nm) return z.web_test_page_param(k);
+    }
+    return -1;
+  };
+  const CH_ON = param(SEC.CHORUS, "MORE", 1), OT_ON = param(SEC.OTT, "BANDS", 3), M1 = param(SEC.MATRIX, "SLOT 1", 0);
+  z.web_test_set(CH_ON, 1);                     // (every live graph live: the chorus and OTT on, LFO 1 on the EQ's MID)
+  z.web_test_set(OT_ON, 1);
+  z.web_test_set(ID.EQ_ON, 1);
+  z.web_test_set(M1, SRC.LFO1);
+  z.web_test_set(M1 + 1, ID.EQ_MID);
+  z.web_test_set(M1 + 2, 500);
+  const busy = [], rows = [];
+  let worst = 0, wname = "", pages = 0;
+  for (let q = 0; q < n; q++) {
+    z.web_test_go(q);
+    if (z.web_test_page() !== q) continue;      // (SAVE's, the browser's: below)
+    pages++;
+    hush();
+    const quiet = idleDraws();
+    if (quiet) busy.push(`${here()} ${quiet}`);
+    const p0 = z.web_screen_px();
+    z.web_keys(1 << 7);
+    play(z, 1.0);
+    const px = z.web_screen_px() - p0;
+    z.web_keys(0);
+    rows.push(`${here()} ${Math.round(100 * px / SPI)} %`);
+    if (px > worst) worst = px, wname = here();
+  }
+  z.web_test_go(0);
+  hush();
+  z.web_buttons(1 << B.SAVE); play(z, 0.03); z.web_buttons(0);   // SAVE's screen, then the browser
+  const qs = idleDraws(), ss = z.web_test_page_section();
+  z.web_buttons(1 << B.HOME); play(z, 0.03); z.web_buttons(0); play(z, 0.3);
+  z.web_buttons(1 << B.SAVE); play(z, 0.7); z.web_buttons(0);
+  const qb = idleDraws(), sb = z.web_test_page_section();
+  if (qs) busy.push(`SAVE ${qs}`);
+  if (qb) busy.push(`BROWSE ${qb}`);
+  console.log(`emu: a note held, the SPI's time a second each page takes: ${rows.join(", ")}`);
+  check(`every page (${pages}, SAVE's and the browser's): in silence nothing drawn (${busy.length ? busy.join(", ") : "none drew"})`,
+        pages >= 40 && ss === SEC.SAVE && sb === SEC.BROWSE && busy.length === 0);
+  check(`.. a note held: only the rows that change sent; the busiest, ${wname}, ${Math.round(100 * worst / SPI)} % of the SPI's time (12 MHz; under 30 %)`,
+        worst / SPI < 0.3);
 }
 {
   ex.web_midi(0x90, 64, 100);
