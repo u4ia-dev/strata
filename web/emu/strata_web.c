@@ -303,6 +303,10 @@ EXPORT uint32_t web_test_page(void) { return ui.page; }
 EXPORT int32_t web_test_scl(uint32_t f) { return f == 0u ? ui.scale : f == 1u ? ui.root : f == 2u ? ui.fit : ui.kvel; }
 EXPORT int32_t web_test_key_note(void) { return sy_key_note; }
 EXPORT int32_t web_test_key_vel(void) { return sy_key_vel; }
+/* the hold layers: the one open (LAY_*); PERFORM's bend as the engine has it (x 1000, -1000 .. 1000) and its wheel */
+EXPORT uint32_t web_test_lay(void) { return ui.lay; }
+EXPORT int32_t web_test_bend(void) { return (int32_t)(sy_bend_v * 1000.0f + (sy_bend_v < 0.0f ? -0.5f : 0.5f)); }
+EXPORT uint32_t web_test_wheel(void) { return sy_wheel; }
 /* page p shown at once (not SAVE's, the browser's: they open from SAVE); the pages' count */
 EXPORT uint32_t web_test_go(uint32_t p)
 {

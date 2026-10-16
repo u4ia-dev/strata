@@ -5,7 +5,7 @@
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
 // one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
 // chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
-// the keys' scale (SCL), the matrix (SEQ), the SETTINGS (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
+// the keys' scale (SCL), the matrix (SEQ), the hold layers (PERFORM, MACROS, JUMP, MOMENTARY), the SETTINGS (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
 // NAME IT from it (a rename, the numbers, written), HOME with a user preset, and the wave page in each palette. It
 // prints what the session set.
 //   node web/emu/strata_shot.mjs [build/emu_strata/strata.wasm] [build/emu_strata/shots]   (after build_strata.sh)
@@ -263,6 +263,32 @@ for (let i = 0; i < 14; i++) { ex.web_enc(E.K3, 1); run(0.13); }
 for (let i = 0; i < 5; i++) { ex.web_enc(E.K4, -1); run(0.004); }
 run(0.1);
 png("matrix.png");
+ex.web_buttons(1 << B.GLO);                     // the hold layers: GLO, PERFORM (a bend up, the mod wheel)
+run(0.6);
+for (let i = 0; i < 6; i++) { ex.web_enc(E.K1, 1); run(0.02); }
+for (let i = 0; i < 6; i++) { ex.web_enc(E.K2, 1); run(0.02); }
+run(0.1);
+png("perform.png");
+ex.web_buttons(0);
+run(0.3);
+ex.web_buttons(1 << B.FX);                      // FX, MACROS
+run(0.6);
+png("macros.png");
+ex.web_buttons(0);
+run(0.3);
+ex.web_buttons(1 << B.EDIT);                    // EDIT, JUMP
+run(0.6);
+png("jump.png");
+ex.web_buttons(0);
+run(0.3);
+tap(B.EDIT);                                    // LFO on an OSC A page, MOMENTARY (KNOB 1 turned)
+ex.web_buttons(1 << B.LFO);
+run(0.6);
+ex.web_enc(E.K1, 2);
+run(0.13);
+png("momentary.png");
+ex.web_buttons(0);
+run(0.3);
 ex.web_buttons(1 << B.HOME);                    // HOME held 5 s: the SETTINGS
 run(5.2);
 ex.web_buttons(0);

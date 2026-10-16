@@ -36,6 +36,16 @@ const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
+const pid = (x, sec, nm, k) => {               // the parameter at knob k of a page, found by its section and name
+  const p = x.web_test_page();
+  let id = -1;
+  for (let q = 0; q < 80 && id < 0; q++) {
+    x.web_test_go(q);
+    if (x.web_test_page_section() === sec && cstr(x, x.web_test_page_name()) === nm) id = x.web_test_page_param(k);
+  }
+  x.web_test_go(p);
+  return id;
+};
 
 async function boot() {
   const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -622,6 +632,68 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(u2, 0.3);
   check(`.. after a power cycle: the scale ${u2.web_test_scl(0)}, the root ${u2.web_test_scl(1)}, the fit ${u2.web_test_scl(2)}, the velocity ${u2.web_test_scl(3)}`,
         u2.web_test_scl(0) === 1 && u2.web_test_scl(1) === 9 && u2.web_test_scl(2) === 0 && u2.web_test_scl(3) === 127);
+}
+{                                               // the hold layers: GLO PERFORM, FX MACROS, LFO MOMENTARY, EDIT JUMP
+  const h = await boot(), ht = () => cstr(h, h.web_test_toast()), hn = () => cstr(h, h.web_test_page_name());
+  const hold = (b) => { h.web_buttons(1 << b); play(h, 0.6); };
+  const letGo = () => { h.web_buttons(0); play(h, 0.2); };
+  const breathes = (b) => (h.web_breath_buttons() >> b) & 1;
+  play(h, 0.2);
+  hold(B.GLO);                                  // GLO: PERFORM, the keys playing on
+  const perf = [h.web_test_lay(), breathes(B.GLO)];
+  h.web_keys(1 << 7);
+  play(h, 0.05);
+  for (let i = 0; i < 8; i++) { h.web_enc(E.K1, 1); play(h, 0.02); }   // KNOB 1: the bend, halfway up
+  for (let i = 0; i < 5; i++) { h.web_enc(E.K2, 1); play(h, 0.13); }   // KNOB 2: the mod wheel, slowly
+  play(h, 0.05);
+  const under = [h.web_test_bend(), h.web_test_wheel(), h.web_test_voices()];
+  letGo();
+  h.web_keys(0);
+  play(h, 0.2);
+  check(`GLO held: PERFORM (layer ${perf[0]}, GLO breathing ${perf[1]}); KNOB 1 bends (${under[0]} / 1000), KNOB 2 the mod wheel (${under[1]}), the note playing on (${under[2]}); let go: the bend back (${h.web_test_bend()}), the wheel kept (${h.web_test_wheel()}), the layer shut (${h.web_test_lay()})`,
+        perf[0] === 1 && perf[1] === 1 && under[0] === 500 && under[1] === 5 && under[2] === 1 && h.web_test_bend() === 0 &&
+        h.web_test_wheel() === 5 && h.web_test_lay() === 0);
+  const MAC1 = pid(h, SEC.MACRO, "HOME", 0), DLON = pid(h, SEC.DELAY, "TONE", 3);
+  hold(B.FX);                                   // FX: MACROS; KNOB 1 MACRO 1; A3 turns DELAY on or off
+  const mac = h.web_test_lay(), m0 = h.web_test_value(MAC1), dl = h.web_test_value(DLON);
+  for (let i = 0; i < 4; i++) { h.web_enc(E.K1, 1); play(h, 0.13); }
+  h.web_keys(1 << 4);
+  play(h, 0.05);
+  const fx = [h.web_test_value(MAC1), h.web_test_value(DLON), ht(), h.web_test_voices(), (h.web_lit_keys() >> 4) & 1];
+  h.web_keys(0);
+  letGo();
+  check(`FX held: MACROS (layer ${mac}); KNOB 1 MACRO 1 (${m0} -> ${fx[0]}); A3 DELAY ${dl} -> ${fx[1]} ("${fx[2]}", no note: ${fx[3]} voices, its LED ${fx[4]}); let go (${h.web_test_lay()})`,
+        mac === 2 && fx[0] > m0 && fx[1] === 1 - dl && fx[2] === (dl ? "DELAY OFF" : "DELAY ON") && fx[3] === 0 &&
+        fx[4] === fx[1] && h.web_test_lay() === 0);
+  tap(h, B.EDIT);                               // LFO on one of OSC A's pages: MOMENTARY
+  const K1 = h.web_test_page_virt(0), p0 = h.web_test_value(K1), pg = hn();
+  hold(B.LFO);
+  const mom = h.web_test_lay();
+  for (let i = 0; i < 3; i++) { h.web_enc(E.K1, 1); play(h, 0.13); }
+  play(h, 0.1);
+  const p1 = h.web_test_value(K1);
+  letGo();
+  check(`LFO held on OSC A's ${pg}: MOMENTARY (layer ${mom}); KNOB 1 moves its value ${p0} -> ${p1}; LFO let go: back to ${h.web_test_value(K1)}`,
+        mom === 3 && K1 >= 0 && K1 < 1000 && p1 !== p0 && h.web_test_value(K1) === p0);
+  hold(B.EDIT);                                 // EDIT: JUMP; C#4 opens KEYS, A#3 GLOBAL; the knobs do nothing
+  const jmp = [h.web_test_lay(), (h.web_dim_keys() >> 8) & 1, (h.web_lit_keys() >> 0) & 1];
+  h.web_keys(1 << 8);
+  play(h, 0.05);
+  h.web_keys(0);
+  play(h, 0.05);
+  const s1 = h.web_test_page_section();
+  h.web_keys(1 << 5);
+  play(h, 0.05);
+  h.web_keys(0);
+  play(h, 0.05);
+  const s2 = h.web_test_page_section(), bpm = h.web_test_tempo(0);
+  h.web_enc(E.K1, 3);
+  play(h, 0.13);
+  const bpm2 = h.web_test_tempo(0);
+  letGo();
+  check(`EDIT held: JUMP (layer ${jmp[0]}; C#4 glowing ${jmp[1]}, F3 lit: OSC A shown ${jmp[2]}); C#4: section ${s1} (KEYS), A#3: ${s2} (GLOBAL); KNOB 1 under it: BPM ${bpm} -> ${bpm2}; let go: on GLOBAL (${h.web_test_page_section()})`,
+        jmp[0] === 4 && jmp[1] === 1 && jmp[2] === 1 && s1 === 22 && s2 === SEC.GLOBAL && bpm2 === bpm &&
+        h.web_test_page_section() === SEC.GLOBAL && h.web_test_lay() === 0);
 }
 {                                               // the chorus's taps: still in silence, moving with a note
   tap(ex, B.FX);
