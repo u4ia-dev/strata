@@ -389,15 +389,16 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
   density halved); two halves above 85 % shed a voice, as Felucca's `shed_voice` does, faded. Below 55 % for a second,
   the steps undo in reverse order. The load, the budget and the shed count are on the INFO page and the console.
 - **Cost** (Phase 2, after its optimisation pass, TESTING.md §4): the target cost model puts a voice of A + B with
-  LP12 at ~276 listing instructions a sample, each unison instance at ~34 (the position on a frame; ~48 moving), every
-  effect together at ~1,100 and the engine's overhead at ~180. At the 205 instructions a µs measured on integer code,
-  one core holds about 10 such voices without effects and about 6–7 with every effect, 7 and 4–5 at 3 unison each:
+  LP12 at ~280 listing instructions a sample, each unison instance at ~34 (the position on a frame; ~48 moving), every
+  effect together at ~1,280 (the EQ's three bands ~180 of it) and the engine's overhead at ~180. At the 205
+  instructions a µs measured on integer code, one core holds about 10 such voices without effects and about 6 with
+  every effect, 7 and 4 at 3 unison each:
   eight voices fit; unison with the whole rack does not, and the guard trims. The budget's default (48 instances) is set
   from the BENCH page's real rate at integration; the second core (§19) doubles the room.
 
 ## 14. Effects
 
-Global, stereo, float, fixed order, each with ON and MIX:
+Global, stereo, float, fixed order, each with ON and MIX (the EQ: none):
 
 | Module | Algorithm | Notes |
 | --- | --- | --- |
@@ -406,6 +407,7 @@ Global, stereo, float, fixed order, each with ON and MIX:
 | DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 750 ms a side (so the pool fits, §20) | SYNC (FREE: TIME in ms, 10–750; FIXED: TIME a note value, dotted/triplet, TIME's modulation stepping it; a synced time longer than the line stops at it), FEEDBACK, LP/HP in the loop, OFFSET L/R |
 | REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
+| EQ | a low shelf, a peak and a high shelf on the filter's trapezoidal SVF (Simper's shelves and bell), ±18 dB, after OTT (added after the mockups, the user's ask) | LOW, MID, HIGH; LO FREQ, MID FREQ, MID Q (0.25–8), HI FREQ; a band at 0 dB is skipped, steady coefficients take a cheaper kernel |
 | LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
 
 Half-rate processing of the delay and reverb halves their memory and cost; their high end is filtered below 10 kHz
@@ -430,14 +432,14 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
 - **Patch**: the parameter values in id order with a count (new parameters take their defaults when older presets
   load), the matrix slots, the two table references (factory id or user table), the macro names, the preset name (16
   characters) and category (bass, lead, pad, pluck, keys, FX, sequence/arp, other), then the LFOs' drawn shapes (`'D'`,
-  each LFO's count of points and its points; a patch without them takes the default's). At most 582 bytes.
+  each LFO's count of points and its points; a patch without them takes the default's). At most 604 bytes.
 - **Factory presets** (64 at first, up to 128) are constants in the image, written by `tools/gen_presets.py` from
   readable definitions.
 - **User presets**: 128 slots in the user store as A/B sector objects (`storage.c`: commit record last, newest valid copy
   wins, a torn write leaves the old copy). Six patches per object, 22 objects, 176 KiB of `0x97000–0xDFFFF`.
 - **Edit buffer and restore on boot**: the sound being played is autosaved (A/B, `0xE5000/0xE6000`, as Felucca's
   autosave) once nothing has sounded for 3 s after a change, and restored at power-on unless the last boot crashed.
-- **Undo** (built): a history of 8 patches in RAM (4.7 KB, `.bss`); a state goes on it when an edit gesture starts
+- **Undo** (built): a history of 8 patches in RAM (4.8 KB, `.bss`); a state goes on it when an edit gesture starts
   (nothing edited for 1 s before: a knob, the MOD layer, an LFO's points) and before a sound loads. SAVE + OCT−
   steps back, SAVE + OCT+ forward again; a state taken back is written as the knobs write.
 - **SAVE** (decided; its screens wait for the mockups' approval): a tap opens the SAVE screen; a patch never saved
@@ -492,9 +494,26 @@ TEMPO (BPM, TS-BEAT, TS-NOTE; its graph the tempo, the time signature, a bar's b
 one a detent (in the MOD layer it stays RATE or TIME, whose modulation steps the note). SAVE + OCT− / OCT+: undo and
 redo (§16). ARP and a step sequencer wait for v1; until then SEQ shows the matrix.
 
-Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the filter, matrix, rack and HOME graphs, presets
-(browser, user slots, save, undo, restore), MIDI learn, help, the rest of the MENU, and CONTROLS.md. The draft below
-is the plan those follow.
+**After the mockups' approval** (the user's changes to them, and the EQ; verified in emulator): the filter's and the
+effects' pages draw what they do, from the values as the DSP reads them (`sy_ui_fx.c`): the filter's response (each
+type's analog prototype at the SVF's warped frequency, so the curve is what plays; VAR's two sides; the range a
+modulation sweeps the cutoff, and where its source takes it; the sources into the filter lit in the header), on MORE
+the cutoff at C2, C4 and C6; under a rack of the six effects (the one shown outlined, each lit when on), DRIVE's curve
+with a sine through it, CHORUS's four taps (moving with its LFO), DELAY's echoes and their fall (ping-pong: left above,
+right below; TONE: what each pass through the loop's filters leaves), REVERB's decay (the early reflections, the tail,
+the highs dying first), OTT's three bands (their levels live, which way each is pushed), the EQ's curve and handles. A
+knob turning lights its cell (its value bold), turns what it moves in NOW with its value in a flag, keeps the shape
+before the turn dashed (the gesture's first state on the undo history) and lets go a second after the last detent; a
+modulated value shows the range it sweeps in MOD. HOME shows the sound (its category, starter number, its name large)
+and its output live: a scope of three periods of the newest note, triggered as the output rises through 0, the scope's
+rows redrawn alone; its header the tempo, the voices sounding, the load. HOME held 5 s opens the SETTINGS (was the
+MENU at the hold time; a countdown in the footer, as LFO's delete has). An eighth palette, MONO (greys only). The WAVE
+page's 3D table is drawn through the warp as the oscillator plays it (WARP and AMOUNT turning: the frame before,
+dashed). Drawing the effects found three engine bugs, fixed (TESTING.md §5.2): the chorus ran at a quarter of its RATE,
+the delay's HP at a tenth of its frequency, the reverb's LOW CUT at a fortieth.
+
+Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the matrix's graph, presets (browser, user slots, save,
+restore), MIDI learn, help, the rest of the SETTINGS, and CONTROLS.md. The draft below is the plan those follow.
 
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
@@ -506,13 +525,13 @@ changed, in strips, so the 12 MHz display keeps up.
 
 | Button | Tap: pages | Hold |
 | --- | --- | --- |
-| HOME | HOME (preset, macros on KNOB 1–4), MACROS | the MENU |
+| HOME | HOME (the sound, its output live, the macros on KNOB 1–4) | held 5 s: the SETTINGS (built) |
 | EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | quick jump: a key per section |
 | ENV | ENV 1, ENV 1 +, ENV 2, ENV 2 + | **assign ENV 2**: turn a knob to set its amount |
 | LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
 | SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount); v1: the step sequencer (the matrix moves) | — |
 | REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount |
-| FX | DRIVE, CHORUS, DELAY, DELAY +, REVERB, REVERB +, OTT, OTT + | **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
+| FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ (built: two or three pages each, ALGORITHM picks the effect) | **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
 | GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built); tune, panel velocity to come | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
 | SCL | KEYS (scale and root shown on the LEDs, octave, panel velocity) | the root by key, as Felucca |
 | SAVE | the SAVE screen (naming a patch never saved; "NAME v2" for one saved before); double tap: write over its slot at once | the preset browser; SAVE + OCT− undo, SAVE + OCT+ redo (built) |

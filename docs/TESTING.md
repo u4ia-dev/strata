@@ -24,7 +24,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-92 checks in five programs (`tests/sy_*.c`), all passing.
+97 checks in five programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -61,9 +61,9 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 63 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 68 checks; `sy_smoke`, 2)
 
-- **Parameters and presets**: 166 parameters; a patch packs into at most 582 bytes (the LFOs' drawn shapes included)
+- **Parameters and presets**: 177 parameters; a patch packs into at most 604 bytes (the LFOs' drawn shapes included)
   and back unchanged; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
   a malformed drawn shape is not read (too many points) or made whole (places out of order, values out of range); a
   foreign blob is refused; the values read as stored (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE,
@@ -94,12 +94,19 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   pulse sub's, PWM's, ASYM's and SYNC's offsets are taken out (means under 2 % of the peak), the infrasonic thump of a
   note's attack and release −41 (ASYM 100 %) to −68 dBFS.
 - **Effects**: the OTT's three bands sum back to the input within 3 × 10⁻⁸; a synced delay (1/4 at 120 BPM) lands at
-  500.00 ms, and TIME's modulation steps its note value (−25 %: 1/8T, 166.85 ms); every effect at its extremes on full-scale noise stays finite and under 1.0 (the limiter); the chorus on
-  a 1 kHz sine is as clean after 10 minutes of running as at the start (−81 / −88 dB away from the tone; the old
-  chorus fell to −20 dB, §5.1).
+  500.00 ms, and TIME's modulation steps its note value (−25 %: 1/8T, 166.85 ms); every effect at its extremes on
+  full-scale noise (the EQ's bands at +18 dB) stays finite and under 1.0 (the limiter); the chorus on a 1 kHz sine is
+  as clean after 10 minutes of running as at the start (−66 / −64 dB away from the tone at its default 0.50 Hz; −81 /
+  −88 dB when it ran at a quarter of that, §5.2; the old chorus fell to −20 dB, §5.1).
+- **EQ**: on and flat, the input bit for bit; each band's gain measured on a sine against its design: the peak's centre
+  ±12.00 dB, the low shelf's far side +11.97 dB (30 Hz), the high shelf's −11.99 dB (16 kHz), halfway at FREQ (+6.00,
+  −6.00 dB), flat away from the bands (0.00; the peak 0.16 dB a decade off, as a Q of 1 has it); against the curve the
+  screen draws (`fx_eq_db`), within 0.05 dB everywhere (0.00 measured); every frequency jumping 20 Hz ↔ 20 kHz each
+  block with the bands at +18 dB and the peak at Q 8: finite, largest output 3.5 on noise at 0.1; its states exactly 0
+  after 10 s of silence.
 - **Determinism and golden renders**: eight test sounds (supersaw, pluck, pad, FM keys, sync lead, ladder bass, vowel pad,
   OTT growl) play the same twice in a run, bit for bit, and as recorded in `tests/sy_golden.txt` (recorded again after
-  the optimisation pass, §5).
+  the optimisation pass, §5, and after the three effects' fixes, §5.2: supersaw, pluck, pad and sync lead).
 
 ## 3. Known gaps (targets not met)
 
@@ -128,6 +135,7 @@ counted from the compiler's listing:
 | Filter, a channel | SVF LP 19, BP 22, NOTCH 23, HP 24, PEAK 24 (24 dB: twice); LADDER 62 and two float divides |
 | Sub | triangle 13, saw 25, sine 36, square / pulse / round 57–60 (both edge corrections counted) |
 | Noise, a channel | white 21, brown 18, pink 41 |
+| EQ, a band a channel | steady 21, its coefficients ramping 32 (a band at 0 dB: none) |
 
 Tuning in Phase 2 took the oscillator from 42 to 35 (7 stack reloads to 2), added the one-frame kernels (what a
 crossfade of exactly 0 or 1 gives, bit for bit, without reading the second frame) and took the LP filter from 29 to
@@ -148,23 +156,24 @@ unrolling the loops cost a little more than in the firmware, so the model errs h
 unison instances come to 48 × 35.6 instructions, the filters and the OTT's crossovers to within a few instructions of
 their loops.
 
-| Scenario | Before the pass | After | One core at 150 / 205 / 300 instructions a µs (after) |
-| --- | --- | --- | --- |
-| idle: no voice, no effect | 270 | 176 | 5 / 4 / 3 % |
-| 1 voice: A × 1 | 458 | 342 | 10 / 7 / 5 % |
-| 1 voice: A × 16 | 1,190 | 859 | 25 / 18 / 13 % |
-| 8 voices: A × 1 | 1,783 | 1,525 | 45 / 33 / 22 % |
-| 8 voices: A + B × 1, LP12 | 3,333 | 2,386 | 70 / 51 / 35 % |
-| 8 voices: A + B × 3, LP24, every effect | 6,756 | 4,908 | 144 / 106 / 72 % |
-| 8 voices: A + B × 16 (budget 48), LADDER, every effect | 7,100 | 5,227 | 154 / 112 / 77 % |
-| 8 voices: A BEND+ / B SYNC × 1, LP12, SUB, pink NOISE | 5,138 | 4,155 | 122 / 89 / 61 % |
-| 1 voice: A × 1, every effect | 1,950 | 1,436 | 42 / 31 / 21 % |
+| Scenario | Before the pass | After | Now, with the EQ | One core at 150 / 205 / 300 instructions a µs (now) |
+| --- | --- | --- | --- | --- |
+| idle: no voice, no effect | 270 | 176 | 182 | 5 / 4 / 3 % |
+| 1 voice: A × 1 | 458 | 342 | 352 | 10 / 8 / 5 % |
+| 1 voice: A × 16 | 1,190 | 859 | 866 | 25 / 19 / 13 % |
+| 8 voices: A × 1 | 1,783 | 1,525 | 1,563 | 46 / 34 / 23 % |
+| 8 voices: A + B × 1, LP12 | 3,333 | 2,386 | 2,423 | 71 / 52 / 36 % |
+| 8 voices: A + B × 3, LP24, every effect | 6,756 | 4,908 | 5,116 | 150 / 110 / 75 % |
+| 8 voices: A + B × 16 (budget 48), LADDER, every effect | 7,100 | 5,227 | 5,436 | 160 / 117 / 80 % |
+| 8 voices: A BEND+ / B SYNC × 1, LP12, SUB, pink NOISE | 5,138 | 4,155 | 4,191 | 123 / 90 / 62 % |
+| 1 voice: A × 1, every effect | 1,950 | 1,436 | 1,626 | 48 / 35 / 24 % |
 
-Listing instructions a sample. The parts after the pass: the engine idle 176; a voice of A + B with LP12, 276; each
-unison instance more, 34 with the position on a frame (as in these scenarios; ~48 while it moves); every effect
-together, 1,094 (reverb ~440, chorus ~165, delay ~100, the lines' int16 conversions ~90, OTT ~170, drive ~50). The
-rate is the open question: 205 instructions a µs was measured on integer code (ChoralRoot); this engine's float code
-has no device figure. Hence three columns.
+Listing instructions a sample. The parts now: the engine idle 182; a voice of A + B with LP12, 280; each unison
+instance more, 34 with the position on a frame (as in these scenarios; ~48 while it moves); every effect together,
+1,275 (reverb ~440, chorus ~165, delay ~100, the lines' int16 conversions ~90, OTT ~170, drive ~50, the EQ's three
+bands steady ~180). "Every effect" has the EQ's three bands on (±3 dB); a band at 0 dB costs nothing. The rate is the
+open question: 205 instructions a µs was measured on integer code (ChoralRoot); this engine's float code has no device
+figure. Hence three columns.
 
 ### 4.3 What fits
 
@@ -172,10 +181,10 @@ At the planned 75 % of a core (less 8 % for the system):
 
 | Voices of A + B with LP12 that fit | 150 / µs | 205 / µs | 300 / µs |
 | --- | --- | --- | --- |
-| no effects, no unison | 7.6 | 10.6 | 15.9 |
-| no effects, 3 unison each | 5.1 | 7.1 | 10.6 |
-| every effect, no unison | 3.6 | 6.7 | 11.9 |
-| every effect, 3 unison each | 2.4 | 4.5 | 7.9 |
+| no effects, no unison | 7.5 | 10.5 | 15.6 |
+| no effects, 3 unison each | 5.0 | 7.0 | 10.5 |
+| every effect, no unison | 2.9 | 5.9 | 11.1 |
+| every effect, 3 unison each | 2.0 | 4.0 | 7.4 |
 
 (The position on a frame; a moving one costs ~14 instructions more an instance.) So at 205 a µs: eight voices of two
 oscillators and a filter fit; unison and the full rack together do not, and the guard (ARCHITECTURE.md §13) trims
@@ -194,8 +203,9 @@ From the probe object (`build/cost/sy.o`), the engine without the UI, after the 
 
 Felucca's pool is 368,640 B and its screen canvas takes 59,520 B: with the engine, 13,482 B stay free, over the
 8 KiB margin `tools/build.py` asks for (if Felucca's platform keeps no other pool buffers: integration confirms). The
-UI's undo history (8 patches of 588 B: 4,704 B) is in `.bss`, not the pool: Felucca's engines, sequencer and song
-freed far more `.bss` than that, but integration confirms the room.
+UI's undo history (8 patches of 604 B: 4,832 B) and HOME's scope (its capture and the UI's copy: 1.7 KB) are in
+`.bss`, not the pool: Felucca's engines, sequencer and song freed far more `.bss` than that, but integration confirms
+the room.
 
 ## 5. The optimisation pass (end of Phase 2)
 
@@ -235,6 +245,18 @@ of those sounds).
   CC changed nothing until the next preset. The smoother now refreshes every changed value (the smoothed ones glide);
   a test changes them while playing.
 
+### 5.2 Three more, found drawing the effects (Phase 4)
+
+Drawing each effect from its parameters (the FX pages, `sy_ui_fx.c`) meant working out what each knob does to the
+sound, and three did not do what they show. All three were in the engine's first commit; each is fixed and the golden
+renders of the sounds that use them re-recorded:
+
+- **The chorus ran at a quarter of its RATE**: its LFO's increment had a stray × 0.25, so RATE 0.12 Hz swept at
+  0.03 Hz. It runs at RATE now; RATE's default is 0.50 Hz (it was 0.12 shown, 0.03 played). SUPERSAW and PAD.
+- **The delay's HP cut at a tenth of its frequency** (56 Hz shown, 5.6 Hz cut) and **the reverb's LOW CUT at a
+  fortieth** (80 Hz shown, 2 Hz cut: none). Both one-poles now sit where their knobs say, as the delay's LP did.
+  SUPERSAW and PAD (the reverb), PLUCK and SYNC LEAD (the delay).
+
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
 The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. The emulator's page
@@ -242,7 +264,7 @@ has also run in headless Chrome (§6.4); the workbench's page has not been opene
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
-The five host programs (§2) built with `emcc` and run under Node: 92 checks, all passing, the golden renders included.
+The five host programs (§2) built with `emcc` and run under Node: 97 checks, all passing, the golden renders included.
 The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
 multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
 workbench and the emulator sound as the host-verified engine does.
@@ -256,9 +278,9 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 42 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 47 checks)
 
-`sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
+`sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
 compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the audio halves as the DMA asks for
 them, the key matrix and its LEDs, the 240 x 240 screen, an erased flash image. Not simulated: USB, TRS MIDI, the
 console, the battery, time within an audio half (no CPU load to show), and the panel's speed (a region is drawn and
@@ -279,7 +301,7 @@ sent at once). **Verified in emulator**, under Node:
 | The MOD layer | REC held opens it; a white key (A3) picks LFO 1 and plays nothing; KNOB 1 sets LFO 1's depth on WT POS in a matrix slot (5 slow detents: 1.0 %); released, it closes, the slot stays |
 | .. its leftovers | a slot it made and turned back to 0 is freed when it closes |
 | REC's gestures | a tap does nothing, a double tap latches the layer, a tap then lets it go |
-| The MENU | HOME held; KNOB 1 changes the palette and the screen with it (25,870 pixels) |
+| The SETTINGS | HOME held: a countdown from the hold time ("HOLD: SETTINGS IN 4"); let go at 1.5 s, nothing opens, the footer cleared; held 5 s: the SETTINGS; KNOB 1 changes the palette and the screen with it (26,085 pixels); the eighth, MONO: not a pixel outside the window that is not grey |
 | OCT with EDIT held | the section's pages: OCT+ WAVE -> UNISON, OCT- back to WAVE, OCT- again round to OUTPUT; EDIT let go: no tap (the page stays); the keys' octave unchanged |
 | OCT with ENV held | OCT+ steps the section shown (OSC A); ENV held on past the hold time: no ENV 2 layer; let go: no tap |
 | OCT alone | the keys' octave +1 and back; the page stays |
@@ -293,6 +315,10 @@ sent at once). **Verified in emulator**, under Node:
 | Undo, redo | SAVE + OCT− twice takes back a level KNOB 3 set and the delete (SHAPE STAIRS, the drawn shape of 7 points); SAVE + OCT+ redoes the delete; SAVE let go: no page, no octave. On WT POS a gesture at a time (600 -> 606 in one, 607 a second later: undone 606, then 600; redone 606); a sound's load undone (PAD back to PLUCK) |
 | SYNC FIXED | LFO 1 SHAPE: SYNC FIXED, KNOB 3 steps the note value (1/4 -> 1/8D), RATE untouched; FREE: KNOB 3 the rate in Hz, the note value kept. DELAY: FIXED by default, KNOB 3 steps its note (1/8D -> 1/8); FREE: the time in ms |
 | GLOBAL | GLO tapped three times: the TEMPO page, 120 BPM 4/4; BPM 3 slow detents 123, held between 20 and 300; TS-BEAT 1-16; TS-NOTE 1, 2, 4, 8, 16; 300 BPM in eighths: 150 quarter notes a minute |
+| FX | ALGORITHM through six effects (DRIVE .. EQ), round; the EQ's pages GAIN (LOW, MID, HIGH, ON) and FREQ (LO FREQ, MID FREQ, MID Q, HI FREQ) |
+| A knob turning | KNOB 2 on the EQ's GAIN page: its cell lit, the curve before the turn kept, 2,642 pixels; a second after the last detent both let go (3,253 pixels back) |
+| HOME | a note playing: the scope live (12 captures in 0.5 s, its rows redrawn 7 times); on another page no capture |
+| The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,871 pixels of the display), the frame before the turn kept |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
@@ -300,8 +326,10 @@ sent at once). **Verified in emulator**, under Node:
 The screens were checked by eye from `strata_shot.mjs`'s PNGs (a session: the wave page with VOWELS and BEND+, REC
 held with LFO 1 on WT POS, the unison page, ENV 1 and ENV 2 with a key held, LFO 1's POINTS page (the sine's points;
 then drawn: a point lowered, one added and curved, a key held: the voice on its cycle), its SHAPE page with S&H's five
-sample cycles and with SYNC FIXED (RATE 1/8), the delete's countdown, GLOBAL's TEMPO at 132 BPM in 6/8, the MENU,
-each palette). Bugs the tests
+sample cycles and with SYNC FIXED (RATE 1/8), the delete's countdown, GLOBAL's TEMPO at 132 BPM in 6/8, HOME with a
+chord (the scope), the WAVE page's AMOUNT turning, the filter's TONE (CUTOFF turning, ENV 2 on it) and MORE (KEYTRACK
+turning), each effect with a knob turning (DRIVE, CHORUS's DEPTH, DELAY's FEEDBACK, its TONE's LP, REVERB's DECAY, OTT's
+DEPTH with a chord, the EQ's MID and MID FREQ), the SETTINGS, each palette). Bugs the tests
 found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
 ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
 double-tap rule, so the session taps slower.
