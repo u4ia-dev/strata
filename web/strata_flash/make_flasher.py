@@ -8,6 +8,7 @@
                                 and the package's facts (version, identity, size, SHA-256) inlined
   build/flasher/strata.fwsc     the package, exactly build/strata.fwsc
   build/flasher/serve.py        a server for 127.0.0.1 only (python serve.py, then http://127.0.0.1:8000/)
+  build/flasher/usb_check.html  which way the FM-1's USB data fails (MIDI each way, the console), nothing written
   build/flasher/FLASHING.md     docs/FLASHING.md: the backup, the install, the test, the way back
   build/flasher/LICENSE, LICENSING.md, LICENSES/   (the package holds JieLi SDK files under Apache-2.0)
 
@@ -79,6 +80,7 @@ def main(pkg="build/strata.fwsc", out="build/flasher"):
     (out / "index.html").write_text(html, encoding="utf-8")
     (out / "strata.fwsc").write_bytes(raw)
     shutil.copy(HERE / "serve.py", out / "serve.py")
+    shutil.copy(HERE / "usb_check.html", out / "usb_check.html")
     if (SRC / "docs" / "FLASHING.md").exists():
         shutil.copy(SRC / "docs" / "FLASHING.md", out / "FLASHING.md")
     for f in sorted((SRC / "LICENSES").glob("*.txt")):

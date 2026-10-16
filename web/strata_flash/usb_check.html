@@ -1,0 +1,285 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2026 brandonmbarone -->
+<!-- STRATA's USB check: which way the FM-1's USB data fails, one direction at a time, over Web MIDI and Web Serial.
+     Nothing here writes to the FM-1's flash. Served beside the flasher (make_flasher.py, serve.py):
+     http://127.0.0.1:8000/usb_check.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata USB check</title>
+<style>
+:root { --bg: #f4f2ec; --card: #fffdf7; --fg: #1d1b17; --mute: #676052; --line: #d9d3c5; --acc: #0d6b66;
+        --acc-ink: #ffffff; --bad: #a3361f; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131210; --card: #1c1a16; --fg: #ece7dc; --mute: #a69e8e; --line: #36322a; --acc: #4db0a8;
+          --acc-ink: #0e1413; --bad: #e57c63; color-scheme: dark; }
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 14px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
+h2 .n { color: var(--acc); font-variant-numeric: tabular-nums; }
+p { margin: 0; color: var(--mute); max-width: 65ch; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid;
+          gap: 10px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+label { display: grid; gap: 4px; font-size: 13px; color: var(--mute); min-width: 0; flex: 1 1 260px; }
+select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg);
+         color: var(--fg); max-width: 100%; }
+button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+         color: var(--fg); cursor: pointer; }
+button.primary { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); }
+button:disabled { opacity: .45; cursor: default; }
+.warn { color: var(--bad); }
+pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+      overflow: auto; max-height: 460px; font: 12.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+      word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Strata USB check</h1>
+  <p>Finds which way the FM-1's USB data fails. Nothing here writes to its flash. Close M-Upgrade and other MIDI apps
+    first, use this one browser tab, work down steps 1 to 4, then copy the log into the conversation.</p>
+
+  <section>
+    <h2><span class="n">1</span>The MIDI ports</h2>
+    <p>Lists every MIDI port the browser sees, and picks the FM-1's.</p>
+    <div class="row"><button id="list" class="primary">List the MIDI ports</button></div>
+    <div class="row">
+      <label>To the FM-1 (output)<select id="out" disabled></select></label>
+      <label>From the FM-1 (input)<select id="in" disabled></select></label>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>The FM-1 answering</h2>
+    <p>Sends the identity request the flasher and M-Upgrade send, three times, and logs every message that comes back
+      on any port.</p>
+    <div class="row"><button id="ident" disabled>Ask for its identity</button></div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>The computer reaching the FM-1</h2>
+    <p>Plays middle C on channel 1 for a moment. Turn MASTER up and listen.</p>
+    <div class="row">
+      <button id="note" disabled>Play a note</button>
+      <button id="heard" disabled>I heard it</button>
+      <button id="silent" disabled>Nothing</button>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>The serial console</h2>
+    <p>Opens the FM-1's serial port (Edge asks which: pick the FM-1's), listens 3 s, types <code>help</code>, listens
+      3 s more, and logs every byte.</p>
+    <div class="row"><button id="serial" disabled>Listen to the console</button></div>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>Only if steps 2 and 4 got nothing back</h2>
+    <p>Each button sends one command that makes Strata show <b>UBOOT (USB)</b> and restart, as OCT− + OCT+ does. If the
+      screen shows it, the message reached Strata. Then tell the page what the screen did.</p>
+    <div class="row">
+      <button id="keymidi" disabled>Send the backup-mode key over MIDI</button>
+      <button id="keyserial" disabled>Type “uboot yes” on the console</button>
+    </div>
+    <div class="row">
+      <button id="shown" disabled>The screen showed UBOOT (USB)</button>
+      <button id="notshown" disabled>Nothing happened</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>The log</h2>
+    <pre id="log"></pre>
+    <div class="row"><button id="copy" class="primary">Copy the log</button></div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const T0 = performance.now();
+const HS_QUERY = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7];   // fm1ota.js's handshake
+const SOFT_KEY = [0xF0, 0x22, 0x24, 0x35, 0x7D, 0xF7];                         // UBOOT (Felucca's, Strata's)
+const FLASHER_RE = /fm-1|felucca|ota|composite|sinco|usb-midi/i;                // the ports the flasher tries
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const hex = (a) => Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(" ");
+let midi = null, heard = [], busy = false;
+
+function log(t) {
+  const s = ((performance.now() - T0) / 1000).toFixed(2).padStart(7);
+  $("log").textContent += `${s}  ${t}\n`;
+  $("log").scrollTop = $("log").scrollHeight;
+}
+function gate() {
+  const ports = !!midi && $("out").options.length > 0;
+  $("list").disabled = busy;
+  $("ident").disabled = $("note").disabled = $("keymidi").disabled = busy || !ports;
+  $("serial").disabled = $("keyserial").disabled = busy || !navigator.serial;
+}
+async function job(fn) {
+  busy = true; gate();
+  try { await fn(); } catch (e) { log(`ERROR ${e && e.name ? e.name + ": " : ""}${e && e.message || e}`); }
+  busy = false; gate();
+}
+function unpack7(s) {
+  const out = []; let acc = 0, nb = 0;
+  for (const b of s) { acc |= (b & 0x7F) << nb; nb += 7; while (nb >= 8) { out.push(acc & 0xFF); acc >>>= 8; nb -= 8; } }
+  return out;
+}
+function identityOf(d) {
+  if (d[0] !== 0xF0 || d[d.length - 1] !== 0xF7) return null;
+  const u = unpack7(d.slice(1, -1));
+  if (u.length !== 34 || u[0] !== 0 || u[1] !== 0x59 || u[2] !== 0x11) return null;
+  return String.fromCharCode(...u.slice(6, 33)).replace(/\0+$/, "");
+}
+const pick = (sel) => midi && [...(sel === "out" ? midi.outputs : midi.inputs).values()].find((p) => p.id === $(sel).value);
+
+log(`page ${location.href}`);
+log(`browser ${navigator.userAgent}`);
+log(`Web MIDI ${navigator.requestMIDIAccess ? "yes" : "NO"}, Web Serial ${navigator.serial ? "yes" : "NO"}, ` +
+    `secure context ${window.isSecureContext}`);
+gate();
+
+// 1: every port, its state, whether the flasher would try it; the FM-1's picked; every matching input listened to
+$("list").addEventListener("click", () => job(async () => {
+  if (!navigator.requestMIDIAccess) throw new Error("no Web MIDI in this browser");
+  if (!midi) {
+    midi = await navigator.requestMIDIAccess({ sysex: true });
+    midi.onstatechange = (e) => log(`port change: ${e.port.type} "${e.port.name}" ${e.port.state}/${e.port.connection}`);
+  }
+  const ins = [...midi.inputs.values()], outs = [...midi.outputs.values()];
+  log(`MIDI: ${ins.length} input(s), ${outs.length} output(s)`);
+  for (const p of [...ins, ...outs]) {
+    const pair = (p.type === "input" ? outs : ins).some((q) => q.name === p.name);
+    log(`  ${p.type.padEnd(6)} "${p.name}"  maker "${p.manufacturer || ""}"  ${p.state}/${p.connection}  ` +
+        `flasher tries it: ${FLASHER_RE.test(p.name || "") && pair ? "yes" : "no"}${pair ? "" : " (no port of the other kind has this name)"}`);
+  }
+  for (const [sel, list] of [["out", outs], ["in", ins]]) {
+    $(sel).innerHTML = "";
+    for (const p of list) $(sel).add(new Option(p.name || "(no name)", p.id));
+    const best = list.find((p) => /felucca|fm-1/i.test(p.name || "")) || list.find((p) => FLASHER_RE.test(p.name || ""));
+    if (best) $(sel).value = best.id;
+    $(sel).disabled = !list.length;
+  }
+  for (const p of ins) {
+    if (!FLASHER_RE.test(p.name || "") && p.id !== $("in").value) continue;
+    try {
+      await p.open();
+      p.onmidimessage = (ev) => {
+        const id = identityOf(ev.data);
+        if (ev.data[0] === 0xFE || ev.data[0] === 0xF8) return;                 // (active sensing, clock: not logged)
+        log(`  <- "${p.name}": ${hex(ev.data)}${id ? `   = identity "${id}"` : ""}`);
+        heard.push(ev.data);
+      };
+      log(`listening on "${p.name}" (${p.connection})`);
+    } catch (e) { log(`  could not open input "${p.name}": ${e.name}: ${e.message}`); }
+  }
+  if (!$("out").options.length) log("no MIDI output at all: the FM-1's MIDI ports are not there");
+}));
+
+// 2: FM-1 -> computer
+$("ident").addEventListener("click", () => job(async () => {
+  const out = pick("out");
+  if (!out) throw new Error("pick the output first (step 1)");
+  try { await out.open(); } catch (e) { log(`could not open output "${out.name}": ${e.name}: ${e.message}`); return; }
+  heard = [];
+  for (let t = 1; t <= 3; t++) {
+    log(`-> "${out.name}": identity request ${t}/3: ${hex(HS_QUERY)}`);
+    out.send(HS_QUERY);
+    await sleep(1500);
+    if (heard.some((d) => identityOf(d))) break;
+  }
+  const ids = heard.map(identityOf).filter(Boolean);
+  log(ids.length ? `ANSWERED: "${ids[0]}"` : `no identity came back (${heard.length} other message(s))`);
+}));
+
+// 3: computer -> FM-1 (a note)
+$("note").addEventListener("click", () => job(async () => {
+  const out = pick("out");
+  if (!out) throw new Error("pick the output first (step 1)");
+  try { await out.open(); } catch (e) { log(`could not open output "${out.name}": ${e.name}: ${e.message}`); return; }
+  log(`-> "${out.name}": note on 60 (middle C), channel 1, 0.7 s`);
+  out.send([0x90, 60, 100]);
+  await sleep(700);
+  out.send([0x80, 60, 0]);
+  $("heard").disabled = $("silent").disabled = false;
+}));
+$("heard").addEventListener("click", () => { log("the user: the FM-1 played the note"); $("heard").disabled = $("silent").disabled = true; });
+$("silent").addEventListener("click", () => { log("the user: the FM-1 played nothing"); $("heard").disabled = $("silent").disabled = true; });
+
+// 4: the serial console, raw
+async function withConsole(fn) {
+  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+  const info = port.getInfo();
+  log(`serial port picked: USB ${(info.usbVendorId || 0).toString(16)}:${(info.usbProductId || 0).toString(16)}`);
+  await port.open({ baudRate: 115200 });
+  log("serial port open");
+  const reader = port.readable.getReader(), writer = port.writable.getWriter(), dec = new TextDecoder();
+  let total = 0, text = "", stop = false;
+  const pump = (async () => {
+    while (!stop) {
+      const r = await reader.read().catch((e) => { log(`read error: ${e.name}: ${e.message}`); return { done: true }; });
+      if (r.done) break;
+      total += r.value.length;
+      text += dec.decode(r.value, { stream: true });
+      log(`  <- ${r.value.length} byte(s): ${JSON.stringify(dec.decode(r.value)).slice(0, 200)}`);
+    }
+  })();
+  try {
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+    log("DTR and RTS on (Strata prints its banner now)");
+    await fn(writer);
+  } finally {
+    stop = true;
+    try { await reader.cancel(); } catch (_) {}
+    await pump;
+    try { reader.releaseLock(); writer.releaseLock(); } catch (_) {}
+    try { await port.close(); } catch (_) {}
+    log(`serial port closed: ${total} byte(s) came back in all`);
+  }
+}
+$("serial").addEventListener("click", () => job(async () => {
+  await withConsole(async (w) => {
+    await sleep(3000);
+    log('-> "\\r" then "help\\r"');
+    await w.write(new TextEncoder().encode("\r"));
+    await sleep(300);
+    await w.write(new TextEncoder().encode("help\r"));
+    await sleep(3000);
+  });
+}));
+
+// 5: commands that restart the FM-1 (the message reaching Strata shows on its screen)
+function askScreen() { $("shown").disabled = $("notshown").disabled = false; }
+$("keymidi").addEventListener("click", () => job(async () => {
+  const out = pick("out");
+  if (!out) throw new Error("pick the output first (step 1)");
+  try { await out.open(); } catch (e) { log(`could not open output "${out.name}": ${e.name}: ${e.message}`); return; }
+  log(`-> "${out.name}": backup-mode key ${hex(SOFT_KEY)}`);
+  out.send(SOFT_KEY);
+  askScreen();
+}));
+$("keyserial").addEventListener("click", () => job(async () => {
+  await withConsole(async (w) => {
+    await sleep(500);
+    log('-> "uboot yes\\r"');
+    await w.write(new TextEncoder().encode("uboot yes\r"));
+    await sleep(1500);
+  });
+  askScreen();
+}));
+$("shown").addEventListener("click", () => { log("the user: the screen showed UBOOT (USB)"); $("shown").disabled = $("notshown").disabled = true; });
+$("notshown").addEventListener("click", () => { log("the user: nothing happened on the screen"); $("shown").disabled = $("notshown").disabled = true; });
+
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("log").textContent); log("(log copied)"); }
+  catch (_) { const r = document.createRange(); r.selectNodeContents($("log")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+});
+</script>
+</body>
+</html>
