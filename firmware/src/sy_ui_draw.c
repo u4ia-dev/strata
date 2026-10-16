@@ -71,6 +71,7 @@ static int32_t ui_depth(uint32_t src, uint32_t id)
 }
 
 /* --------------------------------------------------------------------------------------- header --- */
+static int32_t ui_ld_shown = -1;                    /* HOME's load as last drawn (-1: none) */
 static int32_t ui_tab(int32_t xr, const char *s, int on)   /* a tab ending at xr; returns its left */
 {
     int32_t w = text_w(&AF_XS, s) + 10, x = xr - w;
@@ -115,7 +116,7 @@ static void ui_draw_head(void)
     cv_begin(240, 22, sk.ground);
     cv_rect(0, 21, 240, 1, sk.rule);
     if (pg->graph == G_HOME) {                      /* HOME: the tempo, the voices sounding, the load */
-        int32_t y = CAP_IN(XS, 21), ld = sy_app_load();
+        int32_t y = CAP_IN(XS, 21), ld = ui_ld_shown = sy_app_load();
         for (n = 0, s = 0; s < SY_NVOICE; s++)
             n += sy_v[s].on != 0;
         cv_text_on(8, CAP_IN(SB, 21), &AF_SB, "HOME", sk.text, sk.ground);
@@ -930,10 +931,19 @@ static void ui_g_home(void)
     cv_curve(WX + 7, yl, SY_SCOPE_N, 1.2f, sk.sound);
 }
 
-/* the display; from row r0 only (0: all of it): HOME's scope alone */
+/* the display's rows as the panel has them, a hash each; 0: not known (everything redrawn, everything sent) */
+static uint32_t ui_rowh[114];
+static uint8_t ui_rows_ok;
+
+/* the display; from row r0 only (0: all of it): HOME's scope alone. Only the band of rows that changed goes to the
+ * panel: a voice's dot moving sends a few rows, an envelope held at its sustain none (the SPI, 12 MHz, takes 36 ms
+ * for all 114) */
 static void ui_draw_disp(uint32_t r0)
 {
     uint16_t line = ui.mod ? sk.mline : sk.dline;
+    uint32_t y, x, lo = 114u, hi = 0u;
+    if (!ui_rows_ok)
+        r0 = 0;
     cv_begin(240, 114, sk.ground);
     cv_rrect(6, 3, 228, 110, 4, line, sk.ground);
     cv_rrect(7, 4, 226, 108, 3, sk.display, line);
@@ -957,7 +967,20 @@ static void ui_draw_disp(uint32_t r0)
     case G_BROWSE: ui_g_browse(); break;
     default: ui_g_list(); break;
     }
-    cv_blit_from(0, R_DISP_Y, r0);
+    for (y = r0; y < cv_h; y++) {
+        const uint16_t *p = &cv_px[y * cv_w];
+        uint32_t h = 2166136261u;                   /* (FNV-1a) */
+        for (x = 0; x < cv_w; x++)
+            h = (h ^ p[x]) * 16777619u;
+        if (!ui_rows_ok || h != ui_rowh[y]) {
+            ui_rowh[y] = h;
+            lo = y < lo ? y : lo;
+            hi = y;
+        }
+    }
+    ui_rows_ok = 1;
+    if (lo <= hi)
+        lcd_blit(0, R_DISP_Y + lo, cv_w, hi - lo + 1u, cv_px + lo * cv_w);
 }
 
 /* ------------------------------------------------------------------------------------------ LEDs --- */
@@ -1003,6 +1026,8 @@ static void sy_ui_frame(void)
     uint32_t g = UI_PG[ui.page].graph, i, live = 0, nv = 0;
     static uint8_t was_live, was_busy, was_nv;
     static uint32_t load_t;
+    if ((ui.dirty & D_ALL) == D_ALL)                /* (everything redrawn: everything sent, whatever the panel had) */
+        ui_rows_ok = 0;
     if (ui.act_k < 4u && fm1_ms - ui.act_t >= UI_GESTURE_MS) {   /* (its cell, the graph as it rests) */
         ui.dirty |= D_KNOB(ui.act_k) | D_DISP;
         ui.act_k = 0xFF;
@@ -1043,10 +1068,14 @@ static void sy_ui_frame(void)
             ui.dirty |= D_LIVE;
             fresh = 0;
         }
-        if (nv != was_nv || (sy_app_load() >= 0 && fm1_ms - load_t >= 500u)) {   /* the voices, the load */
+        if (fm1_ms - load_t >= 500u) {              /* the load: when its figure moves (by 2 in silence: its */
+            int32_t ld = sy_app_load(), d = ld - ui_ld_shown;   /* jitter draws nothing) */
             load_t = fm1_ms;
-            ui.dirty |= D_HEAD;
+            if (ld >= 0 && (d >= 2 || d <= -2 || (d && nv)))
+                ui.dirty |= D_HEAD;
         }
+        if (nv != was_nv)                           /* the voices */
+            ui.dirty |= D_HEAD;
     } else if (sy_scope.st == 1u) {
         sy_scope.st = 0;                            /* (another page: no capture) */
     }
