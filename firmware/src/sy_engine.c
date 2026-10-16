@@ -3,7 +3,8 @@
 /* STRATA engine (docs/ARCHITECTURE.md §3, §13): notes to voices, the block, the CPU guard, the tables.
  * Audio side (the ALNK0 interrupt): sy_note_on / sy_note_off / sy_cc / sy_bend / .. at a block's start (the panel's
  * keys and MIDI alike), then sy_block renders 32 frames: the parameters' smoothing, the matrix's global part, the
- * FREE LFOs, every voice, the volume, the effects (sy_fx.c), the master (DC block, clip) into Q15 for audio.c.
+ * FREE LFOs, every voice, the volume, the effects (sy_fx.c), the master (DC block, clip) into Q15 for audio.c, and
+ * HOME's scope its samples when the screen asks.
  * Main loop: sy_service builds a wavetable when an oscillator's TABLE changes (the oscillator fades out over a
  * block first and back in after), sy_patch_load changes the sound (the voices fade out first).
  * Voices: POLY takes a free voice, else steals (a voice in release, the quietest; then the oldest held note that is
@@ -369,6 +370,59 @@ static int sy_cpu(uint32_t load_q8)
     return shed;
 }
 
+/* ------------------------------------------------------------------------------------- the scope --- */
+/* HOME's scope (sy_ui_draw.c): the main loop arms it with a step (samples a point); the audio side waits for the
+ * output (left plus right) to rise through 0 from under -1 % (or SY_SCOPE_WAIT samples: free running), then takes
+ * every step-th sample of each side, SY_SCOPE_N of them, and hands them back (ready). The main loop reads them only
+ * when ready, the audio side writes them only when armed: no sample is read while it is written */
+#define SY_SCOPE_N 212u
+#define SY_SCOPE_WAIT 8192u
+static struct {
+    volatile uint8_t st;                     /* 0 idle, 1 armed (the audio side's), 2 ready (the main loop's) */
+    uint8_t step, low;                       /* samples a point (1..16); the sum has been under -1 % */
+    uint16_t n, k, wait;                     /* points taken; samples to the next; samples waited */
+    uint32_t frames;                         /* captures handed back (the tests) */
+    int16_t v[2][SY_SCOPE_N];                /* left, right (Q15) */
+} sy_scope;
+
+static void sy_scope_arm(uint32_t step)      /* main loop */
+{
+    sy_scope.step = (uint8_t)sy_clampi((int32_t)step, 1, 16);
+    sy_scope.n = sy_scope.k = sy_scope.wait = 0;
+    sy_scope.low = 0;
+    SY_CBAR();                               /* (all of it before the audio side may look) */
+    sy_scope.st = 1;
+}
+
+static void sy_scope_block(const int32_t *out)   /* audio side, armed: a block of the output */
+{
+    uint32_t i;
+    for (i = 0; i < SY_BLK; i++) {
+        int32_t l = out[2u * i], r = out[2u * i + 1u];
+        if (sy_scope.wait < SY_SCOPE_WAIT) {     /* the trigger: up through 0 */
+            sy_scope.wait++;
+            if (l + r < -655)
+                sy_scope.low = 1;
+            else if (sy_scope.low && l + r >= 0)
+                sy_scope.wait = SY_SCOPE_WAIT;
+            if (sy_scope.wait < SY_SCOPE_WAIT)
+                continue;
+        }
+        if (sy_scope.k) {
+            sy_scope.k--;
+            continue;
+        }
+        sy_scope.v[0][sy_scope.n] = (int16_t)l;
+        sy_scope.v[1][sy_scope.n] = (int16_t)r;
+        sy_scope.k = (uint16_t)(sy_scope.step - 1u);
+        if (++sy_scope.n == SY_SCOPE_N) {
+            sy_scope.frames++;
+            sy_scope.st = 2;
+            return;
+        }
+    }
+}
+
 /* ------------------------------------------------------------------------------------- the block --- */
 /* the 5 Hz DC blockers (y = x - x1 + R y1, run inside sy_block's loops); a state, flushed, back after a block */
 #define SY_DC_R 0.99929f
@@ -456,6 +510,8 @@ static void sy_block(int32_t *out)
         sy_dc_store(sy_dc[2], a0, b0);
         sy_dc_store(sy_dc[3], a1, b1);
     }
+    if (sy_scope.st == 1u)
+        sy_scope_block(out);
 }
 
 /* ------------------------------------------------------------------------------------ the sound --- */
@@ -522,6 +578,7 @@ static void sy_init(void)
     memset(&sy_g, 0, sizeof sy_g);
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
+    memset(&sy_scope, 0, sizeof sy_scope);
     sy_glfo_v[0] = sy_glfo_v[1] = 0.0f;
     lfo_dr_seq = 1u;                                 /* (the drawn shapes: taken at the first block) */
     sy_next_st = 0;
