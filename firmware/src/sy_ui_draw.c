@@ -1276,6 +1276,7 @@ static void ui_led(uint8_t *l, uint32_t id)         /* matrix id: a button's (pa
             if (FM1_KEYMAP[r][c] == (int8_t)id)
                 l[c] |= (uint8_t)(1u << r);
 }
+#define UI_LED_PLAY_GREEN ((8u << 3) | 1u)         /* PLAY's green LED: no key there, column 8 row PA9 (Felucca) */
 static void ui_led_breathe(uint32_t id)             /* .. breathing: neither lit nor glowing */
 {
     uint32_t c, r;
@@ -1324,6 +1325,12 @@ static void sy_ui_leds(void)
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
     else
         ui_led(fm1_led_dim, panel.btn[B_REC]);
+    if (ui.run) {                                   /* PLAY: its green LED while running, its own each beat (a */
+        uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u);   /* quarter of it lit) */
+        fm1_led[UI_LED_PLAY_GREEN >> 3] |= (uint8_t)(1u << (UI_LED_PLAY_GREEN & 7u));
+        if ((fm1_ms - ui.run_t) % beat < beat / 4u)
+            ui_led(fm1_led, panel.btn[B_PLAY]);
+    }
     if (ui.mod == 2u)                               /* a latched MOD layer's button, a hold layer's: breathing */
         ui_led_breathe(panel.btn[ui.mod_btn]);
     else if (ui.lay)

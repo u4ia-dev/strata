@@ -33,6 +33,8 @@
  *     change lasts until LFO is let go; on an LFO's POINTS page LFO held deletes a point instead); EDIT, JUMP (a
  *     key opens its section: the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS).
  *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
+ *   - PLAY: the transport on and off (the FREE LFOs start on the beat; PLAY's green LED on, its own blinking each
+ *     beat). ARP: a word (the arpeggiator comes in v1).
  *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
  *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
  * Still to come: the LFO, FX, GLO and SCL layers, MIDI learn, help, the rest of the SETTINGS, the matrix's
@@ -212,6 +214,8 @@ static struct {
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
     uint8_t mslot;                                  /* the matrix's slot picked (SEQ), 0 .. NSLOT - 1 */
+    uint8_t run;                                    /* PLAY: the transport running, since run_t */
+    uint32_t run_t;
     uint8_t scale, root, fit, kvel;                 /* SCL: the keys' scale, its root (0 C .. 11 B), how a key fits */
                                                     /* it (UI_FIT_*), the keys' velocity (1 .. 127) */
     uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
@@ -1154,6 +1158,18 @@ static void ui_release(uint32_t b, int held)
         else
             ui_browse_open();
         ui.tap_t[b] = ui.sv_tap_t ? fm1_ms : 0u;
+        return;
+    }
+    if (b == B_PLAY) {                              /* PLAY: the transport on (the FREE LFOs from the beat), off */
+        ui.run = (uint8_t)!ui.run;
+        ui.run_t = fm1_ms;
+        if (ui.run)
+            sy_lfo_sync = 1;
+        ui_toast(ui.run ? "PLAY" : "STOP");
+        return;
+    }
+    if (b == B_ARP) {
+        ui_toast("ARP: IN A LATER VERSION");
         return;
     }
     if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {

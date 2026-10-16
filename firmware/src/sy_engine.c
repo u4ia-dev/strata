@@ -28,6 +28,7 @@ static uint8_t sy_sustain;
 static uint32_t sy_uni_budget = SY_UNI_BUDGET;
 static uint8_t sy_wheel, sy_at, sy_expr = 127;
 static lfo_t sy_glfo[2];
+static volatile uint8_t sy_lfo_sync;         /* the transport started (PLAY): the FREE LFOs from their start, next block */
 static struct {                              /* the CPU guard */
     uint32_t load_q8;                        /* the last half's load, smoothed (256 = 100 %) */
     uint8_t level;                           /* budget steps taken, 0..SY_GUARD_FX */
@@ -471,6 +472,10 @@ static void sy_block(int32_t *out)
     for (k = 0; k < 4u; k++)
         sy_src_g[SRC_MAC1 + k] = mod_get(sy_goff, SP_MAC1 + k);
     mod_offsets(sy_goff, vs, 0);
+    if (sy_lfo_sync) {                               /* (PLAY: on the beat from here) */
+        sy_glfo[0].ph = sy_glfo[1].ph = 0;
+        sy_lfo_sync = 0;
+    }
     for (k = 0; k < 2u; k++) {                       /* the FREE LFOs */
         lfo_par_t lp;
         voice_lfo_par(0, k, &lp);
@@ -607,6 +612,7 @@ static void sy_init(void)
     memset(&sy_g, 0, sizeof sy_g);
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
+    sy_lfo_sync = 0;
     memset(&sy_scope, 0, sizeof sy_scope);
     sy_hush_req = sy_hushed = sy_hush_n = 0;
     sy_hush_g = 1.0f;
