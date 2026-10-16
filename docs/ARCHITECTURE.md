@@ -96,8 +96,11 @@ main loop  (~60 frames/s)     UI input and drawing, wavetable builds, storage, U
 - **ISR to main loop.** Meters, the scope, voice states for the LEDs and the graphs: plain reads of ISR-written words.
 - **Wavetable builds** run in the main loop (§6.5), never in the ISR. The ISR sees a table only through its descriptor;
   a table being rebuilt is marked busy, and an oscillator reading a busy table fades to silence first.
-- **Flash writes** stop interrupts for up to ~45 ms (a sector erase). Strata writes only when nothing sounds (autosave,
-  settings) or on an explicit SAVE, and fades the output to silence first, so the stalled DMA repeats silence.
+- **Flash writes** stop interrupts: a 4 KiB erase for ~17 ms (Felucca's figure; a datasheet allows more), a page's
+  program for up to 3 ms, while the DMA keeps looping the two audio halves. Strata writes only from the main loop
+  (`sy_app.c`, through `sy_store.c`): on SAVE behind the engine's hush (the output faded out over 5.8 ms, then
+  "hushed" only once eight more blocks, both halves of the ring, are silent, so the stalled DMA loops silence; back in
+  over 5.8 ms), and the settings and the sound playing only after 3 s without sound (the ring under −70 dBFS).
 
 ## 4. Signal flow
 
@@ -110,13 +113,14 @@ main loop  (~60 frames/s)     UI input and drawing, wavetable builds, storage, U
           │ FILTER (stereo, per voice) ─── AMP (ENV 1 × velocity) ── PAN ───┤
           └─ DIRECT sources skip the filter, still through AMP ─────────────┘
                                                                             ▼
-   voice sum ─► DRIVE ─► CHORUS ─► DELAY ─► REVERB ─► OTT ─► LIMITER ─► MASTER (pot) ─► Q15 out
+   voice sum ─► DRIVE ─► CHORUS ─► DELAY ─► REVERB ─► OTT ─► EQ ─► LIMITER ─► MASTER ─► Q15 out
                                                                                         ├─► DAC (24-bit, −6 dBFS ceiling)
                                                                                         └─► USB audio input
 ```
 
 Each oscillator, SUB and NOISE has a FILTER/DIRECT switch (Serum's per-source routing; Serum's mixer buses are left out).
-The FX rack's order is fixed in the MVP; each module has an on switch and a mix.
+The six effects play in the order the patch's FX ORDER sets (any of the 720; the one drawn is the default, §14), the
+limiter always last; each module has an on switch and a mix (the EQ: its gains).
 
 ## 5. Number formats
 
@@ -398,7 +402,7 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
 
 ## 14. Effects
 
-Global, stereo, float, fixed order, each with ON and MIX (the EQ: none):
+Global, stereo, float, each with ON and MIX (the EQ: none), in the patch's order (below), the limiter last:
 
 | Module | Algorithm | Notes |
 | --- | --- | --- |
@@ -407,11 +411,17 @@ Global, stereo, float, fixed order, each with ON and MIX (the EQ: none):
 | DELAY | stereo or ping-pong, two int16 lines stored at half rate (filtered), up to 750 ms a side (so the pool fits, §20) | SYNC (FREE: TIME in ms, 10–750; FIXED: TIME a note value, dotted/triplet, TIME's modulation stepping it; a synced time longer than the line stops at it), FEEDBACK, LP/HP in the loop, OFFSET L/R |
 | REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
-| EQ | a low shelf, a peak and a high shelf on the filter's trapezoidal SVF (Simper's shelves and bell), ±18 dB, after OTT (added after the mockups, the user's ask) | LOW, MID, HIGH; LO FREQ, MID FREQ, MID Q (0.25–8), HI FREQ; a band at 0 dB is skipped, steady coefficients take a cheaper kernel |
+| EQ | a low shelf, a peak and a high shelf on the filter's trapezoidal SVF (Simper's shelves and bell), ±18 dB, after OTT (added after the mockups, the user's ask) | LOW, MID, HIGH; LO FREQ, MID FREQ, HI FREQ; MID Q, LO Q, HI Q (0.25–8; the shelves' 0.707 by default); a band at 0 dB is skipped, steady coefficients take a cheaper kernel |
 | LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
 
 Half-rate processing of the delay and reverb halves their memory and cost; their high end is filtered below 10 kHz
 anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clock.
+
+**The order** (built after the mockups, the user's ask): FX ORDER, a patch parameter (0–719), is the order as a
+Lehmer code, 0 the order above (DRIVE, CHORUS, DELAY, REVERB, OTT, EQ); it saves, loads and undoes with the patch. A
+change while sound plays dips the effects' wet parts for four blocks (out over two, the order swapped at their
+silence, back over two: 2.9 ms), the dry path untouched: no click (verified on host). The cost does not change with the
+order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (§17).
 
 ## 15. MIDI
 
@@ -432,27 +442,45 @@ anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clo
 - **Patch**: the parameter values in id order with a count (new parameters take their defaults when older presets
   load), the matrix slots, the two table references (factory id or user table), the macro names, the preset name (16
   characters) and category (bass, lead, pad, pluck, keys, FX, sequence/arp, other), then the LFOs' drawn shapes (`'D'`,
-  each LFO's count of points and its points; a patch without them takes the default's). At most 604 bytes.
+  each LFO's count of points and its points; a patch without them takes the default's). At most 610 bytes.
 - **Factory presets** (64 at first, up to 128) are constants in the image, written by `tools/gen_presets.py` from
   readable definitions.
-- **User presets**: 128 slots in the user store as A/B sector objects (`storage.c`: commit record last, newest valid copy
-  wins, a torn write leaves the old copy). Six patches per object, 22 objects, 176 KiB of `0x97000–0xDFFFF`.
-- **Edit buffer and restore on boot**: the sound being played is autosaved (A/B, `0xE5000/0xE6000`, as Felucca's
-  autosave) once nothing has sounded for 3 s after a change, and restored at power-on unless the last boot crashed.
+- **User presets** (built, `sy_store.c`, after Felucca's `storage.c`): 128 slots as A/B sector objects (a save goes
+  to the other copy: erase, the payload, the commit record last, read back before it counts; the newest valid copy
+  loads, so a torn write leaves the one before). Five slots of 768 B to a pair, 26 pairs from `0x97000` (208 KiB of
+  the user store `0x97000–0xDFFFF`). Strata's records carry their own magic (`STRA`): Felucca's projects and samples,
+  which live in the same area, read as empty to Strata, and Strata's as none to Felucca. **Installing Strata gives this
+  area to its presets**: a Felucca project there is overwritten where a preset is saved over it, so back it up first
+  (Felucca's web backup, its archive of projects and presets; or a full flash dump, PHASE0.md §7). The index of the
+  slots (name, category: 2.4 KB) is read at power-on.
+- **Edit buffer and restore on boot** (built): the sound playing (its user slot or starter number, and the patch) is
+  saved to `0xE5000/0xE6000` (Felucca's autosave pair) once nothing has sounded for 3 s and it differs from what the
+  flash has, and comes back at power-on; HOME held at power-on skips it (a way back, should a sound ever stop the unit).
+  Integration adds Felucca's boot guard: a crashed boot skips it too.
 - **Undo** (built): a history of 8 patches in RAM (4.8 KB, `.bss`); a state goes on it when an edit gesture starts
   (nothing edited for 1 s before: a knob, the MOD layer, an LFO's points) and before a sound loads. SAVE + OCT−
   steps back, SAVE + OCT+ forward again; a state taken back is written as the knobs write.
-- **SAVE** (decided; its screens wait for the mockups' approval): a tap opens the SAVE screen; a patch never saved
-  (INIT, a factory or starter sound) is named first (the keys type letters: F3 to F#5 A to Z, G5 a space, OCT+
-  letters / numbers and symbols, OCT− deletes, KNOB 1 the cursor, KNOB 2 the character, SAVE writes, HOME cancels; 16
-  characters in capitals); a patch saved before offers its next version, "NAME v2" (lowercase v, one above the
-  highest saved). A double tap writes over the patch's own slot at once. Held: the preset browser.
-- **Settings** (MIDI channel, panel velocity, palette, LED mode, HOLD time, help on/off …) in Felucca's settings pair
-  `0xFC000/0xFD000`.
-- **Flash safety**: only `storage.c` writes, through `FL_RANGE_OK` (the runtime guard in the RAM-resident driver, kept).
-  Every object's sectors are compile-time constants checked against the allow-list with `_Static_assert`. The update
-  loader and the head are untouched. Felucca's flash map, package format and identity (`FM-1_900`, release `FM-1_9XY`)
-  stay, so M-UPGRADE and **Return to official V15** keep working.
+- **SAVE** (built; verified in emulator): a tap opens the SAVE screen (NAME IT). A patch never saved (INIT, a starter
+  sound) is named first: the keys type (F3 to F#5 A to Z, G5 a space; OCT+ letters / numbers and symbols, OCT− deletes),
+  KNOB 1 the cursor, KNOB 2 the character (at the end: ADD), KNOB 3 the category, KNOB 4 the slot (the first free one
+  offered; one in use shows what it replaces); 16 characters in capitals. A patch saved before offers its next version,
+  "NAME v2" (lowercase v, one above the highest saved), in the next free slot, its own slot kept. SAVE writes (behind
+  the hush, §3: "SAVED: USER 3", or "SAVE FAILED" with the store's code), HOME leaves without. A double tap writes
+  over the patch's own slot at once ("SAVED OVER USER 3"; a patch never saved: named first). Held and let go without
+  OCT: the preset browser.
+- **The browser** (built): the categories with their counts at the left (ALL first), the presets of the one picked at
+  the right (the starter sounds, INIT, the user slots, each marked with its bank); KNOB 1 the category, KNOB 2 the
+  preset, loaded as it turns (SAVE + OCT− takes a load back), KNOB 3 the bank (ALL, STARTER, USER); HOME back, SAVE:
+  the SAVE screen. PRESETS on any other page steps the same list (the factory sounds, then the user's).
+- **Settings** (built): Strata's own record (`SET1`: the palette, the knobs' acceleration, BPM, the time signature, the
+  buttons' hold time; MIDI channel and the rest as they come) in Felucca's settings pair `0xFC000/0xFD000`, written as
+  the edit buffer is: after 3 s without sound, when changed.
+- **Flash safety**: only `sy_store.c` writes, through the hooks: `st_erase` / `st_prog` (`storage_hw.c` on the FM-1,
+  the emulator's in `strata_web.c`) check `FL_STORE_OK` against the allow-list, and the RAM-resident driver checks
+  `FL_RANGE_OK` again. The allow-list is one header, `hal/fm1_flash_map.h`, that the firmware, the host tests and the
+  emulator all include; every object's sectors are compile-time constants checked against it with `_Static_assert`.
+  The update loader and the head are untouched. Felucca's flash map, package format and identity (`FM-1_900`, release
+  `FM-1_9XY`) stay, so M-UPGRADE and **Return to official V15** keep working.
 
 ## 17. User interface (draft; CONTROLS.md is the reference once the UI phase is done)
 
@@ -512,8 +540,29 @@ page's 3D table is drawn through the warp as the oscillator plays it (WARP and A
 dashed). Drawing the effects found three engine bugs, fixed (TESTING.md §5.2): the chorus ran at a quarter of its RATE,
 the delay's HP at a tenth of its frequency, the reverb's LOW CUT at a fortieth.
 
-Still to come in Phase 4: the LFO, FX, GLO and SCL layers, the matrix's graph, presets (browser, user slots, save,
-restore), MIDI learn, help, the rest of the SETTINGS, and CONTROLS.md. The draft below is the plan those follow.
+**After the second review** (the user's asks; verified in emulator unless marked): the effects' order (§14): FX held,
+ALGORITHM moves the effect shown one place along the chain ("DRIVE: 2 OF 6"); the rack across the FX pages shows the
+order, and ALGORITHM alone steps the effects in it. The EQ has two pages: POINTS (KNOB 1 picks LOW, MID or HIGH,
+KNOB 2 its frequency, KNOB 3 its gain, KNOB 4 its Q; the point picked lit on the curve) and GAINS (LOW, MID, HIGH,
+ON). Each point's gain, frequency and Q are matrix destinations, so the MOD layer on POINTS sets a source's depth on
+the point picked; the curve then moves with its sources while sound plays, the range each point sweeps drawn as a bar.
+What moves on the screen moves only while sound plays: the voices on an envelope or an LFO, the chorus's taps, OTT's
+levels, the EQ's modulated points and HOME's scope (sounding: a voice on, or the output over −70 dBFS; once more when
+it stops). SAVE, its names and versions, the browser, the user slots, the settings and the sound's restore (§16).
+
+**Efficiency** (the user's ask: no background work at the sound's cost). The audio interrupt does the UI two favours
+only: on HOME while sound plays, the scope's capture (a sample copied every few, 212 points a frame); and each block's
+peak (two instructions a sample, for "sounding"). Everything else is the main loop's, which the audio interrupt always
+preempts. In silence nothing is drawn: every page, SAVE's and the browser's, draws nothing in a second (verified in
+emulator); HOME's CPU figure is redrawn only when it moves by 2 points (it redrew every 500 ms). A redraw sends only the
+band of rows that changed (a hash a row): a voice's dot moving sends a few rows, an envelope held at its sustain none.
+With every live graph live and a note held, the busiest page takes 24 % of the SPI's time (CHORUS; HOME's scope 21 %,
+the EQ 12 %, an LFO 6 %, an envelope 3–5 %; each was 51 % before, a full display 14 times a second). The flash: SAVE
+behind the hush, the rest only after 3 s without sound (§3, §16). Needs hardware test: the render's own time on the
+FM-1 and the keys' latency while a live page draws (the main loop reads the keys; a frame's drawing delays them).
+
+Still to come in Phase 4: the LFO, FX (macros), GLO and SCL layers, the matrix's graph, MIDI learn, help, the rest of
+the SETTINGS, and CONTROLS.md. The draft below is the plan those follow.
 
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
@@ -531,10 +580,10 @@ changed, in strips, so the 12 MHz display keeps up.
 | LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
 | SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount); v1: the step sequencer (the matrix moves) | — |
 | REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount |
-| FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ (built: two or three pages each, ALGORITHM picks the effect) | **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
+| FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ in the patch's order (built: two or three pages each, ALGORITHM picks the effect) | + ALGORITHM: moves the effect shown along the chain (built); **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
 | GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built); tune, panel velocity to come | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
 | SCL | KEYS (scale and root shown on the LEDs, octave, panel velocity) | the root by key, as Felucca |
-| SAVE | the SAVE screen (naming a patch never saved; "NAME v2" for one saved before); double tap: write over its slot at once | the preset browser; SAVE + OCT− undo, SAVE + OCT+ redo (built) |
+| SAVE | the SAVE screen (naming a patch never saved; "NAME v2" for one saved before); double tap: write over its slot at once (built) | let go: the preset browser; SAVE + OCT− undo, SAVE + OCT+ redo (built) |
 | ARP | (v1: the arpeggiator) | — |
 | PLAY | starts and stops the internal clock (synced LFOs and delays; the arp in v1) | — |
 | OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); in dialogs back / confirm | both 5 s: UBOOT (Felucca) |
@@ -591,3 +640,6 @@ whether Strata needs that is decided by the device test.
 | Table build gap (~20 ms) on table/preset change | faded; documented; preset changes are silent between the old sound's fade and the new one |
 | RAM: the engine's pool was 214 B over Felucca's beside the screen's canvas, before the 8 KiB margin | the delay went to 750 ms a side: 295,638 B, 13,482 B free (TESTING.md §4.4); the generator's scratch (11.4 KiB) could move to `.bss` if more is needed |
 | TRS MIDI out | not possible on stock hardware; dropped (§15) |
+| A flash erase longer than measured (the datasheet's maximum) | the hush holds silence in the ring for any length; the keys and MIDI wait meanwhile (a SAVE is deliberate; the background writes wait for 3 s of silence) |
+| Keys' latency while a live page draws (the main loop reads the keys) | only changed rows are sent (§17); the BENCH page times a frame; if needed the keys go to the TIMER5 tick as Felucca's input scan does |
+| Strata's presets take Felucca's projects and samples area | said at install (§16); different magics, so neither misreads the other's records |

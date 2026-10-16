@@ -24,7 +24,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-97 checks in five programs (`tests/sy_*.c`), all passing.
+114 checks in six programs (`tests/sy_*.c`), all passing.
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -61,9 +61,9 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 68 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 73 checks; `sy_smoke`, 2)
 
-- **Parameters and presets**: 177 parameters; a patch packs into at most 604 bytes (the LFOs' drawn shapes included)
+- **Parameters and presets**: 180 parameters; a patch packs into at most 610 bytes (the LFOs' drawn shapes included)
   and back unchanged; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
   a malformed drawn shape is not read (too many points) or made whole (places out of order, values out of range); a
   foreign blob is refused; the values read as stored (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE,
@@ -88,8 +88,11 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   at the next block when done; a patch load takes its drawn shapes.
 - **Clicks** (largest sample-to-sample step against a steady sine's): 17 events (note on/off, steal, retrigger, MONO,
   table swap, patch change, cutoff, macro, bend and level jumps, unison 1 → 7, OSC B / SUB / filter on and off, filter
-  type, warp change) all under 2×; worst 1.59× (unison 1 → 7).
+  type, warp change) all under 2×; worst 1.59× (unison 1 → 7). The hush for a SAVE's flash write (a 220 Hz sine):
+  out 0.96× and back 1.00× the steady step; "hushed" after 16 blocks, the last 256 samples (both audio halves, the ring
+  the DMA loops while an erase stops the interrupts) silent.
 - **Health**: 40 random patches × 3 s with random notes and knobs: every state finite, no denormal filter state.
+  REVERB's PLATE (four lines) with the stack filled with NaN first: silence in, silence out (§5.3).
 - **DC**: the output's mean 1.2 × 10⁻⁵ over the random patches; TUBE drive at 100 % leaves 2.2 × 10⁻⁵ at the output; the
   pulse sub's, PWM's, ASYM's and SYNC's offsets are taken out (means under 2 % of the peak), the infrasonic thump of a
   note's attack and release −41 (ASYM 100 %) to −68 dBFS.
@@ -97,8 +100,12 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   500.00 ms, and TIME's modulation steps its note value (−25 %: 1/8T, 166.85 ms); every effect at its extremes on
   full-scale noise (the EQ's bands at +18 dB) stays finite and under 1.0 (the limiter); the chorus on a 1 kHz sine is
   as clean after 10 minutes of running as at the start (−66 / −64 dB away from the tone at its default 0.50 Hz; −81 /
-  −88 dB when it ran at a quarter of that, §5.2; the old chorus fell to −20 dB, §5.1).
-- **EQ**: on and flat, the input bit for bit; each band's gain measured on a sine against its design: the peak's centre
+  −88 dB when it ran at a quarter of that, §5.2; the old chorus fell to −20 dB, §5.1). FX ORDER: each of the 720
+  codes is an order of the six and comes back the same; the modules play in the patch's order (OTT, EQ, REVERB, DRIVE,
+  DELAY, CHORUS: the same, bit for bit, as calling them so); a new order mid-note dips the wet parts without a click
+  (the largest step under 2× the steady output's).
+- **EQ** (the shelves at their own Q, 0.707 by default; the peak at MID Q): on and flat, the input bit for bit; each
+  band's gain measured on a sine against its design: the peak's centre
   ±12.00 dB, the low shelf's far side +11.97 dB (30 Hz), the high shelf's −11.99 dB (16 kHz), halfway at FREQ (+6.00,
   −6.00 dB), flat away from the bands (0.00; the peak 0.16 dB a decade off, as a Q of 1 has it); against the curve the
   screen draws (`fx_eq_db`), within 0.05 dB everywhere (0.00 measured); every frequency jumping 20 Hz ↔ 20 kHz each
@@ -107,6 +114,17 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 - **Determinism and golden renders**: eight test sounds (supersaw, pluck, pad, FM keys, sync lead, ladder bass, vowel pad,
   OTT growl) play the same twice in a run, bit for bit, and as recorded in `tests/sy_golden.txt` (recorded again after
   the optimisation pass, §5, and after the three effects' fixes, §5.2: supersaw, pluck, pad and sync lead).
+
+### 2.5 Store (`sy_store_test`, 12 checks)
+
+`sy_store.c` (Strata's presets, settings and sound on the flash) against a simulated NOR that behaves as the part does
+(an erase sets 0xFF, a program only clears bits, a page does not wrap) and refuses anything outside the firmware's
+allow-list (`hal/fm1_flash_map.h`, the hooks as `storage_hw.c` has them): an empty flash loads nothing; saved and
+loaded back; saved again to the other copy, the newest winning; a write torn after any byte of the payload or the
+record leaves the copy before; a part that ignores writes is not reported saved (the read-back) and the old copy
+loads; Felucca's record (`FELU`) in the same sector reads as none; all 128 user slots round trip a packed patch, a slot
+written keeps its pair's other slots, a slot emptied reads empty; every object's sectors inside the allow-list (no
+erase or program refused), and the hooks refuse the loader's area and the stock firmware's backup.
 
 ## 3. Known gaps (targets not met)
 
@@ -203,9 +221,10 @@ From the probe object (`build/cost/sy.o`), the engine without the UI, after the 
 
 Felucca's pool is 368,640 B and its screen canvas takes 59,520 B: with the engine, 13,482 B stay free, over the
 8 KiB margin `tools/build.py` asks for (if Felucca's platform keeps no other pool buffers: integration confirms). The
-UI's undo history (8 patches of 604 B: 4,832 B) and HOME's scope (its capture and the UI's copy: 1.7 KB) are in
-`.bss`, not the pool: Felucca's engines, sequencer and song freed far more `.bss` than that, but integration confirms
-the room.
+UI's undo history (8 patches of 610 B: 4,880 B), HOME's scope (its capture and the UI's copy: 1.7 KB), the display's
+row hashes (456 B), the store's buffer (3,840 B), the user slots' index (2,432 B) and a SAVE's packed patch (~630 B)
+are in `.bss`, not the pool: about 14 KB, where Felucca's engines, sequencer and song freed far more `.bss`, but
+integration confirms the room.
 
 ## 5. The optimisation pass (end of Phase 2)
 
@@ -257,6 +276,14 @@ renders of the sounds that use them re-recorded:
   fortieth** (80 Hz shown, 2 Hz cut: none). Both one-poles now sit where their knobs say, as the delay's LP did.
   SUPERSAW and PAD (the reverb), PLUCK and SYNC LEAD (the delay).
 
+### 5.3 One more, found by the effects' order (Phase 4)
+
+- **REVERB's PLATE read four lines it never wrote.** The network mixes eight lines for HALL and four for PLATE, but its
+  output sum always read all eight, `y[4..7]` included, which PLATE leaves unset: whatever the stack held there went
+  into the output. The fixed order hid it (the stack happened to hold small finite values); the health test caught it
+  once the order changed what ran before the reverb. PLATE now sums its own four lines; HALL is unchanged bit for bit.
+  A test fills the stack with NaN before PLATE runs on silence and asks for silence out (it fails on the old code).
+
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
 The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. The emulator's page
@@ -264,7 +291,7 @@ has also run in headless Chrome (§6.4); the workbench's page has not been opene
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
-The five host programs (§2) built with `emcc` and run under Node: 97 checks, all passing, the golden renders included.
+The six host programs (§2) built with `emcc` and run under Node: 114 checks, all passing, the golden renders included.
 The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
 multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
 workbench and the emulator sound as the host-verified engine does.
@@ -278,13 +305,14 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 47 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 60 checks)
 
-`sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_gfx.c`) with the engine, Felucca's `panel.c` and `gfx.c`,
-compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the audio halves as the DMA asks for
-them, the key matrix and its LEDs, the 240 x 240 screen, an erased flash image. Not simulated: USB, TRS MIDI, the
-console, the battery, time within an audio half (no CPU load to show), and the panel's speed (a region is drawn and
-sent at once). **Verified in emulator**, under Node:
+`sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
+Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
+audio halves as the DMA asks for them, the key matrix and its LEDs, the 240 x 240 screen (the pixels each blit sends
+counted), a flash image behind the firmware's allow-list (the page keeps it across reloads). Not simulated: USB, TRS
+MIDI, the console, the battery, time within an audio half (no CPU load to show), the panel's speed (a region is drawn
+and sent at once) and the flash's (a write takes no time). **Verified in emulator**, under Node:
 
 | Check | Result |
 | --- | --- |
@@ -315,10 +343,21 @@ sent at once). **Verified in emulator**, under Node:
 | Undo, redo | SAVE + OCT− twice takes back a level KNOB 3 set and the delete (SHAPE STAIRS, the drawn shape of 7 points); SAVE + OCT+ redoes the delete; SAVE let go: no page, no octave. On WT POS a gesture at a time (600 -> 606 in one, 607 a second later: undone 606, then 600; redone 606); a sound's load undone (PAD back to PLUCK) |
 | SYNC FIXED | LFO 1 SHAPE: SYNC FIXED, KNOB 3 steps the note value (1/4 -> 1/8D), RATE untouched; FREE: KNOB 3 the rate in Hz, the note value kept. DELAY: FIXED by default, KNOB 3 steps its note (1/8D -> 1/8); FREE: the time in ms |
 | GLOBAL | GLO tapped three times: the TEMPO page, 120 BPM 4/4; BPM 3 slow detents 123, held between 20 and 300; TS-BEAT 1-16; TS-NOTE 1, 2, 4, 8, 16; 300 BPM in eighths: 150 quarter notes a minute |
-| FX | ALGORITHM through six effects (DRIVE .. EQ), round; the EQ's pages GAIN (LOW, MID, HIGH, ON) and FREQ (LO FREQ, MID FREQ, MID Q, HI FREQ) |
-| A knob turning | KNOB 2 on the EQ's GAIN page: its cell lit, the curve before the turn kept, 2,642 pixels; a second after the last detent both let go (3,253 pixels back) |
-| HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows redrawn 9 times); on another page no capture |
-| The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,871 pixels of the display), the frame before the turn kept |
+| FX | ALGORITHM through six effects (DRIVE .. EQ), round; the EQ's pages POINTS (POINT, FREQ, GAIN, Q) and GAINS (LOW, MID, HIGH, ON) |
+| A knob turning | EQ POINTS, MID picked: KNOB 3 its gain, its cell lit, the curve before the turn kept (4,430 pixels); KNOB 4 its Q; LOW picked: LO Q; a second after the last detent both let go (2,813 pixels back) |
+| .. the MOD layer there | KNOB 3 sets LFO 1's depth on MID's gain (the point picked) |
+| The effects' order | FX held + ALGORITHM on DRIVE: DRIVE second ("DRIVE: 2 OF 6", FX ORDER 120); FX let go: no page step; ALGORITHM then follows the new order (after DRIVE: DELAY); two back: CHORUS first |
+| Live only with sound | CHORUS on: its taps still in a second of silence (0 blits), moving with a note (7 in 0.5 s), still again after it |
+| HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows sent 10 times); on another page no capture |
+| The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,766 pixels of the display), the frame before the turn kept |
+| SAVE, never saved | a tap: its screen, the sound's name to edit, USER 1 (the first free); OCT− deletes, the keys type "WARM PAD", OCT+ the numbers ("WARM PAD2") |
+| .. written | "SAVED: USER 1"; back on the page; the sound is USER 1, slot 1 holds "WARM PAD"; 22 flash writes, none refused |
+| SAVE, saved before | the next version, "WARM PAD v2", in USER 2; HOME leaves unsaved (slot 2 empty) |
+| SAVE twice | over USER 1 at once ("SAVED OVER USER 1"): the slot's stored WT POS follows the edit; no screen |
+| The browser | SAVE held and let go; KNOB 2 loads as it turns (INIT before, then WARM PAD from the flash, its WT POS as saved); SAVE + OCT− undoes a load there, the browser stays; HOME back |
+| The allow-list | an erase at `0x00000` (the boot) or `0xE8000` (the stock firmware's backup) refused (−8) |
+| A power cycle | the flash image into a new instance: USER 1 kept, the sound that was playing back, the palette |
+| Efficiency | every page (45), SAVE's and the browser's: nothing drawn in a second of silence. Every live graph live (the chorus and OTT on, LFO 1 on the EQ's MID) and a note held, each page's share of the SPI's time (12 MHz): CHORUS 24 %, HOME 21 %, EQ 12 %, OTT 9–10 %, an LFO 4–6 %, an envelope 3–5 %, the rest 0 (each live one 51 % before only changed rows were sent) |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
@@ -329,7 +368,8 @@ then drawn: a point lowered, one added and curved, a key held: the voice on its 
 sample cycles and with SYNC FIXED (RATE 1/8), the delete's countdown, GLOBAL's TEMPO at 132 BPM in 6/8, HOME with a
 chord (the scope), the WAVE page's AMOUNT turning, the filter's TONE (CUTOFF turning, ENV 2 on it) and MORE (KEYTRACK
 turning), each effect with a knob turning (DRIVE, CHORUS's DEPTH, DELAY's FEEDBACK, its TONE's LP, REVERB's DECAY, OTT's
-DEPTH with a chord, the EQ's MID and MID FREQ), the SETTINGS, each palette). Bugs the tests
+DEPTH with a chord, the EQ's MID and MID FREQ, its POINTS with LFO 1 on MID), the SETTINGS, each palette, SAVE's
+screens (naming, the symbols, a new version, saved), the browser (all, a category), HOME with a user preset). Bugs the tests
 found: the table's CC 0 means "no CC", so a CC 0 message (bank select) set the first parameter without one (OSC A's
 ON); the lookup now skips CC 0. And a script tapping ENV twice within 300 ms latched ENV's layer: right, by Felucca's
 double-tap rule, so the session taps slower.
@@ -358,6 +398,10 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 - The codec's output: levels, the −6 dBFS ceiling, DC at the jack.
 - Everything the CPU guard does under a real load.
 - The app on the device (after integration): the audio interrupt with its event rings, the load it reports, and the
-  keys' latency while the screen redraws. The skeleton redraws the whole screen on any change (~77 ms on the panel by
-  Phase 0's figure) and reads the keys in the main loop, so a key could wait that long; the UI phase draws only what
-  changed.
+  keys' latency while the screen redraws. The UI draws only what changed and sends only the rows that changed (the
+  busiest live page 24 % of the SPI's time, §6.3), but the keys are read in the main loop, so a key can wait for a
+  frame's drawing: the BENCH page times a frame; if it is long the keys move to the TIMER5 tick.
+- The flash on the device: an erase's and a page's IRQ-off time against the hush (the ring silent before any write);
+  a SAVE's write and the background writes after 3 s of silence; that nothing outside the allow-list is ever touched
+  (the RAM driver's second guard). Before any of it: a full flash dump (the brief's `docs/02-update-and-recovery.md`
+  exists nowhere; FLASHING.md, Phase 7, builds on the tools PHASE0.md §7 found).
