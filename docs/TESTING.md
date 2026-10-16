@@ -305,7 +305,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 63 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 78 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -359,7 +359,12 @@ and sent at once) and the flash's (a write takes no time). **Verified in emulato
 | .. undo there | a load taken back (SAVE + OCT−): the sound before, as USER 2 again; the browser stays; SAVE twice or HOME: back |
 | The allow-list | an erase at `0x00000` (the boot) or `0xE8000` (the stock firmware's backup) refused (−8) |
 | A power cycle | the flash image into a new instance: USER 1 and USER 2 kept, the sound that was playing back, the palette |
-| Efficiency | every page (45), SAVE's and the browser's: nothing drawn in a second of silence. Every live graph live (the chorus and OTT on, LFO 1 on the EQ's MID) and a note held, each page's share of the SPI's time (12 MHz): CHORUS 24 %, HOME 21 %, EQ 12 %, OTT 9–10 %, an LFO 4–6 %, an envelope 3–5 %, the rest 0 (each live one 51 % before only changed rows were sent) |
+| The matrix | SEQ: KNOB 1 picks slot 8 from slot 1 (round); KNOB 2 its source (LFO 1), KNOB 3 a destination, KNOB 4 an amount; the display changes with them |
+| SCL | its page (its button lit); MAJOR, D, SNAP: G#3 plays G3, F#3 itself; WHITE: C4 plays D4, D4 E4, F3 G3, C#4 nothing; KNOB 4 the keys' velocity (127); SCL held + A3: the root A, no note; A major on the LEDs (the roots mid, C#4 glowing, C4 dark); all four back after a power cycle |
+| The hold layers | GLO: PERFORM, GLO breathing, 8 detents bend halfway up, the wheel 5, a held note playing on; let go, the bend back to 0, the wheel kept. FX: MACROS, MACRO 1 up, A3 turns DELAY on (no note, its LED lit). LFO: MOMENTARY, KNOB 1's value back when let go. EDIT: JUMP, C#4 opens KEYS, A#3 GLOBAL, the knobs do nothing |
+| PLAY | the transport on, LFO 1's phase from its start, the green LED lit, PLAY lit a quarter of each beat; off; ARP says it comes later |
+| The SETTINGS | SCREEN, PANEL, MIDI; GLOW low reaches the LEDs' level; HOLD 500 ms; channel 2: channel 1's note not heard, channel 2's played; program change 3: the fourth starter sound; MIDI LEARN: KNOB 1 picks WT POS, CC 20 learned, OCT+ ends it, CC 20 sets it 0 to 1000; HELP's hint entering the effects; all back after a power cycle; CLEAR twice clears |
+| Efficiency | every page (48), SAVE's and the browser's: nothing drawn in a second of silence. Every live graph live (the chorus and OTT on, LFO 1 on the EQ's MID) and a note held, each page's share of the SPI's time (12 MHz): CHORUS 24 %, HOME 21 %, EQ 12 %, OTT 9–10 %, an LFO 4–6 %, an envelope 3–5 %, the rest 0 (each live one 51 % before only changed rows were sent) |
 | Web MIDI | a note plays and its note-off ends it |
 | MIDI CC | CC 0 (bank select) at 0 and 127 sets nothing; CC 74 sets the cutoff, and only it |
 | Determinism | the same input twice: the same sound, bit for bit |
@@ -372,12 +377,16 @@ chord (the scope), the WAVE page's AMOUNT turning, the filter's TONE (CUTOFF tur
 turning), each effect with a knob turning (DRIVE, CHORUS's DEPTH, DELAY's FEEDBACK, its TONE's LP, REVERB's DECAY, OTT's
 DEPTH with a chord, the EQ's MID and MID FREQ, its POINTS with LFO 1 on MID), the SETTINGS, each palette, SAVE (once:
 the footer's "SAVED"; held: the countdown), the browser (all, a category), NAME IT from it (a rename, the symbols,
-written), HOME with a user preset). Bugs the tests found: the table's CC 0 means "no CC", so a CC 0 message (bank
+written), HOME with a user preset, D dorian under SNAP and WHITE, the matrix, PERFORM, MACROS, JUMP, MOMENTARY, the
+SETTINGS' PANEL and MIDI with a CC learned, LEARN's footer, a HELP hint). Bugs the tests found: the table's CC 0 means "no CC", so a CC 0 message (bank
 select) set the first parameter without one (OSC A's ON); the lookup now skips CC 0. A script tapping ENV twice within
 300 ms latched ENV's layer: right, by Felucca's double-tap rule, so the session taps slower. And undo kept a state's
 values but not which preset it was: a load undone left the sound marked as the preset loaded, so PRESETS stepped from
 the wrong place and SAVE held would have written over another preset's slot. Each state now carries its preset. The
 browser also wrote user names in capitals ("SUPERSAW V2"): only the starter sounds' table names are raised now.
+Adding SCL's section wrote past the sections' page memory (ui.spage), over the family's index: SCL's button went
+dark and the family tables were read out of range; the array now has a place for every section (a check of SCL's
+button LED fails on the old code).
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 

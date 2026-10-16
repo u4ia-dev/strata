@@ -22,6 +22,10 @@ and plays the test sounds bit for bit as the host build does; a browser workbenc
 starter sounds, the LEDs and a placeholder screen (TESTING.md §6). Nothing is built for the FM-1 yet: that is
 integration (Phase 6).
 
+**After Phase 4** (the user interface): every page, layer, gesture and setting of §17 is built and **verified in
+emulator** (78 checks, TESTING.md §6.3); [CONTROLS.md](CONTROLS.md) is the reference for the panel. Still on the FM-1's
+side: integration (Phase 6), the BENCH page, everything §20 marks for the hardware.
+
 Contents: 1 constraints, 2 source layout, 3 real-time model, 4 signal flow, 5 number formats, 6 wavetables,
 7 oscillators, 8 sub and noise, 9 filter, 10 envelopes and LFOs, 11 modulation, 12 parameters, 13 voices and the
 CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 testing, 19 the second core, 20 risks.
@@ -428,8 +432,12 @@ order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (
 - **In**: USB-MIDI and TRS (Felucca's drivers), one channel (or omni), notes, velocity, pitch bend, channel
   aftertouch, CC1 mod wheel, CC11 expression, CC64 sustain, CC120/123 panic, program change and bank select (bank 0
   factory, bank 1 user), clock (tempo for synced rates), start/stop (resets synced LFOs and delays), and a default CC
-  map for the macros and the main parameters (CONTROLS.md lists it). Felucca's MIDI LEARN assigns any CC to the
-  parameter of any knob.
+  map for the macros and the main parameters (CONTROLS.md lists it). MIDI LEARN assigns any CC to the parameter of any
+  knob. Built in Phase 4 (`sy_app.c` sy_midi_in, verified in emulator through the emulator's MIDI input): the channel
+  (SETTINGS > MIDI), notes, bend, channel aftertouch, the engine's controllers, the default CC map, MIDI LEARN (32 CCs,
+  kept with the settings; Felucca's gestures, Strata's own map: the MIDI side only asks, the main loop writes it),
+  program change and CC 0's bank (with PROGRAM on). Clock, start and stop wait for integration (the real MIDI path and
+  its timing); PLAY runs the internal transport meanwhile (§17).
 - **Out**: USB-MIDI: panel keys (with the panel velocity), and optionally the knobs' CCs. **TRS MIDI out is not
   possible on a stock FM-1**: its only MIDI jack is an input (an optocoupler at its pads; no TX pin is known on the
   board; confirmed by PCB photos and by three firmware projects). Options: a USB-MIDI host adapter turns the FM-1's USB
@@ -477,9 +485,10 @@ order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (
   a sound from no user slot the first free one (one in use shows what it replaces). SAVE writes it and goes back to
   the browser; HOME goes back unsaved. PRESETS on any other page steps the same list (the factory sounds, then the
   user's).
-- **Settings** (built): Strata's own record (`SET1`: the palette, the knobs' acceleration, BPM, the time signature, the
-  buttons' hold time; MIDI channel and the rest as they come) in Felucca's settings pair `0xFC000/0xFD000`, written as
-  the edit buffer is: after 3 s without sound, when changed.
+- **Settings** (built): Strata's own record (`SET1`, 115 bytes: the palette, the knobs' acceleration, BPM, the time
+  signature, the buttons' hold time; SCL's scale, root, fit and velocity; HELP, GLOW, the MIDI channel, PROGRAM; MIDI
+  LEARN's 32 entries) in Felucca's settings pair `0xFC000/0xFD000`, written as the edit buffer is: after 3 s without
+  sound, when changed. Fields are only added at its end; a shorter record (an older build's) loads what it has.
 - **Flash safety**: only `sy_store.c` writes, through the hooks: `st_erase` / `st_prog` (`storage_hw.c` on the FM-1,
   the emulator's in `strata_web.c`) check `FL_STORE_OK` against the allow-list, and the RAM-resident driver checks
   `FL_RANGE_OK` again. The allow-list is one header, `hal/fm1_flash_map.h`, that the firmware, the host tests and the
@@ -487,7 +496,7 @@ order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (
   The update loader and the head are untouched. Felucca's flash map, package format and identity (`FM-1_900`, release
   `FM-1_9XY`) stay, so M-UPGRADE and **Return to official V15** keep working.
 
-## 17. User interface (draft; CONTROLS.md is the reference once the UI phase is done)
+## 17. User interface (built in Phase 4; [CONTROLS.md](CONTROLS.md) is the reference for the panel)
 
 **Phase 4, at the look stop** (verified in emulator; the design: the Strata Screen Design canvas, approved with its
 seven palettes and STRATA's amber as the default). The screen is five regions, each drawn only when it changes and sent
@@ -568,8 +577,22 @@ the EQ 12 %, an LFO 6 %, an envelope 3–5 %; each was 51 % before, a full displ
 behind the hush, the rest only after 3 s without sound (§3, §16). Needs hardware test: the render's own time on the
 FM-1 and the keys' latency while a live page draws (the main loop reads the keys; a frame's drawing delays them).
 
-Still to come in Phase 4: the LFO, FX (macros), GLO and SCL layers, the matrix's graph, MIDI learn, help, the rest of
-the SETTINGS, and CONTROLS.md. The draft below is the plan those follow.
+**The rest of Phase 4** (after the SAVE remap; verified in emulator): SEQ's MATRIX takes a slot at a time (KNOB 1 the
+slot, KNOB 2-4 its source, destination and amount) and lists all eight (each source, where it goes, how much; the
+header counts those in use). SCL's KEYS page: the scale (Felucca's sixteen), its root, how the keys fit it (OFF, SNAP:
+a key off the scale plays the note below; WHITE: the white keys walk the scale from the root at C4, the black keys
+silent) and the keys' velocity; SCL held + a key sets the root; the keys' LEDs show a scale (its notes glowing, the root
+at the mid level); these are the unit's, kept with the settings. The hold layers: GLO PERFORM (the bend, back to the
+middle when let go; the mod wheel; GLIDE; VOLUME), FX MACROS (MACRO 1-4; F3 .. D4 switch the effects), LFO MOMENTARY
+(changes last while LFO is held), EDIT JUMP (a key opens its section); each breathes its button, names itself in a
+banner and says in the footer how it ends. PLAY runs the transport (the FREE LFOs start on the beat; PLAY's green LED,
+its own blinking each beat); ARP says it comes later. The SETTINGS have SCREEN (COLOR, HELP, GLOW), PANEL (ACCEL,
+HOLD) and MIDI (CHANNEL, LEARN, CLEAR, PROGRAM); HELP shows a section's hint in the footer as it opens. Found on the
+way and fixed: undo lost which preset a state was (an undone load left the sound marked as the preset loaded, so SAVE
+held would have written another preset's slot); and adding SCL's section wrote past the sections' page memory (ui.fam
+overwritten) until SEC_N sized it; both have tests that fail on the old code.
+
+**The plan the UI followed** (Phase 1's draft; the table now says what was built and how):
 
 **Screen layout** (Felucca's): a header with the page and the preset; four knob cards for KNOB 1–4, each with its value,
 a ring, and the modulation range as a coloured arc; the graph area (the oscillator's frame with the position's neighbour
@@ -582,26 +605,27 @@ changed, in strips, so the 12 MHz display keeps up.
 | Button | Tap: pages | Hold |
 | --- | --- | --- |
 | HOME | HOME (the sound, its output live, the macros on KNOB 1–4) | held 5 s: the SETTINGS (built) |
-| EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | quick jump: a key per section |
-| ENV | ENV 1, ENV 1 +, ENV 2, ENV 2 + | **assign ENV 2**: turn a knob to set its amount |
-| LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held |
-| SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount); v1: the step sequencer (the matrix moves) | — |
-| REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount |
+| EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | **JUMP**: a key opens its section, the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS (built) |
+| ENV | ENV 1 ADSR, SHAPE; ENV 2 the same | **assign ENV 2**: turn a knob to set its amount (built: the MOD layer for ENV 2) |
+| LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held (built; on POINTS: the point's delete) |
+| SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount; built); v1: the step sequencer (the matrix moves) | — |
+| REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount (built) |
 | FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ in the patch's order (built: two or three pages each, ALGORITHM picks the effect) | + ALGORITHM: moves the effect shown along the chain (built); **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
-| GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built); tune, panel velocity to come | **performance**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume |
-| SCL | KEYS (scale and root shown on the LEDs, octave, panel velocity) | the root by key, as Felucca |
+| GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built) | **PERFORM**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume (built) |
+| SCL | KEYS: scale, root, fit, the keys' velocity; the scale on the LEDs (built) | + a key: the root (built) |
 | SAVE | once: the sound saved as a new preset at once (its next version, "NAME v2"); twice: the preset browser, where SAVE opens NAME IT (built) | 5 s: over its own slot, a countdown first (built); SAVE + OCT− undo, SAVE + OCT+ redo (built) |
-| ARP | (v1: the arpeggiator) | — |
-| PLAY | starts and stops the internal clock (synced LFOs and delays; the arp in v1) | — |
-| OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); in dialogs back / confirm | both 5 s: UBOOT (Felucca) |
+| ARP | (v1: the arpeggiator; built: a word saying so) | — |
+| PLAY | starts and stops the internal transport (built: the FREE LFOs start on the beat; MIDI clock at integration; the arp in v1) | — |
+| OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); on NAME IT letters / symbols and delete; while MIDI LEARN listens, its CC away / done (built) | both 5 s: UBOOT (Felucca; at integration) |
 
-PRESETS turns through presets from every page that is not a list. SELECT steps the pages (or, in the MENU, the tempo or
-mod wheel, as Felucca's SELECT option).
+PRESETS turns through presets from every page (built). SELECT steps the family's pages (built).
 
-**LEDs**: the keys show the scale (root lit, scale notes glowing), the notes sounding, and in the MOD layer the sources
-in use; buttons show the open page's family, a locked layer breathes.
+**LEDs** (built): the keys show the notes held, a scale (its notes glowing, the root at the mid level), in the MOD layer
+the source picked and those in use, in MACROS the effects (lit when on), in JUMP the sections' keys; buttons show the
+family shown (the others glowing), a hold layer's button and a latched MOD layer's breathe, PLAY's green LED lights
+while the transport runs and PLAY itself blinks each beat. GLOW (SETTINGS) sets the glow's level.
 
-**Help**: every page has a one-line hint shown for ~2 s on entry (Felucca's HELP setting).
+**Help** (built): entering a section, a one-line hint in the footer for 2 s (SETTINGS > SCREEN > HELP, on by default).
 
 ## 18. Testing
 
