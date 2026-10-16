@@ -390,6 +390,7 @@ static void sy_block(int32_t *out)
     if (sy_next_st)
         sy_patch_swap();
     sp_block();
+    lfo_draw_sync();
     mod_map();
     sy_table_fades();
     sy_budget();
@@ -484,6 +485,7 @@ static void sy_patch_swap(void)
         return;
     sy_patch = sy_next;
     sp_snap();
+    lfo_dr_seq = 1u;                         /* (its drawn shapes: taken at this block's start) */
     for (i = 0; i < SY_NOSC; i++)            /* a table the new sound does not share: nothing reads it until */
         if ((uint32_t)sy_patch.p[i ? SP_B_TABLE : SP_A_TABLE] != wt_tab[i].id)   /* sy_service rebuilds it */
             wt_tab[i].busy = 1;
@@ -512,6 +514,7 @@ static void sy_init(void)
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
     sy_glfo_v[0] = sy_glfo_v[1] = 0.0f;
+    lfo_dr_seq = 1u;                                 /* (the drawn shapes: taken at the first block) */
     sy_next_st = 0;
     wt_build_o = 0xFF;
     fx_lo = 0;

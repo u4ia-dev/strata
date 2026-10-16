@@ -280,6 +280,7 @@ static void voice_lfo_par(const float *off, uint32_t k, lfo_par_t *lp)
     lp->rise = sp_n[SP_L1_RISE + b];
     lp->phase = (float)sy_patch.p[SP_L1_PHASE + b] * (1.0f / 360.0f);
     lp->smooth = sp_n[SP_L1_SMOOTH + b];
+    lp->dr = &lfo_dr[k];
 }
 
 /* adds a source's block (x, y) into its bus with its gains ramped from the last block's */

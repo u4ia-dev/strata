@@ -73,7 +73,7 @@ enum {                           /* units: the display and the DSP's reading of 
     X(E##_RCRV, "R CURVE", S, -1000, 1000, -500, U_BIPCT, 0, 0)
 
 #define SP_LFO(X, L, S, rate)                                                                             \
-    X(L##_SHAPE, "SHAPE", S, 0, 11, 0, U_LIST, 0, 0)                                                      \
+    X(L##_SHAPE, "SHAPE", S, 0, 12, 0, U_LIST, 0, 0)                                                      \
     X(L##_RATE, "RATE", S, 0, 1000, rate, U_LFOHZ, FMV, 0)                                                \
     X(L##_SYNC, "SYNC", S, 0, 17, 0, U_SYNC, 0, 0)                                                        \
     X(L##_MODE, "MODE", S, 0, 2, 1, U_LIST, 0, 0)                                                         \
@@ -186,6 +186,18 @@ typedef struct {
 #define SP_ROW(id, nm, sc, l, h, d, u, f, c) {nm, sc, u, f, c, l, h, d},
 static const sp_desc_t SP[SP_COUNT] = {SY_PARAMS(SP_ROW)};
 
+/* an LFO's drawn shape (SHAPE DRAWN): points over a cycle, the first at 0, the last at 1000, each at or after the
+ * one before (two at one place: a step); between two, a curve: the value goes from the one's y to the next's as
+ * u / (u + (1 - u) 2^(4 c)) of the way at u of the segment (c 0: straight; > 0 slow then quick, as an envelope's
+ * curves). sy_lfo.c reads it (lfo_draw_sync) */
+#define SP_NPT 16u
+typedef struct {
+    uint8_t n;                        /* points, 2 .. SP_NPT */
+    int16_t x[SP_NPT];                /* 0 .. 1000: the place in the cycle */
+    int16_t y[SP_NPT];                /* -1000 .. 1000 */
+    int16_t c[SP_NPT];                /* -1000 .. 1000: the curve from this point to the next */
+} sp_draw_t;
+
 /* the patch: what presets store and the UI and MIDI write */
 #define SP_NPAIR (SP_COUNT / 2u)
 typedef struct {
@@ -196,6 +208,7 @@ typedef struct {
     char name[17];
     uint8_t cat;                      /* CAT_* (the preset browser) */
     char macro[4][9];                 /* the macros' names */
+    sp_draw_t draw[2];                /* the LFOs' drawn shapes (written between sy_draw_edit and sy_draw_done) */
 } sy_patch_t;
 enum { CAT_BASS, CAT_LEAD, CAT_PAD, CAT_PLUCK, CAT_KEYS, CAT_FX, CAT_SEQ, CAT_OTHER, CAT_COUNT };
 
@@ -215,6 +228,64 @@ static inline float sp_norm_of(uint32_t id, int32_t v)
     return (float)(v - d->lo) / (float)(d->hi - d->lo);
 }
 
+/* the LFOs' built-in shapes (sy_lfo.c's LFO_*, in its order) as points: SHAPE DRAWN starts from the shape shown when
+ * its points are first edited. A count, then x, y, curve a point. All but SINE and BOUNCE are exact; their curves
+ * (294: no one curve comes closer to a quarter sine) within 2.6 % of the LFO's range on SINE, 5.3 % on BOUNCE's
+ * first bounce. The random shapes (S&H, SMOOTH) are five cycles of sample levels: drawn, five steps or glides a
+ * cycle */
+static const int16_t SP_SHAPE_PTS[] = {
+    5, 0, 0, -294, 250, 1000, 294, 500, 0, -294, 750, -1000, 294, 1000, 0, 0,                        /* SINE */
+    4, 0, 0, 0, 250, 1000, 0, 750, -1000, 0, 1000, 0, 0,                                              /* TRIANGLE */
+    2, 0, -1000, 0, 1000, 1000, 0,                                                                    /* SAW UP */
+    2, 0, 1000, 0, 1000, -1000, 0,                                                                    /* SAW DOWN */
+    4, 0, 1000, 0, 500, 1000, 0, 500, -1000, 0, 1000, -1000, 0,                                       /* SQUARE */
+    10, 0, 600, 0, 200, 600, 0, 200, -350, 0, 400, -350, 0, 400, 900, 0, 600, 900, 0, 600, -800, 0,    /* S&H */
+    800, -800, 0, 800, 250, 0, 1000, 250, 0,
+    11, 0, 600, 294, 100, 125, -294, 200, -350, 294, 300, 275, -294, 400, 900, 294, 500, 50, -294,    /* SMOOTH */
+    600, -800, 294, 700, -275, -294, 800, 250, 294, 900, -125, -294, 1000, -500, 0,
+    8, 0, 1000, 0, 250, 1000, 0, 250, 333, 0, 500, 333, 0, 500, -333, 0, 750, -333, 0, 750, -1000, 0,   /* STEP 4 */
+    1000, -1000, 0,
+    16, 0, -1000, 0, 125, -1000, 0, 125, -714, 0, 250, -714, 0, 250, -429, 0, 375, -429, 0,            /* STAIRS */
+    375, -143, 0, 500, -143, 0, 500, 143, 0, 625, 143, 0, 625, 429, 0, 750, 429, 0, 750, 714, 0,
+    875, 714, 0, 875, 1000, 0, 1000, 1000, 0,
+    4, 0, 1000, 0, 250, 1000, 0, 250, -1000, 0, 1000, -1000, 0,                                       /* PULSE */
+    9, 0, -1000, -294, 125, 1000, 294, 250, -1000, -294, 375, 560, 294, 500, -1000, -294,             /* BOUNCE */
+    625, 120, 294, 750, -1000, -294, 875, -320, 294, 1000, -1000, 0,
+    5, 0, -1000, 0, 125, 1000, 0, 500, 1000, 0, 625, -1000, 0, 1000, -1000, 0,                        /* TRAPEZ */
+};
+#define SP_NSHAPE_PTS 12u                /* (the shapes above: every one but DRAWN) */
+
+/* a drawn shape made whole: 2 .. SP_NPT points, the first at 0 and the last at 1000, each at or after the one
+ * before, every value in its range */
+static void sp_draw_fix(sp_draw_t *d)
+{
+    uint32_t i, n = d->n < 2u ? 2u : d->n > SP_NPT ? SP_NPT : d->n;
+    d->n = (uint8_t)n;
+    for (i = 0; i < n; i++) {
+        d->x[i] = (int16_t)(i == 0u ? 0 : i + 1u == n ? 1000 : sy_clampi(d->x[i], d->x[i - 1u], 1000));
+        d->y[i] = (int16_t)sy_clampi(d->y[i], -1000, 1000);
+        d->c[i] = (int16_t)sy_clampi(d->c[i], -1000, 1000);
+    }
+}
+
+/* built-in shape s as points (s past them: the sine) */
+static void sp_shape_pts(uint32_t s, sp_draw_t *d)
+{
+    const int16_t *q = SP_SHAPE_PTS;
+    uint32_t i;
+    if (s >= SP_NSHAPE_PTS)
+        s = 0;
+    while (s--)
+        q += 1 + 3 * q[0];
+    memset(d, 0, sizeof *d);
+    d->n = (uint8_t)q[0];
+    for (i = 0; i < d->n; i++) {
+        d->x[i] = q[1u + 3u * i];
+        d->y[i] = q[2u + 3u * i];
+        d->c[i] = q[3u + 3u * i];
+    }
+}
+
 static void sp_defaults(sy_patch_t *pt)
 {
     uint32_t i;
@@ -226,6 +297,8 @@ static void sp_defaults(sy_patch_t *pt)
         memcpy(pt->macro[i], "MACRO 1", 8);
         pt->macro[i][6] = (char)('1' + i);
     }
+    sp_shape_pts(0, &pt->draw[0]);
+    sp_shape_pts(0, &pt->draw[1]);
 }
 
 /* a value into its range (the matrix's destinations: modulatable parameters only) */
@@ -302,12 +375,14 @@ static const char *const SYNC_NAMES[18] = {"FREE", "8 BAR", "4 BAR", "2 BAR", "1
 
 /* ------------------------------------------------------------------------------------------ presets --- */
 /* a patch as bytes (presets, autosave): "SY", the version, the count of values, the values (int16, little endian,
- * in id order), the name (16), the category, the macros' names (4 x 8). A patch written with fewer parameters
- * (an older build) takes the defaults of the ones it lacks; every value is clamped into its range */
-#define SP_PACK_MAX (6u + 2u * SP_COUNT + 16u + 1u + 32u)
+ * in id order), the name (16), the category, the macros' names (4 x 8); then 'D' and the LFOs' drawn shapes (each
+ * its count of points, then x, y, curve a point, int16). A patch written with fewer parameters (an older build)
+ * takes the defaults of the ones it lacks, one without the drawn shapes the default's; every value is clamped
+ * into its range, a drawn shape made whole (sp_draw_fix) */
+#define SP_PACK_MAX (6u + 2u * SP_COUNT + 16u + 1u + 32u + 1u + 2u * (1u + 6u * SP_NPT))
 static uint32_t sp_pack(const sy_patch_t *pt, uint8_t *o)
 {
-    uint32_t i, n = 0;
+    uint32_t i, k, n = 0;
     o[n++] = 'S';
     o[n++] = 'Y';
     o[n++] = 1;
@@ -323,12 +398,25 @@ static uint32_t sp_pack(const sy_patch_t *pt, uint8_t *o)
     o[n++] = pt->cat;
     for (i = 0; i < 32u; i++)
         o[n++] = (uint8_t)pt->macro[i / 8u][i % 8u];
+    o[n++] = 'D';
+    for (k = 0; k < 2u; k++) {
+        const sp_draw_t *d = &pt->draw[k];
+        o[n++] = d->n;
+        for (i = 0; i < d->n; i++) {
+            const int16_t v[3] = {d->x[i], d->y[i], d->c[i]};
+            uint32_t j;
+            for (j = 0; j < 3u; j++) {
+                o[n++] = (uint8_t)v[j];
+                o[n++] = (uint8_t)((uint16_t)v[j] >> 8);
+            }
+        }
+    }
     return n;
 }
 
 static int sp_unpack(sy_patch_t *pt, const uint8_t *b, uint32_t len)
 {
-    uint32_t i, np, n = 6;
+    uint32_t i, k, np, n = 6;
     if (len < 6u || b[0] != 'S' || b[1] != 'Y' || b[2] != 1)
         return 0;
     np = (uint32_t)b[4] | (uint32_t)b[5] << 8;
@@ -347,5 +435,19 @@ static int sp_unpack(sy_patch_t *pt, const uint8_t *b, uint32_t len)
         pt->macro[i / 8u][i % 8u] = (char)b[n++];
     for (i = 0; i < 4u; i++)
         pt->macro[i][8] = 0;
+    if (n < len && b[n] == 'D')                     /* the drawn shapes (each whole, or the default's) */
+        for (n++, k = 0; k < 2u && n < len; k++) {
+            uint32_t m = b[n++];
+            sp_draw_t *d = &pt->draw[k];
+            if (m < 2u || m > SP_NPT || len - n < 6u * m)
+                break;
+            d->n = (uint8_t)m;
+            for (i = 0; i < m; i++, n += 6u) {
+                d->x[i] = (int16_t)(b[n] | b[n + 1u] << 8);
+                d->y[i] = (int16_t)(b[n + 2u] | b[n + 3u] << 8);
+                d->c[i] = (int16_t)(b[n + 4u] | b[n + 5u] << 8);
+            }
+            sp_draw_fix(d);
+        }
     return 1;
 }

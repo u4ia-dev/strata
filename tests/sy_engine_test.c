@@ -3,8 +3,9 @@
 /* The whole engine (src/sy_engine.c and everything under it) through sy_block, as the audio ISR will run it:
  *   build/host/sy_engine_test tests/sy_golden.txt [DEMODIR]       GOLDEN_UPDATE=1 rewrites the golden file
  * 1. parameters: every row's range, default and name; the lists' names match their ranges; MIDI CCs unique;
- *    a patch packed and unpacked is the same; an older patch (fewer values) takes the defaults of the rest; values
- *    out of range are clamped; a foreign blob is refused;
+ *    a patch packed and unpacked is the same (its drawn shapes too); an older patch (fewer values, no drawn
+ *    shapes) takes the defaults of the rest; values out of range are clamped, a malformed drawn shape not read or
+ *    made whole; a foreign blob is refused;
  * 2. matrix: a slot moves its destination by amount x source over the whole range; two slots on one destination
  *    add; a slot into a parameter that is not a destination does nothing; macros feed macros; global destinations
  *    take the newest voice's sources;
@@ -12,7 +13,8 @@
  *    note; VOICES limits them; the same note takes its own voice again; releases end; sustain holds and lets go;
  *    MONO's stack (back to the held note, no restart), LEGATO (no restart while held), MONO restarts; glide's
  *    time; the unison budget trims the oldest voice; the CPU guard steps the budget down and back, sheds a voice;
- * 4. envelopes and LFOs: attack and release times; a FREE LFO's rate; a synced LFO at 120 BPM;
+ * 4. envelopes and LFOs: attack and release times; a FREE LFO's rate; a synced LFO at 120 BPM; the built-in
+ *    shapes as points (on their shapes); a drawn shape plays, its edits reach the audio whole, a patch load's too;
  * 5. clicks: a sine patch, every event that could step the output (note on / off, steal, retrigger, MONO, table
  *    swap, patch change, knob and CC jumps, unison count, sources and the filter switched, filter type and warp
  *    changed, bend jumps): the largest step between samples near the event against the steady sine's (<= 2x);
@@ -94,13 +96,24 @@ static uint64_t hash_out(uint32_t n)
     return h;
 }
 
+static int draw_same(const sp_draw_t *a, const sp_draw_t *b)
+{
+    uint32_t i;
+    if (a->n != b->n)
+        return 0;
+    for (i = 0; i < a->n; i++)
+        if (a->x[i] != b->x[i] || a->y[i] != b->y[i] || a->c[i] != b->c[i])
+            return 0;
+    return 1;
+}
+
 /* ------------------------------------------------------------------------------------- 1 parameters --- */
 static void t_params(void)
 {
-    uint32_t i, j;
+    uint32_t i, j, tail;
     int ok = 1, lists = 1, ccs = 1;
     static uint8_t buf[SP_PACK_MAX];
-    sy_patch_t a, b;
+    sy_patch_t a, b, def;
     printf("engine: %u parameters, a patch packs into %u bytes\n", (unsigned)SP_COUNT, (unsigned)SP_PACK_MAX);
     for (i = 0; i < SP_COUNT; i++) {
         const sp_desc_t *d = &SP[i];
@@ -127,17 +140,41 @@ static void t_params(void)
             a.p[i] = sp_clamp(i, SP[i].lo + (int32_t)(sy_rand(&s) % (uint32_t)(SP[i].hi - SP[i].lo + 1)));
         memcpy(a.name, "TEST PATCH 12345", 17);
         a.cat = CAT_PAD;
+        sp_shape_pts(LFO_STAIRS, &a.draw[0]);             /* drawn shapes: 16 points; 5, moved and curved */
+        a.draw[1].y[1] = 640;
+        a.draw[1].c[2] = -777;
+        a.draw[1].x[3] = 801;
         j = sp_pack(&a, buf);
-        same = sp_unpack(&b, buf, j) && !memcmp(a.p, b.p, sizeof a.p) && !memcmp(a.name, b.name, 16) && a.cat == b.cat;
-        check("a patch packed and unpacked is the same", same);
+        same = sp_unpack(&b, buf, j) && !memcmp(a.p, b.p, sizeof a.p) && !memcmp(a.name, b.name, 16) &&
+               a.cat == b.cat && draw_same(&a.draw[0], &b.draw[0]) && draw_same(&a.draw[1], &b.draw[1]);
+        check("a patch packed and unpacked is the same (its drawn shapes too)", same);
+        tail = j - 6u - 2u * SP_COUNT;                    /* the name, category, macros, drawn shapes */
         buf[4] = (uint8_t)(SP_COUNT - 10u);               /* an older build: 10 values fewer */
-        memmove(buf + 6u + 2u * (SP_COUNT - 10u), buf + 6u + 2u * SP_COUNT, 49u);
+        memmove(buf + 6u + 2u * (SP_COUNT - 10u), buf + 6u + 2u * SP_COUNT, tail);
         same = sp_unpack(&b, buf, j - 20u);
         for (i = SP_COUNT - 10u; i < SP_COUNT; i++)
             same &= b.p[i] == SP[i].def;
         for (i = 0; i < SP_COUNT - 10u; i++)
             same &= b.p[i] == a.p[i];
+        same &= draw_same(&a.draw[1], &b.draw[1]);
         check("a patch with fewer values: the rest take their defaults", same);
+        sp_defaults(&def);
+        j = sp_pack(&a, buf);
+        same = sp_unpack(&b, buf, 6u + 2u * SP_COUNT + 49u) && draw_same(&b.draw[0], &def.draw[0]) &&
+               draw_same(&b.draw[1], &def.draw[1]) && !memcmp(a.p, b.p, sizeof a.p);
+        check("a patch without drawn shapes (an older build): the default's", same);
+        buf[6u + 2u * SP_COUNT + 50u] = SP_NPT + 1u;      /* LFO 1 with 17 points: neither is read */
+        same = sp_unpack(&b, buf, j) && draw_same(&b.draw[0], &def.draw[0]) && draw_same(&b.draw[1], &def.draw[1]);
+        b = a;                                            /* LFO 2's out of order and range: made whole */
+        b.draw[1].x[0] = 50;
+        b.draw[1].x[2] = 900;
+        b.draw[1].x[4] = 990;
+        b.draw[1].y[0] = 5000;
+        b.draw[1].c[4] = -3000;
+        j = sp_pack(&b, buf);
+        same &= sp_unpack(&b, buf, j) && b.draw[1].n == 5u && b.draw[1].x[0] == 0 && b.draw[1].x[2] == 900 &&
+                b.draw[1].x[3] == 900 && b.draw[1].x[4] == 1000 && b.draw[1].y[0] == 1000 && b.draw[1].c[4] == -1000;
+        check("a drawn shape malformed: too many points, not read; out of order or range, made whole", same);
         j = sp_pack(&a, buf);
         buf[6] = 0xFF;                                    /* A ON = 32767 */
         buf[7] = 0x7F;
@@ -435,6 +472,78 @@ static void t_env_lfo(void)
             last = sy_glfo_v[0];
         }
         check("a synced LFO (1/4 at 120 BPM: 2 Hz): 20 cycles in 10 s (+-1)", cyc >= 19u && cyc <= 21u);
+    }
+    {                                                     /* the built-in shapes as points (DRAWN starts from them) */
+        uint32_t s, j, len = 0;
+        int whole = 1, on = 1;
+        double worst[LFO_NSHAPE] = {0};
+        lfo_t l;
+        lfo_par_t p;
+        lfo_draw_t dr;
+        sp_draw_t d, f;
+        memset(&l, 0, sizeof l);
+        memset(&p, 0, sizeof p);
+        for (s = 0; s < SP_NSHAPE_PTS; s++) {
+            sp_shape_pts(s, &d);
+            f = d;
+            sp_draw_fix(&f);
+            whole &= d.n >= 2u && draw_same(&d, &f);
+            len += 1u + 3u * d.n;
+            if (s == LFO_SH || s == LFO_SMOOTH)           /* (random: sample levels) */
+                continue;
+            lfo_draw_of(&dr, &d);
+            p.shape = (uint8_t)s;
+            for (j = 0; j < 1000u; j++) {
+                float x = ((float)j + 0.5f) * 0.001f;
+                worst[s] = fmax(worst[s], fabs((double)(lfo_draw_at(&dr, x) - lfo_shape(&l, &p, x))));
+            }
+            on &= worst[s] <= (s == LFO_SINE ? 0.06 : s == LFO_BOUNCE ? 0.11 : 0.001);
+        }
+        whole &= len == sizeof SP_SHAPE_PTS / sizeof SP_SHAPE_PTS[0];
+        printf("engine: the shapes as points: SINE within %.4f, BOUNCE %.4f, the rest %.4f\n", worst[LFO_SINE],
+               worst[LFO_BOUNCE], fmax(fmax(worst[LFO_TRI], worst[LFO_STEP4]), fmax(worst[LFO_STAIRS], worst[LFO_TRAPEZ])));
+        check("the built-in shapes as points: each whole, the table read to its end", whole);
+        check("the points on their shapes: exact (0.001), SINE's curves within 0.06, BOUNCE's 0.11", on);
+    }
+    {                                                     /* a drawn shape plays; its edits reach the audio whole */
+        static const int16_t X[4] = {0, 300, 300, 1000}, Y[4] = {1000, 1000, -1000, -1000};
+        static sy_patch_t lp;
+        uint32_t b, hi = 0, n = blocks(10.0f);
+        int held;
+        eng_reset();
+        set(SP_L1_MODE, LFOM_FREE);
+        set(SP_L1_SHAPE, LFO_DRAW);
+        set(SP_L1_RATE, 800);                             /* 7.6 Hz: 76 cycles in 10 s */
+        sy_draw_edit();
+        sy_patch.draw[0].n = 4;
+        for (b = 0; b < 4u; b++) {
+            sy_patch.draw[0].x[b] = X[b];
+            sy_patch.draw[0].y[b] = Y[b];
+            sy_patch.draw[0].c[b] = 0;
+        }
+        sy_draw_done();
+        snap();
+        for (b = 0; b < n; b++) {
+            run(1, 0);
+            hi += sy_glfo_v[0] > 0.0f;
+        }
+        printf("engine: a drawn pulse, high 30 %% of its cycle: high %.1f %% of 10 s\n", 100.0 * hi / n);
+        check("a drawn LFO plays its points (a pulse high 30 % of its cycle: 30 +- 1.5 %)",
+              fabs(100.0 * hi / n - 30.0) <= 1.5);
+        sy_draw_edit();                                   /* an edit under way: the last shape plays on */
+        sy_patch.draw[0].y[0] = sy_patch.draw[0].y[1] = -1000;
+        run(4, 0);
+        held = lfo_dr[0].y[0] > 0.5f;
+        sy_draw_done();
+        run(1, 0);
+        check("an edit of a drawn shape: not taken while under way, taken at the next block when done",
+              held && lfo_dr[0].y[0] < -0.5f);
+        lp = sy_patch;
+        sp_shape_pts(LFO_SAWDN, &lp.draw[0]);
+        sy_patch_load(&lp);
+        run(8, 0);
+        check("a patch load takes its drawn shapes", lfo_dr[0].n == 2u && lfo_dr[0].y[0] > 0.99f &&
+                                                     lfo_dr[0].y[1] < -0.99f && !sy_next_st);
     }
 }
 
