@@ -145,7 +145,7 @@ static void fx_chorus(float *l, float *r)
     uint32_t i, c, w = fx.cho_w;
     float base = (2.0f + 13.0f * mod_get(sy_goff, SP_CH_DELAY)) * 0.001f * SY_FS;
     float depth = 3.0f * mod_get(sy_goff, SP_CH_DEPTH) * 0.001f * SY_FS, fb = 0.9f * mod_get(sy_goff, SP_CH_FDBK);
-    uint32_t inc = (uint32_t)(int32_t)(sp_lfo_hz(mod_get(sy_goff, SP_CH_RATE)) * 0.25f / SY_FS * 4294967296.0f);
+    uint32_t inc = (uint32_t)(int32_t)(sp_lfo_hz(mod_get(sy_goff, SP_CH_RATE)) / SY_FS * 4294967296.0f);
     float bm1 = base + 0.5f * depth, hd1 = 0.5f * depth, bm, hd, dbm, dhd, sn, cs, sr, cr, m, dm;
     if (!fx_mixes(1, SP_CH_ON, mod_get(sy_goff, SP_CH_MIX), &m0))
         return;

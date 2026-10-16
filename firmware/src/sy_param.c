@@ -138,7 +138,7 @@ enum {                           /* units: the display and the DSP's reading of 
     X(DR_TONE, "TONE", SEC_DRIVE, -1000, 1000, 0, U_BIPCT, FMG, 0)                                        \
     X(DR_MIX, "MIX", SEC_DRIVE, 0, 1000, 1000, U_PCT, FMG, 0)                                             \
     X(CH_ON, "ON", SEC_CHORUS, 0, 1, 0, U_ONOFF, 0, 0)                                                    \
-    X(CH_RATE, "RATE", SEC_CHORUS, 0, 1000, 300, U_LFOHZ, FMG, 0)                                         \
+    X(CH_RATE, "RATE", SEC_CHORUS, 0, 1000, 472, U_LFOHZ, FMG, 0)                                       \
     X(CH_DEPTH, "DEPTH", SEC_CHORUS, 0, 1000, 500, U_PCT, FMG, 0)                                         \
     X(CH_DELAY, "DELAY", SEC_CHORUS, 0, 1000, 400, U_PCT, FMG, 0)                                         \
     X(CH_FDBK, "FEEDBACK", SEC_CHORUS, 0, 1000, 0, U_PCT, FMG, 0)                                         \
