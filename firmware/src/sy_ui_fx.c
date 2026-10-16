@@ -565,7 +565,9 @@ static void ui_g_delay(void)
             if (fall) {                             /* the echoes above -40 dB */
                 for (n = 0; n < 99u && sy_exp2f(sy_log2f(sy_maxf(fb, 1e-4f)) * (float)(n + 1u)) >= 0.01f; n++)
                     ;
-                e = sp_put(ui_val(w, act) + strlen(w), " \xB7 ");
+                for (e = ui_val(w, act); *e; e++)   /* (its end: the firmware has no strlen) */
+                    ;
+                e = sp_put(e, " \xB7 ");
                 sp_put(sp_fix(e, (int32_t)n, 0u, 0), n == 1u ? " ECHO" : " ECHOES");
             } else {
                 ui_val(w, act);
@@ -716,8 +718,7 @@ static void ui_g_ott(void)
     cv_text_on(WX + 61, sy_floori(UI_LV(-40.0f)) - 6, &AF_XS, "-40", sk.label, sk.display);
     if (act >= 0) {
         int32_t k = act >= SP_OT_LOW ? act - SP_OT_LOW : -1;
-        sp_put(sp_put(w, SP[act].name), " ");
-        ui_val(w + strlen(w), act);
+        ui_val(sp_put(sp_put(w, SP[act].name), " "), act);
         ui_flag(k >= 0 ? WX + 8 + k * 72 + 4 : WX + 60, k >= 0 ? WY + 17 : WY + 17, w);
     }
 #undef UI_LV
@@ -843,8 +844,7 @@ static void ui_g_eq(void)
             y = sy_floori(UI_QY(ui_eq_gain(v, (uint32_t)band)));
             y = y > WY + 50 ? y - 20 : y + 8;
         }
-        sp_put(sp_put(w, SP[act].name), " ");
-        ui_val(w + strlen(w), act);
+        ui_val(sp_put(sp_put(w, SP[act].name), " "), act);
         ui_flag(x, y, w);
     }
 }
