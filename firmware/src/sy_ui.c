@@ -287,45 +287,97 @@ static void ui_go(uint32_t page)
     ui.dirty = D_ALL;
 }
 
-/* s pages on, round: the family's (SELECT, a family button's tap), the section's (sec: EDIT's tap, OCT- / OCT+
- * with a family button held) */
+/* family f's sections in the order they show (FX's: the rack's, FX ORDER), into sec; their count */
+static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
+{
+    uint32_t n;
+    if (f == FAM_FX) {
+        uint8_t o[SP_NFX];
+        sp_order(sy_patch.p[SP_FX_ORDER], o);
+        for (n = 0; n < SP_NFX; n++)
+            sec[n] = (uint8_t)(SEC_DRIVE + o[n]);
+        return n;
+    }
+    for (n = 0; FAM_SECS[f][n] != 0xFF; n++)
+        sec[n] = FAM_SECS[f][n];
+    return n;
+}
+
+/* s pages on, round: the family's (SELECT, a family button's tap: its sections in their order, each one's pages),
+ * the section's (sec: EDIT's tap, OCT- / OCT+ with a family button held) */
 static void ui_step_pages(int32_t s, int sec)
 {
-    uint32_t p = ui.page, n, cur = ui_sec();
-    while (s) {
-        for (n = 0; n < UI_NPG; n++) {
-            p = s > 0 ? (p + 1u) % UI_NPG : (p + UI_NPG - 1u) % UI_NPG;
-            if (sec ? UI_PG[p].sec == cur : ui_in_fam(p, ui.fam))
-                break;
-        }
-        s += s > 0 ? -1 : 1;
-    }
-    ui_go(p);
+    uint16_t pg[UI_NPG];
+    uint8_t secs[8];
+    uint32_t n = 0, ns = 1, cur = 0, i, k;
+    if (sec)
+        secs[0] = (uint8_t)ui_sec();
+    else
+        ns = ui_fam_secs(ui.fam, secs);
+    for (k = 0; k < ns; k++)
+        for (i = 0; i < UI_NPG; i++)
+            if (UI_PG[i].sec == secs[k]) {
+                if (i == ui.page)
+                    cur = n;
+                pg[n++] = (uint16_t)i;
+            }
+    if (n)
+        ui_go(pg[(uint32_t)(((int32_t)cur + s % (int32_t)n + (int32_t)n) % (int32_t)n)]);
 }
 
 /* a family button's tap: its page (another family), else the next of the section (EDIT) or of the family */
 static void ui_family_tap(uint32_t f)
 {
+    uint8_t secs[8];
     if (ui.fam != f)
-        ui_go(ui_in_fam(ui.fpage[f], f) ? ui.fpage[f] : ui_first_page(FAM_SECS[f][0]));
+        ui_go(ui_in_fam(ui.fpage[f], f) ? ui.fpage[f] : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
     else
         ui_step_pages(1, f == FAM_EDIT);
 }
 
-/* ALGORITHM: the family's sections (each on the page it showed last) */
+/* ALGORITHM: the family's sections in their order (each on the page it showed last) */
 static void ui_step_section(int32_t s)
 {
-    uint32_t n = 0, k = 0, sec = ui_sec(), next;
-    while (FAM_SECS[ui.fam][n] != 0xFF) {
-        if (FAM_SECS[ui.fam][n] == sec)
-            k = n;
-        n++;
-    }
+    uint8_t secs[8];
+    uint32_t n = ui_fam_secs(ui.fam, secs), k = 0, i, sec = ui_sec(), next;
+    for (i = 0; i < n; i++)
+        if (secs[i] == sec)
+            k = i;
     if (n < 2u)
         return;
     k = (uint32_t)(((int32_t)k + s % (int32_t)n + (int32_t)n) % (int32_t)n);
-    next = FAM_SECS[ui.fam][k];
+    next = secs[k];
     ui_go(UI_PG[ui.spage[next]].sec == next ? ui.spage[next] : ui_first_page(next));
+}
+
+/* FX held, ALGORITHM turned on an effect's page: that effect s places later in the rack (earlier: s < 0), as far as
+ * its ends; FX's release is no tap after it (a chord) */
+static void ui_edit(void);
+static void ui_toast(const char *s);
+static void ui_fx_move(int32_t s)
+{
+    uint8_t o[SP_NFX], e = (uint8_t)(ui_sec() - SEC_DRIVE), x;
+    int32_t at = 0, to;
+    char t[24];
+    ui.bt_chord |= (uint16_t)(1u << B_FX);
+    sp_order(sy_patch.p[SP_FX_ORDER], o);
+    while (o[at] != e)
+        at++;
+    to = sy_clampi(at + s, 0, (int32_t)SP_NFX - 1);
+    if (to == at) {
+        ui_toast(at ? "LAST IN THE RACK" : "FIRST IN THE RACK");
+        return;
+    }
+    ui_edit();
+    for (; at != to; at += to > at ? 1 : -1) {      /* (past its neighbours, one at a time) */
+        x = o[at + (to > at ? 1 : -1)];
+        o[at + (to > at ? 1 : -1)] = o[at];
+        o[at] = x;
+    }
+    sy_patch.p[SP_FX_ORDER] = sp_order_code(o);
+    sp_put(sp_fix(sp_put(sp_put(t, SEC_NAMES[SEC_DRIVE + e]), ": "), to + 1, 0u, 0), " OF 6");
+    ui_toast(t);
+    ui.dirty |= D_DISP;
 }
 
 /* ------------------------------------------------------------------------------------------- knobs --- */
@@ -928,8 +980,12 @@ static void sy_ui_ms(void)
             ui_knob(k, s);
     if ((s = panel_enc(EN_SELECT)) != 0)
         ui_step_pages(s, 0);
-    if ((s = panel_enc(EN_ALGO)) != 0)
-        ui_step_section(s);
+    if ((s = panel_enc(EN_ALGO)) != 0) {
+        if ((ui.bt_down & (1u << B_FX)) && ui_sec() >= SEC_DRIVE && ui_sec() < SEC_DRIVE + SP_NFX && !ui.mod)
+            ui_fx_move(s);                          /* (FX held: the effect along the rack) */
+        else
+            ui_step_section(s);
+    }
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);
     if (ui.toast[0] && (int32_t)(fm1_ms - ui.toast_t) >= 0) {

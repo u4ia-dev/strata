@@ -27,6 +27,7 @@ const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };        
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, DRIVE: 12, CHORUS: 13, DELAY: 14, EQ: 17, MENU: 18, GLOBAL: 19 };   // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
+             FX_ORDER: 177,
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 
@@ -483,10 +484,32 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         mid === 3 && act === 1 && ghost === 1 && changed(before, lit) > 200 && act2 === 255 && ghost2 === 0 &&
         changed(lit, rest) > 200);
   ex.web_test_set(ID.EQ_MID, 0);
+  ex.web_enc(E.ALGO, SEC.DRIVE - ex.web_test_page_section());   // FX held + ALGORITHM: DRIVE along the rack
+  play(ex, 0.03);
+  const p0 = ex.web_test_page();
+  ex.web_buttons(1 << B.FX);
+  play(ex, 0.05);
+  ex.web_enc(E.ALGO, 1);
+  play(ex, 0.05);
+  const moved = ex.web_test_value(ID.FX_ORDER), toast = cstr(ex, ex.web_test_toast());
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  const stay = ex.web_test_page();
+  ex.web_enc(E.ALGO, 1);
+  play(ex, 0.03);
+  const next = ex.web_test_page_section();
+  ex.web_enc(E.ALGO, -2);
+  play(ex, 0.03);
+  const first = ex.web_test_page_section();
+  check(`FX held + ALGORITHM on DRIVE: DRIVE second (FX ORDER ${moved}, "${toast}"); FX let go, no page step; ALGORITHM after DRIVE: DELAY (${next}); two back, CHORUS first (${first})`,
+        moved === 120 && toast === "DRIVE: 2 OF 6" && stay === p0 && next === SEC.DELAY && first === SEC.CHORUS);
+  ex.web_test_set(ID.FX_ORDER, 0);
+  play(ex, 0.1);
   tap(ex, B.EDIT);
 }
 {                                               // HOME: the sound and its output, live
   tap(ex, B.HOME);
+  play(ex, 1.5);                                // (a word in the footer from before: gone)
   const dq = ex.web_screen_draws();
   play(ex, 1.0);
   const quiet = ex.web_screen_draws() - dq;     // (silence: the scope's flat capture, drawn once)

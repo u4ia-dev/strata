@@ -73,21 +73,25 @@ static float ui_nice(float span, uint32_t most)
     return s;
 }
 
-/* the rack: the six effects across the top of the window, the one shown outlined, each lit when on */
+/* the rack: the six effects across the top of the window in their order (FX ORDER), the one shown outlined, each lit
+ * when on */
 static void ui_rack(void)
 {
     static const char *const N[UI_NFX] = {"DRV", "CHO", "DLY", "REV", "OTT", "EQ"};
+    uint8_t o[SP_NFX];
     uint32_t i, cur = ui_sec() - SEC_DRIVE;
+    sp_order(sy_patch.p[SP_FX_ORDER], o);
     for (i = 0; i < UI_NFX; i++) {
-        int on = sy_patch.p[ui_sec_power(SEC_DRIVE + i)] != 0, here = i == cur;
-        int32_t x = WX + 3 + (int32_t)i * 37, lx = x + (26 - text_w(&AF_XS, N[i])) / 2;
+        uint32_t e = o[i];
+        int on = sy_patch.p[ui_sec_power(SEC_DRIVE + e)] != 0, here = e == cur;
+        int32_t x = WX + 3 + (int32_t)i * 37, lx = x + (26 - text_w(&AF_XS, N[e])) / 2;
         uint16_t bg = here ? sk.raised : sk.display, bd = here ? sk.now : on ? sk.wmid : sk.rule;
         cv_rrect(x, WY + 3, 34, 13, 3, bd, sk.display);
         cv_rrect(x + 1, WY + 4, 32, 11, 2, bg, bd);
         cv_rect(lx, WY + 8, 4, 4, on ? sk.sound : sk.faint);
         if (!on)
             cv_rect(lx + 1, WY + 9, 2, 2, bg);
-        cv_text_on(lx + 8, WY + 3 + CAP_IN(XS, 13), &AF_XS, N[i], here ? sk.text : on ? sk.text2 : sk.faint, bg);
+        cv_text_on(lx + 8, WY + 3 + CAP_IN(XS, 13), &AF_XS, N[e], here ? sk.text : on ? sk.text2 : sk.faint, bg);
     }
 }
 
