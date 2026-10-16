@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
-/* STRATA effects (docs/ARCHITECTURE.md §14): DRIVE -> CHORUS -> DELAY -> REVERB -> OTT -> EQ -> LIMITER, global,
- * stereo, float; each with ON and a MIX (OTT: DEPTH; EQ: none). A module switched on or off fades over a block (its mix
+/* STRATA effects (docs/ARCHITECTURE.md §14): DRIVE, CHORUS, DELAY, REVERB, OTT, EQ in the patch's order (FX ORDER;
+ * as listed by default), then the LIMITER; global, stereo, float; each with ON and a MIX (OTT: DEPTH; EQ: none). A new
+ * order is taken with every module's wet part faded out over two blocks and back over two (fx_block: a dip of 3 ms, no
+ * click). A module switched on or off fades over a block (its mix
  * ramps from or to 0); one that is off and silent costs nothing. Delay lines are int16 at 1/2 of full scale
  * (headroom for feedback) in the pool. The delay and the reverb run at half the rate (22 kHz: twice the time in
  * the same memory, half the work; their tails stop near 10 kHz anyway): a 1-2-1 filter and every other sample
@@ -61,6 +63,10 @@ static struct {
     float eq_s[3][2][2];                  /* the EQ's SVF states [band][channel][ic1 ic2] */
     float eq_c[3][6];                     /* .. each band's coefficients at the end of the last block */
     uint8_t eq_run;                       /* .. the bands that ran in it (a band at 0 dB is skipped) */
+    uint8_t order[SP_NFX];                /* the modules' order playing, and its code (FX ORDER) */
+    int16_t code;
+    uint8_t dip;                          /* a new order: blocks of its dip left (4: down, down, the swap, up, up) */
+    float duck;                           /* every module's wet part this block (1: as set) */
     uint8_t rv_nl;                        /* reverb lines running */
     float lim_g;                          /* the limiter's gain */
 } fx;
@@ -76,6 +82,8 @@ static void fx_init(void)
     fx.ott_g[0] = fx.ott_g[1] = fx.ott_g[2] = 1.0f;
     fx.lim_g = 1.0f;
     fx.rv_nl = FX_RV_NL;
+    sp_order(0, fx.order);
+    fx.duck = 1.0f;
 }
 
 static inline int16_t fx_q(float x)        /* float -> a line's int16 (1/2 full scale = 1.0) */
@@ -91,6 +99,7 @@ static int fx_mixes(uint32_t k, uint32_t on_id, float m1, float *m0)
     *m0 = fx.mix[k];
     if (!sy_patch.p[on_id])
         m1 = 0.0f;
+    m1 *= fx.duck;
     fx.mix[k] = m1;
     return *m0 > 0.0f || m1 > 0.0f;
 }
@@ -624,13 +633,23 @@ static void fx_limit(float *l, float *r)
     fx.lim_g = g;
 }
 
+/* the modules in the patch's order; a new order is taken while every wet part is out: two blocks down (to half, to
+ * none), the swap, two blocks up (each ramped across its block by fx_mixes) */
 static void fx_block(float *l, float *r)
 {
-    fx_drive(l, r);
-    fx_chorus(l, r);
-    fx_delay(l, r);
-    fx_reverb(l, r);
-    fx_ott(l, r);
-    fx_eq(l, r);
+    static void (*const RUN[SP_NFX])(float *, float *) = {fx_drive, fx_chorus, fx_delay, fx_reverb, fx_ott, fx_eq};
+    static const float DUCK[5] = {1.0f, 1.0f, 0.5f, 0.0f, 0.5f};   /* by dip */
+    uint32_t i;
+    if (!fx.dip && sy_patch.p[SP_FX_ORDER] != fx.code)
+        fx.dip = 4u;
+    if (fx.dip == 2u) {
+        fx.code = sy_patch.p[SP_FX_ORDER];
+        sp_order(fx.code, fx.order);
+    }
+    fx.duck = DUCK[fx.dip];
+    if (fx.dip)
+        fx.dip--;
+    for (i = 0; i < SP_NFX; i++)
+        RUN[fx.order[i]](l, r);
     fx_limit(l, r);
 }

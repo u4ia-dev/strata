@@ -139,6 +139,15 @@ static void sp_text(uint32_t id, int32_t v, char *b)
         break;
     case U_DBX: sp_put(sp_fix(b, v, 1u, 1), " dB"); break;
     case U_Q: sp_real(b, sp_q(n), 2u, ""); break;
+    case U_ORDER: {                                            /* "152346": each effect's place as listed */
+        uint8_t o[SP_NFX];
+        uint32_t i;
+        sp_order(v, o);
+        for (i = 0; i < SP_NFX; i++)
+            b[i] = (char)('1' + o[i]);
+        b[SP_NFX] = 0;
+        break;
+    }
     case U_TABLE: sp_put(b, v >= 0 && v < (int32_t)WT_NFACT ? WT_NAMES[v] : "?"); break;
     case U_SRC: sp_put(b, v >= 0 && v < (int32_t)SRC_COUNT ? SRC_NAMES[v] : "?"); break;
     case U_DST:

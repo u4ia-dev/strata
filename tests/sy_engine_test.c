@@ -28,7 +28,8 @@
  * 8. effects: OTT's bands sum back to the input; the synced delay's echo at 1/4 of 120 BPM, TIME's modulation
  *    stepping its note value; every module bounded and finite on full-scale noise; the limiter holds peaks under 1;
  *    the EQ: flat it is its input bit for bit, each band's gain measured against its design and against the curve the
- *    screen draws, bounded with every frequency jumping, its states 0 after silence;
+ *    screen draws, bounded with every frequency jumping, its states 0 after silence; FX ORDER: every code an order,
+ *    the order set the order played, a new one mid-note without a click;
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
 #define SY_ENGINE 1
 #include "sy_host.h"
@@ -1215,6 +1216,91 @@ static void t_eq(void)
     check("EQ: after silence its states are exactly 0 (no denormals)", rest);
 }
 
+/* the effects' order: every code an order and back; a set order is the order the modules play in (against calling
+ * them so); a new order while a sine plays through DRIVE and OTT takes no click (the largest step between samples
+ * near it against the steady output's) */
+static void t_fx_order(void)
+{
+    static void (*const RUN[SP_NFX])(float *, float *) = {fx_drive, fx_chorus, fx_delay, fx_reverb, fx_ott, fx_eq};
+    static const uint8_t ON[SP_NFX] = {SP_DR_ON, SP_CH_ON, SP_DL_ON, SP_RV_ON, SP_OT_ON, SP_EQ_ON};
+    static float a[2][4096], bo[2][4096];
+    uint8_t o[SP_NFX];
+    uint32_t c, i, k, b, s;
+    int all = 1, same = 1;
+    double ph = 0, st = 0, st2 = 0, near = 0;
+    for (c = 0; c < 720u; c++) {
+        uint32_t seen = 0;
+        sp_order((int32_t)c, o);
+        for (i = 0; i < SP_NFX; i++)
+            seen |= 1u << o[i];
+        all &= seen == 63u && sp_order_code(o) == (int16_t)c;
+    }
+    check("FX ORDER: each of the 720 codes is an order of the six, and comes back the same", all);
+    sp_order(595, o);                                   /* OTT, EQ, REVERB, DRIVE, DELAY, CHORUS */
+    for (k = 0; k < 2u; k++) {                          /* fx_block in that order, and the modules called so */
+        eng_reset();
+        for (i = 0; i < SP_NFX; i++)
+            set(ON[i], 1);
+        set(SP_EQ_MID, 60);
+        set(SP_FX_ORDER, 595);
+        snap();
+        mod_map();
+        fx.code = 595;                                  /* (taken, as after its dip) */
+        sp_order(fx.code, fx.order);
+        for (s = 3, b = 0; b < 4096u / SY_BLK; b++) {
+            float l[SY_BLK], r[SY_BLK];
+            for (i = 0; i < SY_BLK; i++)
+                l[i] = r[i] = 0.4f * sy_randf(sy_rand(&s));
+            mod_offsets(sy_goff, 0, 0);
+            if (!k) {
+                fx_block(l, r);
+            } else {
+                for (i = 0; i < SP_NFX; i++)
+                    RUN[o[i]](l, r);
+                fx_limit(l, r);
+            }
+            for (i = 0; i < SY_BLK; i++) {
+                (k ? bo : a)[0][b * SY_BLK + i] = l[i];
+                (k ? bo : a)[1][b * SY_BLK + i] = r[i];
+            }
+        }
+    }
+    for (i = 0; i < 4096u; i++)
+        same &= a[0][i] == bo[0][i] && a[1][i] == bo[1][i];
+    check("FX ORDER: the modules play in the patch's order (OTT EQ REVERB DRIVE DELAY CHORUS: as called so, bit for bit)",
+          same);
+    eng_reset();                                        /* a new order mid-note: a dip, no click */
+    set(SP_DR_ON, 1);
+    set(SP_DR_AMT, 600);
+    set(SP_OT_ON, 1);
+    snap();
+    mod_map();
+    for (b = 0; b < blocks(1.0f); b++) {
+        float l[SY_BLK], r[SY_BLK], prev = 0.0f;
+        if (b == blocks(0.6f))
+            set(SP_FX_ORDER, 595);
+        for (i = 0; i < SY_BLK; i++, ph += 220.0 / (double)SY_FS)
+            l[i] = r[i] = (float)(0.3 * sin(2.0 * M_PI * ph));
+        sp_block();
+        mod_offsets(sy_goff, 0, 0);
+        fx_block(l, r);
+        for (i = 0; i < SY_BLK; i++) {
+            double d = fabs((double)l[i] - (double)(i ? l[i - 1u] : prev));
+            if (b > blocks(0.3f) && b < blocks(0.6f) - 1u)
+                st = fmax(st, d);
+            else if (b >= blocks(0.6f) - 1u && b < blocks(0.6f) + 8u)
+                near = fmax(near, d);
+            else if (b > blocks(0.8f))
+                st2 = fmax(st2, d);
+        }
+        prev = l[SY_BLK - 1u];
+    }
+    printf("engine: FX ORDER changed under a sine through DRIVE and OTT: largest step %.4f near it; steady %.4f before, "
+           "%.4f after\n", near, st, st2);
+    check("FX ORDER: a new order mid-note dips the wet parts, no click (the largest step under 2x the steady output's)",
+          near < 2.0 * fmax(st, st2) && fx.code == 595);
+}
+
 static void t_fx(void)
 {
     {                                                     /* the chorus as clean after 10 minutes as at the start */
@@ -1373,6 +1459,7 @@ int main(int argc, char **argv)
     t_dc_sources();
     t_golden(argc > 1 ? argv[1] : "tests/sy_golden.txt");
     t_fx();
+    t_fx_order();
     t_eq();
     t_cost();
     return t_done();

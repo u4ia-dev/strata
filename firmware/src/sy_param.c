@@ -28,7 +28,8 @@ enum {                           /* units: the display and the DSP's reading of 
     U_SYNC,                      /* a note value (NOTE_NAMES: 8 BAR .. 1/32), an LFO's or the delay's SYNC FIXED */
     U_MS,                        /* the delay's time: 0..1000 = 10 .. 750 ms, exponential */
     U_DBX,                       /* a level in 0.1 dB (the OTT's bands: -24.0 .. +24.0; the EQ's: -18.0 .. +18.0) */
-    U_Q                          /* a band's Q: 0..1000 = 0.25 .. 8, exponential (sp_q) */
+    U_Q,                         /* a band's Q: 0..1000 = 0.25 .. 8, exponential (sp_q) */
+    U_ORDER                      /* the effects' order: a Lehmer code 0..719 (sp_order), shown as the default places */
 };
 
 #define F_MOD 1u                 /* a modulation destination */
@@ -178,7 +179,8 @@ enum {                           /* units: the display and the DSP's reading of 
     X(EQ_LFREQ, "LO FREQ", SEC_EQ, 0, 1000, 292, U_HZ, FMG, 0)                                            \
     X(EQ_MFREQ, "MID FREQ", SEC_EQ, 0, 1000, 567, U_HZ, FMG, 0)                                           \
     X(EQ_Q, "MID Q", SEC_EQ, 0, 1000, 400, U_Q, FMG, 0)                                                   \
-    X(EQ_HFREQ, "HI FREQ", SEC_EQ, 0, 1000, 767, U_HZ, FMG, 0)
+    X(EQ_HFREQ, "HI FREQ", SEC_EQ, 0, 1000, 767, U_HZ, FMG, 0)                                            \
+    X(FX_ORDER, "FX ORDER", SEC_DRIVE, 0, 719, 0, U_ORDER, 0, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
@@ -387,6 +389,32 @@ static const float NOTE_Q[SY_NNOTE] = {0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 2.0f, 4.0f 
 static const char *const NOTE_NAMES[SY_NNOTE] = {"8 BAR", "4 BAR", "2 BAR", "1 BAR", "1/2D", "1/2", "1/2T", "1/4D",
                                                  "1/4", "1/4T", "1/8D", "1/8", "1/8T", "1/16D", "1/16", "1/16T",
                                                  "1/32"};
+
+/* the effects' order (FX ORDER; the rack's first, DRIVE, keeps it in its section): the six, DRIVE CHORUS DELAY
+ * REVERB OTT EQ (0..5), as a Lehmer code 0..719, so every value is an order (0: as listed). sp_order: the code's
+ * effects, first to last; sp_order_code: back */
+#define SP_NFX 6u
+static const uint8_t SP_FACT[SP_NFX] = {120, 24, 6, 2, 1, 1};   /* (5! .. 0!) */
+static void sp_order(int32_t code, uint8_t *o)
+{
+    uint8_t left[SP_NFX] = {0, 1, 2, 3, 4, 5};
+    uint32_t i, j, c = (uint32_t)sy_clampi(code, 0, 719);
+    for (i = 0; i < SP_NFX; i++) {
+        uint32_t k = c / SP_FACT[i];
+        c %= SP_FACT[i];
+        o[i] = left[k];
+        for (j = k; j + 1u < SP_NFX - i; j++)
+            left[j] = left[j + 1u];
+    }
+}
+static int16_t sp_order_code(const uint8_t *o)
+{
+    uint32_t i, j, c = 0;
+    for (i = 0; i < SP_NFX; i++)
+        for (j = i + 1u; j < SP_NFX; j++)
+            c += (o[j] < o[i]) * SP_FACT[i];
+    return (int16_t)c;
+}
 
 /* ------------------------------------------------------------------------------------------ presets --- */
 /* a patch as bytes (presets, autosave): "SY", the version, the count of values, the values (int16, little endian,
