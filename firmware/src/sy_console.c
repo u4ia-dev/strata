@@ -335,11 +335,17 @@ static void con_params(void)                            /* the sound playing: ev
 static void con_exec(const char *p)
 {
     if (con_word(&p, "help") || con_word(&p, "?"))
-        con_puts("status  bench  inp  crash  params  memr ADDR [LEN]  flr OFF [LEN]  uboot yes\r\n");
+        con_puts("status  bench [run]  inp  crash  params  memr ADDR [LEN]  flr OFF [LEN]  uboot yes\r\n");
     else if (con_word(&p, "status"))
         con_status();
-    else if (con_word(&p, "bench"))
-        con_bench();
+    else if (con_word(&p, "bench")) {
+        if (con_word(&p, "run")) {                     /* RUN: the main loop times its loops (a moment's silence) */
+            sy_bench.run = 1;
+            con_puts("RUN asked: 'bench' again in a second\r\n");
+        } else {
+            con_bench();
+        }
+    }
     else if (con_word(&p, "crash"))
         con_crash();
     else if (con_word(&p, "inp"))
