@@ -1,12 +1,14 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.5 HARDWARE TEST`) on an FM-1, testing
+This is the procedure for putting Strata's **hardware test build** (`V0.6 HARDWARE TEST`) on an FM-1, testing
 it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
-back. Section 9 says what happened and what changed; this build has the fix, and has not run on an FM-1 yet.
-Section 8 lists what was checked where.
+back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the fix: it passed the flasher's restart
+check and its report came back over USB, so bulk IN works after a power-on (**verified on hardware**, the V0.5
+report). `V0.6` is the build after that test: the FX chain, seven new effects and the UI changes the test asked for
+(section 1); it has not run on an FM-1 yet. Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
@@ -23,8 +25,16 @@ audio input (what it plays, to the computer); MASTER; a USB serial console; and 
 what this test is for. The platform is Felucca's, unchanged: the boot guard, the watchdog, the crash screen, the
 update entry, the UBOOT entries.
 
+**New in V0.6** (from the V0.5 test; [CONTROLS.md](CONTROLS.md)): the effects as a **chain** of up to eight modules
+(add, take out, move, two of a type; the chain view on FX), seven new effects (FLANGER, PHASER, an FX FILTER of 21
+types, BITCRUSH, TREMOLO / AUTOPAN, RING MOD, TAPE), SELECT picks the section and ALGORITHM the page, no ON knobs
+(EDIT + OCT turns a source on or off, the FX-held keys bypass a module), the matrix on GLO, deleting a user preset in
+the browser (and putting it back). Two fixes from V0.5's report: the keys and MIDI are read while a redraw waits for
+the screen (the keys waited 91 ms), and the CPU guard steps at once when a half nears its deadline (5 halves were
+late). Presets saved by V0.5 load, their effects that were on as the chain.
+
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), MIDI clock, start and
-stop, MIDI out, ARP, the second core.
+stop, MIDI out, ARP, the chords on SCL (V0.7), the second core.
 
 ## 2. Before anything: a full backup
 
@@ -133,7 +143,7 @@ Note what you see and hear, take photos of anything odd, and read the report (se
    high note's metallic whine), DC thumps, and how a note ends. Turn MASTER: the level follows, without zipper noise.
 3. **Load.** HOME's header shows CPU %. On a few sounds (SUPERSAW's unison, a pad with every effect on), hold 1, 2,
    4 and 8 keys and note the CPU % and whether notes drop out (the guard sheds voices over 85 %).
-4. **BENCH.** Hold HOME 5 s for the SETTINGS, turn SELECT to the last page, BENCH. Its rows: AUDIO (a half's
+4. **BENCH.** Hold HOME 5 s for the SETTINGS, turn ALGORITHM to the last page, BENCH. Its rows: AUDIO (a half's
    render: the last and the longest, and how many came late), CPU (load, the guard's steps, voices shed), SCREEN (a
    frame's drawing), KEYS (the longest the keys waited), TABLES (a wavetable build: its longest step and the whole),
    FLASH (the longest erase and page), STACKS, RUN. Turn **KNOB 1** for RUN (two loops timed, a moment's silence);
@@ -150,6 +160,23 @@ Note what you see and hear, take photos of anything odd, and read the report (se
 9. **USB audio.** Record the FM-1 in the DAW (an audio input named after the USB name): clean, no gaps.
 10. **Optional:** OCT− + OCT+ for 5 s: the countdown from 2 s, then UBOOT. Note whether Windows shows the
     `WL82 UBOOT1.00` disk or an unknown device; unread, the FM-1 returns to Strata by itself after ~13 s.
+
+New in V0.6:
+
+11. **The FX chain.** FX: the chain view. Add each type (KNOB 1 the type, KNOB 2 the slot, FX + OCT+), take one out
+    (FX + OCT−), move one (KNOB 3), each while a note plays: listen for clicks (a move dips the effects for 3 ms; an
+    add or a take-out should not be heard as more than the effect coming or going). FX twice opens a module, twice
+    again back. FX held: F3 to F4 bypass the modules. Undo (SAVE + OCT−) after each.
+12. **The new effects.** Each one's every knob, at its extremes too, on a sustained note and on chords: FLANGER,
+    PHASER, the FX FILTER (its 21 types; COMB at a high RESO; DJ swept through its middle), BITCRUSH, TREMOLO and
+    AUTOPAN, RING MOD, TAPE; two of a type (DRIVE and DRIVE 2). Note the CPU % with a full chain of eight (the header
+    estimates it; HOME's header measures it).
+13. **The panel's changes.** SELECT the section, ALGORITHM the page, in every family; EDIT + OCT− turns the section
+    shown off, EDIT + OCT+ on; GLO's third section is the MATRIX; SEQ says "in a later version".
+14. **Deleting a preset.** In the browser, on a user preset: OCT− held 3 s (a countdown), then SAVE + OCT− at once:
+    it comes back. A preset saved by V0.5: loads, its effects as the chain.
+15. **The fixes.** BENCH's KEYS row after flicking through pages while playing (under ~20 ms, against V0.5's 91 ms);
+    AUDIO's late halves after the load test (item 3: none, or fewer than V0.5's 5).
 
 ## 5. The report
 
@@ -218,12 +245,22 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
 
 ## 8. What was checked, and where
 
-- **Built and checked by the build** (`tools/build.py --strata`): the image (362,796 of 581,564 bytes), RAM (48,288
-  of 73,728 bytes), the pool (9.2 KiB spare, over the 8 KiB margin), RAM code with no calls into the flash, no
-  register access outside `hal/`, the interrupt stack (~2.4 KiB of 7.9 KiB, from the listing), the package rebuilt
-  byte for byte by the flasher's builder.
-- **Verified on host and in the emulator:** the engine (114 checks, host and WebAssembly), the UI (78 checks), the
-  MASTER level path, BENCH's page.
+- **Built and checked by the build** (`tools/build.py --strata`, V0.6): the image (407,008 of 581,564 bytes), RAM
+  (66,368 of 73,728 bytes: 7.2 KiB spare, over the 4 KiB margin), the pool (363,492 of 368,640 bytes: 5.0 KiB spare,
+  over its margin, 4 KiB since V0.6), RAM code with no calls into the flash, no register access outside `hal/`, the
+  interrupt stack (~2.5 KiB of 7.9 KiB, from the listing), usb.c, midi_uart.c and ota.c still at `-Os` (57
+  functions), the package rebuilt byte for byte by the flasher's builder (sha256 `d2d79880...35a0b`).
+- **Verified on hardware, V0.5's report (2026-10-17):** the restart check (bulk IN after a power-on); the core's
+  rate, ~180 instructions a µs on integer code and ~147 on float (BENCH RUN); a half's render 172 µs idle, 2,766 µs
+  at the load test's peak (95 %, 5 late, 1 voice shed); the keys' longest wait 91 ms; the stacks (main 17.9 of 24.3
+  KiB, interrupts 2.2 of 7.9 KiB); the flash (erase 17.4 ms, page 2.0 ms); boot 765 ms.
+- **Verified on host and in the emulator:** the engine (132 checks, host and WebAssembly: the chain's adds, take-outs
+  and moves without a click, a module bypassed bit for bit, two of a type, every new module at its corners and the
+  FX filter's 21 types with the cutoff jumping, the responses of the filter, phaser, flanger, ring mod, tremolo and
+  tape; the golden renders unchanged: the six effects of before play as they did), the UI (87 checks: the chain view,
+  its adds, take-outs, moves, limits, bypass, MIX and undo, a second EQ's pages; EDIT + OCT; the matrix on GLO; a
+  preset deleted and put back), the workbench (5), the MASTER level path, BENCH's page. The keys read during a
+  redraw's waits are the FM-1's alone (lcd.c's hook): **needs this hardware test**.
 - **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 26 checks): the install and
   V15 off without a backup from the last 12 hours; Back up now (the token and the page's Origin sent; waiting,
   reading, verified; a device Windows could not read named), the server not an administrator, a backup 20 h old;

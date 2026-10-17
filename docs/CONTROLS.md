@@ -1,8 +1,9 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: the end of Phase 4 (the
-user interface), **verified in emulator**; nothing has run on an FM-1 yet. How it is built: [ARCHITECTURE.md](ARCHITECTURE.md)
-§17. How it is tested: [TESTING.md](TESTING.md) §6.3.
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.6, the changes the V0.5
+hardware test asked for (the FX chain, the new effects, SELECT and ALGORITHM, the matrix on GLO, deleting a preset),
+**verified in emulator**; V0.5 ran on an FM-1 on 2026-10-17, V0.6 **needs a hardware test**. How it is built:
+[ARCHITECTURE.md](ARCHITECTURE.md) §14, §17. How it is tested: [TESTING.md](TESTING.md) §6.3.
 
 ## The panel
 
@@ -11,51 +12,93 @@ user interface), **verified in emulator**; nothing has run on an FM-1 yet. How i
 | 27 keys, F3 to G5 | play notes; in some layers and screens they pick, toggle, jump or type (below) |
 | OCT− / OCT+ | the keys' octave, −3 to +3 (the header of SCL's page shows it) |
 | KNOB 1–4 | the four values on the screen, left to right |
-| SELECT | the next or previous page of the family shown |
-| ALGORITHM | the next or previous section of the family shown (FX: the next effect in the chain) |
+| SELECT | the next or previous section of the family shown (OSC A, OSC B, SUB, NOISE, FILTER; an effect module; ..) |
+| ALGORITHM | the next or previous page of the section shown |
 | PRESETS | the next or previous preset: the starter sounds, INIT, then the user's |
 | MASTER | the output level |
-| HOME, EDIT, ENV, LFO, SEQ, FX, GLO, SCL | the families of pages; held, their layers |
+| HOME, EDIT, ENV, LFO, FX, GLO, SCL | the families of pages; held, their layers |
+| SEQ | the sequencer, in a later version (the matrix is GLO's) |
 | SAVE | save, the browser, undo and redo |
 | REC | held: the MOD layer |
 | PLAY | the transport |
 | ARP | the arpeggiator, in a later version |
 
 The screen has five parts: the header (the section, the page and its number, and on the right what the page needs: the
-oscillator's pitch, an envelope's or LFO's tabs, the effects that are on, the slots in use, the keys' octave), the
+oscillator's pitch, an envelope's or LFO's tabs, a module's place in the FX chain, the slots in use, the keys' octave), the
 display (the graph), four knob cells (a dial or a list; the one turning is lit), and the footer (the modulation sources
 in use on this page, or a word for a moment).
 
 ## The pages
 
 A family button's tap shows its pages: the first tap the family's page shown last, the next taps step through its pages
-(EDIT: through the pages of the section shown). ALGORITHM picks the section, SELECT steps the pages.
+(EDIT and FX: through the pages of the section shown). SELECT picks the section, ALGORITHM steps its pages, in every
+family.
 
 | Button | Section | Page: KNOB 1 · 2 · 3 · 4 |
 | --- | --- | --- |
 | HOME | HOME | the sound (its category, number and name), its output live: MACRO 1 · 2 · 3 · 4 |
-| EDIT | OSC A, OSC B | WAVE: WT POS · TABLE · WARP · AMOUNT; UNISON: UNISON · DETUNE · BLEND · WIDTH; SPREAD: UNI MODE · WT SPRD · PHASE · RAND; PITCH: OCT · SEMI · FINE · PH MODE; OUTPUT: LEVEL · PAN · ROUTE · ON |
-| | SUB | MAIN: SHAPE · OCT · LEVEL · WIDTH; OUTPUT: PAN · ROUTE · ON |
-| | NOISE | MAIN: TYPE · COLOR · STEREO · LEVEL; OUTPUT: PAN · ROUTE · ON |
-| | FILTER | TONE: TYPE · CUTOFF · RESO · DRIVE; MORE: KEYTRACK · VAR · MIX · ON |
+| EDIT | OSC A, OSC B | WAVE: WT POS · TABLE · WARP · AMOUNT; UNISON: UNISON · DETUNE · BLEND · WIDTH; SPREAD: UNI MODE · WT SPRD · PHASE · RAND; PITCH: OCT · SEMI · FINE · PH MODE; OUTPUT: LEVEL · PAN · ROUTE |
+| | SUB | MAIN: SHAPE · OCT · LEVEL · WIDTH; OUTPUT: PAN · ROUTE |
+| | NOISE | MAIN: TYPE · COLOR · STEREO · LEVEL; OUTPUT: PAN · ROUTE |
+| | FILTER | TONE: TYPE · CUTOFF · RESO · DRIVE; MORE: KEYTRACK · VAR · MIX |
 | ENV | ENV 1, ENV 2 | ADSR: ATTACK · DECAY · SUSTAIN · RELEASE; SHAPE: HOLD · A CURVE · D CURVE · R CURVE |
 | LFO | LFO 1, LFO 2 | POINTS: POINT · TIME · LEVEL · CURVE; SHAPE: SHAPE · SYNC · RATE · MODE; TIME: DELAY · RISE · PHASE · SMOOTH |
-| SEQ | MATRIX | SLOTS: SLOT · SOURCE · DEST · AMOUNT |
-| FX | DRIVE | DRIVE: TYPE · DRIVE · TONE · MIX; POWER: ON |
-| | CHORUS | CHORUS: RATE · DEPTH · DELAY · MIX; MORE: FEEDBACK · ON |
-| | DELAY | DELAY: MODE · SYNC · TIME · FEEDBACK; TONE: LP · HP · MIX · ON |
-| | REVERB | REVERB: TYPE · SIZE · DECAY · MIX; TONE: DAMP · PREDELAY · WIDTH · LOW CUT; POWER: ON |
-| | OTT | OTT: DEPTH · TIME · UPWARD · DOWNWARD; BANDS: LOW · MID · HIGH · ON |
-| | EQ | POINTS: POINT · FREQ · GAIN · Q; GAINS: LOW · MID · HIGH · ON |
+| FX | FX CHAIN | CHAIN: ADD (the type) · SLOT · MOVE · MIX (below: the FX chain) |
+| | the chain's modules | each its pages (below) |
 | GLO | VOICE | VOICE: MODE · VOICES · GLIDE · GL MODE; PLAY: BEND UP · BEND DN · VEL AMP · VOLUME |
+| | MATRIX | SLOTS: SLOT · SOURCE · DEST · AMOUNT |
 | | GLOBAL | TEMPO: BPM · TS-BEAT · TS-NOTE |
 | SCL | KEYS | SCALE: SCALE · ROOT · FIT · VELOCITY |
 | HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
 2–4 that point's frequency, gain and Q) and the MATRIX (KNOB 1 the slot, 1–8; KNOB 2–4 its source, destination and
-amount; a destination steps only through what can be modulated). On the FX pages the six effects are in their chain
-order. With SYNC FIXED, an LFO's RATE and the delay's TIME are note values, one a detent.
+amount; a destination steps only through what can be modulated, an effect's only while its module is in the chain).
+With SYNC FIXED, an LFO's RATE, the delay's TIME and the flanger's, phaser's and tremolo's RATE are note values, one a
+detent. There are no ON knobs: EDIT + OCT+ / OCT− turns the source or the filter shown on or off, and the FX-held keys
+bypass a module (the header's light shows it).
+
+## The FX chain
+
+The effects are modules in a chain of up to eight, in the order they play, the limiter fixed after the last. FX shows
+the **chain view**, laid out as the preset browser: the 13 types at the left, the chain at the right.
+
+| Control | On the chain view |
+| --- | --- |
+| KNOB 1 or ALGORITHM | the type to add (each type's instances in the chain shown: 1/2, IN) |
+| KNOB 2 or SELECT | a slot of the chain; past the last module, the place to add one (+ HERE) |
+| KNOB 3 | MOVE: the module picked one place along the chain a detent |
+| KNOB 4 | the module picked's MIX (OTT and TREMOLO: DEPTH; EQ: none) |
+| FX + OCT+ | the type picked added below the slot picked (on + HERE: there), from its defaults: "ADDED: PHASER · 3 OF 8" |
+| FX + OCT− | the module picked taken out (the matrix slots onto it with it) |
+| FX twice | the module picked opened: its pages; SELECT steps the chain's modules, ALGORITHM a module's pages; FX twice there: back to the chain view, that module picked |
+
+Each type plays twice at most (DRIVE 2, EQ 2, ..), DELAY and REVERB once: "PHASER: TWO AT MOST", "DELAY: ONE AT
+MOST"; "THE CHAIN IS FULL: 8 MODULES". Undo (SAVE + OCT−) takes back each add, take-out, move and bypass. The header
+shows the chain's modules of 8 and their cost on one core (the cost model's estimate: REVERB ~13 %, the others 1–6 %).
+
+| Module | Pages: KNOB 1 · 2 · 3 · 4 |
+| --- | --- |
+| DRIVE | DRIVE: TYPE · DRIVE · TONE · MIX |
+| CHORUS | CHORUS: RATE · DEPTH · DELAY · MIX; MORE: FEEDBACK |
+| DELAY | DELAY: MODE · SYNC · TIME · FEEDBACK; TONE: LP · HP · MIX |
+| REVERB | REVERB: TYPE · SIZE · DECAY · MIX; TONE: DAMP · PREDELAY · WIDTH · LOW CUT |
+| OTT | OTT: DEPTH · TIME · UPWARD · DOWNWARD; BANDS: LOW · MID · HIGH |
+| EQ | POINTS: POINT · FREQ · GAIN · Q; GAINS: LOW · MID · HIGH |
+| FLANGER | FLANGER: RATE · DEPTH · DELAY · MIX; MORE: FEEDBACK · SPREAD · SYNC |
+| PHASER | PHASER: RATE · DEPTH · CENTER · MIX; MORE: FEEDBACK · STAGES · SPREAD · SYNC |
+| FILTER | FILTER: TYPE · CUTOFF · RESO · MIX; MORE: DRIVE |
+| BITCRUSH | CRUSH: BITS · RATE · MIX |
+| TREMOLO | TREMOLO: MODE (TREMOLO, AUTOPAN) · SHAPE · RATE · DEPTH; MORE: SYNC |
+| RING MOD | RING MOD: FREQ · SHAPE · SPREAD · MIX |
+| TAPE | TAPE: WOW · FLUTTER · SATURATE · MIX; TONE: TONE |
+
+The FX filter's types: LP 6, LP 12, LP 24, HP 6, HP 12, HP 24, BP 12, BP 24, NOTCH, PEAK, LADDER, DIRTY LP (the
+resonance driven), FORMANT (CUTOFF walks the vowels), COMB + and COMB − (metallic; CUTOFF tunes them), LO SHELF, HI
+SHELF and TILT (RESO a gain, −18 to +18 dB), DJ (one knob: CUTOFF under the middle a low pass, over it a high pass, open
+at the middle), LO-FI (the rate held at CUTOFF, RESO the bits, then a low pass) and RING (times a carrier at CUTOFF,
+RESO from sine to square). A new TYPE fades the module out and back in. Presets from before the chain load with
+their effects that were on as the chain, in the order they played.
 
 ## Knobs
 
@@ -71,18 +114,18 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 | Button | Tap | Twice | Held | Held 5 s | With another control |
 | --- | --- | --- | --- | --- | --- |
 | HOME | HOME | | | the SETTINGS (a countdown from the hold) | held at power-on: the last sound is not brought back (after a crash neither: SAFE START) |
-| EDIT | its pages | | JUMP | | + OCT−/OCT+: the section's pages |
+| EDIT | its pages | | JUMP | | + OCT+: the section shown on, + OCT−: off (OSC A, OSC B, SUB, NOISE, FILTER) |
 | ENV | its pages | the MOD layer for ENV 2, latched | the MOD layer for ENV 2 | | + OCT: the section's pages |
 | LFO | its pages | on POINTS: a point added | MOMENTARY (on POINTS: deletes the point picked) | on POINTS: the point picked deleted (a countdown) | + OCT: the section's pages |
-| SEQ | the MATRIX | | | | + OCT: the section's pages |
-| FX | its pages | | MACROS | | + ALGORITHM: the effect shown moves along the chain; + OCT: the section's pages |
+| SEQ | "SEQUENCER: IN A LATER VERSION" | | | | |
+| FX | its pages (the chain view: none) | the chain view <-> the module picked | MACROS | | the chain view: + OCT+ a module added, + OCT− the one picked taken out; a module's pages: + OCT the pages |
 | GLO | its pages | | PERFORM | | + OCT: the section's pages |
 | SCL | the KEYS page | | a word | | + a key: that note is the root |
 | REC | | the MOD layer, latched (a tap lets it go) | the MOD layer | | + OCT: the section's pages |
 | SAVE | a new version, saved at once | the browser (in it: back) | | saved over its own slot (a countdown from the hold) | + OCT−: undo; + OCT+: redo |
 | PLAY | the transport on, off | | | | |
 | ARP | "in a later version" | | | | |
-| OCT− / OCT+ | the keys' octave | | | | with a family button or REC held: that section's pages; on NAME IT: OCT+ letters / symbols, OCT− deletes; while MIDI LEARN listens: OCT− takes the picked parameter's CC away, OCT+ ends LEARN; **both held 5 s: UBOOT**, the chip's USB boot (a countdown in the footer from 2 s; letting go stops it; [FLASHING.md](FLASHING.md)) |
+| OCT− / OCT+ | the keys' octave (the browser: OCT−'s at its release) | | the browser: OCT− 3 s deletes the user preset playing | | with a family button or REC held: that section's pages; on NAME IT: OCT+ letters / symbols, OCT− deletes; while MIDI LEARN listens: OCT− takes the picked parameter's CC away, OCT+ ends LEARN; **both held 5 s: UBOOT**, the chip's USB boot (a countdown in the footer from 2 s; letting go stops it; [FLASHING.md](FLASHING.md)) |
 
 ## The layers
 
@@ -93,9 +136,9 @@ says how it ends, and its button breathes (a held MOD layer's is lit).
 | --- | --- | --- | --- | --- |
 | MOD | REC (ENV: for ENV 2) | the source's depth on each knob's parameter (a matrix slot, made when needed; one at 0 goes when the layer closes) | a white key picks the source (REC's layer; ENV's keys play) | it closes |
 | PERFORM | GLO | 1 pitch bend (16 detents from the middle to an end), 2 mod wheel, 3 GLIDE, 4 VOLUME | play | the bend goes back to the middle; the wheel stays |
-| MACROS | FX | MACRO 1–4 | F3 DRIVE, G3 CHORUS, A3 DELAY, B3 REVERB, C4 OTT, D4 EQ: on and off (lit when on) | it closes |
+| MACROS | FX | MACRO 1–4 | F3 to F4 (the white keys): the chain's modules 1 to 8 bypassed or back in (lit when in, glowing when bypassed) | it closes |
 | MOMENTARY | LFO (not on the POINTS page) | change the page's values for now (16 at most) | play | every value it changed goes back |
-| JUMP | EDIT | nothing | a key opens its section: the white keys OSC A, OSC B, SUB, NOISE, FILTER, ENV 1, ENV 2, LFO 1, LFO 2, MATRIX, DRIVE, CHORUS, DELAY, REVERB, OTT, EQ; F#3 HOME, G#3 VOICE, A#3 GLOBAL, C#4 KEYS, D#4 SETTINGS | the page it opened |
+| JUMP | EDIT | nothing | a key opens its section: the white keys OSC A, OSC B, SUB, NOISE, FILTER, ENV 1, ENV 2, LFO 1, LFO 2, MATRIX, then the chain's modules 1 to 6; F#3 HOME, G#3 VOICE, A#3 GLOBAL, C#4 KEYS, D#4 SETTINGS, A#4 the FX chain view | the page it opened |
 
 The MOD layer's sources on the white keys: F3 ENV 1, G3 ENV 2, A3 LFO 1, B3 LFO 2, C4 to F4 MACRO 1 to 4, G4 VELOCITY,
 A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRESSION.
@@ -109,6 +152,9 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   OCT, a knob or another button stop it. A sound that is not a user preset has no slot to save over.
 - **SAVE twice: the browser.** KNOB 1 the category (ALL, BASS, LEAD, PAD, PLUCK, KEYS, FX, SEQ, OTHER, with their
   counts), KNOB 2 the preset (loaded as it turns), KNOB 3 the bank (ALL, STARTER, USER). SAVE twice or HOME: back.
+- **OCT− held 3 s in the browser: the user preset playing deleted** after a countdown ("HOLD: DELETE USER 3 IN 2";
+  letting go stops it); the sound plays on, from no slot. **SAVE + OCT− straight after puts it back** ("BACK IN USER
+  3"; its slot taken meanwhile: the first free one). The starter sounds stay. OCT− tapped there: the octave.
 - **SAVE in the browser: NAME IT** for the sound playing. The keys type: F3 to F#5 A to Z, G5 a space; OCT+ the numbers
   and symbols, OCT− deletes. KNOB 1 the cursor, KNOB 2 the character there (at the end: ADD), KNOB 3 the category, KNOB
   4 the slot: its own (a rename), or for a starter sound the first free one (a slot in use says what it would replace).
@@ -126,14 +172,14 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   lydian, locrian, blues, whole tone, the two diminished), ROOT, FIT: OFF (each key its own note), SNAP (a key off the
   scale plays the scale's note below it), WHITE (the white keys walk the scale from the root at C4; the black keys are
   silent). SCL held + a key: that key's note is the root. MIDI notes are not fitted.
-- What else the keys do: in REC's MOD layer they pick sources, in MACROS they switch effects, in JUMP they open sections,
+- What else the keys do: in REC's MOD layer they pick sources, in MACROS they bypass modules, in JUMP they open sections,
   on NAME IT they type, with SCL held they set the root.
 
 ## LEDs
 
 | LED | Lit | Glowing | Mid / breathing |
 | --- | --- | --- | --- |
-| A key | held; the MOD layer's source; MACROS: an effect that is on; JUMP: the section shown | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); an effect that is off (MACROS); a section's key (JUMP) | mid: the scale's root |
+| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP) | mid: the scale's root |
 | A family button | the family shown | the others | |
 | REC | in its layer | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |

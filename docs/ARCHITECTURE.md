@@ -26,6 +26,12 @@ integration (Phase 6).
 emulator** (78 checks, TESTING.md §6.3); [CONTROLS.md](CONTROLS.md) is the reference for the panel. Still on the FM-1's
 side: integration (Phase 6), the BENCH page, everything §20 marks for the hardware.
 
+**V0.6, after the V0.5 hardware test** (2026-10-17: V0.5 ran on the FM-1, its report came back over USB): the effects
+became a chain of modules with seven new types (§14), presets a second format (§16), the panel's changes the test
+asked for (§17: SELECT and ALGORITHM, the chain view, no ON knobs, the matrix on GLO, deleting a preset), the keys
+read during a redraw and the CPU guard's step at a half's deadline (§3, §13). **Verified in emulator** and on host;
+V0.6 **needs a hardware test**.
+
 **Hardware test build** (after Phase 4, before Phase 5, at your request): the FM-1 unit is built. `strata.c` includes
 Felucca's platform unchanged (the HAL, USB, TRS MIDI, the flash driver, the update entry `ota.c`; the update loader is
 Felucca's too) and Strata's sources; `sy_main.c` (power-on, the boot guard, the UBOOT entries, the update entry behind
@@ -128,14 +134,14 @@ main loop  (~60 frames/s)     UI input and drawing, wavetable builds, storage, U
           │ FILTER (stereo, per voice) ─── AMP (ENV 1 × velocity) ── PAN ───┤
           └─ DIRECT sources skip the filter, still through AMP ─────────────┘
                                                                             ▼
-   voice sum ─► DRIVE ─► CHORUS ─► DELAY ─► REVERB ─► OTT ─► EQ ─► LIMITER ─► MASTER ─► Q15 out
+   voice sum ─► the FX chain: up to 8 modules, in its order (§14) ─► LIMITER ─► MASTER ─► Q15 out
                                                                                         ├─► DAC (24-bit, −6 dBFS ceiling)
                                                                                         └─► USB audio input
 ```
 
 Each oscillator, SUB and NOISE has a FILTER/DIRECT switch (Serum's per-source routing; Serum's mixer buses are left out).
-The six effects play in the order the patch's FX ORDER sets (any of the 720; the one drawn is the default, §14), the
-limiter always last; each module has an on switch and a mix (the EQ: its gains).
+The effects are the modules of a chain (up to eight, in the patch's order, §14), the limiter always last; each module
+can be bypassed and has a mix (the EQ: its gains; OTT, TREMOLO: DEPTH).
 
 ## 5. Number formats
 
@@ -407,6 +413,9 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
   one oldest-voice step per half; above 78 % the costly FX quality steps down (OTT upward compression off, reverb
   density halved); two halves above 85 % shed a voice, as Felucca's `shed_voice` does, faded. Below 55 % for a second,
   the steps undo in reverse order. The load, the budget and the shed count are on the INFO page and the console.
+  V0.6 (BENCH on V0.5: 95 % at the load test's peak, 5 halves late): the guard also looks at each half's whole time,
+  the interrupts nested in it included (`sy_cpu_now`): over 90 % a budget step at once, over 94 % the effects at low
+  cost, over 96 % a voice shed at once; the way back unchanged (verified on host; on the FM-1 **needs a hardware test**).
 - **Cost** (Phase 2, after its optimisation pass, TESTING.md §4): the target cost model puts a voice of A + B with
   LP12 at ~280 listing instructions a sample, each unison instance at ~34 (the position on a frame; ~48 moving), every
   effect together at ~1,280 (the EQ's three bands ~180 of it) and the engine's overhead at ~180. At the 205
@@ -417,7 +426,20 @@ ramp linearly inside the block. A knob turned fast or a CC jump therefore never 
 
 ## 14. Effects
 
-Global, stereo, float, each with ON and MIX (the EQ: none), in the patch's order (below), the limiter last:
+**The chain** (V0.6, after the V0.5 test, the user's ask): the effects are modules in a chain of up to eight (FX
+CHAIN, the patch's FXC1..FXC8, each an instance + 1, in the order they play), the limiter after the last. 13 types,
+two instances each (one DELAY and one REVERB: their lines are the pool's largest), 24 in all (`sy_param.c` FXI_*):
+an instance is a section of its own and that section's parameters, ON first (in the chain or bypassed). The first
+DRIVE .. EQ are the six effects of before, their ids and their DSP unchanged (presets, the matrix and MIDI LEARN keep
+pointing at them; the golden renders hold bit for bit); a second instance's ids are its first's moved by an offset,
+its rows alike (asserted), so the screen's graphs draw either. Changes while sound plays: a module only added joins
+at once from rest, its mix from 0 over its first block (as an effect switched on); one only taken out fades out over
+a block, then is gone; anything else (a move) dips every wet part for four blocks (out over two, the chain swapped at
+their silence, back over two: 2.9 ms), the dry path untouched (each verified on host: no click). Lines: the delay's,
+the reverb's and both choruses' in the pool; each flanger's, tape's and FX filter's (COMB) 512 samples a side in
+`.bss` (12 KiB). A module out of the chain costs nothing.
+
+Global, stereo, float, each with ON and MIX (the EQ: none), the limiter last:
 
 | Module | Algorithm | Notes |
 | --- | --- | --- |
@@ -427,16 +449,26 @@ Global, stereo, float, each with ON and MIX (the EQ: none), in the patch's order
 | REVERB | PLATE and HALL: a 4- or 8-line feedback delay network at half rate (lines of 39–79 ms) with damping and slow modulation, pre-delay up to 50 ms | SIZE, DECAY, DAMP, PRE-DELAY, WIDTH, LOW CUT |
 | OTT | three bands split by complementary SVF crossovers (they sum back exactly), per band an envelope follower and up- and downward compression | DEPTH, TIME, UPWARD, DOWNWARD, band gains L/M/H |
 | EQ | a low shelf, a peak and a high shelf on the filter's trapezoidal SVF (Simper's shelves and bell), ±18 dB, after OTT (added after the mockups, the user's ask) | LOW, MID, HIGH; LO FREQ, MID FREQ, HI FREQ; MID Q, LO Q, HI Q (0.25–8; the shelves' 0.707 by default); a band at 0 dB is skipped, steady coefficients take a cheaper kernel |
+| FLANGER | one tap a side on an 11.6 ms line swept by a sine (the right SPREAD of half a cycle later), from 0.3–5 ms up by DEPTH (to 5 ms more); feedback either way (negative: hollow) | RATE (Hz, or a note value with SYNC FIXED), DEPTH, DELAY, FEEDBACK, SPREAD, MIX |
+| PHASER | 2–12 first-order all-pass stages, their coefficient swept around CENTER by up to 2.5 octaves each way, ramped across the block; feedback from the last stage | RATE (Hz/note), DEPTH, CENTER, FEEDBACK, STAGES, SPREAD, MIX |
+| FILTER | the voice filter's ten types (`sy_filter.c`, as a voice plays them), one-pole LP 6 / HP 6, DIRTY LP (the SVF's band through a soft clip), COMB + / − (512 samples: 86 Hz – 20 kHz), LO / HI SHELF and TILT (the EQ's shelves; RESO a gain ±18 dB), DJ (an LP and an HP in series, each flat at its far end: one knob), LO-FI (held at CUTOFF, RESO's bits, then an LP), RING (times a carrier at CUTOFF, sine to square); a new TYPE fades out, then in | TYPE, CUTOFF, RESO, DRIVE, MIX |
+| BITCRUSH | the input held at RATE (20 Hz – 20 kHz), quantised to BITS (1–16) | BITS, RATE, MIX |
+| TREMOLO | the level (AUTOPAN: the sides, power kept) swept by SINE, TRIANGLE, SQUARE (rounded) or SAW, the gain ramped across the block | MODE, SHAPE, RATE (Hz/note), DEPTH |
+| RING MOD | times a carrier at FREQ (the right SPREAD up to a fifth higher), SHAPE from sine to square | FREQ, SHAPE, SPREAD, MIX |
+| TAPE | a tap at 4 ms moved by WOW (0.6 Hz, ±2.5 ms) and FLUTTER (9 and 13 Hz, ±0.4 ms), SATURATE into a soft clip, TONE the head's loss (an LP from 20 kHz down to 2.5 kHz) | WOW, FLUTTER, SATURATE, TONE, MIX |
 | LIMITER | look-ahead-free peak limiter with a soft knee (above 0.75) before the master | catches resonant peaks and OTT gain |
+
+The FX filter's types are the range of a modern wavetable synth's filter menu (normal, multi and character types),
+with Strata's own names and DSP. Costs on one core (TESTING.md §4, at the measured ~150 instructions a µs; the new
+modules estimated, **needs a hardware test**): REVERB ~13 %, EQ, OTT, CHORUS, DELAY ~5 % each, FLANGER and PHASER ~4 %,
+FILTER 1.5–4 %, TAPE ~3 %, DRIVE, BITCRUSH, TREMOLO, RING MOD 1–2 %: the chain view's header sums them.
 
 Half-rate processing of the delay and reverb halves their memory and cost; their high end is filtered below 10 kHz
 anyway. All delay times and LFO rates sync to the internal tempo or the MIDI clock.
 
-**The order** (built after the mockups, the user's ask): FX ORDER, a patch parameter (0–719), is the order as a
-Lehmer code, 0 the order above (DRIVE, CHORUS, DELAY, REVERB, OTT, EQ); it saves, loads and undoes with the patch. A
-change while sound plays dips the effects' wet parts for four blocks (out over two, the order swapped at their
-silence, back over two: 2.9 ms), the dry path untouched: no click (verified on host). The cost does not change with the
-order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (§17).
+**Before the chain** (Phase 4 to V0.5): six fixed effects, each with an ON, in an order FX ORDER (0–719, a Lehmer code)
+set. FX ORDER is kept in the table, unused (F_OLD), for the presets of then: one loads with its effects that were ON as
+the chain, in FX ORDER's order (verified on host).
 
 ## 15. MIDI
 
@@ -458,10 +490,13 @@ order. On the panel: FX held, ALGORITHM moves the effect shown along the chain (
 
 ## 16. Presets and storage
 
-- **Patch**: the parameter values in id order with a count (new parameters take their defaults when older presets
-  load), the matrix slots, the two table references (factory id or user table), the macro names, the preset name (16
-  characters) and category (bass, lead, pad, pluck, keys, FX, sequence/arp, other), then the LFOs' drawn shapes (`'D'`,
-  each LFO's count of points and its points; a patch without them takes the default's). At most 610 bytes.
+- **Patch** (format 2, V0.6): the values of every parameter but the effects' in id order with a count (new
+  parameters take their defaults when older presets load), the matrix slots, the two table references (factory id or
+  user table), the macro names, the preset name (16 characters) and category (bass, lead, pad, pluck, keys, FX,
+  sequence/arp, other), then the LFOs' drawn shapes (`'D'`, each LFO's count of points and its points; a patch without
+  them takes the default's), then the chain (`'C'`: its modules' count, each one's instance, its values' count and its
+  values). A module out of the chain keeps nothing (it is added from its defaults). At most 710 bytes (asserted under
+  a slot's 766). Format 1 (Phase 4 to V0.5: every value, the six effects among them) still loads (§14).
 - **Factory presets** (64 at first, up to 128) are constants in the image, written by `tools/gen_presets.py` from
   readable definitions.
 - **User presets** (built, `sy_store.c`, after Felucca's `storage.c`): 128 slots as A/B sector objects (a save goes
@@ -602,6 +637,23 @@ HOLD) and MIDI (CHANNEL, LEARN, CLEAR, PROGRAM); HELP shows a section's hint in 
 way and fixed: undo lost which preset a state was (an undone load left the sound marked as the preset loaded, so SAVE
 held would have written another preset's slot); and adding SCL's section wrote past the sections' page memory (ui.fam
 overwritten) until SEC_N sized it; both have tests that fail on the old code.
+
+**After the V0.5 hardware test** (V0.6, the user's answers to its questions; verified in emulator, CONTROLS.md is the
+reference): SELECT picks the section and ALGORITHM the page, in every family (the encoders were the other way round).
+FX shows the **chain view**, laid out as the preset browser: the 13 types at the left (KNOB 1, ALGORITHM), the chain at
+the right (KNOB 2, SELECT; past its last module the place to add one), KNOB 3 moves the module picked, KNOB 4 its MIX;
+FX + OCT+ adds the type picked below the slot picked, FX + OCT- takes the module picked out (its matrix slots with it);
+FX twice opens the module picked (SELECT then steps the chain's modules), twice again back to the chain, that module
+picked; each add, take-out and bypass is an undo step of its own. The header counts the chain and sums its modules'
+estimated cost. A module's pages draw what it does (the flanger's comb and the phaser's notches over the sweep's
+range, the FX filter's response, the bitcrusher's steps, the tremolo's gain, the ring's carrier, the tape's pitch
+drift) under a strip of the chain. FX held (MACROS): F3 .. F4 bypass the chain's modules 1 .. 8. No ON knobs: EDIT +
+OCT+ / OCT- turns the source or the filter shown on or off. GLO: VOICE, MATRIX, GLOBAL; SEQ says the sequencer comes
+later. JUMP: the last six white keys open the chain's modules 1 .. 6, A#4 the chain view. The browser: OCT- held 3 s
+deletes the user preset playing (a countdown), SAVE + OCT- straight after puts it back (sy_app.c keeps its bytes in
+the SAVE buffer until the next SAVE). The keys' latency during a redraw (BENCH on V0.5: 91 ms): `lcd.c` calls the app's
+`LCD_IDLE` before each wait for a strip's DMA; `sy_main.c` takes MIDI's ring there and, when the keys only play
+(`sy_ui_keys_plain`: no layer, no screen that types), reads them, once a millisecond (**needs a hardware test**).
 
 **The plan the UI followed** (Phase 1's draft; the table now says what was built and how):
 

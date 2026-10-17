@@ -2,8 +2,8 @@
 
 What is tested, how, and what the tests found. Status words as in [ARCHITECTURE.md](ARCHITECTURE.md):
 **verified on host** (the real DSP sources built with the PC's compiler and checked offline), **verified in emulator**,
-**needs hardware test**. Nothing here has run on an FM-1 yet: every figure about the device is an estimate until the
-BENCH page runs on a unit (the hardware test build, §8; [FLASHING.md](FLASHING.md)).
+**needs hardware test**. V0.5 ran on an FM-1 (2026-10-17): its BENCH figures are in [FLASHING.md](FLASHING.md) §8
+(the core's rate ~180 instructions a µs on integer code, ~147 on float); V0.6 (the FX chain) has not yet.
 
 ## 1. Running the tests
 
@@ -27,7 +27,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-114 checks in six programs (`tests/sy_*.c`), all passing.
+132 checks in six programs (`tests/sy_*.c`), all passing (V0.6).
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -64,10 +64,24 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 73 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 91 checks; `sy_smoke`, 2)
 
-- **Parameters and presets**: 180 parameters; a patch packs into at most 610 bytes (the LFOs' drawn shapes included)
-  and back unchanged; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
+- **The FX chain** (V0.6): a module added under a sine joins at once, no dip, no click (the largest step 0.061 near
+  it, steady 0.075); one taken out fades out over a block, then is gone (0.054, steady 0.054); two swapped dip the wet
+  parts, then play in the new order (0.029, steady 0.039); a module bypassed is the input bit for bit once faded;
+  DRIVE and DRIVE 2, each its own values, play in the chain's order bit for bit as called so; the slots as the audio
+  side takes them (an instance once, none after the first empty slot). The new modules and the second instances (18)
+  at random corners, six each, on full-scale noise for 2 s then silence for 4 s: finite, under 1, no float state
+  subnormal; the FX filter's 21 types at four corners with the cutoff jumping 20 Hz ↔ 20 kHz: finite, under 1.
+  Responses: the FX filter's LP 6 and HP 6 −3.02 and −3.00 dB at the cutoff, LO SHELF +18.00 dB, DJ open +0.00 dB,
+  COMB + 12.9 dB at its frequency against −10.4 halfway; the PHASER (two still stages, half dry) −53 dB at CENTER,
+  −0.06 dB at 60 Hz; the FLANGER (still at 0.3 ms, half dry) −51.7 dB at 1.67 kHz; RING MOD (1 kHz times 300 Hz) the
+  sum and the difference 128 dB over the input; TREMOLO from 0.000 to 0.500 on 0.5 at full DEPTH, AUTOPAN's sides
+  opposite; TAPE (still, clean) the input 4 ms later (correlation 1.0000); BITCRUSH at 1 bit three levels.
+- **Parameters and presets**: 312 parameters; format 2 (V0.6): a patch with a chain of five packs into 550 bytes and
+  back unchanged; the largest (eight modules of the most values, two 16-point shapes) into at most 710 (a slot holds
+  766); a preset of format 1 (from before the chain) loads its effects that were ON as the chain in FX ORDER's order,
+  its values and matrix kept; an older patch (fewer values, or no drawn shapes) loads with defaults; out-of-range values clamp;
   a malformed drawn shape is not read (too many points) or made whole (places out of order, values out of range); a
   foreign blob is refused; the values read as stored (GLIDE, VEL AMP, NOISE STEREO, PREDELAY, the LFOs' DELAY, RISE,
   SMOOTH) take a change at once, without a patch load.
@@ -116,7 +130,10 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
   after 10 s of silence.
 - **Determinism and golden renders**: eight test sounds (supersaw, pluck, pad, FM keys, sync lead, ladder bass, vowel pad,
   OTT growl) play the same twice in a run, bit for bit, and as recorded in `tests/sy_golden.txt` (recorded again after
-  the optimisation pass, §5, and after the three effects' fixes, §5.2: supersaw, pluck, pad and sync lead).
+  the optimisation pass, §5, and after the three effects' fixes, §5.2: supersaw, pluck, pad and sync lead). The chain
+  (V0.6) left them unchanged: the six effects of before play as they did.
+- **The CPU guard near a half's deadline** (V0.6): 88 % changes nothing; 95 % (the nested interrupts in) a budget step
+  at once and the effects cheaper; 98 % a voice shed at once.
 
 ### 2.5 Store (`sy_store_test`, 12 checks)
 
@@ -308,7 +325,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 78 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 87 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -391,6 +408,18 @@ Adding SCL's section wrote past the sections' page memory (ui.spage), over the f
 dark and the family tables were read out of range; the array now has a place for every section (a check of SCL's
 button LED fails on the old code).
 
+**V0.6** (after the V0.5 hardware test): the checks follow the new panel (SELECT the section, ALGORITHM the page; GLO's
+fourth page from VOICE is GLOBAL's TEMPO) and add: FX's chain view (SUPERSAW's chain: CHORUS, REVERB), FX twice opens
+the module picked and twice again comes back, SELECT the chain's modules; a module added below the slot picked
+("ADDED: PHASER · 2 OF 8"), a second of a type, a third refused, DELAY once; KNOB 3 moves the module picked, to the
+top and no further; FX + OCT- takes it out; eight modules, a ninth refused; KNOB 4 the picked module's MIX; FX held:
+F3 bypasses module 1 (its LED glowing), F3 again back; SAVE + OCT- undoes each step; a second EQ's pages set its own
+values. EDIT + OCT- / OCT+: OSC A off, on, the page staying; SEQ: "SEQUENCER: IN A LATER VERSION", the matrix on
+GLO; FX held, a key with no module: "NO MODULE THERE YET"; the browser: OCT- held, its countdown, let go at 1.5 s
+nothing deleted, held 3 s USER 1 deleted (the sound playing on, from no slot), SAVE + OCT- straight after: back;
+OCT- tapped there: the octave. Found by them: chain edits made within a second of each other were one undo step
+(each add, take-out and bypass is a step of its own now).
+
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
 `build_strata.sh` also writes the page as one file (`make_page_strata.py`): the module as base64, the font as a data:
@@ -429,17 +458,18 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 ### 8.1 The build's checks (`tools/build.py --strata`)
 
 Felucca's checks, unchanged, on Strata's unit: `_start` at the app's address and the entry stub; the RAM code (the flash
-driver) with no calls into the flash; no reference into the chip's ROM; the image within the app slot (370,944 of
-581,564 bytes); `.data` + `.bss` with 4 KiB spare (48,288 of 73,728 bytes) and the pool with 8 KiB (359,396 of 368,640
-bytes: 9.2 KiB spare); every register access in `hal/`. That last one caught `SY_CBAR` (an empty barrier written in a
+driver) with no calls into the flash; no reference into the chip's ROM; the image within the app slot (V0.6: 407,008
+of 581,564 bytes); `.data` + `.bss` with 4 KiB spare (66,368 of 73,728 bytes: 7.2 KiB) and the pool with 4 KiB
+(363,492 of 368,640 bytes: 5.0 KiB spare; the margin was 8 KiB until integration had shown every platform buffer in
+it); every register access in `hal/`. That last one caught `SY_CBAR` (an empty barrier written in a
 form the lint does not take): Felucca's own build had failed on it since Phase 2.
 
 New for Strata, **the interrupt stack**. The audio's render and TIMER5, nested in it, share the system stack (7,936
 bytes). From the listing: each function's pushes and stack adjustments make its frame; its depth is its frame plus its
 deepest callee's (a call, or a tail call); calls through the oscillator kernels', the filter types' and the effects'
 tables take every function their initializers name (read from the source, so a new kernel counts at once), and any
-other call through a register fails the build. Now ~2.4 KiB (the audio 2,228 bytes, TIMER5 124, the two wrappers 56) of
-the 4 KiB allowed.
+other call through a register fails the build. Now ~2.5 KiB (V0.6: the audio 2,228 bytes, TIMER5 196, the two
+wrappers 56) of the 4 KiB allowed; the effects' table is the chain's (`FX_RUN`, a function a type).
 
 The package has Felucca's identity (`FM-1_900`), update loader and layout: 610,090 bytes. The first device build also
 found three `strlen` calls in the effects' drawing (the host and Emscripten have one, the firmware not).
