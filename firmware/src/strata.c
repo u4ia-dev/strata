@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.4 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
+#define STRATA_VERSION "V0.5 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"
@@ -58,6 +58,14 @@ static uint8_t fx_lowcut;                        /* (panel.c's Felucca settings 
 #include "panel.c"
 
 /* -------------------------------------------------------- USB, MIDI --- */
+/* usb.c, midi_uart.c and ota.c are built at -Os inside this -O2 unit (tools/strata_drivers.py), as Felucca and every
+ * other Felucca-family firmware build them: built at -O2, Strata's V0.4 (2026-10-16) and OberVave (2026-10-13, its
+ * tools/build.py) sent nothing usable on the bulk IN endpoints after any chip reset, while EP0 and both OUT endpoints
+ * worked (docs/FLASHING.md, section 9). And usb.c's two SIE accesses (a CON1 write, then its MC_ACK) stay out of line,
+ * Felucca's functions instruction for instruction, whatever the inliner decides: at -O2 they were inlined back to back
+ * into the TIMER5 interrupt. These declarations give usb.c's definitions the attributes; usb.c stays Felucca's */
+static void sie_wr(uint32_t r, uint32_t v) __attribute__((noinline, minsize));
+static uint32_t sie_rd(uint32_t r) __attribute__((noinline, minsize));
 #define HALF_FRAMES 128          /* usb.c's USB audio input: the frames a render writes (sy_app.c SY_HALF) */
 #include "usb.c"
 #if FELUCCA_UART

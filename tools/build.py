@@ -238,7 +238,8 @@ def build_app():
 
 
 def build_strata():
-    """STRATA's unit (firmware/src/strata.c), the whole of it at STRATA_OPT with the FPU, then linked as Felucca's"""
+    """STRATA's unit (firmware/src/strata.c) at STRATA_OPT with the FPU, Felucca's drivers in it at -Os
+    (tools/strata_drivers.py), then linked as Felucca's"""
     flags = [*CFLAGS, *STRATA_FLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     flags[0] = os.environ.get("STRATA_OPT", "-O2")
     for flag in ("FELUCCA_CDC", "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_48K", "FELUCCA_CDC_DEFAULT",
@@ -250,10 +251,18 @@ def build_strata():
     if VERSION:
         flags.append(f'-DSTRATA_VERSION="{VERSION}"')
     (OUT / "fm1_cpu1.o").unlink(missing_ok=True)
+    # strata.c to LLVM IR without the optimizer (and once more with -g, only to tell which file defines what); usb.c,
+    # midi_uart.c and ota.c marked to build as Felucca builds them (tools/strata_drivers.py); the IR at STRATA_OPT
+    ir = ("-S", "-emit-llvm", "-Xclang", "-disable-llvm-optzns", "-c", FW / "src" / "strata.c")
     tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
            ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
-           ("cc", *flags, "-c", FW / "src" / "strata.c", "-o", OUT / "strata.o"))
+           ("cc", *flags, *ir, "-o", OUT / "strata.ll"),
+           ("cc", *flags, "-g", *ir, "-o", OUT / "strata_g.ll"))
+    subprocess.run([sys.executable, SRC / "tools" / "strata_drivers.py", OUT / "strata.ll", OUT / "strata_g.ll",
+                    OUT / "strata_drv.ll"], check=True)
+    tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c", OUT / "strata_drv.ll",
+       "-o", OUT / "strata.o")
     return link_app(OUT / "strata.o")
 
 
