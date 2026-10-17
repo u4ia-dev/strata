@@ -58,6 +58,10 @@
   ul.checks input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--amber); }
   .aside { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 8px; background: var(--raise); font-size: 13.5px;
            display: grid; gap: 8px; }
+  li.backup { display: grid; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  li.backup .aside { margin-left: 0; }
+  #bk-status { overflow-wrap: anywhere; }
+  #bk-status[data-ok="1"] { color: var(--green); font-weight: 600; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 8px; padding: 9px 16px; cursor: pointer;
            border: 1px solid var(--line); background: var(--raise); color: var(--text); }
@@ -107,16 +111,25 @@
   <section class="card">
     <h2><span class="n">1</span>Before you start</h2>
     <ul class="checks">
-      <li>
-        <label><input type="checkbox" class="pre" id="c-backup">
-          <span>I have a <b>full flash backup</b> of this FM-1 made today (all 1 MiB, read twice, both copies the same
-          SHA-256), and the way I made it puts the FM-1 in backup mode <b>at power-on</b>: the Flipper Zero route or
-          the FM-1 Transporter (FLASHING.md, section 2). I keep it.</span></label>
+      <li class="backup">
+        <p><b>A full flash backup, made now</b> (all 1 MiB, read twice, the two copies identical, checked as an FM-1's
+        flash). This page makes it and writes nothing without one from the last 12 hours. Press <b>Back up now</b>,
+        then put the FM-1 in backup mode the Flipper Zero way:</p>
+        <ol class="steps small">
+          <li>The Flipper unplugged from this computer: Apps &gt; Tools &gt; <b>FM1 Recovery</b>. The FM-1 switched
+            off, a USB-C data cable from the Flipper to the FM-1.</li>
+          <li><b>OK</b> on the Flipper, then switch the FM-1 on. At <i>Move FM1 cable to PC now</i>, move the cable to
+            this computer without switching the FM-1 off.</li>
+          <li>If Windows offers to format a disk: <b>Cancel</b>. This page reads it by itself, then lets it go.</li>
+        </ol>
+        <div class="row"><button id="bk-start" class="primary" disabled>Back up now</button>
+          <button id="bk-cancel" hidden>Stop</button></div>
+        <progress id="bk-bar" max="32" value="0" hidden></progress>
+        <p id="bk-status" class="small">Asking this page's server about backups&hellip;</p>
         <div class="aside">
-          <p>Backup mode is the chip's own USB boot (<code>WL82 UBOOT1.00</code>). Only a route that enters it at
-          power-on still works when the firmware's own USB does not: on 2026-10-16 the FM-1 could take in USB but not
-          send, and this button's way in (the firmware's soft key) never appeared on that computer either. The button
-          asks the firmware running now to go there; if Windows then offers to format a disk: <b>Cancel</b>.</p>
+          <p>Another way into backup mode, where it works: this button asks the firmware running now to go there (the
+          soft key). On 2026-10-16 it never appeared on this computer; the Flipper's way works at power-on, whatever
+          the firmware does.</p>
           <div class="row"><button id="uboot" disabled>Put the FM-1 in backup mode&hellip;</button></div>
           <div class="confirm" id="uboot-confirm" hidden>
             <p id="uboot-what">The FM-1 will stop its firmware and wait for jl-uboot-tool. Nothing is written.</p>
@@ -231,6 +244,8 @@ const WHY = {
 };
 let image = null, midi = null, writing = false, pending = null, stock = null, stockPending = null, report = "";
 let ubootAsked = false;                                  // (backup mode: its confirmation shown first)
+const TOKEN = "__STRATA_TOKEN__";                        // (serve.py puts this run's token here)
+let bk = null, backupOk = false;                         // serve.py's backup report; a backup from the last 12 h
 
 const log = (t) => { $("log").textContent += t + "\n"; };
 function say(text, kind = "") { $("status").textContent = text; $("status-card").dataset.kind = kind; }
@@ -247,15 +262,63 @@ function describe(id) {
                                   : "Felucca or another firmware of its family";
 }
 function gate() {
-  const ready = !!image && [...document.querySelectorAll(".pre")].every((c) => c.checked);
+  const backingUp = !!bk && (bk.state === "waiting" || bk.state === "reading");
+  const ready = !!image && backupOk && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
   $("find").disabled = !ready || writing || !$("confirm").hidden;
   $("uboot").disabled = writing || !navigator.requestMIDIAccess;
-  $("stock-go").disabled = !stock || writing || !$("c-backup").checked || !$("c-power").checked;
+  $("stock-go").disabled = !stock || writing || !backupOk || backingUp || !$("c-power").checked;
+  $("bk-start").disabled = !bk || !!bk.why_not || backingUp || writing;
+  $("bk-cancel").hidden = !backingUp;
   $("report").disabled = $("run").disabled = writing || !navigator.serial;
   $("stock-file").disabled = writing;
 }
 document.querySelectorAll(".pre").forEach((c) => c.addEventListener("change", gate));
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = ""; } });
+
+// step 1's backup, made by serve.py (it reads the backup-mode disk with flipper-fm1-recovery's pc_backup.py): its
+// state polled once a second; the install waits for a backup from the last 12 hours whose files still check out
+function ageText(h) { return h < 1 / 60 ? "just now" : h < 1 ? `${Math.round(h * 60)} min ago` : `${h.toFixed(1)} h ago`; }
+function showBackup() {
+  const st = $("bk-status"), bar = $("bk-bar"), r = bk, L = r && r.latest;
+  backupOk = !!(L && L.ok);
+  st.dataset.ok = backupOk ? "1" : "";
+  bar.hidden = !(r && r.state === "reading");
+  if (r) bar.value = r.progress || 0;
+  if (!r) { st.textContent = "This page's server cannot make backups: open it from build\\flasher\\serve.py (FLASHING.md, section 3)."; return; }
+  if (r.why_not) { st.textContent = `Backups are off: ${r.why_not}.`; return; }
+  const failed = r.failed && r.failed.length ? ` Windows could not read a USB device (${r.failed.length}×): if that was ` +
+    "the FM-1, switch it off and do the Flipper steps again." : "";
+  const job = {
+    waiting: "Waiting for the FM-1 in backup mode (the Flipper steps above)…" + failed,
+    reading: `Reading the flash, twice (${r.progress || 0} of 32)… Leave the FM-1 connected and on.`,
+    failed: `The backup did not finish: ${r.message}. Nothing was written.`,
+    cancelled: `Stopped: ${r.message}.`,
+  }[r.state] || "";
+  const have = !L ? "No backup yet." : L.ok
+    ? `Backup ready (${ageText(L.age_h)}): ${L.dir}, SHA-256 ${L.sha256.slice(0, 16)}…` +
+      (r.state === "verified" ? " The FM-1 is still in backup mode: switch it off and on, then install." : "")
+    : !L.files_ok ? `The last backup (${L.dir}) no longer checks out: make a new one.`
+    : `The last backup is ${ageText(L.age_h)}, older than ${r.max_age_h} h: make a new one.`;
+  st.textContent = [job, have].filter(Boolean).join(" ");
+}
+async function backupPoll() {
+  try { const r = await fetch("api/backup", { cache: "no-store" }); bk = r.ok ? await r.json() : null; }
+  catch (_) { bk = null; }
+  showBackup();
+  gate();
+}
+async function backupPost(what) {
+  try {
+    const r = await fetch(`api/backup/${what}`, { method: "POST", headers: { "X-Strata-Token": TOKEN } });
+    if (!r.ok) throw new Error(`the server refused (HTTP ${r.status})`);
+    log(`backup ${what}`);
+  } catch (e) { $("bk-status").textContent = `Could not ${what === "start" ? "start" : "stop"} the backup: ${e.message}.`; return; }
+  await backupPoll();
+}
+$("bk-start").addEventListener("click", () => backupPost("start"));
+$("bk-cancel").addEventListener("click", () => backupPost("cancel"));
+backupPoll();
+setInterval(backupPoll, 1000);
 
 async function getMidi() {
   if (!navigator.requestMIDIAccess) throw codeErr("nomidi");
@@ -281,7 +344,7 @@ async function getMidi() {
       return;
     }
     image = logicalImage(pkg);
-    say("Package checked. Tick the four boxes to install.", "");
+    say("Package checked. Make the backup (step 1) and tick the three boxes to install.", "");
   } catch (e) { showErr(e); }
   gate();
 })();
@@ -352,6 +415,8 @@ $("write").addEventListener("click", async () => {
   $("confirm").hidden = true;
   writing = true; gate();
   try {
+    if (!backupOk) throw new Error("no backup from the last 12 hours (step 1)");
+    log(`backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}`);
     const up = new Updater(await getMidi(), log), step = stepper();
     if (job.loader) {
       if (!await up.resume(image, step, meta.product)) throw codeErr("stopped");
@@ -394,7 +459,7 @@ $("stock-file").addEventListener("change", async () => {
   try {
     if (file.size !== STOCK_V15_SIZE) throw new Error("this is not M-VAVE's FM-1.fwsc V15 (its size)");
     stock = await validateStockPackage(new Uint8Array(await file.arrayBuffer()));
-    say("Official V15 checked (SHA-256). Tick the backup and power boxes above to use it.", "");
+    say("Official V15 checked (SHA-256). Make the backup and tick the power box above to use it.", "");
   } catch (e) { say("Cannot use this file: " + e.message, "err"); }
   gate();
 });
@@ -422,6 +487,8 @@ $("stock-write").addEventListener("click", async () => {
   $("stock-confirm").hidden = true;
   writing = true; gate();
   try {
+    if (!backupOk) throw new Error("no backup from the last 12 hours (step 1)");
+    log(`backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}`);
     const up = new Updater(await getMidi(), log), step = stepper();
     if (job.loader) {
       if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");

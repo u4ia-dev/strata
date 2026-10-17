@@ -8,7 +8,9 @@
 // into the update loader, step 2's reads, the reset into the new firmware; every byte served checked against the
 // package) and a simulated console takes Web Serial's; the FM-1 can be switched off and on (fm.restart), and stay mute
 // after that (cfg.mute: it takes in USB but sends nothing, as on 2026-10-16). Scenarios, each in a fresh page:
-//   the package checked, the install gated by the four boxes; an install over the official firmware, Done only after
+//   the package checked, the install gated by a backup from the last 12 h (serve.py's step, simulated by the server
+//   below: none yet, made from the page, the server not an administrator, one too old) and three boxes; an install
+//   over the official firmware, Done only after
 //   the restart; a resume (the FM-1 found in update mode); the install whose Strata is mute after the restart, never
 //   Done; a device that is no FM-1; none at all; Cancel (nothing sent); backup mode (the soft
 //   key, nothing written); the report and RUN over the console; an official file that is not V15 refused; a package
@@ -30,14 +32,49 @@ if (!CHROME) { console.log("flasher: no Chrome or Edge found (set CHROME)"); pro
 if (!fs.existsSync(path.join(root, "index.html"))) { console.log(`flasher: no ${root}/index.html (make_flasher.py)`); process.exit(1); }
 const TYPES = { ".html": "text/html", ".fwsc": "application/octet-stream", ".md": "text/plain" };
 
-// ------------------------------------------------------------------ the server: /ok/<file>, /bad/<file> (one byte off)
+// ------------------------------------------------------------------ the server: /ok/<session>/<file>, /bad/... (one byte
+// off), and serve.py's backup step simulated per session (s<n>-ready: a backup 5 min old; -none: none until "Back up
+// now", then waiting, reading, verified; -noadmin: off; -stale: 20 h old), with its token and Origin rules
+const TOKEN = "test-token-5150", sessions = new Map();
+function backupState(id) {
+  if (!sessions.has(id)) {
+    const mode = id.split("-")[1] || "ready", now = Date.now() / 1000;
+    const latest = (h) => ({ dir: "C:\\fm1-recovery\\backup-sim", sha256: "2d9298db0c9ea2933a463bea94eecd83", made: now - h * 3600,
+                             age_h: h, ok: h < 12, files_ok: true });
+    sessions.set(id, { mode, starts: 0, refused: 0, t0: 0, latest: mode === "ready" ? latest(5 / 60) : mode === "stale" ? latest(20) : null,
+                       why_not: mode === "noadmin" ? "the flasher's server is not running as administrator (start serve.py in an administrator PowerShell)" : "",
+                       verify: () => latest(0) });
+  }
+  const s = sessions.get(id);
+  let state = "idle", progress = 0;
+  if (s.t0) {
+    const t = Date.now() - s.t0;
+    if (t < 1200) state = "waiting";
+    else if (t < 2400) { state = "reading"; progress = Math.floor((t - 1200) / 1200 * 32); }
+    else { state = "verified"; progress = 32; if (!s.latest || s.latest.age_h) s.latest = s.verify(); }
+  }
+  return { state, message: "", progress, failed: state === "waiting" ? ["Unknown USB Device (Device Descriptor Request Failed)"] : [],
+           dir: "", why_not: s.why_not, latest: s.latest, max_age_h: 12 };
+}
 const server = http.createServer((req, res) => {
   const [, variant, ...rest] = decodeURIComponent(req.url.split("?")[0]).split("/");
+  const sid = /^s\d+(-\w+)?$/.test(rest[0] || "") ? rest.shift() : "s0";
   const file = rest.join("/") || "index.html";
+  const json = (code, obj) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
+  if (file === "api/backup" && req.method === "GET") { json(200, backupState(sid)); return; }
+  if (file.startsWith("api/backup/") && req.method === "POST") {
+    const s = sessions.get(sid) || (backupState(sid), sessions.get(sid));
+    if (req.headers["x-strata-token"] !== TOKEN || req.headers.origin !== base) { s.refused++; json(403, { error: "refused" }); return; }
+    if (file === "api/backup/start" && !s.why_not) { s.starts++; s.t0 = Date.now(); }
+    if (file === "api/backup/cancel") s.t0 = 0;
+    json(200, { started: file === "api/backup/start" && !s.why_not });
+    return;
+  }
   let body;
   if (!["ok", "bad"].includes(variant) || file.includes("..")) { res.writeHead(404); res.end(); return; }
   try { body = fs.readFileSync(path.join(root, file)); } catch { res.writeHead(404); res.end(); return; }
   if (variant === "bad" && file === "strata.fwsc") { body = Buffer.from(body); body[0x5000] ^= 1; }
+  if (file === "index.html") body = Buffer.from(body.toString("utf8").replace("__STRATA_TOKEN__", TOKEN));   // (as serve.py)
   res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   res.end(body);
 });
@@ -191,18 +228,21 @@ async function shot(sid, name) {
 const exceptions = (sid) => events.filter((e) => e.sessionId === sid && e.method === "Runtime.exceptionThrown")
   .map((e) => e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text);
 
+let pages = 0;
 async function open(cfg, variant = "ok") {
   const { targetId } = await send("Target.createTarget", { url: "about:blank" });
   const { sessionId: sid } = await send("Target.attachToTarget", { targetId, flatten: true });
   for (const d of ["Runtime", "Page"]) await send(`${d}.enable`, {}, sid);
   await send("Page.addScriptToEvaluateOnNewDocument", { source: FAKE(cfg) }, sid);
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] }, sid);
-  await send("Page.navigate", { url: `${base}/${variant}/index.html` }, sid);
+  const session = `s${++pages}-${cfg.backup || "ready"}`;
+  await send("Page.navigate", { url: `${base}/${variant}/${session}/index.html` }, sid);
   for (let t = 0; t < 100; t++) {
-    if (await ev(sid, "document.readyState === 'complete' && !/Loading/.test(document.getElementById('status').textContent) && !!window.__fm1.image")) break;
+    if (await ev(sid, "document.readyState === 'complete' && !/Loading/.test(document.getElementById('status').textContent) && " +
+                      "!!window.__fm1.image && !/^Asking/.test(document.getElementById('bk-status').textContent)")) break;
     await sleep(50);
   }
-  return { sid, targetId };
+  return { sid, targetId, session };
 }
 const status = (sid) => ev(sid, "document.getElementById('status').textContent");
 const shown = (sid, id) => ev(sid, `getComputedStyle(document.getElementById('${id}')).display !== 'none'`);   // (drawn, not the attribute)
@@ -217,22 +257,57 @@ async function until(sid, expr, ms) {
 let checks = 0, failed = 0;
 const check = (what, ok) => { checks++; if (!ok) failed++; console.log(`flasher: ${what.padEnd(100)} ${ok ? "ok" : "FAIL"}`); };
 try {
-  {   // the package checked; Find waits for the four boxes
+  {   // the package checked; Find waits for the backup and the three boxes
     const { sid, targetId } = await open({ mode: "stock" });
     const st = await status(sid), facts = await ev(sid, "document.getElementById('f-product').textContent + ' ' + document.getElementById('f-size').textContent");
     const before = await ev(sid, "document.getElementById('find').disabled");
     const hid = [];
-    for (const id of ["confirm", "uboot-confirm", "stock-confirm", "bar", "report-text"]) if (await shown(sid, id)) hid.push(id);
-    check(`as it opens, every confirmation, the bar and the report not drawn${hid.length ? " (drawn: " + hid.join(", ") + ")" : ""}`, !hid.length);
-    await ev(sid, "document.getElementById('c-backup').click()");
+    for (const id of ["confirm", "uboot-confirm", "stock-confirm", "bar", "report-text", "bk-bar", "bk-cancel"]) if (await shown(sid, id)) hid.push(id);
+    check(`as it opens, every confirmation, the bars, Stop and the report not drawn${hid.length ? " (drawn: " + hid.join(", ") + ")" : ""}`, !hid.length);
+    await ev(sid, "document.getElementById('c-power').click()");
     const one = await ev(sid, "document.getElementById('find').disabled");
     await tick(sid);
-    const after = await ev(sid, "document.getElementById('find').disabled");
-    check(`the package checked (${facts}); Find off, off with one box, on with four`,
-          /Package checked/.test(st) && /FM-1_900/.test(facts) && /610,090/.test(facts) && before && one && !after);
+    const after = await ev(sid, "document.getElementById('find').disabled"), bks = await ev(sid, "document.getElementById('bk-status').textContent");
+    check(`the package checked (${facts}); a backup 5 min old ("${bks.slice(0, 26)}..."); Find off, off with one box, on with three`,
+          /Package checked/.test(st) && /FM-1_900/.test(facts) && /610,090/.test(facts) && /^Backup ready \(5 min ago\)/.test(bks) &&
+          before && one && !after);
     await shot(sid, "flasher_light.png");
     check(`no exceptions on load${exceptions(sid).map((x) => " | " + x.slice(0, 160)).join("")}`, exceptions(sid).length === 0);
     await send("Target.closeTarget", { targetId });
+  }
+  {   // no backup yet: Find off with every box; Back up now (the token sent), waiting, reading, verified; Find on
+    const { sid, targetId, session } = await open({ mode: "stock", backup: "none" });
+    await tick(sid);
+    const off = await ev(sid, "document.getElementById('find').disabled && document.getElementById('stock-go').disabled");
+    const first = await ev(sid, "document.getElementById('bk-status').textContent");
+    await click(sid, "bk-start");
+    await until(sid, "/^Waiting for the FM-1/.test(document.getElementById('bk-status').textContent)", 4000);
+    const waiting = await ev(sid, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled, " +
+                                  "start: document.getElementById('bk-start').disabled, stop: !document.getElementById('bk-cancel').hidden })");
+    await until(sid, "!document.getElementById('bk-bar').hidden", 4000);
+    const reading = await ev(sid, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled })");
+    const done = await until(sid, "!document.getElementById('find').disabled", 6000);
+    const final = await ev(sid, "document.getElementById('bk-status').textContent"), s = sessions.get(session);
+    check(`no backup: "${first}", Find and V15 off with every box ticked`, off && /^No backup yet/.test(first));
+    check(`Back up now: "${waiting.t.slice(0, 44)}...", Find off, Stop shown; a device Windows could not read named`,
+          waiting.find && waiting.start && waiting.stop && /Windows could not read a USB device/.test(waiting.t));
+    check(`then "${reading.t.slice(0, 30)}...", Find still off; then "${final.slice(0, 40)}...", Find on`,
+          /^Reading the flash, twice/.test(reading.t) && reading.find && done && /^Backup ready \(just now\)/.test(final) &&
+          /switch it off and on/.test(final));
+    check(`the start asked once, with the token and this page's Origin (${s.starts} start, ${s.refused} refused)`, s.starts === 1 && s.refused === 0);
+    await send("Target.closeTarget", { targetId });
+  }
+  {   // the server not an administrator, or a backup 20 h old: the reason shown, Find off
+    const { sid, targetId } = await open({ mode: "stock", backup: "noadmin" });
+    await tick(sid);
+    const a = await ev(sid, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled, start: document.getElementById('bk-start').disabled })");
+    await send("Target.closeTarget", { targetId });
+    const { sid: sid2, targetId: t2 } = await open({ mode: "stock", backup: "stale" });
+    await tick(sid2);
+    const b = await ev(sid2, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled })");
+    check(`no administrator: "${a.t.slice(0, 56)}...", Back up now and Find off`, /^Backups are off: .*administrator/.test(a.t) && a.find && a.start);
+    check(`a backup 20 h old: "${b.t.slice(0, 56)}...", Find off`, /older than 12 h: make a new one/.test(b.t) && b.find);
+    await send("Target.closeTarget", { targetId: t2 });
   }
   {   // an install over the official firmware: step 1, the loader, step 2, Strata back
     const { sid, targetId } = await open({ mode: "stock" });

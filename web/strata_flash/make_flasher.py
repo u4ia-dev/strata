@@ -7,7 +7,8 @@
   build/flasher/index.html      web/strata_flash/index.html, with Felucca's fm1pkg.js and fm1ota.js (unchanged)
                                 and the package's facts (version, identity, size, SHA-256) inlined
   build/flasher/strata.fwsc     the package, exactly build/strata.fwsc
-  build/flasher/serve.py        a server for 127.0.0.1 only (python serve.py, then http://127.0.0.1:8000/)
+  build/flasher/serve.py        a server for 127.0.0.1 only, and the backup step before any write (py serve.py in an
+                                administrator PowerShell, then http://127.0.0.1:8000/)
   build/flasher/usb_check.html  which way the FM-1's USB data fails (MIDI each way, the console), nothing written
   build/flasher/FLASHING.md     docs/FLASHING.md: the backup, the install, the test, the way back
   build/flasher/LICENSE, LICENSING.md, LICENSES/   (the package holds JieLi SDK files under Apache-2.0)
@@ -89,7 +90,8 @@ def main(pkg="build/strata.fwsc", out="build/flasher"):
         shutil.copy(SRC / doc, out / doc)
     print(f"flasher: {out}: index.html ({len(html)} B), strata.fwsc ({len(raw)} B, {product}, sha256 "
           f"{meta['sha256'][:16]}...), {meta['version']}")
-    print(f"         serve it: python3 {out / 'serve.py'}, then http://127.0.0.1:8000/ in Chrome or Edge")
+    print(f"         serve it (Windows, an administrator PowerShell, for the backup step): py {out / 'serve.py'}, "
+          "then http://127.0.0.1:8000/ in Chrome or Edge")
 
 
 if __name__ == "__main__":
