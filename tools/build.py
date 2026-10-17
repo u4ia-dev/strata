@@ -369,8 +369,8 @@ def check(img, syms, dis, rt):
         errors.append("app.ld: POOL does not start where RAM ends")
     if ram_len - bss < 4096:                      # keep >= 4 KiB of .bss spare (state the audio side touches)
         errors.append(f"RAM headroom {ram_len - bss} B < 4096 B")
-    if pool_len - pool < 8192:                    # keep >= 8 KiB of the pool spare
-        errors.append(f"pool headroom {pool_len - pool} B < 8192 B")
+    if pool_len - pool < 4096:                    # keep >= 4 KiB of the pool spare (8 KiB until integration showed
+        errors.append(f"pool headroom {pool_len - pool} B < 4096 B")   # every platform buffer in it: V0.6, .bss's 4 KiB)
     return errors, notes
 
 
@@ -382,7 +382,7 @@ def check(img, syms, dis, rt):
 # source, so a new kernel counts at once) is a callee. A "call" next to an <unknown instruction> is a jump table's
 # data the listing decoded (a '.' label inside a function), not a call.
 ISR_ROOTS_STACK = ("fm1_alnk0_irq", "fm1_timer5_irq")
-ISR_ICALLS = {"fm1_alnk0_irq": ("sy_fx.c", "RUN"),            # fx_block: the effects in their order
+ISR_ICALLS = {"fm1_alnk0_irq": ("sy_fx.c", "FX_RUN"),         # fx_block: the chain's modules, by type
               "osc_run": ("sy_osc.c", "OSC_KS"),               # the oscillator kernels
               "flt_block": ("sy_filter.c", "FLT_SVF")}         # the SVF types
 ISR_WRAP = 28                       # hal/fm1_isr.S: {psr, rets, reti} and {r3-r0} before the C body

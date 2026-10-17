@@ -87,7 +87,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT,           /* (the matrix's: the slot picked, its source, place, amount) */
        UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL,            /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
        UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC,   /* (the SETTINGS' others) */
-       UI_BRUN, UI_BCLR };                            /* (BENCH's: RUN, CLEAR the peaks) */
+       UI_BRUN, UI_BCLR,                              /* (BENCH's: RUN, CLEAR the peaks) */
+       UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX };       /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -95,7 +96,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 #define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI, G_BENCH };
+       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI, G_BENCH, G_CHAIN, G_FLANGER,
+       G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -107,7 +109,7 @@ typedef struct {
     {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH}},                \
     {S, G_UNI, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},              \
     {S, G_WT2D, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                  \
-    {S, G_WT2D, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, SP_##O##_ON}},
+    {S, G_WT2D, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},
 #define UI_ENV(E, S)                                                                                      \
     {S, G_ENV, "ADSR", {SP_##E##_ATK, SP_##E##_DEC, SP_##E##_SUS, SP_##E##_REL}},                          \
     {S, G_ENV, "SHAPE", {SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV}},
@@ -115,15 +117,44 @@ typedef struct {
     {S, G_LFO, "POINTS", {UI_LPT, UI_LX, UI_LY, UI_LC}},                                                   \
     {S, G_LFO, "SHAPE", {SP_##L##_SHAPE, SP_##L##_SYNC, SP_##L##_RATE, SP_##L##_MODE}},                    \
     {S, G_LFO, "TIME", {SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH}},
+/* the effect modules' pages, of an instance whose ids are its type's first's moved by O (sy_param.c FXI_OFF); no ON:
+ * the FX-held keys bypass a module */
+#define UI_DRVP(S, O) {S, G_DRIVE, "DRIVE", {SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O}},
+#define UI_CHOP(S, O)                                                                                     \
+    {S, G_CHORUS, "CHORUS", {SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O}},           \
+    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, -1, -1, -1}},
+#define UI_OTTP(S, O)                                                                                     \
+    {S, G_OTT, "OTT", {SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O}},                   \
+    {S, G_OTT, "BANDS", {SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1}},
+#define UI_EQP(S, O)                                                                                      \
+    {S, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},                                               \
+    {S, G_EQ, "GAINS", {SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1}},
+#define UI_FLGP(S, O)                                                                                     \
+    {S, G_FLANGER, "FLANGER", {SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_DELAY + O, SP_FL_MIX + O}},         \
+    {S, G_FLANGER, "MORE", {SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1}},
+#define UI_PHSP(S, O)                                                                                     \
+    {S, G_PHASER, "PHASER", {SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_CENTER + O, SP_PH_MIX + O}},          \
+    {S, G_PHASER, "MORE", {SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O}},
+#define UI_FFXP(S, O)                                                                                     \
+    {S, G_FFILT, "FILTER", {SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O}},                \
+    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, -1, -1, -1}},
+#define UI_CRUP(S, O) {S, G_CRUSH, "CRUSH", {SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1}},
+#define UI_TRMP(S, O)                                                                                     \
+    {S, G_TREM, "TREMOLO", {SP_TR_MODE + O, SP_TR_SHAPE + O, SP_TR_RATE + O, SP_TR_DEPTH + O}},           \
+    {S, G_TREM, "MORE", {SP_TR_SYNC + O, -1, -1, -1}},
+#define UI_RNGP(S, O) {S, G_RING, "RING MOD", {SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O}},
+#define UI_TAPP(S, O)                                                                                     \
+    {S, G_TAPE, "TAPE", {SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O}},                   \
+    {S, G_TAPE, "TONE", {SP_TP_TONE + O, -1, -1, -1}},
 static const ui_page_t UI_PG[] = {
     UI_OSC(A, SEC_OSCA)
     UI_OSC(B, SEC_OSCB)
     {SEC_SUB, G_LIST, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW}},
-    {SEC_SUB, G_LIST, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, SP_SUB_ON, -1}},
+    {SEC_SUB, G_LIST, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, -1, -1}},
     {SEC_NOISE, G_LIST, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
-    {SEC_NOISE, G_LIST, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, SP_NZ_ON, -1}},
+    {SEC_NOISE, G_LIST, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, -1, -1}},
     {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
-    {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, SP_F_ON}},
+    {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
     UI_ENV(E1, SEC_ENV1)
     UI_ENV(E2, SEC_ENV2)
     UI_LFO(L1, SEC_LFO1)
@@ -133,19 +164,33 @@ static const ui_page_t UI_PG[] = {
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
     {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
     {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
-    {SEC_DRIVE, G_DRIVE, "DRIVE", {SP_DR_TYPE, SP_DR_AMT, SP_DR_TONE, SP_DR_MIX}},
-    {SEC_DRIVE, G_DRIVE, "POWER", {SP_DR_ON, -1, -1, -1}},
-    {SEC_CHORUS, G_CHORUS, "CHORUS", {SP_CH_RATE, SP_CH_DEPTH, SP_CH_DELAY, SP_CH_MIX}},
-    {SEC_CHORUS, G_CHORUS, "MORE", {SP_CH_FDBK, SP_CH_ON, -1, -1}},
+    {SEC_CHAIN, G_CHAIN, "CHAIN", {UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX}},
+    UI_DRVP(SEC_DRIVE, 0)
+    UI_CHOP(SEC_CHORUS, 0)
     {SEC_DELAY, G_DELAY, "DELAY", {SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK}},
-    {SEC_DELAY, G_DELAY, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, SP_DL_ON}},
+    {SEC_DELAY, G_DELAY, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, -1}},
     {SEC_REVERB, G_REVERB, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX}},
     {SEC_REVERB, G_REVERB, "TONE", {SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT}},
-    {SEC_REVERB, G_REVERB, "POWER", {SP_RV_ON, -1, -1, -1}},
-    {SEC_OTT, G_OTT, "OTT", {SP_OT_DEPTH, SP_OT_TIME, SP_OT_UP, SP_OT_DOWN}},
-    {SEC_OTT, G_OTT, "BANDS", {SP_OT_LOW, SP_OT_MID, SP_OT_HIGH, SP_OT_ON}},
-    {SEC_EQ, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},
-    {SEC_EQ, G_EQ, "GAINS", {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH, SP_EQ_ON}},
+    UI_OTTP(SEC_OTT, 0)
+    UI_EQP(SEC_EQ, 0)
+    UI_DRVP(SEC_DRIVE2, SP_DR2_ON - SP_DR_ON)
+    UI_CHOP(SEC_CHORUS2, SP_CH2_ON - SP_CH_ON)
+    UI_OTTP(SEC_OTT2, SP_OT2_ON - SP_OT_ON)
+    UI_EQP(SEC_EQ2, SP_EQ2_ON - SP_EQ_ON)
+    UI_FLGP(SEC_FLANGER, 0)
+    UI_FLGP(SEC_FLANGER2, SP_FL2_ON - SP_FL_ON)
+    UI_PHSP(SEC_PHASER, 0)
+    UI_PHSP(SEC_PHASER2, SP_PH2_ON - SP_PH_ON)
+    UI_FFXP(SEC_FFILT, 0)
+    UI_FFXP(SEC_FFILT2, SP_FF2_ON - SP_FF_ON)
+    UI_CRUP(SEC_CRUSH, 0)
+    UI_CRUP(SEC_CRUSH2, SP_CR2_ON - SP_CR_ON)
+    UI_TRMP(SEC_TREM, 0)
+    UI_TRMP(SEC_TREM2, SP_TR2_ON - SP_TR_ON)
+    UI_RNGP(SEC_RING, 0)
+    UI_RNGP(SEC_RING2, SP_RG2_ON - SP_RG_ON)
+    UI_TAPP(SEC_TAPE, 0)
+    UI_TAPP(SEC_TAPE2, SP_TP2_ON - SP_TP_ON)
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_HELP, UI_GLOW, -1}},
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
@@ -156,15 +201,20 @@ static const ui_page_t UI_PG[] = {
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
 
-/* the families: the sections each button shows (0xFF ends) */
+/* the families: the sections each button shows (0xFF ends). FX: the chain view (SEC_CHAIN), then the modules in the
+ * chain, in its order (ui_fam_secs; every effect section is FX's: ui_fam_of). SEQ: none yet (the sequencer comes in
+ * a later version; the matrix is GLO's) */
 enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_SCL, FAM_N };
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
-    {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_MATRIX, 0xFF}, {SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, 0xFF},
-    {SEC_VOICE, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF}, {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF},
+    {SEC_LFO1, SEC_LFO2, 0xFF}, {0xFF}, {SEC_CHAIN, 0xFF}, {SEC_VOICE, SEC_MATRIX, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
+    {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF},
 };
-#define UI_NFX 6u                                   /* the effects, SEC_DRIVE .. SEC_EQ */
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB, NB, B_SCL};
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL};
+static int ui_is_fx(uint32_t sec) { return sec >= SEC_DRIVE && sec < SEC_CHAIN; }   /* an effect module's section */
+/* the effects' costs on one core, % (TESTING.md §4: the cost model at the measured ~150 instructions a us; the new
+ * modules' estimated), by type: the chain view's sum */
+static const uint8_t FXT_COST[FXT_N] = {2, 5, 6, 13, 5, 5, 4, 4, 3, 1, 1, 2, 3};
 
 /* SCL: the scales (Felucca's, seq.c SCALE_MASK), each a bit a semitone from the root; how the keys fit them */
 #define UI_NSCALE 16u
@@ -220,15 +270,26 @@ static const uint8_t UI_KEY_SRC[27] = {
     SRC_ENV1, 0, SRC_ENV2, 0, SRC_LFO1, 0, SRC_LFO2, SRC_MAC1, 0, SRC_MAC2, 0, SRC_MAC3, SRC_MAC4, 0,
     SRC_VEL, 0, SRC_NOTE, 0, SRC_RAND, SRC_ALT, 0, SRC_WHEEL, 0, SRC_BEND, SRC_AT, 0, SRC_EXPR,
 };
-/* FX held (MACROS): the white keys F3 .. D4 turn the effects on and off (DRIVE .. EQ; -1 none) */
-static const int8_t UI_KEY_FX[27] = {0, -1, 1, -1, 2, -1, 3, 4, -1, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+/* FX held (MACROS): the white keys F3 .. F4 bypass the chain's modules 1 .. 8 or take them back (-1 none) */
+static const int8_t UI_KEY_FX[27] = {0, -1, 1, -1, 2, -1, 3, 4, -1, 5, -1, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1,
                                      -1, -1, -1, -1, -1, -1};
-/* EDIT held (JUMP): the section each key opens (0xFF none): the white keys in the panel's order, five black keys
- * the rest */
+/* EDIT held (JUMP): the section each key opens (0xFF none): the white keys in the panel's order, the black keys the
+ * rest; the last six white keys the chain's modules 1 .. 6 (UI_JUMP_FX + its slot), A#4 the chain view */
+#define UI_JUMP_FX 0xE0u
 static const uint8_t UI_KEY_JUMP[27] = {
     SEC_OSCA, SEC_MACRO, SEC_OSCB, SEC_VOICE, SEC_SUB, SEC_GLOBAL, SEC_NOISE, SEC_FILTER, SEC_KEYS, SEC_ENV1, SEC_MENU,
-    SEC_ENV2, SEC_LFO1, 0xFF, SEC_LFO2, 0xFF, SEC_MATRIX, 0xFF, SEC_DRIVE, SEC_CHORUS, 0xFF, SEC_DELAY, 0xFF,
-    SEC_REVERB, SEC_OTT, 0xFF, SEC_EQ};
+    SEC_ENV2, SEC_LFO1, 0xFF, SEC_LFO2, 0xFF, SEC_MATRIX, SEC_CHAIN, UI_JUMP_FX, UI_JUMP_FX + 1, 0xFF, UI_JUMP_FX + 2,
+    0xFF, UI_JUMP_FX + 3, UI_JUMP_FX + 4, 0xFF, UI_JUMP_FX + 5};
+/* the section key k opens in JUMP: a chain slot's, its module's (0xFF: none) */
+static uint32_t ui_jump_sec(uint32_t k)
+{
+    uint32_t c = k < 27u ? UI_KEY_JUMP[k] : 0xFFu;
+    int32_t i;
+    if (c == 0xFFu || c < UI_JUMP_FX)
+        return c;
+    i = sp_chain_at(sy_patch.p, c - UI_JUMP_FX);
+    return i < 0 ? 0xFFu : SEC_DRIVE + (uint32_t)i;
+}
 /* the footer's sources (the design's chips) */
 static const uint8_t UI_CHIP_SRC[8] = {SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_MAC1, SRC_MAC2, SRC_MAC3, SRC_MAC4};
 static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", "M3", "M4"};
@@ -299,7 +360,9 @@ static struct {
                                                     /* NAME IT) at this time, no second tap by then (0 none) */
     uint8_t br_cat, br_bank;                        /* the browser: the category (0 all), the bank (all, factory, user) */
     uint16_t br_want;                               /* .. a preset to load (its id + 1; 0 none) */
-} ui;
+    uint8_t undel;                                  /* .. a preset just deleted: SAVE + OCT- puts it back (sy_app.c) */
+    uint8_t ctype, cslot;                           /* the FX chain view: the type picked (left), the slot (right; */
+} ui;                                               /* past the last module: the place to add one) */
 
 static void ui_toast(const char *s)
 {
@@ -348,19 +411,18 @@ static int32_t ui_sec_power(uint32_t s)            /* a section's ON (its header
     case SEC_SUB: return SP_SUB_ON;
     case SEC_NOISE: return SP_NZ_ON;
     case SEC_FILTER: return SP_F_ON;
-    case SEC_DRIVE: return SP_DR_ON;
-    case SEC_CHORUS: return SP_CH_ON;
-    case SEC_DELAY: return SP_DL_ON;
-    case SEC_REVERB: return SP_RV_ON;
-    case SEC_OTT: return SP_OT_ON;
-    case SEC_EQ: return SP_EQ_ON;
     }
-    return -1;
+    return ui_is_fx(s) ? (int32_t)FXI_ON[s - SEC_DRIVE] : -1;   /* (a module: bypassed or in) */
 }
+/* the effect module the page shows: its instance (-1: not a module's page), its ids' offset from its type's first's */
+static int32_t ui_fx_inst(void) { return ui_is_fx(UI_PG[ui.page].sec) ? (int32_t)(UI_PG[ui.page].sec - SEC_DRIVE) : -1; }
+static uint32_t ui_fx_off(void) { return ui_fx_inst() >= 0 ? FXI_OFF((uint32_t)ui_fx_inst()) : 0u; }
 
 static uint32_t ui_fam_of(uint32_t sec)
 {
     uint32_t f, k;
+    if (ui_is_fx(sec))
+        return FAM_FX;
     for (f = 0; f < FAM_N; f++)
         for (k = 0; FAM_SECS[f][k] != 0xFF; k++)
             if (FAM_SECS[f][k] == sec)
@@ -392,14 +454,18 @@ static void ui_page_of(uint32_t page, uint32_t *n, uint32_t *of)
 /* the EQ's POINTS page, KNOB 2-4: the point picked's FREQ, GAIN and Q (its parameters: the MOD layer sets their
  * depths, undo takes them back); the matrix's, KNOB 2-4: the slot picked's SOURCE, DEST, AMOUNT; any other id as it
  * is */
+static int32_t ui_cmix(void);                        /* the chain view's MIX: the slot picked's (-1 none) */
 static int32_t ui_virt(int32_t id)
 {
     static const uint8_t F[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ}, G[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH};
     static const uint8_t Q[3] = {SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ};
-    uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u, m = 3u * (ui.mslot < NSLOT ? ui.mslot : 0u);
+    uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u, m = 3u * (ui.mslot < NSLOT ? ui.mslot : 0u), o = ui_fx_off();
     if (id >= UI_MSRC && id <= UI_MAMT)
         return (int32_t)(SP_M1_SRC + m) + (id - UI_MSRC);
-    return id == UI_EQF ? F[p] : id == UI_EQG ? G[p] : id == UI_EQQ ? Q[p] : id;
+    if (id == UI_CMIX)
+        return ui_cmix();
+    return id == UI_EQF ? (int32_t)(F[p] + o) : id == UI_EQG ? (int32_t)(G[p] + o) : id == UI_EQQ ? (int32_t)(Q[p] + o)
+                                                                                               : id;
 }
 
 static int ui_list(uint32_t id)                     /* shown as a list (a pill), turned one entry a detent */
@@ -461,12 +527,8 @@ static int ui_src_used(uint32_t src)                /* .. anything */
 /* HELP: a section's hint in the footer as it opens, 2 s (0 none: its footer says it, or it needs none) */
 static const char *ui_hint(uint32_t sec)
 {
-    if (sec == SEC_OSCA || sec == SEC_OSCB)
-        return "REC HELD + A KEY: MODULATE IT";
-    if (sec == SEC_SUB || sec == SEC_NOISE)
-        return "OUTPUT: FILTERED OR DIRECT";
-    if (sec == SEC_FILTER)
-        return "ENV HELD + A KNOB: ENV 2 ON IT";
+    if (sec == SEC_OSCA || sec == SEC_OSCB || sec == SEC_SUB || sec == SEC_NOISE || sec == SEC_FILTER)
+        return "EDIT+OCT+ ON \xB7 EDIT+OCT- OFF";
     if (sec == SEC_ENV1 || sec == SEC_ENV2)
         return "ENV HELD: ENV 2 ONTO A KNOB";
     if (sec == SEC_LFO1 || sec == SEC_LFO2)
@@ -477,8 +539,10 @@ static const char *ui_hint(uint32_t sec)
         return "SAVE: KEEP IT \xB7 TWICE: BROWSE";
     if (sec == SEC_MATRIX)
         return "KNOB 1: THE SLOT TO SET";
-    if (sec >= SEC_DRIVE && sec < SEC_DRIVE + SP_NFX)
-        return "FX HELD: MACROS \xB7 + ALGO: MOVE";
+    if (ui_is_fx(sec))
+        return "FX TWICE: THE CHAIN";
+    if (sec == SEC_CHAIN)
+        return "FX+OCT+ ADDS \xB7 FX TWICE OPENS";
     if (sec == SEC_GLOBAL)
         return "PLAY: THE LFOS ON THE BEAT";
     if (sec == SEC_MENU)
@@ -502,16 +566,18 @@ static void ui_go(uint32_t page)
     }
 }
 
-/* family f's sections in the order they show (FX's: the rack's, FX ORDER), into sec; their count */
+/* family f's sections in the order they show (FX's: the chain's modules, in its order; none: the chain view), into
+ * sec (NFXC at least); their count */
 static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
 {
     uint32_t n;
     if (f == FAM_FX) {
-        uint8_t o[SP_NFX];
-        sp_order(sy_patch.p[SP_FX_ORDER], o);
-        for (n = 0; n < SP_NFX; n++)
-            sec[n] = (uint8_t)(SEC_DRIVE + o[n]);
-        return n;
+        uint32_t k, nc = sp_chain_n(sy_patch.p);
+        for (k = 0; k < nc; k++)
+            sec[k] = (uint8_t)(SEC_DRIVE + (uint32_t)sp_chain_at(sy_patch.p, k));
+        if (!nc)
+            sec[nc++] = SEC_CHAIN;
+        return nc;
     }
     for (n = 0; FAM_SECS[f][n] != 0xFF; n++)
         sec[n] = FAM_SECS[f][n];
@@ -540,20 +606,29 @@ static void ui_step_pages(int32_t s, int sec)
         ui_go(pg[(uint32_t)(((int32_t)cur + s % (int32_t)n + (int32_t)n) % (int32_t)n)]);
 }
 
-/* a family button's tap: its page (another family), else the next of the section (EDIT) or of the family */
+/* a module's page shown, its module still in the chain (or not a module's page) */
+static int ui_page_live(uint32_t page)
+{
+    uint32_t s = UI_PG[page].sec;
+    return !ui_is_fx(s) || sp_chain_find(sy_patch.p, s - SEC_DRIVE) >= 0;
+}
+/* a family button's tap: its page (another family; FX: the view it showed, the chain view if that module has gone),
+ * else the next of the section (EDIT, FX's module) or of the family (the chain view: none) */
 static void ui_family_tap(uint32_t f)
 {
-    uint8_t secs[8];
+    uint8_t secs[NFXC];
     if (ui.fam != f)
-        ui_go(ui_in_fam(ui.fpage[f], f) ? ui.fpage[f] : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
-    else
-        ui_step_pages(1, f == FAM_EDIT);
+        ui_go(ui_in_fam(ui.fpage[f], f) && ui_page_live(ui.fpage[f]) ? ui.fpage[f]
+              : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)
+                                                                  : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
+    else if (ui_sec() != SEC_CHAIN)
+        ui_step_pages(1, f == FAM_EDIT || f == FAM_FX);
 }
 
-/* ALGORITHM: the family's sections in their order (each on the page it showed last) */
+/* SELECT: the family's sections in their order (each on the page it showed last) */
 static void ui_step_section(int32_t s)
 {
-    uint8_t secs[8];
+    uint8_t secs[NFXC];
     uint32_t n = ui_fam_secs(ui.fam, secs), k = 0, i, sec = ui_sec(), next;
     for (i = 0; i < n; i++)
         if (secs[i] == sec)
@@ -565,34 +640,140 @@ static void ui_step_section(int32_t s)
     ui_go(UI_PG[ui.spage[next]].sec == next ? ui.spage[next] : ui_first_page(next));
 }
 
-/* FX held, ALGORITHM turned on an effect's page: that effect s places later in the rack (earlier: s < 0), as far as
- * its ends; FX's release is no tap after it (a chord) */
+/* --------------------------------------------------------------------------------------- the chain --- */
+/* the FX chain view (SEC_CHAIN), as the preset browser: the types at the left (KNOB 1, ALGORITHM), the chain at the
+ * right (KNOB 2, SELECT: its modules, then the place after the last while there is room); KNOB 3 moves the module
+ * picked along the chain, KNOB 4 sets its MIX. FX + OCT+ adds a module of the type picked below the slot picked (at
+ * the place after the last: there), from its defaults; FX + OCT- takes the module picked out (its matrix slots with
+ * it). FX twice opens the module picked (its pages: SELECT the modules in the chain's order, ALGORITHM its pages);
+ * FX twice there, back to the chain, that module picked. Undo takes any of it back */
 static void ui_edit(void);
+static void ui_edit_step(void);
 static void ui_toast(const char *s);
-static void ui_fx_move(int32_t s)
+static uint32_t ui_cn(void) { return sp_chain_n(sy_patch.p); }
+static uint32_t ui_cslot(void)                       /* the slot picked, kept in range */
 {
-    uint8_t o[SP_NFX], e = (uint8_t)(ui_sec() - SEC_DRIVE), x;
-    int32_t at = 0, to;
-    char t[24];
-    ui.bt_chord |= (uint16_t)(1u << B_FX);
-    sp_order(sy_patch.p[SP_FX_ORDER], o);
-    while (o[at] != e)
-        at++;
-    to = sy_clampi(at + s, 0, (int32_t)SP_NFX - 1);
-    if (to == at) {
-        ui_toast(at ? "LAST IN THE RACK" : "FIRST IN THE RACK");
+    uint32_t n = ui_cn(), top = n < NFXC ? n : NFXC - 1u;
+    return ui.cslot > top ? top : ui.cslot;
+}
+static int32_t ui_cinst(void) { return sp_chain_at(sy_patch.p, ui_cslot()); }   /* its module, -1 the empty place */
+static int32_t ui_cmix(void)                         /* .. its MIX (OTT: DEPTH; TREMOLO: DEPTH; EQ: none) */
+{
+    static const int16_t MIX[FXT_N] = {SP_DR_MIX, SP_CH_MIX, SP_DL_MIX, SP_RV_MIX, SP_OT_DEPTH, -1, SP_FL_MIX,
+                                       SP_PH_MIX, SP_FF_MIX, SP_CR_MIX, SP_TR_DEPTH, SP_RG_MIX, SP_TP_MIX};
+    int32_t i = ui_cinst();
+    if (i < 0 || MIX[FXI_TYPE[i]] < 0)
+        return -1;
+    return MIX[FXI_TYPE[i]] + (int32_t)FXI_OFF((uint32_t)i);
+}
+/* the type's instance free to add (-1: both in the chain, or its one) */
+static int32_t ui_cfree(uint32_t t)
+{
+    uint32_t k;
+    for (k = 0; k < 2u; k++)
+        if (FXT_INST[t][k] != 0xFF && sp_chain_find(sy_patch.p, FXT_INST[t][k]) < 0)
+            return FXT_INST[t][k];
+    return -1;
+}
+static void ui_chain_turn(int32_t item, int32_t s)
+{
+    uint32_t n = ui_cn(), at = ui_cslot();
+    if (item == UI_CTYPE) {
+        ui.ctype = (uint8_t)((ui.ctype + (uint32_t)(s % (int32_t)FXT_N + (int32_t)FXT_N)) % FXT_N);
+    } else if (item == UI_CSLOT) {
+        ui.cslot = (uint8_t)sy_clampi((int32_t)at + s, 0, (int32_t)(n < NFXC ? n : NFXC - 1u));
+    } else if (item == UI_CMOVE) {                  /* the module picked, past its neighbours one a detent */
+        int32_t to = sy_clampi((int32_t)at + s, 0, (int32_t)n - 1);
+        if (at >= n)
+            return;
+        if (to == (int32_t)at) {
+            ui_toast(at ? "LAST IN THE CHAIN" : "FIRST IN THE CHAIN");
+            return;
+        }
+        ui_edit();
+        while ((int32_t)at != to) {
+            uint32_t nb = to > (int32_t)at ? at + 1u : at - 1u;
+            int16_t x = sy_patch.p[SP_FXC1 + nb];
+            sy_patch.p[SP_FXC1 + nb] = sy_patch.p[SP_FXC1 + at];
+            sy_patch.p[SP_FXC1 + at] = x;
+            at = nb;
+        }
+        ui.cslot = (uint8_t)at;
+    }
+    ui.dirty |= D_DISP | D_KNOBS | D_HEAD;
+}
+/* FX + OCT+: a module of the type picked, below the slot picked (on the empty place: there), from its defaults */
+static void ui_chain_add(void)
+{
+    uint16_t ids[SP_FX_MAXP];
+    uint32_t n = ui_cn(), at = ui_cslot(), pos = at < n ? at + 1u : n, m, k;
+    int32_t i = ui_cfree(ui.ctype);
+    char t[32];
+    if (n >= NFXC) {
+        ui_toast("THE CHAIN IS FULL: 8 MODULES");
         return;
     }
-    ui_edit();
-    for (; at != to; at += to > at ? 1 : -1) {      /* (past its neighbours, one at a time) */
-        x = o[at + (to > at ? 1 : -1)];
-        o[at + (to > at ? 1 : -1)] = o[at];
-        o[at] = x;
+    if (i < 0) {                                    /* "DRIVE: TWO AT MOST", "DELAY: ONE AT MOST" */
+        sp_put(sp_put(t, FXT_NAMES[ui.ctype]), FXT_INST[ui.ctype][1] == 0xFF ? ": ONE AT MOST" : ": TWO AT MOST");
+        ui_toast(t);
+        return;
     }
-    sy_patch.p[SP_FX_ORDER] = sp_order_code(o);
-    sp_put(sp_fix(sp_put(sp_put(t, SEC_NAMES[SEC_DRIVE + e]), ": "), to + 1, 0u, 0), " OF 6");
+    ui_edit_step();
+    m = sp_inst_ids((uint32_t)i, ids);              /* (its values first, the chain after: the audio side takes */
+    for (k = 0; k < m; k++)                         /* it whole) */
+        sy_patch.p[ids[k]] = SP[ids[k]].def;
+    sy_patch.p[FXI_ON[i]] = 1;
+    for (k = n; k > pos; k--)
+        sy_patch.p[SP_FXC1 + k] = sy_patch.p[SP_FXC1 + k - 1u];
+    sy_patch.p[SP_FXC1 + pos] = (int16_t)(i + 1);
+    ui.cslot = (uint8_t)pos;
+    sp_put(sp_fix(sp_put(sp_put(sp_put(t, "ADDED: "), SEC_NAMES[SEC_DRIVE + (uint32_t)i]), " \xB7 "), (int32_t)pos + 1,
+                  0u, 0), " OF 8");
     ui_toast(t);
-    ui.dirty |= D_DISP;
+    ui.dirty |= D_DISP | D_KNOBS | D_HEAD;
+}
+/* FX + OCT-: the module picked out, the matrix slots onto it freed */
+static void ui_chain_del(void)
+{
+    uint32_t n = ui_cn(), at = ui_cslot(), k;
+    int32_t i = ui_cinst();
+    char t[32];
+    if (i < 0) {
+        ui_toast(n ? "PICK A MODULE (KNOB 2)" : "THE CHAIN IS EMPTY");
+        return;
+    }
+    ui_edit_step();
+    for (k = 0; k < NSLOT; k++)
+        if (sp_inst_of((uint32_t)sy_patch.p[SP_M1_DST + 3u * k]) == i) {
+            sy_patch.p[SP_M1_SRC + 3u * k] = SRC_NONE;
+            sy_patch.p[SP_M1_DST + 3u * k] = 0;
+            sy_patch.p[SP_M1_AMT + 3u * k] = 0;
+        }
+    for (k = at; k + 1u < NFXC; k++)
+        sy_patch.p[SP_FXC1 + k] = sy_patch.p[SP_FXC1 + k + 1u];
+    sy_patch.p[SP_FXC8] = 0;
+    sp_put(sp_put(t, "TAKEN OUT: "), SEC_NAMES[SEC_DRIVE + (uint32_t)i]);
+    ui_toast(t);
+    ui.dirty |= D_DISP | D_KNOBS | D_HEAD | D_FOOT;
+}
+/* FX twice: the chain view <-> the module picked (the page it showed last) */
+static void ui_chain_flip(void)
+{
+    if (ui_sec() == SEC_CHAIN) {
+        int32_t i = ui_cinst();
+        uint32_t sec;
+        if (i < 0) {
+            ui_toast(ui_cn() ? "FX + OCT+ ADDS ONE HERE" : "THE CHAIN IS EMPTY: FX + OCT+");
+            return;
+        }
+        sec = SEC_DRIVE + (uint32_t)i;
+        ui_go(UI_PG[ui.spage[sec]].sec == sec ? ui.spage[sec] : ui_first_page(sec));
+    } else if (ui_fx_inst() >= 0) {
+        int32_t k = sp_chain_find(sy_patch.p, (uint32_t)ui_fx_inst());
+        if (k >= 0)
+            ui.cslot = (uint8_t)k;
+        ui_go(ui_first_page(SEC_CHAIN));
+    }
 }
 
 /* ------------------------------------------------------------------------------------------- knobs --- */
@@ -645,6 +826,7 @@ static void ui_hist_drop(void)                      /* (full: the oldest goes) *
 /* the patch as it is, on the history (any redo's go) */
 static void ui_hist_push(void)
 {
+    ui.undel = 0;                                   /* (a delete is put back only straight after it) */
     ui.h_cnt = ui.h_at;
     if (ui.h_cnt == UI_NHIST)
         ui_hist_drop();
@@ -657,6 +839,12 @@ static void ui_edit(void)                           /* an edit: the first of a g
     if (!ui.edit_t || fm1_ms - ui.edit_t > UI_GESTURE_MS)
         ui_hist_push();
     ui.edit_t = fm1_ms | 1u;
+}
+static void ui_edit_step(void)                      /* .. an edit a step of its own (a module added, taken out, */
+{                                                   /* bypassed: each undone alone) */
+    ui.edit_t = 0;
+    ui_edit();
+    ui.edit_t = 0;
 }
 
 static void ui_hist_take(const sy_patch_t *h)       /* a state into the patch, as the knobs write it */
@@ -873,29 +1061,35 @@ static void ui_lfo_del(void)
     sp_put(sp_fix(sp_put(s, "POINT "), (int32_t)i + 1, 0u, 0), " DELETED");
     ui_toast(s);
 }
+#define UI_DEL_MS 3000u                             /* OCT- held in the browser: the preset playing deleted */
+static void ui_browse_del(void);                    /* sy_ui_save.c */
 static void ui_cd_tick(void)                        /* every millisecond while it counts */
 {
-    uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left;
+    uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left, dur = b == B_OCTDN ? UI_DEL_MS : UI_LONG_MS;
     char s[32], *e;
     if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || ui.mod ||
-        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT) || (b == B_SAVE && sy_app_slot() < 0)) {
+        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT) || (b == B_SAVE && sy_app_slot() < 0) ||
+        (b == B_OCTDN && (ui_sec() != SEC_BROWSE || sy_app_slot() < 0))) {
         ui_cd_stop();
         return;
     }
-    if (held >= UI_LONG_MS) {
+    if (held >= dur) {
         ui.cd_btn = NB;
         if (b == B_LFO) {
             ui_lfo_del();
         } else if (b == B_SAVE) {
             ui.toast[0] = 0;
             ui_save_over();
+        } else if (b == B_OCTDN) {
+            ui.toast[0] = 0;
+            ui_browse_del();
         } else {
             ui.toast[0] = 0;
             ui_go(ui_first_page(SEC_MENU));
         }
         return;
     }
-    left = (UI_LONG_MS - held + 999u) / 1000u;
+    left = (dur - held + 999u) / 1000u;
     if (left != ui.cd_s) {                          /* "HOLD: DELETE POINT 3 IN 4", "HOLD: SETTINGS IN 4", */
                                                     /* "HOLD: SAVE OVER USER 3 IN 4" */
         ui.cd_s = (uint8_t)left;
@@ -906,6 +1100,8 @@ static void ui_cd_tick(void)                        /* every millisecond while i
             e = sp_fix(sp_put(e, "DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
         } else if (b == B_SAVE) {
             e = sp_fix(sp_put(e, "SAVE OVER USER "), sy_app_slot() + 1, 0u, 0);
+        } else if (b == B_OCTDN) {
+            e = sp_fix(sp_put(e, "DELETE USER "), sy_app_slot() + 1, 0u, 0);
         } else {
             e = sp_put(e, "SETTINGS");
         }
@@ -1068,6 +1264,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (ui.mod) {
         return;
+    } else if (item >= UI_CTYPE && item <= UI_CMOVE) {   /* the FX chain view's */
+        ui_chain_turn(item, s);
     } else if (item >= UI_SCALE && item <= UI_KVEL) {   /* SCL: the scale, the root (round), the fit, the velocity */
         if (item == UI_SCALE)
             ui.scale = (uint8_t)((ui.scale + (uint32_t)(s % (int32_t)UI_NSCALE + (int32_t)UI_NSCALE)) % UI_NSCALE);
@@ -1094,17 +1292,28 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
 
 /* the parameter a knob sets: an LFO's RATE or the delay's TIME with SYNC FIXED, its note value (the MOD layer: RATE
  * and TIME themselves, whose modulation steps it) */
+static const uint16_t UI_SYNCED[6][3] = {         /* a rate (a time), its SYNC, its NOTE (an effect's: its first's) */
+    {SP_L1_RATE, SP_L1_SYNC, SP_L1_NOTE}, {SP_L2_RATE, SP_L2_SYNC, SP_L2_NOTE}, {SP_DL_TIME, SP_DL_SYNC, SP_DL_NOTE},
+    {SP_FL_RATE, SP_FL_SYNC, SP_FL_NOTE}, {SP_PH_RATE, SP_PH_SYNC, SP_PH_NOTE}, {SP_TR_RATE, SP_TR_SYNC, SP_TR_NOTE}};
 static int32_t ui_eff(int32_t id)
 {
-    if (ui.mod)
+    uint32_t b, o, k;
+    if (ui.mod || id < 0 || id >= (int32_t)SP_COUNT)
         return id;
-    if (id == SP_L1_RATE && sy_patch.p[SP_L1_SYNC])
-        return SP_L1_NOTE;
-    if (id == SP_L2_RATE && sy_patch.p[SP_L2_SYNC])
-        return SP_L2_NOTE;
-    if (id == SP_DL_TIME && sy_patch.p[SP_DL_SYNC])
-        return SP_DL_NOTE;
+    b = sp_fx_base((uint32_t)id);
+    o = (uint32_t)id - b;
+    for (k = 0; k < 6u; k++)
+        if (b == UI_SYNCED[k][0] && sy_patch.p[UI_SYNCED[k][1] + o])
+            return (int32_t)(UI_SYNCED[k][2] + o);
     return id;
+}
+static int ui_is_sync(uint32_t id)                  /* a SYNC (its rate's knob shows Hz or a note value) */
+{
+    uint32_t b = sp_fx_base(id), k;
+    for (k = 0; k < 6u; k++)
+        if (b == UI_SYNCED[k][1])
+            return 1;
+    return 0;
 }
 
 /* the knob turning: its cell lit, and what it moves on the graph, until UI_GESTURE_MS pass without a detent
@@ -1219,13 +1428,15 @@ static void ui_knob(uint32_t k, int32_t s)
         ui.toast[0] = 0;
         ui.dirty |= D_FOOT | D_DISP;
     }
-    if (d->unit == U_DST) {                         /* a destination: the next parameter that can be modulated */
-        int32_t v = sy_patch.p[id], dir = s > 0 ? 1 : -1, n = s > 0 ? s : -s;
+    if (d->unit == U_DST) {                         /* a destination: the next parameter that can be modulated (an */
+        int32_t v = sy_patch.p[id], dir = s > 0 ? 1 : -1, n = s > 0 ? s : -s;   /* effect's: of a module in the chain) */
         while (n--) {
             int32_t w = v;
             do
                 w += dir;
-            while (w > 0 && w < (int32_t)SP_COUNT && !(SP[w].flags & F_MOD));
+            while (w > 0 && w < (int32_t)SP_COUNT &&
+                   (!(SP[w].flags & F_MOD) ||
+                    (sp_inst_of((uint32_t)w) >= 0 && sp_chain_find(sy_patch.p, (uint32_t)sp_inst_of((uint32_t)w)) < 0)));
             if (w < 0 || w >= (int32_t)SP_COUNT)
                 break;
             v = w;
@@ -1242,7 +1453,7 @@ static void ui_knob(uint32_t k, int32_t s)
     }
     sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
     ui.dirty |= D_KNOB(k) | D_DISP;
-    if (id == SP_L1_SYNC || id == SP_L2_SYNC || id == SP_DL_SYNC)
+    if (ui_is_sync((uint32_t)id))
         ui.dirty |= D_KNOBS;                        /* (RATE, TIME: Hz or ms, or a note value) */
     if (ui_sec_power(ui_sec()) == id || UI_PG[ui.page].graph == G_WT3D || UI_PG[ui.page].graph == G_WT2D ||
         ui_sec() == SEC_MATRIX)
@@ -1254,8 +1465,14 @@ static void sy_ui_touch(void) { ui.dirty |= D_KNOBS | D_DISP | D_HEAD | D_FOOT; 
 
 /* ---------------------------------------------------------------------------------------- buttons --- */
 static int ui_has_layer(uint32_t b) { return b == B_REC || b == B_ENV; }
-#define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_SEQ) | (1u << B_FX) | \
-                  (1u << B_GLO) | (1u << B_REC))    /* held with OCT- / OCT+: the section's pages */
+#define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_FX) | (1u << B_GLO) | \
+                  (1u << B_REC))                    /* held with OCT- / OCT+: the section's pages (FX on the chain */
+                                                    /* view: add, take out; EDIT on a source or the filter: on, off) */
+static void ui_browse_undel(void);                  /* sy_ui_save.c */
+static int ui_src_sec(uint32_t s)                   /* a section EDIT + OCT turns on and off */
+{
+    return s == SEC_OSCA || s == SEC_OSCB || s == SEC_SUB || s == SEC_NOISE || s == SEC_FILTER;
+}
 
 static void ui_press(uint32_t b)
 {
@@ -1273,14 +1490,32 @@ static void ui_press(uint32_t b)
     if (b == B_OCTDN || b == B_OCTUP) {
         char t[16] = "KEYS OCT ";
         uint16_t held = (uint16_t)(ui.bt_down & UI_CHORD);
-        if (ui.bt_down & (1u << B_SAVE)) {          /* SAVE held: undo, redo */
-            ui.bt_chord |= (uint16_t)(1u << B_SAVE);
-            ui_undo(b == B_OCTUP);
+        if (ui.bt_down & (1u << B_SAVE)) {          /* SAVE held: undo, redo (in the browser, a preset just */
+            ui.bt_chord |= (uint16_t)((1u << B_SAVE) | (1u << b));   /* deleted: back) */
+            if (b == B_OCTDN && ui_sec() == SEC_BROWSE && ui.undel)
+                ui_browse_undel();
+            else
+                ui_undo(b == B_OCTUP);
             return;
         }
         if (held) {
-            ui.bt_chord |= held;
-            ui_step_pages(b == B_OCTUP ? 1 : -1, 1);
+            ui.bt_chord |= (uint16_t)(held | (1u << b));
+            if ((held & (1u << B_FX)) && ui_sec() == SEC_CHAIN && !ui.mod) {
+                if (b == B_OCTUP)
+                    ui_chain_add();
+                else
+                    ui_chain_del();
+            } else if ((held & (1u << B_EDIT)) && ui_src_sec(ui_sec()) && !ui.mod) {
+                uint32_t pw = (uint32_t)ui_sec_power(ui_sec());
+                char t[24];
+                ui_edit_step();
+                sy_patch.p[pw] = b == B_OCTUP;
+                sp_put(sp_put(sp_put(t, ui_sec_name(ui_sec())), ": "), b == B_OCTUP ? "ON" : "OFF");
+                ui_toast(t);
+                ui.dirty |= D_HEAD | D_DISP;
+            } else {
+                ui_step_pages(b == B_OCTUP ? 1 : -1, 1);
+            }
             return;
         }
         if (ui.learn) {                             /* MIDI LEARN: OCT- the picked one's CC away, OCT+ done */
@@ -1294,6 +1529,8 @@ static void ui_press(uint32_t b)
             ui.dirty |= D_FOOT | D_DISP | D_KNOBS;
             return;
         }
+        if (b == B_OCTDN && ui_sec() == SEC_BROWSE)
+            return;                                 /* (the browser: OCT- held deletes; its tap, at its release) */
         sy_app_octave(b == B_OCTUP ? 1 : -1);
         sp_fix(t + 9, sy_app_oct(), 0u, 1);
         ui_toast(t);
@@ -1306,6 +1543,8 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
     if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
         if (b == B_HOME)
             ui_cd_arm(B_HOME);
+        else if (b == B_OCTDN && ui_sec() == SEC_BROWSE && !(ui.bt_chord & (1u << B_OCTDN)))
+            sy_app_slot() >= 0 ? ui_cd_arm(B_OCTDN) : ui_toast("A STARTER SOUND STAYS");   /* (3 s: deleted) */
         return;
     }
     if (b == B_REC && !ui.mod)
@@ -1372,6 +1611,26 @@ static void ui_release(uint32_t b, int held)
     }
     if (b == B_ARP) {
         ui_toast("ARP: IN A LATER VERSION");
+        return;
+    }
+    if (b == B_SEQ) {
+        ui_toast("SEQUENCER: IN A LATER VERSION");
+        return;
+    }
+    if (b == B_OCTDN || b == B_OCTUP) {             /* (the browser: OCT-'s tap, the octave at its release) */
+        if (b == B_OCTDN && ui_sec() == SEC_BROWSE) {
+            char t[16] = "KEYS OCT ";
+            sy_app_octave(-1);
+            sp_fix(t + 9, sy_app_oct(), 0u, 1);
+            ui_toast(t);
+        }
+        return;
+    }
+    if (b == B_FX && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod && ui.fam == FAM_FX) {   /* FX twice: the chain */
+        if (ui_fam_of(UI_PG[ui.prev_page].sec) == FAM_FX)   /* view <-> the module (the first tap's page step undone) */
+            ui_go(ui.prev_page);
+        ui_chain_flip();
+        ui.tap_t[b] = 0;
         return;
     }
     if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {
@@ -1469,24 +1728,45 @@ static int32_t sy_ui_key_note(uint32_t k, int32_t oct)
 }
 static uint32_t sy_ui_key_vel(void) { return ui.kvel ? ui.kvel : 100u; }
 
+/* the keys only play (sy_ui_key would take none, and change nothing): no layer, no screen that types, SCL not held
+ * (its own state read: the main loop's may be a frame old). sy_main.c reads the keys between a redraw's strips then */
+static int sy_ui_keys_plain(void)
+{
+    return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
+}
+
 /* the keys in REC's MOD layer: a white key picks its source, no key plays; 1 = taken (no note). (ENV's layer:
  * the keys play, to hear what ENV 2 does) */
 static int sy_ui_key(uint32_t k)
 {
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
-    if (ui.lay == LAY_MAC && k < 27u && UI_KEY_FX[k] >= 0) {   /* MACROS: an effect on or off */
-        char t[24];
-        uint32_t sec = SEC_DRIVE + (uint32_t)UI_KEY_FX[k], pw = (uint32_t)ui_sec_power(sec);
-        ui_edit();
+    if (ui.lay == LAY_MAC && k < 27u && UI_KEY_FX[k] >= 0) {   /* MACROS: a module bypassed or back in */
+        char t[32];
+        int32_t i = sp_chain_at(sy_patch.p, (uint32_t)UI_KEY_FX[k]);
+        uint32_t pw;
+        if (i < 0) {
+            ui_toast("NO MODULE THERE YET");
+            return 1;
+        }
+        pw = FXI_ON[i];
+        ui_edit_step();
         sy_patch.p[pw] = !sy_patch.p[pw];
-        sp_put(sp_put(sp_put(t, SEC_NAMES[sec]), " "), sy_patch.p[pw] ? "ON" : "OFF");
+        sp_put(sp_put(sp_put(t, SEC_NAMES[SEC_DRIVE + (uint32_t)i]), " "), sy_patch.p[pw] ? "IN" : "BYPASSED");
         ui_toast(t);
         ui.dirty |= D_HEAD | D_DISP;
         return 1;
     }
-    if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section */
-        uint32_t sec = UI_KEY_JUMP[k];
+    if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section (a chain slot's: */
+        uint32_t sec = UI_KEY_JUMP[k];                                /* its module) */
+        if (sec >= UI_JUMP_FX) {
+            int32_t i = sp_chain_at(sy_patch.p, sec - UI_JUMP_FX);
+            if (i < 0) {
+                ui_toast("NO MODULE THERE YET");
+                return 1;
+            }
+            sec = SEC_DRIVE + (uint32_t)i;
+        }
         ui_go(UI_PG[ui.spage[sec]].sec == sec ? ui.spage[sec] : ui_first_page(sec));
         return 1;
     }
@@ -1521,13 +1801,19 @@ static void sy_ui_ms(void)
     for (k = 0; k < 4u; k++)
         if ((s = panel_enc(EN_K1 + k)) != 0)
             ui_knob(k, s);
-    if ((s = panel_enc(EN_SELECT)) != 0)
-        ui_step_pages(s, 0);
-    if ((s = panel_enc(EN_ALGO)) != 0) {
-        if ((ui.bt_down & (1u << B_FX)) && ui_sec() >= SEC_DRIVE && ui_sec() < SEC_DRIVE + SP_NFX && !ui.mod)
-            ui_fx_move(s);                          /* (FX held: the effect along the rack) */
+    if ((s = panel_enc(EN_SELECT)) != 0) {          /* SELECT: the section (the chain view: the slot) */
+        ui_cd_stop();
+        if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
+            ui_chain_turn(UI_CSLOT, s);
         else
             ui_step_section(s);
+    }
+    if ((s = panel_enc(EN_ALGO)) != 0) {            /* ALGORITHM: the section's pages (the chain view: the type) */
+        ui_cd_stop();
+        if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
+            ui_chain_turn(UI_CTYPE, s);
+        else
+            ui_step_pages(s, 1);
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);

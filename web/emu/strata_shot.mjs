@@ -5,7 +5,7 @@
 // turned: its depth on WT POS), the unison page, an envelope with a key held, LFO 1's POINTS page (a point lowered,
 // one added, a key held: the voice on its cycle), its SHAPE page with S&H (five cycles of sample levels), HOME with a
 // chord (the scope), the wave page's AMOUNT turning, the filter's pages and each effect's, a knob turning on each,
-// the keys' scale (SCL), the matrix (SEQ), the hold layers (PERFORM, MACROS, JUMP, MOMENTARY), the SETTINGS (SCREEN,
+// the keys' scale (SCL), the matrix (GLO), the FX chain and its new modules, the hold layers (PERFORM, MACROS, JUMP, MOMENTARY), the SETTINGS (SCREEN,
 // PANEL, MIDI with a CC learned; LEARN's footer; a HELP hint) (HOME held 5 s), SAVE (once: a new version; held: the countdown), the browser (SAVE twice; all, PAD),
 // NAME IT from it (a rename, the numbers, written), HOME with a user preset, and the wave page in each palette. It
 // prints what the session set.
@@ -117,7 +117,7 @@ png("lfo_drawn.png");
 ex.web_keys(0);
 console.log(`LFO 1: ${ex.web_test_draw(0, 0, 0)} points, point ${ex.web_test_lpt(0) + 1} picked`);
 run(0.2);
-ex.web_enc(E.SELECT, 1);                        // its SHAPE page: S&H
+ex.web_enc(E.ALGO, 1);                        // its SHAPE page: S&H
 run(0.05);
 ex.web_enc(E.K1, 5 - ex.web_test_value(ex.web_test_page_param(0)));
 run(0.1);
@@ -132,16 +132,18 @@ run(0.3);
 png("lfo_fixed.png");
 ex.web_keys(0);
 run(0.2);
-ex.web_enc(E.SELECT, -1);                       // POINTS: LFO held, the delete's countdown
+ex.web_enc(E.ALGO, -1);                       // POINTS: LFO held, the delete's countdown
 run(0.05);
 ex.web_buttons(1 << B.LFO);
 run(1.5);
 png("lfo_delete.png");
 ex.web_buttons(0);
 run(0.1);
-tap(B.GLO);                                     // GLO three times: GLOBAL's TEMPO, 6/8 at 132
-tap(B.GLO);
-tap(B.GLO);
+const cstr = (q) => { const m = new Uint8Array(ex.memory.buffer); let e = q; while (m[e]) e++; return String.fromCharCode(...m.subarray(q, e)); };
+const go = (sec, nm) => {                       // a section's page by its name, at once
+  for (let q = 0; q < 200; q++) { ex.web_test_go(q); if (ex.web_test_page_section() === sec && cstr(ex.web_test_page_name()) === nm) return; }
+};
+go(38, "TEMPO");                                // GLOBAL's TEMPO, 6/8 at 132
 for (let i = 0; i < 12; i++) { ex.web_enc(E.K1, 1); run(0.06); }
 ex.web_enc(E.K2, 2);
 ex.web_enc(E.K3, 1);
@@ -149,7 +151,7 @@ run(0.1);
 png("tempo.png");
 console.log(`GLOBAL: ${ex.web_test_tempo(0)} BPM ${ex.web_test_tempo(1)}/${ex.web_test_tempo(2)}`);
 const sect = () => ex.web_test_page_section();
-const to = (sec) => { ex.web_enc(E.ALGO, sec - sect()); run(0.05); };   // ALGORITHM: a section of the family
+const to = (sec) => { ex.web_enc(E.SELECT, sec - sect()); run(0.05); };   // SELECT: a section of the family
 const turn = (k, n, dt = 0.12) => { for (let i = 0; i < Math.abs(n); i++) { ex.web_enc(E.K1 + k, n > 0 ? 1 : -1); run(dt); } };
 const set = (id, v) => ex.web_test_set(id, v);
 tap(B.HOME);                                    // HOME: a chord playing, the scope live
@@ -159,7 +161,7 @@ png("home.png");
 ex.web_keys(0);
 run(0.5);
 tap(B.EDIT);                                    // OSC A WAVE: AMOUNT turning (BEND+ 30 % -> more)
-ex.web_enc(E.SELECT, -1);
+ex.web_enc(E.ALGO, -1);
 run(0.05);
 turn(3, 4);
 png("wave_warp.png");
@@ -175,43 +177,43 @@ run(0.1);
 turn(1, 4);
 png("filter_tone.png");
 run(1.2);
-ex.web_enc(E.SELECT, 1);                        // MORE: KEYTRACK turning
+ex.web_enc(E.ALGO, 1);                        // MORE: KEYTRACK turning
 run(0.05);
 turn(0, 6, 0.004);
 png("filter_more.png");
 run(1.2);
 set(106, 0); set(107, 0); set(108, 0);
-tap(B.FX);                                      // DRIVE: TUBE, DRIVE turning
-to(12);
+for (let k = 0; k < 8; k++) set(180 + k, k < 6 ? k + 1 : 0);   // the chain: the six of before, in their order
+go(12, "DRIVE");                                // DRIVE: TUBE, DRIVE turning
 set(130, 1); set(131, 1);
 run(0.05);
 turn(1, 4);
 png("drive.png");
 run(1.2);
-to(13);                                         // CHORUS: DEPTH turning, its taps moving
+go(13, "CHORUS");                                         // CHORUS: DEPTH turning, its taps moving
 set(135, 1);
 run(0.3);
 turn(1, 4);
 png("chorus.png");
 run(1.2);
-to(14);                                         // DELAY: PING-PONG 1/8D, FEEDBACK turning
+go(14, "DELAY");                                         // DELAY: PING-PONG 1/8D, FEEDBACK turning
 set(141, 1);
 run(0.05);
 turn(3, 4);
 png("delay.png");
 run(1.2);
-ex.web_enc(E.SELECT, 1);                        // its TONE page: LP turning
+ex.web_enc(E.ALGO, 1);                        // its TONE page: LP turning
 run(0.05);
 turn(0, -5, 0.004);
 png("delay_tone.png");
 run(1.2);
-to(15);                                         // REVERB: HALL, DECAY turning
+go(15, "REVERB");                                         // REVERB: HALL, DECAY turning
 set(149, 1);
 run(0.05);
 turn(2, 4);
 png("reverb.png");
 run(1.2);
-to(16);                                         // OTT: a chord through it, DEPTH turning
+go(16, "OTT");                                         // OTT: a chord through it, DEPTH turning
 set(158, 1);
 ex.web_keys((1 << 2) | (1 << 9) | (1 << 14));
 run(0.8);
@@ -219,7 +221,7 @@ turn(0, -6, 0.004);
 png("ott.png");
 ex.web_keys(0);
 run(1.2);
-to(17);                                         // EQ POINTS: MID picked, its GAIN turning; LFO 1 on MID's gain
+go(17, "POINTS");                                         // EQ POINTS: MID picked, its GAIN turning; LFO 1 on MID's gain
 set(169, 1); set(170, 60); set(171, -40); set(172, 30);
 set(106, 3); set(107, 171); set(108, 250);      // slot 1: LFO 1 -> MID, +-25 %
 ex.web_enc(E.K1, 1);
@@ -232,13 +234,29 @@ run(0.45);
 png("eq_live.png");
 ex.web_keys(0);
 run(1.5);
-ex.web_enc(E.SELECT, 1);                        // GAINS: LOW turning
+ex.web_enc(E.ALGO, 1);                        // GAINS: LOW turning
 run(0.05);
 turn(0, 4);
 png("eq_gains.png");
 run(1.2);
 set(106, 0); set(107, 0); set(108, 0);
 for (const id of [130, 135, 141, 149, 158, 169]) set(id, 0);
+for (let k = 0; k < 8; k++) set(180 + k, [2, 15, 13, 23, 4][k] || 0);   // the chain: CHORUS, FILTER, PHASER, TAPE, REVERB
+for (const id of [135, 149, 256, 236, 300]) set(id, 1);
+tap(B.FX);                                      // FX: the chain view (TAPE picked to add)
+ex.web_enc(E.K1, 12 - ex.web_test_ctype());
+ex.web_enc(E.K2, 3 - ex.web_test_cslot());
+run(0.3);
+png("fx_chain.png");
+for (const [sec, nm, f] of [[22, "FLANGER", "flanger.png"], [24, "PHASER", "phaser.png"], [26, "FILTER", "fx_filter.png"],
+                            [28, "CRUSH", "bitcrush.png"], [30, "TREMOLO", "tremolo.png"], [32, "RING MOD", "ring.png"],
+                            [34, "TAPE", "tape.png"]]) {
+  go(sec, nm);
+  run(0.3);
+  png(f);
+}
+for (const id of [135, 149, 256, 236, 300]) set(id, 0);
+for (let k = 0; k < 8; k++) set(180 + k, 0);
 tap(1);                                         // SCL: D dorian, SNAP (a key off the scale plays the note below)
 ex.web_enc(E.K1, 3);
 run(0.12);
@@ -256,7 +274,7 @@ ex.web_enc(E.K2, -2);
 run(0.12);
 ex.web_enc(E.K3, -2);
 run(0.12);
-tap(9);                                         // SEQ: the matrix; slot 2 made: ENV 2, negative, onto OSC B's FINE
+go(11, "SLOTS");                                // GLO's MATRIX; slot 2 made: ENV 2, negative, onto OSC B's FINE
 ex.web_enc(E.K1, 1);
 run(0.12);
 ex.web_enc(E.K2, 2);
@@ -296,10 +314,10 @@ run(5.2);
 ex.web_buttons(0);
 run(0.1);
 png("settings.png");
-ex.web_enc(E.SELECT, 1);                        // PANEL; MIDI with LEARN on, a knob picked, CC 74 learned to it
+ex.web_enc(E.ALGO, 1);                        // PANEL; MIDI with LEARN on, a knob picked, CC 74 learned to it
 run(0.1);
 png("settings_panel.png");
-ex.web_enc(E.SELECT, 1);
+ex.web_enc(E.ALGO, 1);
 run(0.1);
 ex.web_enc(E.K2, 1);
 run(0.13);
@@ -313,7 +331,7 @@ ex.web_buttons(1 << B.HOME);
 run(5.2);
 ex.web_buttons(0);
 run(0.1);
-ex.web_enc(E.SELECT, 2);
+ex.web_enc(E.ALGO, 2);
 run(0.1);
 png("settings_midi.png");
 ex.web_enc(E.K2, -1);                           // (LEARN off)

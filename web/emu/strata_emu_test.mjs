@@ -29,17 +29,19 @@ function check(what, ok) {
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12,
             OCTUP: 13 };                                                                       // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
-const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, OTT: 16, EQ: 17,
-              MENU: 18, GLOBAL: 19, SAVE: 20, BROWSE: 21 };                                   // SEC_*
+const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, VOICE: 9, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, REVERB: 15,
+              OTT: 16, EQ: 17, EQ2: 21, PHASER: 24, PHASER2: 25, CHAIN: 36, MENU: 37, GLOBAL: 38, SAVE: 39, BROWSE: 40,
+              KEYS: 41 };                                                                     // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
-             FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
+             FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
+             PH_ON: 236, EQ2_MID: 209, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
              LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 const pid = (x, sec, nm, k) => {               // the parameter at knob k of a page, found by its section and name
   const p = x.web_test_page();
   let id = -1;
-  for (let q = 0; q < 80 && id < 0; q++) {
+  for (let q = 0; q < 200 && id < 0; q++) {
     x.web_test_go(q);
     if (x.web_test_page_section() === sec && cstr(x, x.web_test_page_name()) === nm) id = x.web_test_page_param(k);
   }
@@ -77,6 +79,17 @@ function cstr(ex, p) {
 }
 const tap = (ex, b) => { ex.web_buttons(1 << b); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.35); };   // (no double tap)
 const slots = (ex) => Array.from({ length: 8 }, (_, s) => [0, 1, 2].map((f) => ex.web_test_slot(s, f)));
+const fxTwice = (x) => {                        // FX tapped twice: the chain view <-> the module picked
+  for (let i = 0; i < 2; i++) { x.web_buttons(1 << B.FX); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
+  play(x, 0.3);
+};
+const goPage = (x, sec, nm) => {                // the page of a section, by its name, shown at once
+  for (let q = 0; q < x.web_test_go(0) * 0 + 200; q++) {
+    x.web_test_go(q);
+    if (x.web_test_page_section() === sec && cstr(x, x.web_test_page_name()) === nm) return q;
+  }
+  return -1;
+};
 
 const mod = await WebAssembly.compile(bytes);
 check("no imports (the worklet instantiates it with none)", WebAssembly.Module.imports(mod).length === 0);
@@ -123,16 +136,24 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   check(`KNOB 1 (WT POS) speed-sensitive: 3 slow detents ${v1 - v0} (0.1 % each), 6 quick ones ${v2 - v1}`,
         v1 - v0 === -3 && v2 - v1 <= -150);
 }
-{
-  tap(ex, B.FX);
-  const s1 = ex.web_test_page_section();
-  ex.web_enc(E.ALGO, 1);
+{                                               // FX: the chain view; FX twice opens the module picked
+  tap(ex, B.FX);                                // (SUPERSAW: CHORUS, REVERB)
+  const s1 = ex.web_test_page_section(), c = [0, 1, 2].map((k) => ex.web_test_chain(k));
+  ex.web_enc(E.SELECT, 1);                      // SELECT: the next slot
   play(ex, 0.03);
+  const slot = ex.web_test_cslot();
+  fxTwice(ex);
   const s2 = ex.web_test_page_section(), p2 = ex.web_test_page();
-  ex.web_enc(E.SELECT, 1);
+  ex.web_enc(E.ALGO, 1);                        // ALGORITHM: the module's next page
   play(ex, 0.03);
-  check(`FX shows DRIVE, ALGORITHM the next effect, SELECT the next page (sections ${s1}, ${s2})`,
-        s1 === SEC.DRIVE && s2 === SEC.CHORUS && ex.web_test_page() !== p2);
+  const p3 = ex.web_test_page(), s3 = ex.web_test_page_section();
+  ex.web_enc(E.SELECT, -1);                     // SELECT: the module before in the chain
+  play(ex, 0.03);
+  const s4 = ex.web_test_page_section();
+  fxTwice(ex);
+  check(`FX: the chain view (section ${s1}: ${c}); SELECT the slot (${slot}); FX twice opens REVERB (${s2}); ALGORITHM its next page (${s3}), SELECT the module before (${s4}); FX twice: back (${ex.web_test_page_section()}, CHORUS picked: slot ${ex.web_test_cslot()})`,
+        s1 === SEC.CHAIN && c.join() === "2,4,0" && slot === 1 && s2 === SEC.REVERB && p3 !== p2 && s3 === SEC.REVERB &&
+        s4 === SEC.CHORUS && ex.web_test_page_section() === SEC.CHAIN && ex.web_test_cslot() === 0);
 }
 {
   ex.web_enc(E.PRESET, 1);
@@ -218,30 +239,31 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
 }
 const name = () => cstr(ex, ex.web_test_page_name());
 const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.03); ex.web_buttons(1 << held); play(ex, 0.03); };
-{                                               // OCT- / OCT+ with a family button held: the section's pages
-  const oct0 = ex.web_test_oct(), p0 = name();
+{                                               // EDIT + OCT-/OCT+: the section shown off and on; ENV + OCT: pages
+  const oct0 = ex.web_test_oct(), p0 = name(), toast = () => cstr(ex, ex.web_test_toast());
   ex.web_buttons(1 << B.EDIT);
   play(ex, 0.05);
+  chord(B.EDIT, B.OCTDN);
+  const off = [ex.web_test_value(ID.A_ON), toast(), name()];
   chord(B.EDIT, B.OCTUP);
-  const p1 = name();
-  chord(B.EDIT, B.OCTDN);
-  const p2 = name();
-  chord(B.EDIT, B.OCTDN);
-  const p3 = name(), s3 = ex.web_test_page_section();
+  const on = [ex.web_test_value(ID.A_ON), toast(), name()];
   ex.web_buttons(0);
   play(ex, 0.4);
-  check(`EDIT held: OCT+ ${p0} -> ${p1}, OCT- -> ${p2}, OCT- round -> ${p3} (OSC A); EDIT let go: no tap (${name()}); the octave stays (${ex.web_test_oct()})`,
-        p0 === "WAVE" && p1 === "UNISON" && p2 === "WAVE" && p3 === "OUTPUT" && s3 === SEC.OSCA && name() === "OUTPUT" &&
+  check(`EDIT held: OCT- OSC A off (${off[0]}, "${off[1]}"), OCT+ on again (${on[0]}, "${on[1]}"); the page stays (${p0}, ${off[2]}, ${on[2]}); EDIT let go: no tap (${name()}); the octave stays (${ex.web_test_oct()})`,
+        p0 === "WAVE" && off[0] === 0 && off[1] === "OSC A: OFF" && on[0] === 1 && on[1] === "OSC A: ON" &&
+        off[2] === "WAVE" && on[2] === "WAVE" && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA &&
         ex.web_test_oct() === oct0);
   ex.web_buttons(1 << B.ENV);                   // ENV held past its hold time: no ENV 2 layer after a chord
   play(ex, 0.05);
   chord(B.ENV, B.OCTUP);
+  const p4 = name();
+  chord(B.ENV, B.OCTDN);
   play(ex, 0.6);
-  const layer = ex.web_test_mod(), p4 = name();
+  const layer = ex.web_test_mod(), p5 = name();
   ex.web_buttons(0);
   play(ex, 0.4);
-  check(`ENV held: OCT+ steps the section shown (OUTPUT -> ${p4}); held on, no MOD layer (${layer}); let go, no tap (${name()})`,
-        p4 === "WAVE" && layer === 0 && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA);
+  check(`ENV held: OCT+ steps the section shown (WAVE -> ${p4}), OCT- back (${p5}); held on, no MOD layer (${layer}); let go, no tap (${name()})`,
+        p4 === "UNISON" && p5 === "WAVE" && layer === 0 && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA);
   ex.web_buttons(1 << B.OCTUP); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.03);
   const o1 = ex.web_test_oct();
   ex.web_buttons(1 << B.OCTDN); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.03);
@@ -253,10 +275,10 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   const pt = (i) => [1, 2, 3].map((f) => ex.web_test_draw(0, i, f));
   tap(ex, B.LFO);
   const sec = ex.web_test_page_section(), pg = name(), items = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
-  ex.web_enc(E.SELECT, 1);
+  ex.web_enc(E.ALGO, 1);
   play(ex, 0.03);
   const SHAPE = ex.web_test_page_param(0), shape0 = ex.web_test_value(SHAPE);
-  ex.web_enc(E.SELECT, -1);
+  ex.web_enc(E.ALGO, -1);
   play(ex, 0.03);
   check(`LFO: LFO 1 ${pg} first (section ${sec}), KNOB 1-4 the point, its place, level, curve (${items}); SHAPE ${shape0}`,
         sec === SEC.LFO1 && pg === "POINTS" && items.join() === [ID.LPT, ID.LX, ID.LY, ID.LC].join() && shape0 === 0);
@@ -307,7 +329,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         ex.web_test_draw(0, 0, 0) === n2 && name() === "SHAPE");
   ex.web_enc(E.K1, 8 - ex.web_test_value(SHAPE));   // SHAPE STAIRS: 16 points, no 17th
   play(ex, 0.03);
-  ex.web_enc(E.SELECT, -1);
+  ex.web_enc(E.ALGO, -1);
   play(ex, 0.03);
   twice(B.LFO);
   check(`STAIRS shown (16 points): LFO twice adds none (SHAPE ${ex.web_test_value(SHAPE)}, drawn ${ex.web_test_draw(0, 0, 0)} points)`,
@@ -377,7 +399,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         redone[2] === 15 && name() === "POINTS" && ex.web_test_oct() === 0);
 }
 {                                               // SYNC FREE / FIXED: RATE in Hz or a note value
-  ex.web_enc(E.SELECT, 1);                      // LFO 1 SHAPE
+  ex.web_enc(E.ALGO, 1);                      // LFO 1 SHAPE
   play(ex, 0.03);
   const [SYNC, RATE] = [ex.web_test_page_param(1), ex.web_test_page_param(2)];
   const r0 = ex.web_test_value(RATE), q0 = ex.web_test_value(ID.L1_NOTE), s0 = ex.web_test_value(SYNC);
@@ -393,8 +415,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   check(`LFO 1 SHAPE: SYNC ${s0} -> FIXED (${fixed[0]}): KNOB 3 steps the note value (1/4: ${q0} -> ${fixed[1]}, RATE stays ${fixed[2]}); FREE: KNOB 3 the rate in Hz (${r0} -> ${ex.web_test_value(RATE)}), the note kept`,
         s0 === 0 && fixed[0] === 1 && q0 === 8 && fixed[1] === 10 && fixed[2] === r0 && ex.web_test_value(RATE) === r0 + 2 &&
         ex.web_test_value(ID.L1_NOTE) === 10);
-  tap(ex, B.FX);                                // the delay (FIXED 1/8D by default)
-  ex.web_enc(E.ALGO, 2 - (ex.web_test_page_section() - SEC.DRIVE));
+  goPage(ex, SEC.DELAY, "DELAY");               // the delay (FIXED 1/8D by default)
   play(ex, 0.03);
   const dsec = ex.web_test_page_section(), [DSYNC, DTIME] = [ex.web_test_page_param(1), ex.web_test_page_param(2)];
   const t0 = ex.web_test_value(DTIME), d0 = ex.web_test_value(ID.DL_NOTE), ds0 = ex.web_test_value(DSYNC);
@@ -410,9 +431,8 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         ex.web_test_value(ID.DL_NOTE) === 11);
 }
 {                                               // GLO: GLOBAL's tempo and time signature
-  tap(ex, B.GLO);
-  tap(ex, B.GLO);
-  tap(ex, B.GLO);
+  goPage(ex, SEC.VOICE, "VOICE");               // GLO from VOICE: three taps, PLAY, the MATRIX's SLOTS, GLOBAL's TEMPO
+  for (let i = 0; i < 3; i++) tap(ex, B.GLO);
   const sec = ex.web_test_page_section(), items = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
   const t = () => [0, 1, 2, 3].map((f) => ex.web_test_tempo(f));
   const a = t();
@@ -434,7 +454,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   const n16 = t()[2];
   ex.web_enc(E.K3, -9); play(ex, 0.03);
   const n1 = t()[2];
-  check(`GLO three taps: GLOBAL (section ${sec}) ${name()} (${items}): ${a[0]} BPM ${a[1]}/${a[2]}`,
+  check(`GLO, from VOICE three taps: GLOBAL (section ${sec}) ${name()} (${items}): ${a[0]} BPM ${a[1]}/${a[2]}`,
         sec === SEC.GLOBAL && name() === "TEMPO" && items.join() === [ID.BPM, ID.TSB, ID.TSN, -1].join() &&
         a[0] === 120 && a[1] === 4 && a[2] === 4 && a[3] === 12000);
   check(`.. BPM: 3 slow detents ${a[0]} -> ${b[0]}, held between 20 and 300 (${lo}, ${hi}); TS-BEAT 1-16 (${tsb}, ${tsb1}, ${tsb16}); TS-NOTE 1 2 4 8 16 (${n8[2]}, ${n16}, ${n1}); 300 BPM in eighths: ${n8[3] / 100} quarter notes a minute`,
@@ -472,26 +492,103 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
 }
 const scr = () => new Uint16Array(ex.memory.buffer, ex.web_screen(), 240 * 240).slice();
 const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >= y0 * 240 && i < y1 * 240).length;
-{                                               // FX: six effects, the EQ's pages; a knob turning lit, the curve before it kept
-  tap(ex, B.FX);                                // (FX shows the effect it showed last: DRIVE first)
-  ex.web_enc(E.ALGO, SEC.DRIVE - ex.web_test_page_section());
-  play(ex, 0.03);
-  const secs = [];
-  for (let i = 0; i < 6; i++) { secs.push(ex.web_test_page_section()); ex.web_enc(E.ALGO, 1); play(ex, 0.03); }
-  const round = ex.web_test_page_section();
-  ex.web_enc(E.ALGO, -1);
+{                                               // the FX chain: add, take out, move, the limits, bypass, MIX, undo
+  const c = await boot(), ct = () => cstr(c, c.web_test_toast()), ch = () => [0, 1, 2, 3, 4, 5, 6, 7].map((k) => c.web_test_chain(k));
+  const ctap = (b) => { c.web_buttons(1 << b); play(c, 0.03); c.web_buttons(0); play(c, 0.35); };
+  const fxoct = (b) => {                        // FX + OCT- / OCT+, FX let go after (no tap)
+    c.web_buttons(1 << B.FX); play(c, 0.05);
+    c.web_buttons((1 << B.FX) | (1 << b)); play(c, 0.03);
+    c.web_buttons(1 << B.FX); play(c, 0.03);
+    c.web_buttons(0); play(c, 0.4);
+  };
+  const pick = (k) => { c.web_enc(E.K2, k - c.web_test_cslot()); play(c, 0.05); };
+  const type = (t) => { c.web_enc(E.K1, t - c.web_test_ctype()); play(c, 0.05); };
+  play(c, 0.2);
+  ctap(B.FX);                                   // (SUPERSAW: CHORUS, REVERB)
+  type(7);                                      // KNOB 1: PHASER
+  pick(0);                                      // KNOB 2: slot 1, CHORUS
+  fxoct(B.OCTUP);
+  const add = [ch().slice(0, 4).join(), ct(), c.web_test_cslot(), c.web_test_value(ID.PH_ON), c.web_test_page_section()];
+  check(`chain: KNOB 1 a type (PHASER), FX + OCT+ adds it below the slot picked (${add[0]}, "${add[1]}", slot ${add[2] + 1}, its ON ${add[3]}); the view stays (${add[4]}); no tap after (FX let go)`,
+        add[0] === "2,13,4,0" && add[1] === "ADDED: PHASER · 2 OF 8" && add[2] === 1 && add[3] === 1 && add[4] === SEC.CHAIN);
+  fxoct(B.OCTUP);                               // a second: PHASER 2, below the first; a third: refused
+  const two = ch()[2];
+  fxoct(B.OCTUP);
+  const lim = [ct(), ch().slice(0, 5).join()];
+  type(2);                                      // DELAY: one; a second refused
+  fxoct(B.OCTUP);
+  fxoct(B.OCTUP);
+  const one = [ct(), ch().filter((v) => v === 3).length];
+  check(`.. a second PHASER (PHASER 2: ${two}); a third refused ("${lim[0]}", ${lim[1]}); DELAY once, a second refused ("${one[0]}", ${one[1]} in it)`,
+        two === 14 && lim[0] === "PHASER: TWO AT MOST" && lim[1] === "2,13,14,4,0" && one[0] === "DELAY: ONE AT MOST" && one[1] === 1);
+  pick(2);                                      // KNOB 3: PHASER 2 moved one up, then past the top
+  c.web_enc(E.K3, -1);
+  play(c, 0.05);
+  const mv = [ch().slice(0, 5).join(), c.web_test_cslot()];
+  c.web_enc(E.K3, -3);
+  play(c, 0.05);
+  c.web_enc(E.K3, -1);
+  play(c, 0.05);
+  const top = [ch().slice(0, 5).join(), ct()];
+  check(`.. KNOB 3 moves the module picked (PHASER 2 up: ${mv[0]}, picked ${mv[1] + 1}); to the top and no further (${top[0]}, "${top[1]}")`,
+        mv[0] === "2,14,13,3,4" && mv[1] === 1 && top[0] === "14,2,13,3,4" && top[1] === "FIRST IN THE CHAIN");
+  fxoct(B.OCTDN);                               // FX + OCT-: the module picked out
+  const out = [ch().slice(0, 5).join(), ct()];
+  check(`.. FX + OCT- takes the module picked out (${out[0]}, "${out[1]}")`, out[0] === "2,13,3,4,0" && out[1] === "TAKEN OUT: PHASER 2");
+  for (const t of [0, 4, 5, 6]) { type(t); pick(c.web_test_chain(7) ? 7 : 8); fxoct(B.OCTUP); }   // DRIVE, OTT, EQ, FLANGER
+  const full = [ch().filter((v) => v).length, ct()];
+  type(9);
+  fxoct(B.OCTUP);
+  check(`.. eight modules (${full[0]}, "${full[1]}"): a ninth refused ("${ct()}")`, full[0] === 8 && ct() === "THE CHAIN IS FULL: 8 MODULES");
+  pick(0);                                      // KNOB 4: the slot picked's MIX (CHORUS's)
+  const m0 = c.web_test_value(ID.CH_MIX);
+  for (let i = 0; i < 3; i++) { c.web_enc(E.K4, 1); play(c, 0.12); }
+  const m1 = c.web_test_value(ID.CH_MIX);
+  c.web_buttons(1 << B.FX);                     // FX held: F3 bypasses module 1 (CHORUS), F3 again takes it back
+  play(c, 0.6);
+  c.web_keys(1 << 0); play(c, 0.05); c.web_keys(0); play(c, 0.05);
+  const byp = [c.web_test_value(ID.CH_ON), ct(), (c.web_lit_keys() >> 0) & 1, (c.web_dim_keys() >> 0) & 1, c.web_test_voices()];
+  c.web_keys(1 << 0); play(c, 0.05); c.web_keys(0); play(c, 0.05);
+  const back = [c.web_test_value(ID.CH_ON), ct()];
+  c.web_buttons(0);
+  play(c, 0.3);
+  check(`.. KNOB 4 the slot picked's MIX (CHORUS ${m0} -> ${m1}); FX held: F3 bypasses module 1 (ON ${byp[0]}, "${byp[1]}", its LED glowing ${byp[3]}, lit ${byp[2]}, no note ${byp[4]}), F3 again: back (${back[0]}, "${back[1]}")`,
+        m1 === m0 + 3 && byp[0] === 0 && byp[1] === "CHORUS BYPASSED" && byp[2] === 0 && byp[3] === 1 && byp[4] === 0 &&
+        back[0] === 1 && back[1] === "CHORUS IN");
+  const before = ch().join();                   // SAVE + OCT-: undo, a step at a time (the bypass twice, then the MIX)
+  c.web_buttons(1 << B.SAVE);
+  play(c, 0.05);
+  for (let i = 0; i < 4; i++) { c.web_buttons((1 << B.SAVE) | (1 << B.OCTDN)); play(c, 0.03); c.web_buttons(1 << B.SAVE); play(c, 0.03); }
+  c.web_buttons(0);
+  play(c, 0.4);
+  check(`.. SAVE + OCT- undoes the chain's edits (${before} -> ${ch().join()})`, ch().join() !== before && ch().filter((v) => v).length === 7);
+  type(5);                                      // a second EQ (its pages: its own values)
+  pick(c.web_test_chain(7) ? 7 : ch().filter((v) => v).length);
+  fxoct(B.OCTUP);
+  const at = c.web_test_cslot();
+  fxTwice(c);
+  const eq2 = [c.web_test_page_section(), cstr(c, c.web_test_page_name()), ...[0, 1, 2, 3].map((k) => c.web_test_page_param(k))];
+  c.web_enc(E.K1, 1);                           // POINTS: MID picked, KNOB 3 its gain: EQ 2's
+  play(c, 0.12);
+  for (let i = 0; i < 3; i++) { c.web_enc(E.K3, 1); play(c, 0.12); }
+  check(`.. a second EQ (slot ${at + 1}), FX twice: its pages (section ${eq2[0]}, ${eq2[1]}: ${eq2.slice(2)}); KNOB 3 on MID: EQ 2's gain (${c.web_test_value(ID.EQ2_MID)}), the first's kept (${c.web_test_value(ID.EQ_MID)})`,
+        eq2[0] === SEC.EQ2 && eq2[1] === "POINTS" && eq2.slice(2).join() === [ID.EQPT, ID.EQF, ID.EQG, ID.EQQ].join() &&
+        c.web_test_value(ID.EQ2_MID) === 3 && c.web_test_value(ID.EQ_MID) === 0);
+}
+{                                               // an EQ module's pages; a knob turning lit, the curve before it kept
+  ex.web_test_set(ID.FXC1 + 2, 6);              // (EQ the chain's third: CHORUS, REVERB, EQ)
+  goPage(ex, SEC.EQ, "POINTS");
   play(ex, 0.03);
   const pg = () => [name(), ...[0, 1, 2, 3].map((k) => ex.web_test_page_param(k))];
   const eq1 = pg();
-  ex.web_enc(E.SELECT, 1);
+  ex.web_enc(E.ALGO, 1);
   play(ex, 0.03);
   const eq2 = pg();
-  ex.web_enc(E.SELECT, -1);
+  ex.web_enc(E.ALGO, -1);
   play(ex, 0.03);
-  check(`FX: ALGORITHM through six effects (${secs}), round (${round}); the EQ's pages ${eq1[0]} (${eq1.slice(1)}), ${eq2[0]} (${eq2.slice(1)})`,
-        secs.join() === [12, 13, 14, 15, 16, 17].join() && round === SEC.DRIVE && eq1[0] === "POINTS" &&
-        eq1.slice(1).join() === [ID.EQPT, ID.EQF, ID.EQG, ID.EQQ].join() && eq2[0] === "GAINS" &&
-        eq2.slice(1).join() === [ID.EQ_LOW, ID.EQ_MID, ID.EQ_HIGH, ID.EQ_ON].join());
+  check(`EQ: its pages ${eq1[0]} (${eq1.slice(1)}), ${eq2[0]} (${eq2.slice(1)}; no ON: the FX-held keys bypass it)`,
+        eq1[0] === "POINTS" && eq1.slice(1).join() === [ID.EQPT, ID.EQF, ID.EQG, ID.EQQ].join() && eq2[0] === "GAINS" &&
+        eq2.slice(1).join() === [ID.EQ_LOW, ID.EQ_MID, ID.EQ_HIGH, -1].join());
   ex.web_enc(E.K1, 1);                          // POINTS: MID picked, its GAIN (KNOB 3) turned
   play(ex, 0.12);
   const before = scr();
@@ -523,36 +620,18 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 0.1);
   check(`.. the MOD layer on POINTS: KNOB 3 sets LFO 1's depth on MID's GAIN (slot ${sl + 1}: ${sl >= 0 ? ex.web_test_slot(sl, 2) : "-"})`,
         sl >= 0 && ex.web_test_slot(sl, 2) === 10);
-  for (const [id, v] of [[ID.EQ_MID, 0], [ID.EQ_Q, 400], [ID.EQ_LQ, 300], [106 + 3 * sl, 0], [107 + 3 * sl, 0], [108 + 3 * sl, 0]])
+  for (const [id, v] of [[ID.EQ_MID, 0], [ID.EQ_Q, 400], [ID.EQ_LQ, 300], [106 + 3 * sl, 0], [107 + 3 * sl, 0], [108 + 3 * sl, 0], [ID.FXC1 + 2, 0]])
     ex.web_test_set(id, v);
-  ex.web_enc(E.ALGO, SEC.DRIVE - ex.web_test_page_section());   // FX held + ALGORITHM: DRIVE along the rack
-  play(ex, 0.03);
-  const p0 = ex.web_test_page();
-  ex.web_buttons(1 << B.FX);
-  play(ex, 0.05);
-  ex.web_enc(E.ALGO, 1);
-  play(ex, 0.05);
-  const moved = ex.web_test_value(ID.FX_ORDER), toast = cstr(ex, ex.web_test_toast());
-  ex.web_buttons(0);
-  play(ex, 0.4);
-  const stay = ex.web_test_page();
-  ex.web_enc(E.ALGO, 1);
-  play(ex, 0.03);
-  const next = ex.web_test_page_section();
-  ex.web_enc(E.ALGO, -2);
-  play(ex, 0.03);
-  const first = ex.web_test_page_section();
-  check(`FX held + ALGORITHM on DRIVE: DRIVE second (FX ORDER ${moved}, "${toast}"); FX let go, no page step; ALGORITHM after DRIVE: DELAY (${next}); two back, CHORUS first (${first})`,
-        moved === 120 && toast === "DRIVE: 2 OF 6" && stay === p0 && next === SEC.DELAY && first === SEC.CHORUS);
-  ex.web_test_set(ID.FX_ORDER, 0);
   play(ex, 0.1);
   tap(ex, B.EDIT);
 }
-{                                               // SEQ: the matrix, a slot at a time (a fresh unit)
+{                                               // GLO's MATRIX, a slot at a time (a fresh unit); SEQ: a word
   const m = await boot(), mscr = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
   const mtap = (b) => { m.web_buttons(1 << b); play(m, 0.03); m.web_buttons(0); play(m, 0.35); };
   play(m, 0.2);
   mtap(B.SEQ);
+  const seq = [cstr(m, m.web_test_toast()), m.web_test_page_section()];
+  for (let i = 0; i < 3; i++) mtap(B.GLO);      // (VOICE, PLAY, then the MATRIX's SLOTS)
   const sec = m.web_test_page_section(), pg = cstr(m, m.web_test_page_name()), first = m.web_test_page_virt(1);
   m.web_enc(E.K1, -1);                          // KNOB 1: the slot before slot 1, round: slot 8
   play(m, 0.12);
@@ -565,8 +644,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   for (let i = 0; i < 6; i++) { m.web_enc(E.K4, 1); play(m, 0.004); }   // KNOB 4: how much, quickly
   play(m, 0.1);
   const b = mscr(), src = m.web_test_value(SRC8), dst = m.web_test_value(DST8), amt = m.web_test_value(AMT8);
-  check(`SEQ: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b, 22, 136)} pixels`,
-        sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
+  check(`SEQ: "${seq[0]}" (the page stays: ${seq[1]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b, 22, 136)} pixels`,
+        seq[0] === "SEQUENCER: IN A LATER VERSION" && seq[1] === SEC.OSCA && sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
         s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b, 22, 136) > 300);
 }
 {                                               // SCL: the keys' scale, its root, how they fit it, their velocity
@@ -592,7 +671,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(u, 0.12);
   const snap = ukey(3), own = ukey(1);          // G#3: off D major, down to G3; F#3: on it, as it is
   check(`SCL: its page (section ${u.web_test_page_section()}, ${pg}), SCL lit (${sclLit}); MAJOR, D, SNAP (${u.web_test_scl(0)}, ${u.web_test_scl(1)}, ${u.web_test_scl(2)}): G#3 plays ${plain[0]} before, ${snap[0]} now; F#3 ${own[0]}`,
-        sec === 22 && pg === "SCALE" && sclLit === 1 && u.web_test_scl(0) === 1 && u.web_test_scl(1) === 2 && u.web_test_scl(2) === 1 &&
+        sec === SEC.KEYS && pg === "SCALE" && sclLit === 1 && u.web_test_scl(0) === 1 && u.web_test_scl(1) === 2 && u.web_test_scl(2) === 1 &&
         plain[0] === 56 && snap[0] === 55 && own[0] === 54);
   u.web_enc(E.K3, 1);                           // WHITE: the white keys walk the scale from the root at C4
   play(u, 0.12);
@@ -616,7 +695,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(u, 0.3);
   check(`.. KNOB 4: the keys' velocity ${u.web_test_scl(3)} (a key's: ${vel}); SCL held ("${word}") + A3: the root ${rt[0]} ("${rt[1]}"), no note (${quiet} voices); the page stays (${u.web_test_page_section()})`,
         u.web_test_scl(3) === 127 && vel === 127 && word === "SCL HELD: A KEY IS THE ROOT" && rt[0] === 9 &&
-        rt[1] === "ROOT A" && quiet === 0 && u.web_test_page_section() === 22);
+        rt[1] === "ROOT A" && quiet === 0 && u.web_test_page_section() === SEC.KEYS);
   u.web_enc(E.K3, -2);                          // FIT OFF: A major on the keys' LEDs
   play(u, 0.2);
   const mid = u.web_mid_keys(), dim = u.web_dim_keys(), bit = (m, k) => (m >>> k) & 1;
@@ -654,18 +733,24 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`GLO held: PERFORM (layer ${perf[0]}, GLO breathing ${perf[1]}); KNOB 1 bends (${under[0]} / 1000), KNOB 2 the mod wheel (${under[1]}), the note playing on (${under[2]}); let go: the bend back (${h.web_test_bend()}), the wheel kept (${h.web_test_wheel()}), the layer shut (${h.web_test_lay()})`,
         perf[0] === 1 && perf[1] === 1 && under[0] === 500 && under[1] === 5 && under[2] === 1 && h.web_test_bend() === 0 &&
         h.web_test_wheel() === 5 && h.web_test_lay() === 0);
-  const MAC1 = pid(h, SEC.MACRO, "HOME", 0), DLON = pid(h, SEC.DELAY, "TONE", 3);
-  hold(B.FX);                                   // FX: MACROS; KNOB 1 MACRO 1; A3 turns DELAY on or off
-  const mac = h.web_test_lay(), m0 = h.web_test_value(MAC1), dl = h.web_test_value(DLON);
+  const MAC1 = pid(h, SEC.MACRO, "HOME", 0);
+  hold(B.FX);                                   // FX: MACROS; KNOB 1 MACRO 1; G3 bypasses module 2 (REVERB), A3 none
+  const mac = h.web_test_lay(), m0 = h.web_test_value(MAC1), rv = h.web_test_value(149);
   for (let i = 0; i < 4; i++) { h.web_enc(E.K1, 1); play(h, 0.13); }
+  h.web_keys(1 << 2);
+  play(h, 0.05);
+  const fx = [h.web_test_value(MAC1), h.web_test_value(149), ht(), h.web_test_voices(), (h.web_dim_keys() >> 2) & 1];
+  h.web_keys(0);
+  play(h, 0.05);
   h.web_keys(1 << 4);
   play(h, 0.05);
-  const fx = [h.web_test_value(MAC1), h.web_test_value(DLON), ht(), h.web_test_voices(), (h.web_lit_keys() >> 4) & 1];
+  const none = ht();
   h.web_keys(0);
   letGo();
-  check(`FX held: MACROS (layer ${mac}); KNOB 1 MACRO 1 (${m0} -> ${fx[0]}); A3 DELAY ${dl} -> ${fx[1]} ("${fx[2]}", no note: ${fx[3]} voices, its LED ${fx[4]}); let go (${h.web_test_lay()})`,
-        mac === 2 && fx[0] > m0 && fx[1] === 1 - dl && fx[2] === (dl ? "DELAY OFF" : "DELAY ON") && fx[3] === 0 &&
-        fx[4] === fx[1] && h.web_test_lay() === 0);
+  check(`FX held: MACROS (layer ${mac}); KNOB 1 MACRO 1 (${m0} -> ${fx[0]}); G3 bypasses REVERB (${rv} -> ${fx[1]}, "${fx[2]}", no note: ${fx[3]} voices, its LED glowing ${fx[4]}); A3: "${none}"; let go (${h.web_test_lay()})`,
+        mac === 2 && fx[0] > m0 && rv === 1 && fx[1] === 0 && fx[2] === "REVERB BYPASSED" && fx[3] === 0 && fx[4] === 1 &&
+        none === "NO MODULE THERE YET" && h.web_test_lay() === 0);
+  h.web_test_set(149, 1);
   tap(h, B.EDIT);                               // LFO on one of OSC A's pages: MOMENTARY
   const K1 = h.web_test_page_virt(0), p0 = h.web_test_value(K1), pg = hn();
   hold(B.LFO);
@@ -693,7 +778,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const bpm2 = h.web_test_tempo(0);
   letGo();
   check(`EDIT held: JUMP (layer ${jmp[0]}; C#4 glowing ${jmp[1]}, F3 lit: OSC A shown ${jmp[2]}); C#4: section ${s1} (KEYS), A#3: ${s2} (GLOBAL); KNOB 1 under it: BPM ${bpm} -> ${bpm2}; let go: on GLOBAL (${h.web_test_page_section()})`,
-        jmp[0] === 4 && jmp[1] === 1 && jmp[2] === 1 && s1 === 22 && s2 === SEC.GLOBAL && bpm2 === bpm &&
+        jmp[0] === 4 && jmp[1] === 1 && jmp[2] === 1 && s1 === SEC.KEYS && s2 === SEC.GLOBAL && bpm2 === bpm &&
         h.web_test_page_section() === SEC.GLOBAL && h.web_test_lay() === 0);
 }
 {                                               // PLAY: the transport (the FREE LFOs from the beat), its LEDs; ARP
@@ -729,13 +814,13 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   g.web_enc(E.K3, 1);                           // SCREEN: KNOB 3 the LEDs' glow, low
   play(g, 0.13);
   const glow = [g.web_test_set_get(1, -1), g.web_dim_level()];
-  g.web_enc(E.SELECT, 1);                       // PANEL: KNOB 2 the hold time, 500 ms
+  g.web_enc(E.ALGO, 1);                       // PANEL: KNOB 2 the hold time, 500 ms
   play(g, 0.1);
   pages.push(gn());
   g.web_enc(E.K2, 1);
   play(g, 0.13);
   const hold = g.web_test_set_get(2, -1);
-  g.web_enc(E.SELECT, 1);                       // MIDI: KNOB 1 the channel (2), KNOB 4 PROGRAM on
+  g.web_enc(E.ALGO, 1);                       // MIDI: KNOB 1 the channel (2), KNOB 4 PROGRAM on
   play(g, 0.1);
   pages.push(gn());
   g.web_enc(E.K1, 2);
@@ -795,12 +880,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(g2, 0.3);
   const back = [0, 1, 2, 3, 4].map((f) => g2.web_test_set_get(f, -1));
   check(`HELP: entering the effects, the footer's hint ("${hint}"); after a power cycle: HELP ${back[0]}, GLOW ${back[1]}, HOLD ${back[2]}, the channel ${back[3]}, PROGRAM ${back[4]}, CC 20 learned (${g2.web_test_learned(20)})`,
-        hint === "FX HELD: MACROS \u00b7 + ALGO: MOVE" && back.join() === "0,1,2,2,1" && g2.web_test_learned(20) === K1);
+        hint === "FX+OCT+ ADDS \u00b7 FX TWICE OPENS" && back.join() === "0,1,2,2,1" && g2.web_test_learned(20) === K1);
   g.web_buttons(1 << B.HOME);                   // CLEAR: turned once, a word; again within 2 s, every learned CC
   play(g, 5.2);
   g.web_buttons(0);
   play(g, 0.1);
-  g.web_enc(E.SELECT, 2);
+  g.web_enc(E.ALGO, 2);
   play(g, 0.1);
   g.web_enc(E.K3, 1);
   play(g, 0.13);
@@ -812,9 +897,11 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         g.web_test_set_get(6, -1) === 0);
 }
 {                                               // the chorus's taps: still in silence, moving with a note
-  tap(ex, B.FX);
-  ex.web_enc(E.ALGO, SEC.CHORUS - ex.web_test_page_section());
-  ex.web_test_set(135, 1);                      // CHORUS ON
+  const was = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => ex.web_test_chain(k)), won = ex.web_test_value(ID.CH_ON);
+  ex.web_test_set(ID.FXC1, 2);                  // (the chorus in the chain, alone, on; its page)
+  ex.web_test_set(ID.FXC1 + 1, 0);
+  ex.web_test_set(ID.CH_ON, 1);
+  goPage(ex, SEC.CHORUS, "CHORUS");
   play(ex, 1.6);
   const d0 = ex.web_screen_draws();
   play(ex, 1.0);
@@ -828,7 +915,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 1.0);
   check(`CHORUS on: in silence its taps still (${still} blits in 1 s); a note: moving (${moving} in 0.5 s); after it, still again (${ex.web_screen_draws() - d1})`,
         still === 0 && moving >= 4 && ex.web_screen_draws() - d1 === 0);
-  ex.web_test_set(135, 0);
+  was.forEach((v, k) => ex.web_test_set(ID.FXC1 + k, v));   // (the chain as it was)
+  ex.web_test_set(ID.CH_ON, won);
   tap(ex, B.EDIT);
 }
 {                                               // HOME: the sound and its output, live
@@ -964,6 +1052,39 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`.. in the browser: SAVE held + OCT- undoes a load ("${ld}" -> "${und[1]}" of USER ${und[3] + 1} again, "${und[0]}", section ${und[2]}); SAVE twice: back (section ${back1}); HOME: back (${ex.web_test_page_section()})`,
         ld === `${name0} v2` && und[0] === "UNDO" && und[1] === "WARM PAD" && und[3] === 1 && und[2] === SEC.BROWSE &&
         back1 === SEC.OSCA && ex.web_test_page_section() === SEC.OSCA);
+  btn(B.SAVE);                                  // the browser: OCT- held 3 s deletes the user preset playing
+  btn(B.SAVE);
+  play(ex, 0.4);
+  ex.web_enc(E.K2, -1);                         // (USER 1)
+  play(ex, 0.3);
+  const del0 = [name(), ex.web_test_user_slot(), slotName(0), ex.web_test_oct()];
+  ex.web_buttons(1 << B.OCTDN);
+  play(ex, 1.5);
+  const dcd = toast();
+  ex.web_buttons(0);
+  play(ex, 0.3);
+  const kept = [slotName(0), ex.web_test_oct(), toast()];
+  ex.web_buttons(1 << B.OCTDN);
+  play(ex, 3.3);
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  const del1 = [toast(), slotName(0), ex.web_test_user_slot(), name(), ex.web_test_oct()];
+  check(`the browser: OCT- held, a countdown ("${dcd}"); let go at 1.5 s, nothing deleted ("${kept[0]}"), no octave (${kept[1]}); held 3 s: USER 1 deleted ("${del1[0]}", "${del1[1]}"), the sound plays on ("${del1[3]}", from no slot: ${del1[2]})`,
+        del0[1] === 0 && dcd === "HOLD: DELETE USER 1 IN 2" && kept[0] === del0[2] && kept[1] === del0[3] && kept[2] === "" &&
+        del1[0] === "DELETED USER 1 · SAVE+OCT- UNDO" && del1[1] === "" && del1[2] === -1 && del1[3] === del0[0] &&
+        del1[4] === del0[3]);
+  hold(0.7);                                    // SAVE + OCT- straight after: put back
+  chord(B.SAVE, B.OCTDN);
+  ex.web_buttons(0);
+  play(ex, 0.5);
+  const put = [toast(), slotName(0)];
+  btn(B.OCTDN);                                 // OCT-'s tap there: the octave, at its release
+  const oc = ex.web_test_oct();
+  btn(B.OCTUP);
+  check(`.. SAVE + OCT- straight after: back ("${put[0]}", USER 1 "${put[1]}"); OCT- tapped in the browser: the octave (${del0[3]} -> ${oc} -> ${ex.web_test_oct()})`,
+        put[0] === "BACK IN USER 1" && put[1] === del0[2] && oc === del0[3] - 1 && ex.web_test_oct() === del0[3]);
+  btn(B.HOME);
+  play(ex, 0.1);
   ex.web_enc(E.PRESET, 1);                      // PRESETS: from the last user preset round to the first starter
   play(ex, 0.4);
   const st = [name(), ex.web_test_user_slot()];
@@ -995,7 +1116,10 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
 {                                               // every page: in silence nothing drawn; a note held, the pixels sent
   const z = await boot(), n = z.web_test_go(0), SPI = 12e6 / 8 / 2;   // (the FM-1's SPI1: 12 MHz, 2 bytes a pixel)
   const SECN = ["OSC A", "OSC B", "SUB", "NOISE", "FILTER", "ENV 1", "ENV 2", "LFO 1", "LFO 2", "VOICE", "HOME",
-                "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "MENU", "GLOBAL", "SAVE", "BROWSE"];
+                "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "DRIVE 2", "CHORUS 2", "OTT 2", "EQ 2",
+                "FLANGER", "FLANGER 2", "PHASER", "PHASER 2", "FX FILTER", "FX FILTER 2", "BITCRUSH", "BITCRUSH 2",
+                "TREMOLO", "TREMOLO 2", "RING MOD", "RING MOD 2", "TAPE", "TAPE 2", "CHAIN", "MENU", "GLOBAL", "SAVE",
+                "BROWSE", "KEYS"];
   const here = () => `${SECN[z.web_test_page_section()]} ${cstr(z, z.web_test_page_name())}`;
   const hush = () => { for (let k = 0; k < 40 && play(z, 0.25).peak > 1e-5; k++); play(z, 0.3); };
   const idleDraws = () => { play(z, 1.2); const d0 = z.web_screen_draws(); play(z, 1.0); return z.web_screen_draws() - d0; };
@@ -1006,11 +1130,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     }
     return -1;
   };
-  const CH_ON = param(SEC.CHORUS, "MORE", 1), OT_ON = param(SEC.OTT, "BANDS", 3);
   param(SEC.MATRIX, "SLOTS", 0);
   const M1 = z.web_test_page_virt(1);           // (slot 1 picked: its SOURCE)
-  z.web_test_set(CH_ON, 1);                     // (every live graph live: the chorus and OTT on, LFO 1 on the EQ's MID)
-  z.web_test_set(OT_ON, 1);
+  for (const [k, i] of [[0, 2], [1, 5], [2, 6], [3, 0]])   // (every live graph live: CHORUS, OTT and EQ the chain,
+    z.web_test_set(ID.FXC1 + k, i);             // in; LFO 1 on the EQ's MID)
+  z.web_test_set(ID.CH_ON, 1);
+  z.web_test_set(ID.OT_ON, 1);
   z.web_test_set(ID.EQ_ON, 1);
   z.web_test_set(M1, SRC.LFO1);
   z.web_test_set(M1 + 1, ID.EQ_MID);

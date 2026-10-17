@@ -8,8 +8,12 @@
  * jump never steps the audio. Lists, counts and switches are read as stored, at a block start. The matrix adds
  * its offsets to the normalised value (an amount of 100 % moves a destination across its whole range). */
 
+/* the sections: SEC_DRIVE .. SEC_TAPE2 are the effects' modules, one a section, in the order of their instance
+ * numbers (FXI_*: SEC_DRIVE + FXI); SEC_CHAIN holds the chain's slots (FX CHAIN, sy_ui.c's chain view) */
 enum { SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, SEC_ENV1, SEC_ENV2, SEC_LFO1, SEC_LFO2, SEC_VOICE,
-       SEC_MACRO, SEC_MATRIX, SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, SEC_COUNT };
+       SEC_MACRO, SEC_MATRIX, SEC_DRIVE, SEC_CHORUS, SEC_DELAY, SEC_REVERB, SEC_OTT, SEC_EQ, SEC_DRIVE2, SEC_CHORUS2,
+       SEC_OTT2, SEC_EQ2, SEC_FLANGER, SEC_FLANGER2, SEC_PHASER, SEC_PHASER2, SEC_FFILT, SEC_FFILT2, SEC_CRUSH,
+       SEC_CRUSH2, SEC_TREM, SEC_TREM2, SEC_RING, SEC_RING2, SEC_TAPE, SEC_TAPE2, SEC_CHAIN, SEC_COUNT };
 
 enum {                           /* units: the display and the DSP's reading of a value */
     U_INT,                       /* an integer as it is */
@@ -36,6 +40,7 @@ enum {                           /* units: the display and the DSP's reading of 
 #define F_VOICE 2u               /* per voice (else global: effects, macros, the patch volume) */
 #define F_SMOOTH 4u              /* continuous: smoothed a block (else read as stored) */
 #define F_TABLE 8u               /* a change rebuilds a wavetable (main loop) */
+#define F_OLD 16u                /* no longer used (FX ORDER: the chain took its place; EQ 2's gap), kept for the ids */
 #define FMV (F_MOD | F_VOICE | F_SMOOTH)
 #define FMG (F_MOD | F_SMOOTH)
 
@@ -88,6 +93,107 @@ enum {                           /* units: the display and the DSP's reading of 
     X(M##N##_SRC, "SOURCE", SEC_MATRIX, 0, SRC_COUNT - 1, 0, U_SRC, 0, 0)                                 \
     X(M##N##_DST, "DEST", SEC_MATRIX, 0, 511, 0, U_DST, 0, 0)                                             \
     X(M##N##_AMT, "AMOUNT", SEC_MATRIX, -1000, 1000, 0, U_BIPCT, 0, 0)
+
+/* the effects chain (FX): eight slots, each an effect module's instance number + 1 (FXI_*; 0: none, the slots after
+ * the first 0 unused) */
+#define SP_CHAIN(X)                                                                                       \
+    X(FXC1, "CHAIN 1", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) X(FXC2, "CHAIN 2", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) \
+    X(FXC3, "CHAIN 3", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) X(FXC4, "CHAIN 4", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) \
+    X(FXC5, "CHAIN 5", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) X(FXC6, "CHAIN 6", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) \
+    X(FXC7, "CHAIN 7", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0) X(FXC8, "CHAIN 8", SEC_CHAIN, 0, 24, 0, U_INT, 0, 0)
+
+/* the second DRIVE, CHORUS, OTT and EQ: the first's rows in the first's order (an instance is the first's ids moved
+ * by its offset, FXI_OFF), the first's CCs left out; EQ 2 keeps a gap where the first has FX ORDER */
+#define SP_DRV(X, P, S)                                                                                   \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_TYPE, "TYPE", S, 0, 3, 0, U_LIST, 0, 0)                                                         \
+    X(P##_AMT, "DRIVE", S, 0, 1000, 300, U_PCT, FMG, 0)                                                   \
+    X(P##_TONE, "TONE", S, -1000, 1000, 0, U_BIPCT, FMG, 0)                                               \
+    X(P##_MIX, "MIX", S, 0, 1000, 1000, U_PCT, FMG, 0)
+#define SP_CHO(X, P, S)                                                                                   \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_RATE, "RATE", S, 0, 1000, 472, U_LFOHZ, FMG, 0)                                                 \
+    X(P##_DEPTH, "DEPTH", S, 0, 1000, 500, U_PCT, FMG, 0)                                                 \
+    X(P##_DELAY, "DELAY", S, 0, 1000, 400, U_PCT, FMG, 0)                                                 \
+    X(P##_FDBK, "FEEDBACK", S, 0, 1000, 0, U_PCT, FMG, 0)                                                 \
+    X(P##_MIX, "MIX", S, 0, 1000, 500, U_PCT, FMG, 0)
+#define SP_OTTX(X, P, S)                                                                                  \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_DEPTH, "DEPTH", S, 0, 1000, 1000, U_PCT, FMG, 0)                                                \
+    X(P##_TIME, "TIME", S, 0, 1000, 500, U_PCT, FMG, 0)                                                   \
+    X(P##_UP, "UPWARD", S, 0, 1000, 1000, U_PCT, FMG, 0)                                                  \
+    X(P##_DOWN, "DOWNWARD", S, 0, 1000, 1000, U_PCT, FMG, 0)                                              \
+    X(P##_LOW, "LOW", S, -240, 240, 0, U_DBX, FMG, 0)                                                     \
+    X(P##_MID, "MID", S, -240, 240, 0, U_DBX, FMG, 0)                                                     \
+    X(P##_HIGH, "HIGH", S, -240, 240, 0, U_DBX, FMG, 0)
+#define SP_EQX(X, P, S)                                                                                   \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_LOW, "LOW", S, -180, 180, 0, U_DBX, FMG, 0)                                                     \
+    X(P##_MID, "MID", S, -180, 180, 0, U_DBX, FMG, 0)                                                     \
+    X(P##_HIGH, "HIGH", S, -180, 180, 0, U_DBX, FMG, 0)                                                   \
+    X(P##_LFREQ, "LO FREQ", S, 0, 1000, 292, U_HZ, FMG, 0)                                                \
+    X(P##_MFREQ, "MID FREQ", S, 0, 1000, 567, U_HZ, FMG, 0)                                               \
+    X(P##_Q, "MID Q", S, 0, 1000, 400, U_Q, FMG, 0)                                                       \
+    X(P##_HFREQ, "HI FREQ", S, 0, 1000, 767, U_HZ, FMG, 0)                                                \
+    X(P##_GAP, "-", S, 0, 1, 0, U_INT, F_OLD, 0)                                                          \
+    X(P##_LQ, "LO Q", S, 0, 1000, 300, U_Q, FMG, 0)                                                       \
+    X(P##_HQ, "HI Q", S, 0, 1000, 300, U_Q, FMG, 0)
+
+/* the effects added with the chain, two instances each (the second right after the first: FXI_OFF) */
+#define SP_FLG(X, P, S)                                    /* FLANGER: one swept tap a side, feedback either way */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_RATE, "RATE", S, 0, 1000, 350, U_LFOHZ, FMG, 0)                                                 \
+    X(P##_SYNC, "SYNC", S, 0, 1, 0, U_LIST, 0, 0)                                                         \
+    X(P##_NOTE, "NOTE", S, 0, 16, 3, U_SYNC, 0, 0)                                                        \
+    X(P##_DEPTH, "DEPTH", S, 0, 1000, 700, U_PCT, FMG, 0)                                                 \
+    X(P##_DELAY, "DELAY", S, 0, 1000, 300, U_PCT, FMG, 0)                                                 \
+    X(P##_FDBK, "FEEDBACK", S, -1000, 1000, 500, U_BIPCT, FMG, 0)                                         \
+    X(P##_SPREAD, "SPREAD", S, 0, 1000, 500, U_PCT, FMG, 0)                                               \
+    X(P##_MIX, "MIX", S, 0, 1000, 500, U_PCT, FMG, 0)
+#define SP_PHS(X, P, S)                                    /* PHASER: all-pass stages swept around CENTER */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_RATE, "RATE", S, 0, 1000, 350, U_LFOHZ, FMG, 0)                                                 \
+    X(P##_SYNC, "SYNC", S, 0, 1, 0, U_LIST, 0, 0)                                                         \
+    X(P##_NOTE, "NOTE", S, 0, 16, 3, U_SYNC, 0, 0)                                                        \
+    X(P##_DEPTH, "DEPTH", S, 0, 1000, 700, U_PCT, FMG, 0)                                                 \
+    X(P##_CENTER, "CENTER", S, 0, 1000, 500, U_HZ, FMG, 0)                                                \
+    X(P##_FDBK, "FEEDBACK", S, -1000, 1000, 300, U_BIPCT, FMG, 0)                                         \
+    X(P##_STAGES, "STAGES", S, 0, 5, 2, U_LIST, 0, 0)                                                     \
+    X(P##_SPREAD, "SPREAD", S, 0, 1000, 500, U_PCT, FMG, 0)                                               \
+    X(P##_MIX, "MIX", S, 0, 1000, 500, U_PCT, FMG, 0)
+#define SP_FFX(X, P, S)                                    /* FILTER: the filter module (sy_fx.c FF_*) */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_TYPE, "TYPE", S, 0, 20, 1, U_LIST, 0, 0)                                                        \
+    X(P##_CUT, "CUTOFF", S, 0, 1000, 700, U_HZ, FMG, 0)                                                   \
+    X(P##_RES, "RESO", S, 0, 1000, 100, U_PCT, FMG, 0)                                                    \
+    X(P##_DRIVE, "DRIVE", S, 0, 1000, 0, U_PCT, FMG, 0)                                                   \
+    X(P##_MIX, "MIX", S, 0, 1000, 1000, U_PCT, FMG, 0)
+#define SP_CRU(X, P, S)                                    /* BITCRUSH: fewer bits, a lower rate */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_BITS, "BITS", S, 1, 16, 8, U_INT, 0, 0)                                                         \
+    X(P##_RATE, "RATE", S, 0, 1000, 800, U_HZ, FMG, 0)                                                    \
+    X(P##_MIX, "MIX", S, 0, 1000, 1000, U_PCT, FMG, 0)
+#define SP_TRM(X, P, S)                                    /* TREMOLO: the level (or AUTOPAN: the side) swept */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_MODE, "MODE", S, 0, 1, 0, U_LIST, 0, 0)                                                         \
+    X(P##_SHAPE, "SHAPE", S, 0, 3, 0, U_LIST, 0, 0)                                                       \
+    X(P##_RATE, "RATE", S, 0, 1000, 720, U_LFOHZ, FMG, 0)                                                 \
+    X(P##_SYNC, "SYNC", S, 0, 1, 0, U_LIST, 0, 0)                                                         \
+    X(P##_NOTE, "NOTE", S, 0, 16, 11, U_SYNC, 0, 0)                                                       \
+    X(P##_DEPTH, "DEPTH", S, 0, 1000, 700, U_PCT, FMG, 0)
+#define SP_RNG(X, P, S)                                    /* RING MOD: times a carrier at FREQ */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_FREQ, "FREQ", S, 0, 1000, 450, U_HZ, FMG, 0)                                                    \
+    X(P##_SHAPE, "SHAPE", S, 0, 1000, 0, U_PCT, FMG, 0)                                                   \
+    X(P##_SPREAD, "SPREAD", S, 0, 1000, 0, U_PCT, FMG, 0)                                                 \
+    X(P##_MIX, "MIX", S, 0, 1000, 500, U_PCT, FMG, 0)
+#define SP_TAP(X, P, S)                                    /* TAPE: wow, flutter, saturation, the head's loss */ \
+    X(P##_ON, "ON", S, 0, 1, 0, U_ONOFF, 0, 0)                                                            \
+    X(P##_WOW, "WOW", S, 0, 1000, 300, U_PCT, FMG, 0)                                                     \
+    X(P##_FLUT, "FLUTTER", S, 0, 1000, 200, U_PCT, FMG, 0)                                                \
+    X(P##_SAT, "SATURATE", S, 0, 1000, 300, U_PCT, FMG, 0)                                                \
+    X(P##_TONE, "TONE", S, 0, 1000, 300, U_PCT, FMG, 0)                                                   \
+    X(P##_MIX, "MIX", S, 0, 1000, 1000, U_PCT, FMG, 0)
 
 /* the parameters, in id order (append-only) */
 #define SY_PARAMS(X)                                                                                      \
@@ -180,9 +286,21 @@ enum {                           /* units: the display and the DSP's reading of 
     X(EQ_MFREQ, "MID FREQ", SEC_EQ, 0, 1000, 567, U_HZ, FMG, 0)                                           \
     X(EQ_Q, "MID Q", SEC_EQ, 0, 1000, 400, U_Q, FMG, 0)                                                   \
     X(EQ_HFREQ, "HI FREQ", SEC_EQ, 0, 1000, 767, U_HZ, FMG, 0)                                            \
-    X(FX_ORDER, "FX ORDER", SEC_DRIVE, 0, 719, 0, U_ORDER, 0, 0)                                         \
+    X(FX_ORDER, "FX ORDER", SEC_DRIVE, 0, 719, 0, U_ORDER, F_OLD, 0)                                     \
     X(EQ_LQ, "LO Q", SEC_EQ, 0, 1000, 300, U_Q, FMG, 0)                                                   \
-    X(EQ_HQ, "HI Q", SEC_EQ, 0, 1000, 300, U_Q, FMG, 0)
+    X(EQ_HQ, "HI Q", SEC_EQ, 0, 1000, 300, U_Q, FMG, 0)                                                   \
+    SP_CHAIN(X)                                                                                           \
+    SP_DRV(X, DR2, SEC_DRIVE2)                                                                            \
+    SP_CHO(X, CH2, SEC_CHORUS2)                                                                           \
+    SP_OTTX(X, OT2, SEC_OTT2)                                                                             \
+    SP_EQX(X, EQ2, SEC_EQ2)                                                                               \
+    SP_FLG(X, FL, SEC_FLANGER) SP_FLG(X, FL2, SEC_FLANGER2)                                               \
+    SP_PHS(X, PH, SEC_PHASER) SP_PHS(X, PH2, SEC_PHASER2)                                                 \
+    SP_FFX(X, FF, SEC_FFILT) SP_FFX(X, FF2, SEC_FFILT2)                                                   \
+    SP_CRU(X, CR, SEC_CRUSH) SP_CRU(X, CR2, SEC_CRUSH2)                                                   \
+    SP_TRM(X, TR, SEC_TREM) SP_TRM(X, TR2, SEC_TREM2)                                                     \
+    SP_RNG(X, RG, SEC_RING) SP_RNG(X, RG2, SEC_RING2)                                                     \
+    SP_TAP(X, TP, SEC_TAPE) SP_TAP(X, TP2, SEC_TAPE2)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
@@ -418,26 +536,147 @@ static int16_t sp_order_code(const uint8_t *o)
     return (int16_t)c;
 }
 
+/* ------------------------------------------------------------------------------------ the FX chain --- */
+/* the effects as modules (docs/ARCHITECTURE.md §14): 13 types, 24 instances (two of each type, one DELAY and one
+ * REVERB: their lines are the pool's largest). An instance is a section (SEC_DRIVE + its number) and that section's
+ * parameters, ON first (on in the chain or bypassed: the FX-held keys); the first DRIVE .. EQ are the six effects of
+ * before the chain, their ids as they were (presets, the matrix and MIDI LEARN keep pointing at them). The chain:
+ * FXC1 .. FXC8, each an instance + 1, in the order they play (the slots after the first 0 unused) */
+enum { FXI_DRIVE, FXI_CHORUS, FXI_DELAY, FXI_REVERB, FXI_OTT, FXI_EQ, FXI_DRIVE2, FXI_CHORUS2, FXI_OTT2, FXI_EQ2,
+       FXI_FLANGER, FXI_FLANGER2, FXI_PHASER, FXI_PHASER2, FXI_FFILT, FXI_FFILT2, FXI_CRUSH, FXI_CRUSH2, FXI_TREM,
+       FXI_TREM2, FXI_RING, FXI_RING2, FXI_TAPE, FXI_TAPE2, FXI_N };
+enum { FXT_DRIVE, FXT_CHORUS, FXT_DELAY, FXT_REVERB, FXT_OTT, FXT_EQ, FXT_FLANGER, FXT_PHASER, FXT_FFILT, FXT_CRUSH,
+       FXT_TREM, FXT_RING, FXT_TAPE, FXT_N };
+#define NFXC 8u                                      /* the chain's slots */
+#define SP_FX_MAXP 10u                               /* an instance's parameters at most */
+_Static_assert(SEC_DRIVE + FXI_N == SEC_CHAIN, "an instance a section, in order");
+_Static_assert(SP_FXC8 - SP_FXC1 == NFXC - 1u, "the chain's slots in a row");
+static const uint8_t FXI_TYPE[FXI_N] = {FXT_DRIVE, FXT_CHORUS, FXT_DELAY, FXT_REVERB, FXT_OTT, FXT_EQ, FXT_DRIVE,
+                                        FXT_CHORUS, FXT_OTT, FXT_EQ, FXT_FLANGER, FXT_FLANGER, FXT_PHASER, FXT_PHASER,
+                                        FXT_FFILT, FXT_FFILT, FXT_CRUSH, FXT_CRUSH, FXT_TREM, FXT_TREM, FXT_RING,
+                                        FXT_RING, FXT_TAPE, FXT_TAPE};
+static const uint8_t FXT_INST[FXT_N][2] = {      /* a type's instances (0xFF: one only) */
+    {FXI_DRIVE, FXI_DRIVE2}, {FXI_CHORUS, FXI_CHORUS2}, {FXI_DELAY, 0xFF}, {FXI_REVERB, 0xFF}, {FXI_OTT, FXI_OTT2},
+    {FXI_EQ, FXI_EQ2}, {FXI_FLANGER, FXI_FLANGER2}, {FXI_PHASER, FXI_PHASER2}, {FXI_FFILT, FXI_FFILT2},
+    {FXI_CRUSH, FXI_CRUSH2}, {FXI_TREM, FXI_TREM2}, {FXI_RING, FXI_RING2}, {FXI_TAPE, FXI_TAPE2}};
+static const uint16_t FXI_ON[FXI_N] = {          /* each instance's first parameter, its ON */
+    SP_DR_ON, SP_CH_ON, SP_DL_ON, SP_RV_ON, SP_OT_ON, SP_EQ_ON, SP_DR2_ON, SP_CH2_ON, SP_OT2_ON, SP_EQ2_ON, SP_FL_ON,
+    SP_FL2_ON, SP_PH_ON, SP_PH2_ON, SP_FF_ON, SP_FF2_ON, SP_CR_ON, SP_CR2_ON, SP_TR_ON, SP_TR2_ON, SP_RG_ON, SP_RG2_ON,
+    SP_TP_ON, SP_TP2_ON};
+/* an instance's ids: its type's first instance's, moved by this (the rows of each are alike: asserted below) */
+#define FXI_OFF(i) ((uint32_t)FXI_ON[i] - (uint32_t)FXI_ON[FXT_INST[FXI_TYPE[i]][0]])
+_Static_assert(SP_DR2_MIX - SP_DR2_ON == SP_DR_MIX - SP_DR_ON && SP_CH2_MIX - SP_CH2_ON == SP_CH_MIX - SP_CH_ON,
+               "DRIVE 2, CHORUS 2 as the first");
+_Static_assert(SP_OT2_HIGH - SP_OT2_ON == SP_OT_HIGH - SP_OT_ON && SP_EQ2_HQ - SP_EQ2_ON == SP_EQ_HQ - SP_EQ_ON &&
+               SP_EQ2_GAP - SP_EQ2_ON == SP_FX_ORDER - SP_EQ_ON, "OTT 2, EQ 2 as the first");
+_Static_assert(SP_FL2_ON - SP_FL_ON == SP_FL2_MIX - SP_FL_MIX && SP_PH2_ON - SP_PH_ON == SP_PH2_MIX - SP_PH_MIX &&
+               SP_FF2_ON - SP_FF_ON == SP_FF2_MIX - SP_FF_MIX && SP_CR2_ON - SP_CR_ON == SP_CR2_MIX - SP_CR_MIX &&
+               SP_TR2_ON - SP_TR_ON == SP_TR2_DEPTH - SP_TR_DEPTH && SP_RG2_ON - SP_RG_ON == SP_RG2_MIX - SP_RG_MIX &&
+               SP_TP2_ON - SP_TP_ON == SP_TP2_MIX - SP_TP_MIX, "the new types' second instances as their first");
+
+/* parameter id's instance (FXI_*), -1: no effect's */
+static int32_t sp_inst_of(uint32_t id)
+{
+    uint32_t s = id < SP_COUNT ? SP[id].sec : 0u;
+    return s >= SEC_DRIVE && s < SEC_CHAIN && !(SP[id].flags & F_OLD) ? (int32_t)(s - SEC_DRIVE) : -1;
+}
+/* .. as its type's first instance has it (a second instance's moved back; anything else as it is) */
+static uint32_t sp_fx_base(uint32_t id)
+{
+    int32_t i = sp_inst_of(id);
+    return i < 0 ? id : id - FXI_OFF((uint32_t)i);
+}
+/* instance i's parameter ids in id order (ON first), into ids (SP_FX_MAXP); their count */
+static uint32_t sp_inst_ids(uint32_t i, uint16_t *ids)
+{
+    uint32_t id, n = 0;
+    for (id = FXI_ON[i]; id < SP_COUNT && n < SP_FX_MAXP; id++)
+        if ((uint32_t)sp_inst_of(id) == i)
+            ids[n++] = (uint16_t)id;
+    if (i == FXI_DELAY && n < SP_FX_MAXP)
+        ids[n++] = SP_DL_NOTE;                       /* (the delay's NOTE came after the LFOs') */
+    return n;
+}
+/* a patch's chain: its modules (the slots up to the first empty one), slot k's instance (-1 none) */
+static uint32_t sp_chain_n(const int16_t *p)
+{
+    uint32_t k = 0;
+    while (k < NFXC && p[SP_FXC1 + k] > 0 && p[SP_FXC1 + k] <= (int16_t)FXI_N)
+        k++;
+    return k;
+}
+static int32_t sp_chain_at(const int16_t *p, uint32_t k)
+{
+    return k < sp_chain_n(p) ? p[SP_FXC1 + k] - 1 : -1;
+}
+static int32_t sp_chain_find(const int16_t *p, uint32_t i)   /* instance i's slot in the chain, -1: not in it */
+{
+    uint32_t k, n = sp_chain_n(p);
+    for (k = 0; k < n; k++)
+        if (p[SP_FXC1 + k] == (int16_t)(i + 1u))
+            return (int32_t)k;
+    return -1;
+}
+/* the chain made whole: instances in range, each once, no gaps */
+static void sp_chain_fix(int16_t *p)
+{
+    uint32_t k, n = 0, seen = 0;
+    for (k = 0; k < NFXC; k++) {
+        int32_t v = p[SP_FXC1 + k];
+        if (v > 0 && v <= (int32_t)FXI_N && !((seen >> (v - 1)) & 1u)) {
+            seen |= 1u << (v - 1);
+            p[SP_FXC1 + n++] = (int16_t)v;
+        }
+    }
+    for (; n < NFXC; n++)
+        p[SP_FXC1 + n] = 0;
+}
+/* a patch from before the chain (an older preset, a starter sound): its six effects that are ON become the chain,
+ * in FX ORDER's order; those OFF stay out */
+static void sp_chain_from_old(sy_patch_t *pt)
+{
+    uint8_t o[SP_NFX];
+    uint32_t k, n = 0;
+    sp_order(pt->p[SP_FX_ORDER], o);
+    for (k = 0; k < NFXC; k++)
+        pt->p[SP_FXC1 + k] = 0;
+    for (k = 0; k < SP_NFX; k++)
+        if (pt->p[FXI_ON[o[k]]])
+            pt->p[SP_FXC1 + n++] = (int16_t)(o[k] + 1u);
+}
+
 /* ------------------------------------------------------------------------------------------ presets --- */
-/* a patch as bytes (presets, autosave): "SY", the version, the count of values, the values (int16, little endian,
- * in id order), the name (16), the category, the macros' names (4 x 8); then 'D' and the LFOs' drawn shapes (each
- * its count of points, then x, y, curve a point, int16). A patch written with fewer parameters (an older build)
- * takes the defaults of the ones it lacks, one without the drawn shapes the default's; every value is clamped
- * into its range, a drawn shape made whole (sp_draw_fix) */
-#define SP_PACK_MAX (6u + 2u * SP_COUNT + 16u + 1u + 32u + 1u + 2u * (1u + 6u * SP_NPT))
+/* a patch as bytes (presets, autosave): "SY", the version (2), the count of values, the values (int16, little
+ * endian, in id order) of every parameter but the effects' (the core: sp_core), the name (16), the category, the
+ * macros' names (4 x 8); then 'D' and the LFOs' drawn shapes (each its count of points, then x, y, curve a point,
+ * int16); then 'C' and the modules in the chain: their count, then each one's instance, its count of values and
+ * its values in id order (sp_inst_ids). A module out of the chain keeps nothing: it is added from its defaults.
+ * A patch written with fewer parameters (an older build) takes the defaults of the ones it lacks, one without the
+ * drawn shapes the default's; every value is clamped into its range, a drawn shape made whole (sp_draw_fix), the
+ * chain made whole (sp_chain_fix). Version 1 (before the chain: every value in id order, the six effects among them)
+ * still loads: its effects that are ON become the chain (sp_chain_from_old). */
+#define SP_ISFX(id, nm, sc, l, h, d, u, f, c) +((sc) >= SEC_DRIVE && (sc) < SEC_CHAIN && !((f) & F_OLD))
+#define SP_ISOLD(id, nm, sc, l, h, d, u, f, c) +(((f) & F_OLD) != 0)
+enum { SP_NFXP = 0 SY_PARAMS(SP_ISFX), SP_NOLD = 0 SY_PARAMS(SP_ISOLD) };
+#define SP_NCORE (SP_COUNT - SP_NFXP - SP_NOLD)
+#define SP_PACK_MAX (6u + 2u * SP_NCORE + 16u + 1u + 32u + 1u + 2u * (1u + 6u * SP_NPT) + 2u + NFXC * (2u + 2u * SP_FX_MAXP))
+_Static_assert(SP_PACK_MAX <= 766u, "a packed patch fits a user slot (sy_store.c: SS_SLOT_BYTES less its length)");
+static int sp_core(uint32_t id) { return !(SP[id].flags & F_OLD) && sp_inst_of(id) < 0; }
+
 static uint32_t sp_pack(const sy_patch_t *pt, uint8_t *o)
 {
-    uint32_t i, k, n = 0;
+    uint32_t i, k, n = 0, nc = sp_chain_n(pt->p);
     o[n++] = 'S';
     o[n++] = 'Y';
-    o[n++] = 1;
+    o[n++] = 2;
     o[n++] = 0;
-    o[n++] = (uint8_t)SP_COUNT;
-    o[n++] = (uint8_t)(SP_COUNT >> 8);
-    for (i = 0; i < SP_COUNT; i++) {
-        o[n++] = (uint8_t)pt->p[i];
-        o[n++] = (uint8_t)((uint16_t)pt->p[i] >> 8);
-    }
+    o[n++] = (uint8_t)SP_NCORE;
+    o[n++] = (uint8_t)(SP_NCORE >> 8);
+    for (i = 0; i < SP_COUNT; i++)
+        if (sp_core(i)) {
+            o[n++] = (uint8_t)pt->p[i];
+            o[n++] = (uint8_t)((uint16_t)pt->p[i] >> 8);
+        }
     for (i = 0; i < 16u; i++)
         o[n++] = (uint8_t)pt->name[i];
     o[n++] = pt->cat;
@@ -456,21 +695,46 @@ static uint32_t sp_pack(const sy_patch_t *pt, uint8_t *o)
             }
         }
     }
+    o[n++] = 'C';
+    o[n++] = (uint8_t)nc;
+    for (k = 0; k < nc; k++) {
+        uint16_t ids[SP_FX_MAXP];
+        uint32_t inst = (uint32_t)pt->p[SP_FXC1 + k] - 1u, m = sp_inst_ids(inst, ids);
+        o[n++] = (uint8_t)inst;
+        o[n++] = (uint8_t)m;
+        for (i = 0; i < m; i++) {
+            o[n++] = (uint8_t)pt->p[ids[i]];
+            o[n++] = (uint8_t)((uint16_t)pt->p[ids[i]] >> 8);
+        }
+    }
     return n;
 }
 
 static int sp_unpack(sy_patch_t *pt, const uint8_t *b, uint32_t len)
 {
-    uint32_t i, k, np, n = 6;
-    if (len < 6u || b[0] != 'S' || b[1] != 'Y' || b[2] != 1)
+    uint32_t i, k, np, n = 6, ver;
+    if (len < 6u || b[0] != 'S' || b[1] != 'Y' || (b[2] != 1 && b[2] != 2))
         return 0;
+    ver = b[2];
     np = (uint32_t)b[4] | (uint32_t)b[5] << 8;
     if (len < 6u + 2u * np + 49u)
         return 0;
     sp_defaults(pt);
-    for (i = 0; i < np; i++, n += 2u)
-        if (i < SP_COUNT)
-            pt->p[i] = sp_clamp(i, (int16_t)(b[n] | b[n + 1u] << 8));
+    if (ver == 1u) {                                /* (every value, in id order) */
+        for (i = 0; i < np; i++, n += 2u)
+            if (i < SP_COUNT)
+                pt->p[i] = sp_clamp(i, (int16_t)(b[n] | b[n + 1u] << 8));
+    } else {                                        /* (the core's values, in id order) */
+        uint32_t id = 0;
+        for (i = 0; i < np; i++, n += 2u) {
+            while (id < SP_COUNT && !sp_core(id))
+                id++;
+            if (id < SP_COUNT) {
+                pt->p[id] = sp_clamp(id, (int16_t)(b[n] | b[n + 1u] << 8));
+                id++;
+            }
+        }
+    }
     for (i = 0; i < 16u; i++)
         pt->name[i] = (char)b[n++];
     pt->name[16] = 0;
@@ -494,5 +758,26 @@ static int sp_unpack(sy_patch_t *pt, const uint8_t *b, uint32_t len)
             }
             sp_draw_fix(d);
         }
+    if (ver == 1u) {
+        sp_chain_from_old(pt);
+    } else if (n < len && b[n] == 'C' && len - n >= 2u) {   /* the chain: each module and its values */
+        uint32_t nc = b[n + 1u];
+        n += 2u;
+        for (k = 0; k < nc && k < NFXC && len - n >= 2u; k++) {
+            uint16_t ids[SP_FX_MAXP];
+            uint32_t inst = b[n], m = b[n + 1u], ni;
+            n += 2u;
+            if (len - n < 2u * m)
+                break;
+            if (inst < FXI_N) {
+                ni = sp_inst_ids(inst, ids);
+                for (i = 0; i < m && i < ni; i++)
+                    pt->p[ids[i]] = sp_clamp(ids[i], (int16_t)(b[n + 2u * i] | b[n + 2u * i + 1u] << 8));
+                pt->p[SP_FXC1 + k] = (int16_t)(inst + 1u);
+            }
+            n += 2u * m;
+        }
+    }
+    sp_chain_fix(pt->p);
     return 1;
 }

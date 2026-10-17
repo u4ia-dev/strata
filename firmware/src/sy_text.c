@@ -5,11 +5,23 @@
  * characters, Latin-1 (the degree sign is 0xB0, as the firmware's fonts have it). No printf: the firmware has none. */
 #define SP_TEXT_N 16u
 
-static const char *const SEC_NAMES[SEC_COUNT] = {"OSC A", "OSC B", "SUB", "NOISE", "FILTER", "ENV 1", "ENV 2",
-                                                 "LFO 1", "LFO 2", "VOICE", "MACROS", "MATRIX", "DRIVE", "CHORUS",
-                                                 "DELAY", "REVERB", "OTT", "EQ"};
-static const char *const SEC_SHORT[SEC_COUNT] = {"A", "B", "SUB", "NZ", "FLT", "E1", "E2", "L1", "L2", "VCE", "MAC",
-                                                 "MTX", "DRV", "CHO", "DLY", "REV", "OTT", "EQ"};
+static const char *const SEC_NAMES[SEC_COUNT] = {
+    "OSC A", "OSC B", "SUB", "NOISE", "FILTER", "ENV 1", "ENV 2", "LFO 1", "LFO 2", "VOICE", "MACROS", "MATRIX",
+    "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "DRIVE 2", "CHORUS 2", "OTT 2", "EQ 2", "FLANGER", "FLANGER 2",
+    "PHASER", "PHASER 2", "FX FILTER", "FX FILTER 2", "BITCRUSH", "BITCRUSH 2", "TREMOLO", "TREMOLO 2", "RING MOD",
+    "RING MOD 2", "TAPE", "TAPE 2", "FX CHAIN"};
+static const char *const SEC_SHORT[SEC_COUNT] = {
+    "A", "B", "SUB", "NZ", "FLT", "E1", "E2", "L1", "L2", "VCE", "MAC", "MTX", "DRV", "CHO", "DLY", "REV", "OTT", "EQ",
+    "DRV2", "CHO2", "OTT2", "EQ2", "FLG", "FLG2", "PHS", "PHS2", "FFL", "FFL2", "CRU", "CRU2", "TRM", "TRM2", "RNG",
+    "RNG2", "TAP", "TAP2", "FXC"};
+/* the effect modules' types (sy_param.c FXT_*): as the chain view lists them, and short */
+static const char *const FXT_NAMES[FXT_N] = {"DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "FLANGER", "PHASER",
+                                             "FILTER", "BITCRUSH", "TREMOLO", "RING MOD", "TAPE"};
+static const char *const FXT_SHORT[FXT_N] = {"DRV", "CHO", "DLY", "REV", "OTT", "EQ", "FLG", "PHS", "FLT", "CRU",
+                                             "TRM", "RNG", "TAP"};
+static const char *const PHS_STAGES[6] = {"2", "4", "6", "8", "10", "12"};
+static const char *const TRM_MODES[2] = {"TREMOLO", "AUTOPAN"};
+static const char *const TRM_SHAPES[4] = {"SINE", "TRIANGLE", "SQUARE", "SAW"};
 static const char *const CAT_NAMES[CAT_COUNT] = {"BASS", "LEAD", "PAD", "PLUCK", "KEYS", "FX", "SEQ", "OTHER"};
 static const char *const PHMODE_NAMES[2] = {"RETRIG", "FREE"};
 static const char *const UMODE_NAMES[2] = {"LINEAR", "SUPER"};
@@ -19,17 +31,23 @@ static const char *const SYNCM_NAMES[2] = {"FREE", "FIXED"};
 static const char *const VMODE_NAMES[3] = {"POLY", "MONO", "LEGATO"};
 static const char *const GLMODE_NAMES[2] = {"ALWAYS", "LEGATO"};
 
-/* a list parameter's names and their count (0: not a list) */
+/* a list parameter's names and their count (0: not a list); an effect's second instance as its first */
 static const char *const *sp_list(uint32_t id, uint32_t *n)
 {
-    switch (id) {
+    switch (sp_fx_base(id)) {
     case SP_A_WARP: case SP_B_WARP: *n = WARP_COUNT; return WARP_NAMES;
     case SP_A_PHMODE: case SP_B_PHMODE: *n = 2u; return PHMODE_NAMES;
     case SP_A_UMODE: case SP_B_UMODE: *n = 2u; return UMODE_NAMES;
     case SP_A_ROUTE: case SP_B_ROUTE: case SP_SUB_ROUTE: case SP_NZ_ROUTE: *n = 2u; return ROUTE_NAMES;
     case SP_L1_SHAPE: case SP_L2_SHAPE: *n = LFO_NSHAPE; return LFO_NAMES;
     case SP_L1_MODE: case SP_L2_MODE: *n = 3u; return LFOM_NAMES;
-    case SP_L1_SYNC: case SP_L2_SYNC: case SP_DL_SYNC: *n = 2u; return SYNCM_NAMES;
+    case SP_L1_SYNC: case SP_L2_SYNC: case SP_DL_SYNC: case SP_FL_SYNC: case SP_PH_SYNC: case SP_TR_SYNC:
+        *n = 2u;
+        return SYNCM_NAMES;
+    case SP_PH_STAGES: *n = 6u; return PHS_STAGES;
+    case SP_FF_TYPE: *n = FF_COUNT; return FF_NAMES;
+    case SP_TR_MODE: *n = 2u; return TRM_MODES;
+    case SP_TR_SHAPE: *n = 4u; return TRM_SHAPES;
     case SP_SUB_SHAPE: *n = SUB_NSHAPE; return SUB_NAMES;
     case SP_NZ_TYPE: *n = 3u; return NZ_NAMES;
     case SP_F_TYPE: *n = FT_COUNT; return FT_NAMES;
@@ -116,7 +134,12 @@ static void sp_text(uint32_t id, int32_t v, char *b)
         sp_put(b, names && v >= 0 && (uint32_t)v < cnt ? names[v] : "?");
         break;
     case U_ONOFF: sp_put(b, v ? "ON" : "OFF"); break;
-    case U_PCT: sp_put(sp_fix(b, v, 1u, 0), "%"); break;
+    case U_PCT:
+        if (sp_fx_base(id) == SP_FF_RES && ff_gain_type(sy_patch.p[id - (SP_FF_RES - SP_FF_TYPE)]))
+            sp_put(sp_fix(b, ff_gain_dbx(v), 1u, 1), " dB");   /* (the FX filter's shelves and tilt: RESO a gain) */
+        else
+            sp_put(sp_fix(b, v, 1u, 0), "%");
+        break;
     case U_BIPCT: sp_put(sp_fix(b, v, 1u, 1), "%"); break;
     case U_CENT: sp_put(sp_fix(b, v, 0u, 1), " ct"); break;
     case U_SEMI: sp_put(sp_fix(b, v, 0u, d->lo < 0), " st"); break;

@@ -114,11 +114,23 @@ EXPORT const char *sw_text(uint32_t id, int32_t v)
     return sw_txt;
 }
 EXPORT int32_t sw_clamp(uint32_t id, int32_t v) { return sp_clamp(id, v); }
+/* the effects chain as the page has it: a module whose ON the page turns on joins the chain's end (the FM-1 adds
+ * and takes them out on its FX page; here the panels' switches do) */
+static void sw_chain_on(int16_t *p)
+{
+    uint32_t i, n = sp_chain_n(p);
+    for (i = 0; i < FXI_N && n < NFXC; i++)
+        if (p[FXI_ON[i]] && sp_chain_find(p, i) < 0)
+            p[SP_FXC1 + n++] = (int16_t)(i + 1u);
+}
+
 /* the playing instance: a value the page set (the smoother glides the continuous ones, as on the FM-1) */
 EXPORT void sw_set(uint32_t id, int32_t v)
 {
-    if (id < SP_COUNT)
+    if (id < SP_COUNT) {
         sy_patch.p[id] = sp_clamp(id, v);
+        sw_chain_on(sy_patch.p);
+    }
 }
 
 /* --------------------------------------------------------------------------------------- patches --- */
@@ -141,6 +153,8 @@ static void sw_to(sy_patch_t *p)
     sp_defaults(p);
     for (i = 0; i < SP_COUNT; i++)
         p->p[i] = sp_clamp(i, sw_vals[i]);
+    sp_chain_fix(p->p);
+    sw_chain_on(p->p);
     memcpy(p->name, sw_name, sizeof p->name);
     p->name[16] = 0;
     for (i = 0; i < 2u; i++)
@@ -162,6 +176,7 @@ EXPORT void sw_sound(uint32_t k)
     if (k < sw_sound_count()) {
         for (i = 0; SOUNDS[k].kv[i][0] >= 0; i++)
             p.p[SOUNDS[k].kv[i][0]] = sp_clamp((uint32_t)SOUNDS[k].kv[i][0], SOUNDS[k].kv[i][1]);
+        sp_chain_from_old(&p);                   /* (their effects as the six were: those ON, the chain) */
         for (n = 0; n < 16u && SOUNDS[k].name[n]; n++)
             p.name[n] = (char)(SOUNDS[k].name[n] >= 'a' && SOUNDS[k].name[n] <= 'z' ? SOUNDS[k].name[n] - 32
                                                                                       : SOUNDS[k].name[n]);
@@ -213,6 +228,7 @@ EXPORT void sw_test_sound(uint32_t k)
     sy_tables_now();
     for (i = 0; k < sw_sound_count() && SOUNDS[k].kv[i][0] >= 0; i++)
         sy_patch.p[SOUNDS[k].kv[i][0]] = sp_clamp((uint32_t)SOUNDS[k].kv[i][0], SOUNDS[k].kv[i][1]);
+    sp_chain_from_old(&sy_patch);
     sp_snap();
     sy_tables_now();
 }

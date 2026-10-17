@@ -63,7 +63,15 @@ static uint32_t run(uint32_t nb, uint32_t at)
 }
 
 static uint32_t blocks(float secs) { return (uint32_t)(secs * SY_FS) / SY_BLK; }
-static void set(uint32_t id, int32_t v) { sy_patch.p[id] = sp_clamp(id, v); }
+static void set(uint32_t id, int32_t v)
+{
+    int32_t fi = sp_inst_of(id);
+    if (id >= SP_COUNT)
+        return;
+    sy_patch.p[id] = sp_clamp(id, v);
+    if (id == SP_FX_ORDER || (fi >= 0 && fi < (int32_t)SP_NFX && id == FXI_ON[fi]))
+        sp_chain_from_old(&sy_patch);                 /* (the six's ON and FX ORDER: the chain as before it) */
+}
 static void snap(void) { sp_snap(); }
 
 static uint32_t nvoices(void)
@@ -113,11 +121,21 @@ static int draw_same(const sp_draw_t *a, const sp_draw_t *b)
 }
 
 /* ------------------------------------------------------------------------------------- 1 parameters --- */
+/* a patch as a load leaves it: its chain whole, the effects out of the chain and the unused at their defaults */
+static void canon(sy_patch_t *a)
+{
+    uint32_t i;
+    sp_chain_fix(a->p);
+    for (i = 0; i < SP_COUNT; i++)
+        if ((SP[i].flags & F_OLD) || (sp_inst_of(i) >= 0 && sp_chain_find(a->p, (uint32_t)sp_inst_of(i)) < 0))
+            a->p[i] = SP[i].def;
+}
 static void t_params(void)
 {
     uint32_t i, j, tail;
     int ok = 1, lists = 1, ccs = 1;
-    static uint8_t buf[SP_PACK_MAX];
+    static uint8_t buf[SP_PACK_MAX + 64u];
+    int same_v1;
     sy_patch_t a, b, def;
     printf("engine: %u parameters, a patch packs into %u bytes\n", (unsigned)SP_COUNT, (unsigned)SP_PACK_MAX);
     for (i = 0; i < SP_COUNT; i++) {
@@ -140,11 +158,22 @@ static void t_params(void)
     check("list parameters span their lists (warps, shapes, types, sources, tables)", lists);
     check("default MIDI CCs: each on one parameter", ccs);
     {
-        uint32_t s = 7;
+        uint32_t s = 7, nc = 0, core[SP_COUNT];
         int same = 1;
+        for (i = 0; i < SP_COUNT; i++)
+            if (sp_core(i))
+                core[nc++] = i;
         sp_defaults(&a);
         for (i = 0; i < SP_COUNT; i++)
             a.p[i] = sp_clamp(i, SP[i].lo + (int32_t)(sy_rand(&s) % (uint32_t)(SP[i].hi - SP[i].lo + 1)));
+        for (i = 0; i < NFXC; i++)                        /* a chain of five: DRIVE 2, EQ, FILTER, TAPE 2, DELAY */
+            a.p[SP_FXC1 + i] = 0;
+        a.p[SP_FXC1] = FXI_DRIVE2 + 1;
+        a.p[SP_FXC2] = FXI_EQ + 1;
+        a.p[SP_FXC3] = FXI_FFILT + 1;
+        a.p[SP_FXC4] = FXI_TAPE2 + 1;
+        a.p[SP_FXC5] = FXI_DELAY + 1;
+        canon(&a);
         memcpy(a.name, "TEST PATCH 12345", 17);
         a.cat = CAT_PAD;
         sp_shape_pts(LFO_STAIRS, &a.draw[0]);             /* drawn shapes: 16 points; 5, moved and curved */
@@ -152,25 +181,30 @@ static void t_params(void)
         a.draw[1].c[2] = -777;
         a.draw[1].x[3] = 801;
         j = sp_pack(&a, buf);
-        same = sp_unpack(&b, buf, j) && !memcmp(a.p, b.p, sizeof a.p) && !memcmp(a.name, b.name, 16) &&
-               a.cat == b.cat && draw_same(&a.draw[0], &b.draw[0]) && draw_same(&a.draw[1], &b.draw[1]);
-        check("a patch packed and unpacked is the same (its drawn shapes too)", same);
-        tail = j - 6u - 2u * SP_COUNT;                    /* the name, category, macros, drawn shapes */
-        buf[4] = (uint8_t)(SP_COUNT - 10u);               /* an older build: 10 values fewer */
-        memmove(buf + 6u + 2u * (SP_COUNT - 10u), buf + 6u + 2u * SP_COUNT, tail);
+        same = j <= SP_PACK_MAX && sp_unpack(&b, buf, j) && !memcmp(a.p, b.p, sizeof a.p) &&
+               !memcmp(a.name, b.name, 16) && a.cat == b.cat && draw_same(&a.draw[0], &b.draw[0]) &&
+               draw_same(&a.draw[1], &b.draw[1]);
+        printf("engine: a patch of %u core values and a chain of 5 packs into %u bytes\n", (unsigned)nc, (unsigned)j);
+        check("a patch packed and unpacked is the same (its chain, its modules' values, its drawn shapes)", same &&
+              nc == SP_NCORE);
+        tail = j - 6u - 2u * nc;                          /* the name, category, macros, drawn shapes, the chain */
+        buf[4] = (uint8_t)(nc - 10u);                     /* an older build: 10 core values fewer */
+        memmove(buf + 6u + 2u * (nc - 10u), buf + 6u + 2u * nc, tail);
         same = sp_unpack(&b, buf, j - 20u);
-        for (i = SP_COUNT - 10u; i < SP_COUNT; i++)
-            same &= b.p[i] == SP[i].def;
-        for (i = 0; i < SP_COUNT - 10u; i++)
-            same &= b.p[i] == a.p[i];
+        for (i = nc - 10u; i < nc; i++)                   /* (the chain's slots: the chain's own part sets them) */
+            same &= b.p[core[i]] == (core[i] >= SP_FXC1 && core[i] <= SP_FXC8 ? a.p[core[i]] : SP[core[i]].def);
+        for (i = 0; i < nc - 10u; i++)
+            same &= b.p[core[i]] == a.p[core[i]];
         same &= draw_same(&a.draw[1], &b.draw[1]);
         check("a patch with fewer values: the rest take their defaults", same);
         sp_defaults(&def);
         j = sp_pack(&a, buf);
-        same = sp_unpack(&b, buf, 6u + 2u * SP_COUNT + 49u) && draw_same(&b.draw[0], &def.draw[0]) &&
-               draw_same(&b.draw[1], &def.draw[1]) && !memcmp(a.p, b.p, sizeof a.p);
+        same = sp_unpack(&b, buf, 6u + 2u * nc + 49u) && draw_same(&b.draw[0], &def.draw[0]) &&
+               draw_same(&b.draw[1], &def.draw[1]);
+        for (i = 0; i < nc; i++)
+            same &= b.p[core[i]] == a.p[core[i]];
         check("a patch without drawn shapes (an older build): the default's", same);
-        buf[6u + 2u * SP_COUNT + 50u] = SP_NPT + 1u;      /* LFO 1 with 17 points: neither is read */
+        buf[6u + 2u * nc + 50u] = SP_NPT + 1u;            /* LFO 1 with 17 points: neither is read */
         same = sp_unpack(&b, buf, j) && draw_same(&b.draw[0], &def.draw[0]) && draw_same(&b.draw[1], &def.draw[1]);
         b = a;                                            /* LFO 2's out of order and range: made whole */
         b.draw[1].x[0] = 50;
@@ -189,6 +223,49 @@ static void t_params(void)
         check("values out of range are clamped", same);
         buf[0] = 'X';
         check("a foreign blob is refused", !sp_unpack(&b, buf, j));
+    }
+    {                                                     /* the largest patch: eight modules of the most values, */
+        uint32_t k, n;                                    /* both LFOs drawn with 16 points */
+        static const uint8_t BIG[NFXC] = {FXI_EQ, FXI_EQ2, FXI_PHASER, FXI_PHASER2, FXI_DELAY, FXI_REVERB,
+                                          FXI_FLANGER, FXI_FLANGER2};
+        sp_defaults(&a);
+        for (k = 0; k < NFXC; k++)
+            a.p[SP_FXC1 + k] = (int16_t)(BIG[k] + 1u);
+        sp_shape_pts(LFO_STAIRS, &a.draw[0]);
+        sp_shape_pts(LFO_STAIRS, &a.draw[1]);
+        n = sp_pack(&a, buf);
+        printf("engine: the largest patch packs into %u bytes (at most %u; a user slot holds 766)\n", (unsigned)n,
+               (unsigned)SP_PACK_MAX);
+        check("the largest patch (eight modules of ten values, two 16-point shapes) fits SP_PACK_MAX and a user slot",
+              n <= SP_PACK_MAX && SP_PACK_MAX <= 766u && sp_unpack(&b, buf, n) && sp_chain_n(b.p) == NFXC);
+    }
+    {                                                     /* a preset from before the chain (version 1: every value */
+        static uint8_t v1[6u + 2u * 181u + 49u + 1u + 2u];   /* of the 181 then, in id order) */
+        uint32_t n = 0, k;
+        sp_defaults(&a);
+        a.p[SP_CH_ON] = 1;
+        a.p[SP_CH_RATE] = 123;
+        a.p[SP_RV_ON] = 1;
+        a.p[SP_RV_DECAY] = 777;
+        a.p[SP_DL_ON] = 0;
+        a.p[SP_DL_MIX] = 999;
+        a.p[SP_FX_ORDER] = 595;                           /* OTT EQ REVERB DRIVE DELAY CHORUS */
+        a.p[SP_M1_SRC] = SRC_LFO1;
+        a.p[SP_M1_DST] = SP_RV_MIX;
+        a.p[SP_M1_AMT] = 500;
+        v1[n++] = 'S', v1[n++] = 'Y', v1[n++] = 1, v1[n++] = 0, v1[n++] = 181, v1[n++] = 0;
+        for (k = 0; k < 181u; k++)
+            v1[n++] = (uint8_t)a.p[k], v1[n++] = (uint8_t)((uint16_t)a.p[k] >> 8);
+        memcpy(v1 + n, "OLD ONE\0\0\0\0\0\0\0\0\0", 16);
+        n += 16u;
+        v1[n++] = CAT_KEYS;
+        for (k = 0; k < 32u; k++)
+            v1[n++] = (uint8_t)a.macro[k / 8u][k % 8u];
+        same_v1 = sp_unpack(&b, v1, n) && sp_chain_n(b.p) == 2u && b.p[SP_FXC1] == FXI_REVERB + 1 &&
+                  b.p[SP_FXC2] == FXI_CHORUS + 1 && b.p[SP_CH_RATE] == 123 && b.p[SP_RV_DECAY] == 777 &&
+                  b.p[SP_M1_DST] == SP_RV_MIX && b.cat == CAT_KEYS;
+        check("a preset from before the chain: its effects that were ON the chain, in FX ORDER's order, values kept",
+              same_v1);
     }
     {                                                     /* the values read as stored follow a change at once */
         static const uint16_t IDS[] = {SP_V_GLIDE, SP_V_VEL, SP_NZ_STEREO, SP_RV_PRE, SP_L1_DELAY, SP_L1_RISE,
@@ -430,6 +507,24 @@ static void t_voices(void)
     for (i = 0; i < 345u * 6u; i++)
         sy_cpu(100);
     check("CPU guard: under 55 % for a second, one step back at a time, all the way", sy_uni_budget == 48u && !fx_lo);
+    {                                                     /* near the deadline: at once */
+        uint32_t b0, b1, sh;
+        int f1;
+        eng_reset();
+        for (i = 0; i < 4u; i++) {
+            sy_note_on(60 + i, 100);
+            run(1, 0);
+        }
+        b0 = sy_uni_budget;
+        k = (uint32_t)sy_cpu_now(225);                    /* (88 %: nothing) */
+        b1 = sy_uni_budget;
+        k += (uint32_t)sy_cpu_now(242);                   /* (95 %: a step, the effects cheaper) */
+        f1 = fx_lo;
+        sh = (uint32_t)sy_cpu_now(250);                   /* (98 %: a voice shed now) */
+        check("CPU guard: a half near its deadline (the nested interrupts in): over 90 % a step at once, over 94 % the "
+              "effects cheaper, over 96 % a voice shed at once",
+              b0 == 48u && b1 == 48u && !k && f1 == 1 && sy_uni_budget < 40u && sh == 1u);
+    }
 }
 
 /* ------------------------------------------------------------------------------- 4 envelopes, LFOs --- */
@@ -816,7 +911,7 @@ static void t_health(void)
                             denorm++;
                     }
             }
-            if (!isfinite(fx.dly_lp[0]) || !isfinite(fx.rv_lp[0]) || !isfinite(fx.ott_env[0]) || !isfinite(fx.lim_g))
+            if (!isfinite(fx.dly_lp[0]) || !isfinite(fx.rv_lp[0]) || !isfinite(fx.ott[0].env[0]) || !isfinite(fx.lim_g))
                 finite = 0;
         }
         sy_all_notes_off();                               /* then a chord held 4 s, without the noise (its mean */
@@ -1100,7 +1195,7 @@ static double chorus_noise(void)
         for (i = 0; i < SY_BLK; i++, ph += 1000.0 / (double)SY_FS)
             l[i] = r[i] = (float)(0.5 * sin(2.0 * M_PI * ph));
         mod_offsets(sy_goff, 0, 0);
-        fx_chorus(l, r);
+        fx_chorus(l, r, FXI_CHORUS);
         for (i = 0; i < SY_BLK && b >= 64u && n < (1u << 16); i++)
             out[n++] = l[i];
     }
@@ -1123,7 +1218,7 @@ static double delay_echo_ms(void)
         mod_map();
         sy_src_g[SRC_MAC1] = sp_n[SP_MAC1];
         mod_offsets(sy_goff, 0, 0);
-        fx_delay(l, r);
+        fx_delay(l, r, FXI_DELAY);
         for (i = 0; i < SY_BLK; i++)
             L[b * SY_BLK + i] = l[i];
     }
@@ -1139,8 +1234,8 @@ static double eq_gain_db(double hz)
     float l[SY_BLK], r[SY_BLK], x[SY_BLK];
     double ph = 0, pi = 0, po = 0;
     uint32_t b, i;
-    memset(fx.eq_s, 0, sizeof fx.eq_s);
-    fx.eq_run = 0;
+    memset(fx.eq[0].s, 0, sizeof fx.eq[0].s);
+    fx.eq[0].run = 0;
     fx.mix[5] = 0.0f;
     for (b = 0; b < blocks(0.6f); b++) {
         for (i = 0; i < SY_BLK; i++, ph += hz / (double)SY_FS)
@@ -1148,7 +1243,7 @@ static double eq_gain_db(double hz)
         sp_block();
         mod_map();
         mod_offsets(sy_goff, 0, 0);
-        fx_eq(l, r);
+        fx_eq(l, r, FXI_EQ);
         if (b >= blocks(0.3f))
             for (i = 0; i < SY_BLK; i++) {
                 pi += (double)x[i] * (double)x[i];
@@ -1180,7 +1275,7 @@ static void t_eq(void)
         sp_block();
         mod_map();
         mod_offsets(sy_goff, 0, 0);
-        fx_eq(l, r);
+        fx_eq(l, r, FXI_EQ);
         for (i = 0; i < SY_BLK; i++)
             exact &= l[i] == x[i] && r[i] == x[i];
     }
@@ -1221,7 +1316,7 @@ static void t_eq(void)
         for (i = 0; i < SY_BLK; i++)
             l[i] = r[i] = 0.1f * sy_randf(sy_rand(&s));
         mod_offsets(sy_goff, 0, 0);
-        fx_eq(l, r);
+        fx_eq(l, r, FXI_EQ);
         for (i = 0; i < SY_BLK; i++) {
             finite &= isfinite(l[i]) && isfinite(r[i]);
             top = fmaxf(top, fmaxf(fabsf(l[i]), fabsf(r[i])));
@@ -1236,11 +1331,11 @@ static void t_eq(void)
         sy_zerof(l, SY_BLK);
         sy_zerof(r, SY_BLK);
         mod_offsets(sy_goff, 0, 0);
-        fx_eq(l, r);
+        fx_eq(l, r, FXI_EQ);
     }
     for (b = 0; b < 3u; b++)
         for (i = 0; i < 2u; i++)
-            rest &= fx.eq_s[b][i][0] == 0.0f && fx.eq_s[b][i][1] == 0.0f;
+            rest &= fx.eq[0].s[b][i][0] == 0.0f && fx.eq[0].s[b][i][1] == 0.0f;
     printf("engine: EQ at +18 dB with every frequency jumping 20 Hz <-> 20 kHz each block: largest output %.2f\n",
            (double)top);
     check("EQ: frequencies jumping each block at +18 dB: finite and bounded (noise at 0.1 under 4)", finite && top < 4.0f);
@@ -1252,7 +1347,8 @@ static void t_eq(void)
  * near it against the steady output's) */
 static void t_fx_order(void)
 {
-    static void (*const RUN[SP_NFX])(float *, float *) = {fx_drive, fx_chorus, fx_delay, fx_reverb, fx_ott, fx_eq};
+    static void (*const RUN[SP_NFX])(float *, float *, uint32_t) = {fx_drive, fx_chorus, fx_delay, fx_reverb, fx_ott,
+                                                                    fx_eq};
     static const uint8_t ON[SP_NFX] = {SP_DR_ON, SP_CH_ON, SP_DL_ON, SP_RV_ON, SP_OT_ON, SP_EQ_ON};
     static float a[2][4096], bo[2][4096];
     uint8_t o[SP_NFX];
@@ -1275,9 +1371,7 @@ static void t_fx_order(void)
         set(SP_EQ_MID, 60);
         set(SP_FX_ORDER, 595);
         snap();
-        mod_map();
-        fx.code = 595;                                  /* (taken, as after its dip) */
-        sp_order(fx.code, fx.order);
+        mod_map();                                      /* (the chain from none: taken at once) */
         for (s = 3, b = 0; b < 4096u / SY_BLK; b++) {
             float l[SY_BLK], r[SY_BLK];
             for (i = 0; i < SY_BLK; i++)
@@ -1287,7 +1381,7 @@ static void t_fx_order(void)
                 fx_block(l, r);
             } else {
                 for (i = 0; i < SP_NFX; i++)
-                    RUN[o[i]](l, r);
+                    RUN[o[i]](l, r, o[i]);
                 fx_limit(l, r);
             }
             for (i = 0; i < SY_BLK; i++) {
@@ -1329,7 +1423,7 @@ static void t_fx_order(void)
     printf("engine: FX ORDER changed under a sine through DRIVE and OTT: largest step %.4f near it; steady %.4f before, "
            "%.4f after\n", near, st, st2);
     check("FX ORDER: a new order mid-note dips the wet parts, no click (the largest step under 2x the steady output's)",
-          near < 2.0 * fmax(st, st2) && fx.code == 595);
+          near < 2.0 * fmax(st, st2) && fx.n == 2u && fx.ch[0] == FXI_OTT && fx.ch[1] == FXI_DRIVE);
 }
 
 static void stack_poison(void)                            /* the stack below its caller full of NaN: an unset */
@@ -1358,7 +1452,7 @@ static void t_fx(void)
             sy_zerof(r, SY_BLK);
             mod_offsets(sy_goff, 0, 0);
             stack_poison();
-            fx_reverb(l, r);
+            fx_reverb(l, r, FXI_REVERB);
             for (j = 0; j < SY_BLK; j++)
                 quiet &= l[j] == 0.0f && r[j] == 0.0f;
         }
@@ -1378,7 +1472,7 @@ static void t_fx(void)
         for (b = 0; b < (uint32_t)(600.0 * (double)SY_FS) / SY_BLK; b++) {
             sy_zerof(z[0], SY_BLK);
             sy_zerof(z[1], SY_BLK);
-            fx_chorus(z[0], z[1]);
+            fx_chorus(z[0], z[1], FXI_CHORUS);
         }
         n1 = chorus_noise();
         printf("engine: chorus on a 1 kHz sine, power away from it: %.1f dB at the start, %.1f dB after 10 minutes\n",
@@ -1400,7 +1494,7 @@ static void t_fx(void)
         for (i = 0; i < SY_BLK; i++)
             x[i] = l[i] = r[i] = 0.3f * sy_randf(sy_rand(&s));
         mod_offsets(sy_goff, 0, 0);
-        fx_ott(l, r);
+        fx_ott(l, r, FXI_OTT);
         if (b > 4u)
             for (i = 0; i < SY_BLK; i++)
                 err = fmax(err, fabs((double)l[i] - (double)x[i]));
@@ -1461,6 +1555,476 @@ static void t_fx(void)
     }
     printf("engine: every effect at its extremes on full-scale noise: largest output %.3f\n", top);
     check("effects at their extremes: finite, and the limiter holds the peaks under 1", finite && top < 1.0);
+}
+
+/* ------------------------------------------------------------------------------------- the chain --- */
+/* the chain set to these instances (each ON), the rest of the slots empty */
+static void chain(const uint8_t *ins, uint32_t n)
+{
+    uint32_t k;
+    for (k = 0; k < NFXC; k++)
+        sy_patch.p[SP_FXC1 + k] = (int16_t)(k < n ? ins[k] + 1u : 0u);
+    for (k = 0; k < n; k++)
+        sy_patch.p[FXI_ON[ins[k]]] = 1;
+}
+
+/* a block of the chain on l / r as the engine runs it (the values followed, the matrix's offsets) */
+static void fx_run(float *l, float *r)
+{
+    sp_block();
+    mod_map();
+    mod_offsets(sy_goff, 0, 0);
+    fx_block(l, r);
+}
+
+/* a sine at hz (0.05: +18 dB stays under the limiter) through the chain as set: its gain in dB (power out over in,
+ * after 0.4 s); the left */
+static double chain_gain_db(double hz)
+{
+    float l[SY_BLK], r[SY_BLK], x[SY_BLK];
+    double ph = 0, pi = 0, po = 0;
+    uint32_t b, i;
+    for (b = 0; b < blocks(0.8f); b++) {
+        for (i = 0; i < SY_BLK; i++, ph += hz / (double)SY_FS)
+            x[i] = l[i] = r[i] = (float)(0.05 * sin(2.0 * M_PI * ph));
+        fx_run(l, r);
+        if (b >= blocks(0.4f))
+            for (i = 0; i < SY_BLK; i++) {
+                pi += (double)x[i] * (double)x[i];
+                po += (double)l[i] * (double)l[i];
+            }
+    }
+    return 10.0 * log10(po / pi + 1e-30);
+}
+
+/* a 220 Hz sine through the chain for 1 s, the chain changed by `change` at 0.6 s: the largest step between samples
+ * near the change against the steady output's (before and after); the deepest dip asked for (fx.dip) */
+static double chain_step(void (*change)(void), double *steady, uint32_t *dip)
+{
+    double ph = 0, st = 0, st2 = 0, near = 0;
+    float prev = 0.0f;
+    uint32_t b, i;
+    *dip = 0;
+    for (b = 0; b < blocks(1.0f); b++) {
+        float l[SY_BLK], r[SY_BLK];
+        if (b == blocks(0.6f))
+            change();
+        for (i = 0; i < SY_BLK; i++, ph += 220.0 / (double)SY_FS)
+            l[i] = r[i] = (float)(0.3 * sin(2.0 * M_PI * ph));
+        fx_run(l, r);
+        if (fx.dip > *dip)
+            *dip = fx.dip;
+        for (i = 0; i < SY_BLK; i++) {
+            double d = fabs((double)l[i] - (double)(i ? l[i - 1u] : prev));
+            if (b > blocks(0.3f) && b < blocks(0.6f) - 1u)
+                st = fmax(st, d);
+            else if (b >= blocks(0.6f) - 1u && b < blocks(0.6f) + 8u)
+                near = fmax(near, d);
+            else if (b > blocks(0.8f))
+                st2 = fmax(st2, d);
+        }
+        prev = l[SY_BLK - 1u];
+    }
+    *steady = fmax(st, st2);
+    return near;
+}
+static void ch_add_eq(void)                               /* DRIVE -> DRIVE, EQ (MID +6 dB) */
+{
+    static const uint8_t C[2] = {FXI_DRIVE, FXI_EQ};
+    sy_patch.p[SP_EQ_MID] = 60;
+    chain(C, 2u);
+}
+static void ch_take_ott(void)                             /* DRIVE, OTT -> DRIVE */
+{
+    static const uint8_t C[1] = {FXI_DRIVE};
+    chain(C, 1u);
+}
+static void ch_swap(void)                                 /* DRIVE, OTT -> OTT, DRIVE */
+{
+    static const uint8_t C[2] = {FXI_OTT, FXI_DRIVE};
+    chain(C, 2u);
+}
+
+static void t_chain(void)
+{
+    static const uint8_t DO[2] = {FXI_DRIVE, FXI_OTT}, D[1] = {FXI_DRIVE};
+    double near, st;
+    uint32_t dip, b, i, s = 21;
+    eng_reset();
+    sy_patch.p[SP_DR_AMT] = 600;
+    chain(D, 1u);
+    snap();
+    near = chain_step(ch_add_eq, &st, &dip);
+    printf("engine: chain: EQ added under a sine through DRIVE: largest step %.4f near it, steady %.4f; dip %u\n",
+           near, st, (unsigned)dip);
+    check("chain: a module added joins at once, its mix from 0 (no dip, no click: under 2x the steady step)",
+          near < 2.0 * st && dip == 0u && fx.n == 2u && fx.ch[1] == FXI_EQ);
+    eng_reset();
+    sy_patch.p[SP_DR_AMT] = 600;
+    chain(DO, 2u);
+    snap();
+    near = chain_step(ch_take_ott, &st, &dip);
+    printf("engine: chain: OTT taken out under a sine through DRIVE and OTT: largest step %.4f near it, steady %.4f\n",
+           near, st);
+    check("chain: a module taken out fades out over a block, then is gone (no dip, no click)",
+          near < 2.0 * st && dip == 0u && fx.n == 1u && fx.ch[0] == FXI_DRIVE && !fx.out);
+    eng_reset();
+    sy_patch.p[SP_DR_AMT] = 600;
+    chain(DO, 2u);
+    snap();
+    near = chain_step(ch_swap, &st, &dip);
+    printf("engine: chain: DRIVE and OTT swapped under a sine: largest step %.4f near it, steady %.4f; dip %u\n", near,
+           st, (unsigned)dip);
+    check("chain: modules moved: a dip of the wet parts, then the new order (no click)",
+          near < 2.0 * st && dip >= 3u && fx.n == 2u && fx.ch[0] == FXI_OTT && fx.ch[1] == FXI_DRIVE);
+    {                                                     /* bypassed: as if not there, once faded */
+        static const uint8_t F[1] = {FXI_FLANGER};
+        float l[SY_BLK], r[SY_BLK], x[SY_BLK];
+        int exact = 1;
+        eng_reset();
+        chain(F, 1u);
+        sy_patch.p[SP_FL_MIX] = 1000;
+        snap();
+        for (b = 0; b < 40u; b++) {
+            for (i = 0; i < SY_BLK; i++)
+                x[i] = l[i] = r[i] = 0.3f * sy_randf(sy_rand(&s));
+            if (b == 20u)
+                sy_patch.p[SP_FL_ON] = 0;
+            fx_run(l, r);
+            for (i = 0; b > 21u && i < SY_BLK; i++)
+                exact &= l[i] == x[i] && r[i] == x[i];
+        }
+        check("chain: a module bypassed (its ON off, the FX-held keys') is the input bit for bit once faded", exact);
+    }
+    {                                                     /* two of a type: each its own values, in order */
+        static const uint8_t DD[2] = {FXI_DRIVE, FXI_DRIVE2};
+        static float a[2][2048], c[2][2048];
+        int same = 1;
+        uint32_t k;
+        for (k = 0; k < 2u; k++) {
+            eng_reset();
+            chain(DD, 2u);
+            sy_patch.p[SP_DR_TYPE] = DRV_FOLD;
+            sy_patch.p[SP_DR_AMT] = 400;
+            sy_patch.p[SP_DR2_TYPE] = DRV_HARD;
+            sy_patch.p[SP_DR2_AMT] = 900;
+            sy_patch.p[SP_DR2_TONE] = -600;
+            snap();
+            mod_map();
+            for (s = 5, b = 0; b < 2048u / SY_BLK; b++) {
+                float l[SY_BLK], r[SY_BLK];
+                for (i = 0; i < SY_BLK; i++)
+                    l[i] = r[i] = 0.4f * sy_randf(sy_rand(&s));
+                mod_offsets(sy_goff, 0, 0);
+                if (!k) {
+                    fx_block(l, r);
+                } else {
+                    fx_drive(l, r, FXI_DRIVE);
+                    fx_drive(l, r, FXI_DRIVE2);
+                    fx_limit(l, r);
+                }
+                for (i = 0; i < SY_BLK; i++)
+                    (k ? c : a)[0][b * SY_BLK + i] = l[i], (k ? c : a)[1][b * SY_BLK + i] = r[i];
+            }
+        }
+        for (i = 0; i < 2048u; i++)
+            same &= a[0][i] == c[0][i] && a[1][i] == c[1][i];
+        check("chain: DRIVE and DRIVE 2, each its own values, in the chain's order (as called so, bit for bit)", same);
+    }
+    {                                                     /* the slots made whole as the audio side takes them */
+        float l[SY_BLK], r[SY_BLK];
+        eng_reset();
+        sy_patch.p[SP_FXC1] = FXI_TAPE + 1;
+        sy_patch.p[SP_FXC2] = FXI_TAPE + 1;               /* (twice: once) */
+        sy_patch.p[SP_FXC3] = FXI_RING + 1;
+        sy_patch.p[SP_FXC4] = 0;
+        sy_patch.p[SP_FXC5] = FXI_EQ + 1;                 /* (after a gap: not in it) */
+        sy_zerof(l, SY_BLK);
+        sy_zerof(r, SY_BLK);
+        fx_run(l, r);
+        check("chain: the slots as the audio side takes them: an instance once, none after the first empty slot",
+              fx.n == 2u && fx.ch[0] == FXI_TAPE && fx.ch[1] == FXI_RING);
+    }
+}
+
+/* ---------------------------------------------------------------------------------- the new modules --- */
+static int flt_ok(const float *x, uint32_t n)             /* finite, none subnormal */
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        if (!isfinite(x[i]) || fpclassify(x[i]) == FP_SUBNORMAL)
+            return 0;
+    return 1;
+}
+
+/* instance i alone in the chain, its values at random corners (each at its low or high end), full-scale noise for
+ * 2 s then silence for 4 s: finite, under the limiter's 1, every float state flushed (none subnormal) */
+static int mod_extremes(uint32_t i, uint32_t seed, float *top)
+{
+    uint16_t ids[SP_FX_MAXP];
+    uint32_t n = sp_inst_ids(i, ids), k, b, j, s = seed;
+    int ok = 1;
+    uint8_t one[1];
+    one[0] = (uint8_t)i;
+    eng_reset();
+    chain(one, 1u);
+    for (k = 1; k < n; k++)
+        sy_patch.p[ids[k]] = (sy_rand(&s) & 1u) ? SP[ids[k]].hi : SP[ids[k]].lo;
+    snap();
+    *top = 0.0f;
+    for (b = 0; b < blocks(6.0f); b++) {
+        float l[SY_BLK], r[SY_BLK];
+        for (j = 0; j < SY_BLK; j++) {
+            l[j] = b < blocks(2.0f) ? sy_randf(sy_rand(&s)) : 0.0f;
+            r[j] = b < blocks(2.0f) ? sy_randf(sy_rand(&s)) : 0.0f;
+        }
+        fx_run(l, r);
+        for (j = 0; j < SY_BLK; j++) {
+            ok &= isfinite(l[j]) && isfinite(r[j]);
+            *top = fmaxf(*top, fmaxf(fabsf(l[j]), fabsf(r[j])));
+        }
+    }
+    for (k = 0; k < 2u; k++) {                            /* (the float states that recurse: none subnormal) */
+        ok &= flt_ok(fx.phs[k].s[0], 24u) && flt_ok(fx.phs[k].fb, 2u) && flt_ok(fx.ff[k].s[0], 8u);
+        ok &= flt_ok(fx.ff[k].f.s[0], 12u) && flt_ok(fx.tap[k].lp, 2u) && flt_ok(fx.ott[k].env, 3u);
+        ok &= flt_ok(fx.ott[k].s[0][0], 8u) && flt_ok(fx.eq[k].s[0][0], 12u) && flt_ok(fx.drv_lp[k], 2u);
+    }
+    return ok && *top <= 1.0f;
+}
+
+/* the left of a 1 kHz sine (0.5) times nothing but the chain, its power at hz (a bin of a 2^15 spectrum), dB */
+static double chain_bin_db(double fin, const double *hz, double *out, uint32_t nh)
+{
+    static float o[1u << 15];
+    double *p = malloc(((1u << 14) + 1u) * sizeof *p), ph = 0;
+    uint32_t b, i, n = 0, k;
+    for (b = 0; n < (1u << 15); b++) {
+        float l[SY_BLK], r[SY_BLK];
+        for (i = 0; i < SY_BLK; i++, ph += fin / (double)SY_FS)
+            l[i] = r[i] = (float)(0.5 * sin(2.0 * M_PI * ph));
+        fx_run(l, r);
+        for (i = 0; i < SY_BLK && b >= 64u && n < (1u << 15); i++)
+            o[n++] = l[i];
+    }
+    power_spectrum(o, 1u << 15, p);
+    for (k = 0; k < nh; k++) {
+        uint32_t c = (uint32_t)(hz[k] * (double)(1u << 15) / (double)SY_FS + 0.5), j;
+        double e = 0;
+        for (j = c - 2u; j <= c + 2u; j++)
+            e += p[j];
+        out[k] = 10.0 * log10(e + 1e-30);
+    }
+    free(p);
+    return 0;
+}
+
+static void t_fx_new(void)
+{
+    static const uint8_t NEW[] = {FXI_FLANGER, FXI_FLANGER2, FXI_PHASER, FXI_PHASER2, FXI_FFILT, FXI_FFILT2,
+                                  FXI_CRUSH, FXI_CRUSH2, FXI_TREM, FXI_TREM2, FXI_RING, FXI_RING2, FXI_TAPE,
+                                  FXI_TAPE2, FXI_DRIVE2, FXI_CHORUS2, FXI_OTT2, FXI_EQ2};
+    uint32_t k, t, seed = 1, bad = 0;
+    float top, worst = 0.0f;
+    for (k = 0; k < sizeof NEW; k++)
+        for (t = 0; t < 6u; t++, seed += 7u)
+            if (!mod_extremes(NEW[k], seed, &top))
+                bad++, printf("engine: %s at its corners (seed %u): unbounded or not flushed (peak %.3f)\n",
+                              SEC_NAMES[SEC_DRIVE + NEW[k]], (unsigned)seed, (double)top);
+            else
+                worst = fmaxf(worst, top);
+    check("the new modules and the second instances at their corners on full-scale noise: finite, under 1, flushed",
+          !bad);
+    for (t = 0, bad = 0; t < FF_COUNT; t++) {             /* the FX filter's every type, the same */
+        uint32_t c;
+        for (c = 0; c < 4u; c++) {
+            static const uint8_t F[1] = {FXI_FFILT};
+            uint32_t b, j, s = 77u + c;
+            int ok = 1;
+            eng_reset();
+            chain(F, 1u);
+            sy_patch.p[SP_FF_TYPE] = (int16_t)t;
+            sy_patch.p[SP_FF_CUT] = (int16_t)(c & 1u ? 1000 : 0);
+            sy_patch.p[SP_FF_RES] = (int16_t)(c & 2u ? 1000 : 0);
+            sy_patch.p[SP_FF_DRIVE] = (int16_t)(c == 3u ? 1000 : 0);
+            snap();
+            for (b = 0; b < blocks(3.0f); b++) {
+                float l[SY_BLK], r[SY_BLK];
+                for (j = 0; j < SY_BLK; j++)
+                    l[j] = r[j] = b < blocks(1.5f) ? sy_randf(sy_rand(&s)) : 0.0f;
+                if ((b & 15u) == 0u)                      /* the cutoff jumping 20 Hz <-> 20 kHz */
+                    sy_patch.p[SP_FF_CUT] = (int16_t)(1000 - sy_patch.p[SP_FF_CUT]);
+                fx_run(l, r);
+                for (j = 0; j < SY_BLK; j++)
+                    ok &= isfinite(l[j]) && fabsf(l[j]) <= 1.0f;
+            }
+            if (!ok)
+                bad++, printf("engine: FX filter %s (corner %u): unbounded\n", FF_NAMES[t], (unsigned)c);
+        }
+    }
+    check("the FX filter's 21 types at their corners, the cutoff jumping 20 Hz <-> 20 kHz: finite, under 1", !bad);
+    {                                                     /* the FX filter's responses */
+        static const uint8_t F[1] = {FXI_FFILT};
+        double lp6, hp6, shelf, dj, cp, cq;
+        eng_reset();
+        chain(F, 1u);
+        sy_patch.p[SP_FF_TYPE] = FF_LP6;
+        sy_patch.p[SP_FF_CUT] = 566;                      /* (1.00 kHz) */
+        snap();
+        lp6 = chain_gain_db(1000.0);
+        sy_patch.p[SP_FF_TYPE] = FF_HP6;
+        snap();
+        hp6 = chain_gain_db(1000.0);
+        sy_patch.p[SP_FF_TYPE] = FF_LSHELF;
+        sy_patch.p[SP_FF_RES] = 1000;                     /* (+18 dB) */
+        snap();
+        shelf = chain_gain_db(40.0);
+        sy_patch.p[SP_FF_TYPE] = FF_DJ;
+        sy_patch.p[SP_FF_CUT] = 500;                      /* (the middle: open) */
+        sy_patch.p[SP_FF_RES] = 0;
+        snap();
+        dj = chain_gain_db(1000.0);
+        sy_patch.p[SP_FF_TYPE] = FF_COMBP;
+        sy_patch.p[SP_FF_CUT] = 456;                      /* (441 Hz) */
+        sy_patch.p[SP_FF_RES] = 900;
+        snap();
+        cp = chain_gain_db(sp_cut_hz(0.456f));
+        cq = chain_gain_db(1.5 * (double)sp_cut_hz(0.456f));
+        printf("engine: FX filter at 1 kHz: LP 6 %+.2f dB, HP 6 %+.2f dB; LO SHELF +18 dB at 40 Hz %+.2f dB; DJ open "
+               "%+.2f dB; COMB + %+.1f dB at its frequency, %+.1f dB halfway\n", lp6, hp6, shelf, dj, cp, cq);
+        check("FX filter: LP 6 and HP 6 -3 dB at the cutoff (+-0.5), LO SHELF its gain (+-1), DJ open flat (+-0.2), "
+              "COMB + a peak at its frequency (10 dB over halfway)",
+              fabs(lp6 + 3.01) < 0.5 && fabs(hp6 + 3.01) < 0.5 && fabs(shelf - 18.0) < 1.0 && fabs(dj) < 0.2 &&
+              cp > cq + 10.0);
+    }
+    {                                                     /* PHASER: two stages, still, at 1 kHz, half dry: a notch */
+        static const uint8_t P[1] = {FXI_PHASER};
+        double at, lo;
+        eng_reset();
+        chain(P, 1u);
+        sy_patch.p[SP_PH_STAGES] = 0;
+        sy_patch.p[SP_PH_DEPTH] = 0;
+        sy_patch.p[SP_PH_CENTER] = 566;
+        sy_patch.p[SP_PH_FDBK] = 0;
+        sy_patch.p[SP_PH_MIX] = 500;
+        snap();
+        at = chain_gain_db(1000.0);
+        lo = chain_gain_db(60.0);
+        printf("engine: PHASER, two stages at 1 kHz, still, half dry: %+.1f dB at 1 kHz, %+.2f dB at 60 Hz\n", at, lo);
+        check("PHASER: two still stages and the dry make a notch at CENTER (under -30 dB), flat far under it (-1 dB)",
+              at < -30.0 && lo > -1.0);
+    }
+    {                                                     /* FLANGER: still at 0.3 ms, half dry: a notch at 1.67 kHz */
+        static const uint8_t F[1] = {FXI_FLANGER};
+        double at, lo, f0 = 1.0 / (2.0 * 0.0003);
+        eng_reset();
+        chain(F, 1u);
+        sy_patch.p[SP_FL_DEPTH] = 0;
+        sy_patch.p[SP_FL_DELAY] = 0;
+        sy_patch.p[SP_FL_FDBK] = 0;
+        sy_patch.p[SP_FL_MIX] = 500;
+        snap();
+        at = chain_gain_db(f0);
+        lo = chain_gain_db(60.0);
+        printf("engine: FLANGER, still at 0.3 ms, half dry: %+.1f dB at %.0f Hz, %+.2f dB at 60 Hz\n", at, f0, lo);
+        check("FLANGER: still, half dry: its first notch at 1 / (2 x delay) (under -20 dB), flat far under it",
+              at < -20.0 && lo > -1.0);
+    }
+    {                                                     /* RING MOD: 1 kHz times 300 Hz: 700 and 1300 Hz, no 1 kHz */
+        static const uint8_t G[1] = {FXI_RING};
+        static const double HZ[3] = {1000.0, 700.0, 1300.0};
+        double db[3];
+        eng_reset();
+        chain(G, 1u);
+        sy_patch.p[SP_RG_FREQ] = 392;                     /* (300 Hz) */
+        sy_patch.p[SP_RG_MIX] = 1000;
+        snap();
+        chain_bin_db(1000.0, HZ, db, 3u);
+        printf("engine: RING MOD, 1 kHz times 300 Hz: %.1f dB at 1 kHz, %.1f and %.1f dB at 700 and 1300 Hz\n", db[0],
+               db[1], db[2]);
+        check("RING MOD: the sum and the difference (700, 1300 Hz), the input gone (40 dB under them)",
+              db[1] > db[0] + 40.0 && db[2] > db[0] + 40.0 && fabs(db[1] - db[2]) < 1.0);
+    }
+    {                                                     /* TREMOLO and AUTOPAN */
+        static const uint8_t T[1] = {FXI_TREM};
+        float lo = 1.0f, hi = 0.0f, cl = 0.0f, cr = 0.0f;
+        double corr = 0;
+        uint32_t b, i, m;
+        for (m = 0; m < 2u; m++) {
+            eng_reset();
+            chain(T, 1u);
+            sy_patch.p[SP_TR_MODE] = (int16_t)m;
+            sy_patch.p[SP_TR_DEPTH] = 1000;
+            snap();
+            for (b = 0; b < blocks(2.0f); b++) {
+                float l[SY_BLK], r[SY_BLK];
+                for (i = 0; i < SY_BLK; i++)
+                    l[i] = r[i] = 0.5f;
+                fx_run(l, r);
+                if (b < blocks(0.5f))
+                    continue;
+                if (!m) {
+                    lo = fminf(lo, l[0]);
+                    hi = fmaxf(hi, l[0]);
+                } else {
+                    cl = l[0] - 0.5f;
+                    cr = r[0] - 0.5f;
+                    corr += (double)cl * (double)cr;
+                }
+            }
+        }
+        printf("engine: TREMOLO at DEPTH 100 %% on 0.5: %.3f .. %.3f; AUTOPAN: the sides' swings %s\n", (double)lo,
+               (double)hi, corr < 0.0 ? "opposite" : "together");
+        check("TREMOLO: the level from 0 to all of it at full DEPTH; AUTOPAN: the sides swing opposite",
+              lo < 0.02f && hi > 0.48f && corr < 0.0);
+    }
+    {                                                     /* TAPE, still and clean: a 200 Hz sine 4 ms later */
+        static const uint8_t T[1] = {FXI_TAPE};
+        static float ou[1u << 14];
+        uint32_t b, i, n = 0;
+        double xy = 0, xx = 0, yy = 0, ph = 0;
+        eng_reset();
+        chain(T, 1u);
+        sy_patch.p[SP_TP_WOW] = sy_patch.p[SP_TP_FLUT] = sy_patch.p[SP_TP_SAT] = sy_patch.p[SP_TP_TONE] = 0;
+        snap();
+        for (b = 0; n < (1u << 14); b++) {
+            float l[SY_BLK], r[SY_BLK];
+            for (i = 0; i < SY_BLK; i++, ph += 200.0 / (double)SY_FS)
+                l[i] = r[i] = (float)(0.3 * sin(2.0 * M_PI * ph));
+            fx_run(l, r);
+            for (i = 0; i < SY_BLK && n < (1u << 14); i++)
+                ou[n++] = l[i];
+        }
+        for (i = 4096u; i < (1u << 14); i++) {           /* (against the sine as it was 4 ms before) */
+            double x = 0.3 * sin(2.0 * M_PI * 200.0 * ((double)i / (double)SY_FS - 0.004));
+            xy += x * (double)ou[i];
+            xx += x * x;
+            yy += (double)ou[i] * (double)ou[i];
+        }
+        printf("engine: TAPE still and clean: the output against the input 4 ms before, correlation %.4f\n",
+               xy / sqrt(xx * yy));
+        check("TAPE: no wow, flutter or saturation: the input 4 ms later (correlation over 0.999)", xy / sqrt(xx * yy) > 0.999);
+    }
+    {                                                     /* BITCRUSH: one bit, three levels (the module alone) */
+        uint32_t b, i, s = 9;
+        int ok = 1;
+        eng_reset();
+        sy_patch.p[SP_CR_ON] = 1;
+        sy_patch.p[SP_CR_BITS] = 1;
+        sy_patch.p[SP_CR_MIX] = 1000;
+        snap();
+        for (b = 0; b < 200u; b++) {
+            float l[SY_BLK], r[SY_BLK];
+            for (i = 0; i < SY_BLK; i++)
+                l[i] = r[i] = 0.9f * sy_randf(sy_rand(&s));
+            sp_block();
+            mod_map();
+            mod_offsets(sy_goff, 0, 0);
+            fx_crush(l, r, FXI_CRUSH);
+            for (i = 0; b > 2u && i < SY_BLK; i++)
+                ok &= fabsf(l[i] + 1.0f) < 1e-6f || fabsf(l[i]) < 1e-6f || fabsf(l[i] - 1.0f) < 1e-6f;
+        }
+        check("BITCRUSH at 1 bit: three levels", ok);
+    }
 }
 
 /* ----------------------------------------------------------------------------------------- 9 cost --- */
@@ -1524,6 +2088,8 @@ int main(int argc, char **argv)
     t_fx();
     t_fx_order();
     t_eq();
+    t_chain();
+    t_fx_new();
     t_cost();
     return t_done();
 }

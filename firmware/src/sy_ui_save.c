@@ -240,6 +240,57 @@ static void ui_browse_open(void)
     ui_go(ui_first_page(SEC_BROWSE));
 }
 
+/* OCT- held 3 s in the browser: the user preset playing deleted (the sound plays on, from no slot); SAVE + OCT-
+ * straight after puts it back (sy_app.c keeps its bytes until the next SAVE) */
+static int sy_app_delete(uint32_t s);               /* sy_app.c */
+static int sy_app_undelete(void);
+static void ui_browse_del(void)
+{
+    int32_t s = sy_app_slot();
+    if (s < 0)
+        return;
+    if (ui.saving || sy_app_delete((uint32_t)s)) {
+        ui_toast("BUSY: TRY AGAIN");
+        return;
+    }
+    ui.saving = 1;
+    ui_toast("DELETING");
+}
+static void ui_browse_undel(void)
+{
+    if (ui.saving || sy_app_undelete()) {
+        ui_toast(ui.saving ? "BUSY: TRY AGAIN" : "NO ROOM TO PUT IT BACK");
+        return;
+    }
+    ui.saving = 1;
+    ui.undel = 0;
+    ui_toast("PUTTING IT BACK");
+}
+static void sy_ui_deleted(int rc, uint32_t s)
+{
+    char t[sizeof ui.toast];
+    ui.saving = 0;
+    if (rc) {
+        sp_fix(sp_put(t, "DELETE FAILED: "), rc, 0u, 0);
+    } else {
+        sp_put(sp_fix(sp_put(t, "DELETED USER "), (int32_t)s + 1, 0u, 0), " \xB7 SAVE+OCT- UNDO");
+        ui.undel = 1;
+    }
+    ui_toast(t);
+    ui.dirty |= D_HEAD | D_DISP | D_KNOBS;
+}
+static void sy_ui_restored(int rc, uint32_t s)
+{
+    char t[sizeof ui.toast];
+    ui.saving = 0;
+    if (rc)
+        sp_fix(sp_put(t, "PUT BACK FAILED: "), rc, 0u, 0);
+    else
+        sp_fix(sp_put(t, "BACK IN USER "), (int32_t)s + 1, 0u, 0);
+    ui_toast(t);
+    ui.dirty |= D_HEAD | D_DISP | D_KNOBS;
+}
+
 /* the browser's presets (its bank and category) and where the one playing is among them (n: not there) */
 static uint32_t ui_browse_list(uint16_t *ids, uint32_t *at)
 {
@@ -484,5 +535,5 @@ static void ui_g_browse(void)
             sp_put(t, ids[k] + 1u < SY_NFACT ? "STARTER" : "");
         cv_text_r(WX + 218, y + CAP_IN(XS, 16), &AF_XS, t, on ? sk.label : sk.faint, bg);
     }
-    cv_text_on(WX + 78, WY + 95, &AF_XS, "SAVE + OCT-: UNDO A LOAD", sk.faint, sk.display);
+    cv_text_on(WX + 78, WY + 95, &AF_XS, "OCT- HOLD: DEL \xB7 SAVE+OCT-: UNDO", sk.faint, sk.display);
 }

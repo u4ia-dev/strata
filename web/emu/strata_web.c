@@ -395,6 +395,10 @@ EXPORT int32_t web_test_slot_value(uint32_t s, uint32_t id)
     int n = ss_user_get(s, pk, sizeof pk);
     return n > 0 && sp_unpack(&p, pk, (uint32_t)n) && id < SP_COUNT ? p.p[id] : -32768;
 }
+/* the FX chain: slot k's instance + 1 (0 none); the chain view's slot and type picked */
+EXPORT int32_t web_test_chain(uint32_t k) { return k < NFXC ? sy_patch.p[SP_FXC1 + k] : 0; }
+EXPORT uint32_t web_test_cslot(void) { return ui_cslot(); }
+EXPORT uint32_t web_test_ctype(void) { return ui.ctype; }
 /* the knob turning (0xFF none), whether a shape before the turn is kept (the ghost), HOME's scope captures taken */
 EXPORT uint32_t web_test_act(void) { return ui.act_k; }
 EXPORT uint32_t web_test_ghost(void) { return ui_ghost() != 0; }

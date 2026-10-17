@@ -132,6 +132,7 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
         us = (fm1_ticks() - t0 - SY_NESTED_TICKS()) / FM1_TICKS_PER_US;
         sy_load_q8 = us * 256u / (SY_HALF * 1000000u / 44118u);
         sy_cpu(sy_load_q8);
+        sy_cpu_now((fm1_ticks() - t0) / FM1_TICKS_PER_US * 256u / (SY_HALF * 1000000u / 44118u));
         sy_bench.half_us = us;
         if (us > sy_bench.half_max_us)
             sy_bench.half_max_us = us;
@@ -211,6 +212,7 @@ static void sy_sound_patch(uint32_t k, sy_patch_t *p)
         return;
     for (i = 0; SOUNDS[k].kv[i][0] >= 0; i++)
         p->p[SOUNDS[k].kv[i][0]] = sp_clamp((uint32_t)SOUNDS[k].kv[i][0], SOUNDS[k].kv[i][1]);
+    sp_chain_from_old(p);                        /* (their effects as the six were: those ON, the chain) */
     p->cat = SOUNDS[k].cat;
     for (n = 0; n < 16u && SOUNDS[k].name[n]; n++)
         p->name[n] = (char)(SOUNDS[k].name[n] >= 'a' && SOUNDS[k].name[n] <= 'z' ? SOUNDS[k].name[n] - 32
@@ -373,12 +375,15 @@ static void sy_app_sound_step(int32_t s)
  * settings and the sound playing (back at power-on): only after 3 s without sound (the ring under -70 dBFS, nothing
  * to hush), when they differ from what the flash has */
 #define SY_QUIET_MS 3000u
+enum { SY_FL_SAVE = 1, SY_FL_DEL, SY_FL_BACK };   /* a slot's write: a SAVE, a delete, a delete put back */
 static struct {
-    uint8_t busy;                                /* a SAVE waiting for the hush */
+    uint8_t busy;                                /* a write waiting for the hush (SY_FL_*) */
     uint16_t slot;
-    uint8_t pk[SP_PACK_MAX];
+    uint8_t pk[SP_PACK_MAX];                     /* the patch to write; after a delete, the one deleted (put back) */
     uint32_t len, quiet_t, check_t, edit_crc, set_crc;
 } sy_fl;
+static void sy_ui_deleted(int rc, uint32_t s);   /* sy_ui_save.c: a delete or its putting back done */
+static void sy_ui_restored(int rc, uint32_t s);
 
 /* a SAVE asked for: the sound playing into user slot s, named and filed so; 0 queued (sy_ui_saved tells the end) */
 static int sy_app_save(uint32_t s, const char *name, uint32_t cat)
@@ -392,7 +397,35 @@ static int sy_app_save(uint32_t s, const char *name, uint32_t cat)
     sy_patch.cat = (uint8_t)(cat < CAT_COUNT ? cat : CAT_OTHER);
     sy_fl.len = sp_pack(&sy_patch, sy_fl.pk);
     sy_fl.slot = (uint16_t)s;
-    sy_fl.busy = 1;
+    sy_fl.busy = SY_FL_SAVE;
+    sy_hush_req = 1;
+    ui.undel = 0;                                /* (the bytes of a delete gone with it) */
+    return 0;
+}
+/* user slot s emptied (its bytes kept: sy_app_undelete puts them back); 0 queued (sy_ui_deleted tells the end) */
+static int sy_app_delete(uint32_t s)
+{
+    int n;
+    if (sy_fl.busy || s >= SS_NUSER || !sy_uidx[s].used || (n = ss_user_get(s, sy_fl.pk, sizeof sy_fl.pk)) <= 0)
+        return -1;
+    sy_fl.len = (uint32_t)n;
+    sy_fl.slot = (uint16_t)s;
+    sy_fl.busy = SY_FL_DEL;
+    sy_hush_req = 1;
+    return 0;
+}
+/* the preset deleted last back in its slot (taken meanwhile: the first free one); 0 queued (sy_ui_restored) */
+static int sy_app_undelete(void)
+{
+    int32_t s = sy_fl.slot;
+    if (sy_fl.busy || !sy_fl.len)
+        return -1;
+    if (s >= (int32_t)SS_NUSER || sy_uidx[s].used)
+        s = sy_app_slot_free();
+    if (s < 0)
+        return -1;
+    sy_fl.slot = (uint16_t)s;
+    sy_fl.busy = SY_FL_BACK;
     sy_hush_req = 1;
     return 0;
 }
@@ -408,15 +441,31 @@ static uint32_t sy_edit_pack(uint8_t *b)
 
 static void sy_flash_ms(void)
 {
-    if (sy_fl.busy && sy_hushed) {               /* a SAVE: hushed, the slot written, back */
-        int rc = ss_user_put(sy_fl.slot, sy_fl.pk, sy_fl.len);
+    if (sy_fl.busy && sy_hushed) {               /* a SAVE, a delete, its putting back: hushed, the slot written, */
+        uint32_t job = sy_fl.busy;               /* back */
+        int rc = ss_user_put(sy_fl.slot, sy_fl.pk, job == SY_FL_DEL ? 0u : sy_fl.len);
         sy_hush_req = 0;
         sy_fl.busy = 0;
-        if (!rc) {
-            sy_uidx_set(sy_fl.slot, sy_fl.pk, sy_fl.len);
-            sy_slot = (int16_t)sy_fl.slot;
+        if (job == SY_FL_DEL) {
+            if (!rc) {
+                sy_uidx[sy_fl.slot].used = 0;
+                if (sy_slot == (int16_t)sy_fl.slot)
+                    sy_slot = -1;                /* (the sound plays on, from no slot) */
+            }
+            sy_ui_deleted(rc, sy_fl.slot);
+        } else if (job == SY_FL_BACK) {
+            if (!rc) {
+                sy_uidx_set(sy_fl.slot, sy_fl.pk, sy_fl.len);
+                sy_fl.len = 0;
+            }
+            sy_ui_restored(rc, sy_fl.slot);
+        } else {
+            if (!rc) {
+                sy_uidx_set(sy_fl.slot, sy_fl.pk, sy_fl.len);
+                sy_slot = (int16_t)sy_fl.slot;
+            }
+            sy_ui_saved(rc, sy_fl.slot);
         }
-        sy_ui_saved(rc, sy_fl.slot);
     }
     if (ui_sounding())
         sy_fl.quiet_t = fm1_ms;

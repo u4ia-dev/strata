@@ -371,6 +371,34 @@ static int sy_cpu(uint32_t load_q8)
     return shed;
 }
 
+/* end of a half, again: tot_q8 the render and the interrupts nested in it together (256 = the half). Near the deadline
+ * the guard steps at once, not a few smoothed halves later: over 90 % a budget step (and over 94 % the effects at low
+ * cost), over 96 % a voice shed now (BENCH on V0.5: 95 % at its peak, 5 halves late, 1 voice shed). The way back is
+ * sy_cpu's, unchanged. Returns 1 when a voice was shed */
+static int sy_cpu_now(uint32_t tot_q8)
+{
+    int shed = 0;
+    if (tot_q8 <= 230u)
+        return 0;
+    if (sy_g.level < SY_GUARD_FX)
+        sy_g.level++;
+    if (tot_q8 > 240u)
+        sy_g.fx_lo = 1;
+    sy_g.calm = 0;
+    if (tot_q8 > 246u) {
+        sy_voice_t *v = sy_steal_pick(SY_NVOICE);
+        if (v && !v->steal) {
+            v->steal = VOICE_STEAL_BLKS;
+            v->next_vel = 0;
+            sy_g.shed++;
+            shed = 1;
+        }
+    }
+    sy_uni_budget = SY_GUARD_BUDGET[sy_g.level];
+    fx_lo = sy_g.fx_lo;
+    return shed;
+}
+
 /* ------------------------------------------------------------------------------------- the scope --- */
 /* HOME's scope (sy_ui_draw.c): the main loop arms it with a step (samples a point); the audio side waits for the
  * output (left plus right) to rise through 0 from under -1 % (or SY_SCOPE_WAIT samples: free running), then takes
@@ -474,6 +502,7 @@ static void sy_block(int32_t *out)
     mod_offsets(sy_goff, vs, 0);
     if (sy_lfo_sync) {                               /* (PLAY: on the beat from here) */
         sy_glfo[0].ph = sy_glfo[1].ph = 0;
+        fx_lfo_reset();                              /* (the flangers', phasers', tremolos' too) */
         sy_lfo_sync = 0;
     }
     for (k = 0; k < 2u; k++) {                       /* the FREE LFOs */

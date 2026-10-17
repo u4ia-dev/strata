@@ -31,6 +31,14 @@ static void ui_g_delay(void);
 static void ui_g_reverb(void);
 static void ui_g_ott(void);
 static void ui_g_eq(void);
+static void ui_g_chain(void);
+static void ui_g_flanger(void);
+static void ui_g_phaser(void);
+static void ui_g_ffilt(void);
+static void ui_g_crush(void);
+static void ui_g_trem(void);
+static void ui_g_ring(void);
+static void ui_g_tape(void);
 static void ui_flag(int32_t x, int32_t y, const char *s);
 static int ui_eq_modded(void);
 static void ui_g_save(void);                        /* sy_ui_save.c: SAVE's screen, the browser */
@@ -104,7 +112,7 @@ static void ui_draw_head(void)
             else
                 sp_put(t, "A KNOB: FOR NOW");
         } else {
-            sp_put(t, ui.lay == LAY_PERF ? "KNOB 1 BEND \xB7 2 WHEEL" : ui.lay == LAY_MAC ? "KEYS: THE EFFECTS"
+            sp_put(t, ui.lay == LAY_PERF ? "KNOB 1 BEND \xB7 2 WHEEL" : ui.lay == LAY_MAC ? "KEYS: BYPASS A MODULE"
                                                                                  : "A KEY: ITS SECTION");
         }
         cv_begin(240, 22, sk.banner);
@@ -183,18 +191,16 @@ static void ui_draw_head(void)
         case SEC_LFO2:
             r = ui_tab(ui_tab(232, "LFO 2", pg->sec == SEC_LFO2) - 3, "LFO 1", pg->sec == SEC_LFO1);
             break;
-        case SEC_DRIVE:
-        case SEC_CHORUS:
-        case SEC_DELAY:
-        case SEC_REVERB:
-        case SEC_OTT:
-        case SEC_EQ:
-            for (n = 0, s = SEC_DRIVE; s < SEC_DRIVE + UI_NFX; s++)
-                n += sy_patch.p[ui_sec_power(s)] != 0;
-            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, " OF 6 ON", sk.dim, sk.ground);
-            sp_fix(t, (int32_t)n, 0u, 0);
+        case SEC_CHAIN: {                           /* the chain: its modules of 8, their cost (the cost model's) */
+            uint32_t cost = 0, nc = sp_chain_n(sy_patch.p);
+            for (s = 0; s < nc; s++)
+                cost += FXT_COST[FXI_TYPE[sp_chain_at(sy_patch.p, s)]];
+            sp_put(sp_fix(sp_put(t, " OF 8 \xB7 CPU ~"), (int32_t)cost, 0u, 0), "%");
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, t, sk.dim, sk.ground);
+            sp_fix(t, (int32_t)nc, 0u, 0);
             r = cv_text_r(r, CAP_IN(XS, 21), &AF_XS, t, sk.text, sk.ground);
             break;
+        }
         case SEC_KEYS:                              /* the keys' octave (OCT- / OCT+) */
             sp_fix(sp_put(t, "OCT "), sy_app_oct(), 0u, sy_app_oct() != 0);
             r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, t, sk.dim, sk.ground);
@@ -226,6 +232,11 @@ static void ui_draw_head(void)
             r = 232 - 4 * 16 + 3;
             break;
         }
+        }
+        if (ui_is_fx(pg->sec)) {                    /* a module: its place in the chain */
+            int32_t at = sp_chain_find(sy_patch.p, pg->sec - SEC_DRIVE);
+            sp_fix(sp_put(sp_fix(t, at + 1, 0u, 0), " OF "), (int32_t)sp_chain_n(sy_patch.p), 0u, 0);
+            r = cv_text_r(232, CAP_IN(XS, 21), &AF_XS, at >= 0 ? t : "OUT", sk.dim, sk.ground);
         }
         ui_page_of(ui.page, &n, &of);               /* the page, and its number where there is room */
         e = pg->sec != SEC_SAVE ? sp_put(t, pg->name) : sp_put(t, ui_save_renaming() ? "RENAME" : "NAME IT");
@@ -435,6 +446,19 @@ static void ui_draw_knob(uint32_t k)
         sp_fix(t, (int32_t)ui.mslot + 1, 0u, 0);
         ui_pill(t, ui.mod != 0, act);
         ui_text_c(0, 46, 60, &AF_XS, "SLOT", ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
+    } else if (id >= UI_CTYPE && id <= UI_CMOVE) {  /* the chain view's: the type to add, the slot, MOVE */
+        static const char *const NAME[3] = {"ADD", "SLOT", "MOVE"};
+        uint32_t nc = sp_chain_n(sy_patch.p), at = ui_cslot();
+        if (id == UI_CTYPE)
+            ui_pill(FXT_NAMES[ui.ctype % FXT_N], ui.mod != 0, act);
+        else if (id == UI_CSLOT)
+            ui_pill(at < nc ? (sp_fix(t, (int32_t)at + 1, 0u, 0), t) : "END", ui.mod != 0, act);
+        else
+            ui_pill(at < nc ? "< >" : "-", ui.mod != 0 || at >= nc, act);
+        ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_CTYPE], ui.mod ? sk.faint : act ? sk.now : sk.label, sk.ground);
+    } else if (it == UI_CMIX && id < 0) {           /* .. the slot picked has no MIX (EQ, the empty place) */
+        ui_pill("-", 1, 0);
+        ui_text_c(0, 46, 60, &AF_XS, "MIX", sk.faint, sk.ground);
     } else if (id >= UI_ITEM) {                     /* the SETTINGS' items */
         ui_set_cell(id, act);
     } else if (id >= 0) {
@@ -474,7 +498,7 @@ static void ui_draw_foot(void)
     } else if (ui.lay) {                            /* a hold layer: how it ends */
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS,
                   ui.lay == LAY_PERF ? "LET GO OF GLO: THE BEND BACK TO 0"
-                  : ui.lay == LAY_MAC ? "F3 .. D4: AN EFFECT ON OR OFF"
+                  : ui.lay == LAY_MAC ? "F3 .. F4: A MODULE BYPASSED OR IN"
                   : ui.lay == LAY_MOM ? "LET GO OF LFO: EVERY CHANGE BACK" : "LET GO OF EDIT: THE PAGE",
                   sk.dim, sk.ground);
     } else if (ui_sec() == SEC_SAVE) {
@@ -482,6 +506,9 @@ static void ui_draw_foot(void)
                                                             : "OCT+ 123 \xB7 OCT- DEL \xB7 SAVE: WRITE", sk.dim, sk.ground);
     } else if (ui_sec() == SEC_BROWSE) {
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "KNOB 2 LOADS \xB7 SAVE: NAME IT", sk.dim, sk.ground);
+    } else if (ui_sec() == SEC_CHAIN && !ui.mod) {
+        ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, "FX+OCT+/- ADD, OUT \xB7 FX TWICE: OPEN", sk.dim,
+                  sk.ground);
     } else if (ui_sec() == SEC_MENU) {
         uint32_t g = UI_PG[ui.page].graph;
         ui_text_c(0, CAP_IN(XS, 20), 240, &AF_XS, g == G_COLOR ? "KNOB 1 COLOR \xB7 2 HELP \xB7 3 GLOW"
@@ -998,24 +1025,23 @@ static void ui_g_perf(void)
     cv_text_on(WX + 8, WY + 92, &AF_XS, "THE KEYS PLAY ON", sk.faint, sk.display);
 }
 
-/* FX held, MACROS: the six effects in their order, each lit when on, with the key that turns it on and off; the four
- * macros as bars under their names */
+/* FX held, MACROS: the chain's eight slots in its order, each module lit when in (dim when bypassed), with the key
+ * that bypasses it or takes it back; the four macros as bars under their names */
 static void ui_g_mac(void)
 {
-    static const char *const KEY[6] = {"F3", "G3", "A3", "B3", "C4", "D4"};
-    uint8_t o[SP_NFX];
+    static const char *const KEY[NFXC] = {"F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4"};
     uint32_t i;
     char t[SP_TEXT_N + 4];
-    sp_order(sy_patch.p[SP_FX_ORDER], o);
-    for (i = 0; i < SP_NFX; i++) {
-        uint32_t sec = SEC_DRIVE + o[i];
-        int on = sy_patch.p[ui_sec_power(sec)] != 0;
-        int32_t x = WX + 4 + (int32_t)i * 37;
-        cv_rrect(x, WY + 4, 34, 18, 3, on ? sk.wmid : sk.rline, sk.display);
-        cv_rrect(x + 1, WY + 5, 32, 16, 2, on ? sk.wtint : sk.display, on ? sk.wmid : sk.rline);
-        ui_text_c(x, WY + 5 + CAP_IN(XS, 16), 34, &AF_XS, SEC_SHORT[sec], on ? sk.sound : sk.faint,
-                  on ? sk.wtint : sk.display);
-        ui_text_c(x, WY + 26, 34, &AF_XS, KEY[o[i]], sk.dim, sk.display);
+    for (i = 0; i < NFXC; i++) {
+        int32_t in = sp_chain_at(sy_patch.p, i), x = WX + 3 + (int32_t)i * 28;
+        int on = in >= 0 && sy_patch.p[FXI_ON[in]] != 0;
+        uint16_t bd = in < 0 ? sk.track : on ? sk.wmid : sk.rline;
+        cv_rrect(x, WY + 4, 26, 18, 3, bd, sk.display);
+        cv_rrect(x + 1, WY + 5, 24, 16, 2, on ? sk.wtint : sk.display, bd);
+        if (in >= 0)
+            ui_text_c(x, WY + 5 + CAP_IN(XS, 16), 26, &AF_XS, SEC_SHORT[SEC_DRIVE + (uint32_t)in],
+                      on ? sk.sound : sk.faint, on ? sk.wtint : sk.display);
+        ui_text_c(x, WY + 26, 26, &AF_XS, KEY[i], in >= 0 ? sk.dim : sk.faint, sk.display);
     }
     for (i = 0; i < 4u; i++) {
         int32_t y = WY + 44 + (int32_t)i * 15;
@@ -1031,18 +1057,29 @@ static void ui_g_mac(void)
 static void ui_g_jump(void)
 {
     static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0};   /* from F */
-    static const char *const CODE[SEC_N] = {"A", "B", "SB", "NZ", "FL", "E1", "E2", "L1", "L2", "V", "H", "MX",
-                                            "DR", "CH", "DL", "RV", "OT", "EQ", "S", "G", "", "", "K"};
+    static const char *const CODE[SEC_MATRIX + 1u] = {"A", "B", "SB", "NZ", "FL", "E1", "E2", "L1", "L2", "V", "H",
+                                                       "MX"};
     uint32_t k, w, pass, cur = ui_sec();
-    char t[32];
+    char t[32], cd[27][3];
+    for (k = 0; k < 27u; k++) {                     /* each key's code: its section's (a chain slot's: its module's */
+        uint32_t sec = ui_jump_sec(k);              /* type, two letters; the chain view FX) */
+        static const char *const FXC[FXT_N] = {"DR", "CH", "DL", "RV", "OT", "EQ", "FG", "PH", "FF", "BC", "TR",
+                                               "RM", "TP"};   /* (a module's type: two letters, each its own) */
+        const char *c = sec <= SEC_MATRIX ? CODE[sec] : sec == SEC_CHAIN ? "X" : sec == SEC_MENU ? "S"
+                        : sec == SEC_GLOBAL ? "G" : sec == SEC_KEYS ? "K"
+                        : ui_is_fx(sec) ? FXC[FXI_TYPE[sec - SEC_DRIVE]] : "";
+        cd[k][0] = c[0];
+        cd[k][1] = c[0] ? c[1] : 0;
+        cd[k][2] = 0;
+    }
     int32_t y = WY + 44;
     sp_put(sp_put(t, "NOW: "), ui_sec_name(cur));
     cv_text_on(WX + 6, WY + 3, &AF_SB, t, sk.text, sk.display);
     cv_text_on(WX + 6, WY + 21, &AF_XS, "H HOME \xB7 V VOICE \xB7 G GLOBAL", sk.faint, sk.display);
-    cv_text_on(WX + 6, WY + 31, &AF_XS, "K KEYS \xB7 S SETTINGS", sk.faint, sk.display);
+    cv_text_on(WX + 6, WY + 31, &AF_XS, "K KEYS \xB7 S SETTINGS \xB7 X FX CHAIN", sk.faint, sk.display);
     for (pass = 0; pass < 2u; pass++)               /* the white keys, then the black over them */
         for (k = 0, w = 0; k < 27u; k++) {
-            int black = BLACK[k % 12u], on = UI_KEY_JUMP[k] == cur, has = UI_KEY_JUMP[k] != 0xFF;
+            int black = BLACK[k % 12u], on = ui_jump_sec(k) == cur, has = ui_jump_sec(k) != 0xFFu;
             uint16_t fill = on ? sk.now : has ? (black ? sk.ground : sk.raised) : sk.display;
             uint16_t edge = on ? sk.now : has ? sk.rline2 : sk.track;
             if (!black) {
@@ -1051,7 +1088,7 @@ static void ui_g_jump(void)
                     cv_rrect(kx, y, 13, 56, 2, edge, sk.display);
                     cv_rrect(kx + 1, y + 1, 11, 54, 1, fill, edge);
                     if (has) {
-                        const char *c = CODE[UI_KEY_JUMP[k]];
+                        const char *c = cd[k];
                         char a[2] = {c[0], 0}, b[2] = {c[0] ? c[1] : 0, 0};
                         uint16_t ink = on ? sk.ground : sk.text;
                         if (b[0]) {
@@ -1068,7 +1105,7 @@ static void ui_g_jump(void)
                 cv_rrect(kx, y, 9, 32, 2, edge, sk.raised);
                 cv_rrect(kx + 1, y + 1, 7, 30, 1, fill, edge);
                 if (has)
-                    ui_text_c(kx, y + 19, 9, &AF_XS, CODE[UI_KEY_JUMP[k]], on ? sk.ground : sk.label, fill);
+                    ui_text_c(kx, y + 19, 9, &AF_XS, cd[k], on ? sk.ground : sk.label, fill);
             }
         }
 }
@@ -1395,6 +1432,14 @@ static void ui_draw_disp(uint32_t r0)
     case G_PANEL: ui_g_panel(); break;
     case G_MIDI: ui_g_midi(); break;
     case G_BENCH: ui_g_bench(); break;
+    case G_CHAIN: ui_g_chain(); break;
+    case G_FLANGER: ui_g_flanger(); break;
+    case G_PHASER: ui_g_phaser(); break;
+    case G_FFILT: ui_g_ffilt(); break;
+    case G_CRUSH: ui_g_crush(); break;
+    case G_TREM: ui_g_trem(); break;
+    case G_RING: ui_g_ring(); break;
+    case G_TAPE: ui_g_tape(); break;
     default: ui_g_list(); break;
     }
     for (y = r0; y < cv_h; y++) {
@@ -1448,10 +1493,12 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led, 14u + k);
             else if (UI_KEY_SRC[k] && ui_src_used(UI_KEY_SRC[k]))
                 ui_led(fm1_led_dim, 14u + k);
-        } else if (ui.lay == LAY_MAC && UI_KEY_FX[k] >= 0) {   /* MACROS: the effects' keys, lit when on */
-            ui_led(sy_patch.p[ui_sec_power(SEC_DRIVE + (uint32_t)UI_KEY_FX[k])] ? fm1_led : fm1_led_dim, 14u + k);
-        } else if (ui.lay == LAY_JUMP && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the keys that open a section, */
-            ui_led(UI_KEY_JUMP[k] == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
+        } else if (ui.lay == LAY_MAC && UI_KEY_FX[k] >= 0) {   /* MACROS: the modules' keys, lit when in, */
+            int32_t in = sp_chain_at(sy_patch.p, (uint32_t)UI_KEY_FX[k]);   /* glowing when bypassed */
+            if (in >= 0)
+                ui_led(sy_patch.p[FXI_ON[in]] ? fm1_led : fm1_led_dim, 14u + k);
+        } else if (ui.lay == LAY_JUMP && ui_jump_sec(k) != 0xFFu) {   /* JUMP: the keys that open a section, */
+            ui_led(ui_jump_sec(k) == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
@@ -1500,8 +1547,8 @@ static void sy_ui_frame(void)
         nv += sy_v[i].on != 0;
     if (g == G_ENV || g == G_LFO)                   /* what moves, only while sound plays (then once more, still): */
         live = nv != 0;                             /* the voices on an envelope or an LFO; the chorus's taps, */
-    else if (g == G_CHORUS || g == G_OTT)           /* OTT's levels (the effect on); the EQ's points where their */
-        live = sy_patch.p[g == G_CHORUS ? SP_CH_ON : SP_OT_ON] && ui_sounding();   /* modulation has them */
+    else if (g == G_CHORUS || g == G_OTT)           /* OTT's levels (the module in); the EQ's points where their */
+        live = ui_sec_power(ui_sec()) >= 0 && sy_patch.p[ui_sec_power(ui_sec())] && ui_sounding();   /* modulation */
     else if (g == G_EQ)
         live = ui_sounding() && ui_eq_modded();
     if ((live || was_live) && fm1_ms - ui.live_t >= 70u) {
