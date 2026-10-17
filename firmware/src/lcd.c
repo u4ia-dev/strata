@@ -20,10 +20,14 @@ static void lcd_spin(uint32_t n)
         ;
 }
 
+#ifndef LCD_IDLE
+#define LCD_IDLE() ((void)0)       /* (an app's: work done while a transfer runs, before waiting for its end) */
+#endif
 static void lcd_sync(void)          /* finish the running transfer (before touching its buffer) */
 {
     if (!lcd_busy)
         return;
+    LCD_IDLE();
     fm1_lcd_wait();
     fm1_lcd_deselect();
     lcd_busy = 0;

@@ -171,6 +171,33 @@ static void sy_midi_take(void)
     }
 }
 
+/* the keys and MIDI between the main loop's millisecond passes: a full redraw holds the loop for up to ~90 ms (BENCH
+ * on V0.5: the keys waited 91 ms), most of it waiting for a strip's DMA to the panel. lcd.c calls this before each
+ * such wait: once a millisecond, MIDI's ring taken and, when the keys only play (no layer, no screen that types:
+ * sy_ui_keys_plain), the keys read, so a note waits a strip at most. BENCH's KEYS row: the longest between two
+ * readings of the keys, either here or the millisecond pass */
+static uint8_t sy_loop_on;                       /* the main loop running (the splash draws before it) */
+static uint32_t sy_keys_t;                       /* TIMER4 at the keys' last reading */
+static void sy_keys_read(void)
+{
+    uint32_t t = fm1_ticks(), d;
+    if (sy_keys_t && (d = (t - sy_keys_t) / FM1_TICKS_PER_US) > sy_bench.gap_max_us)
+        sy_bench.gap_max_us = d;
+    sy_keys_t = t;
+}
+static void sy_lcd_idle(void)
+{
+    static uint32_t last;
+    if (!sy_loop_on || fm1_ms == last)
+        return;
+    last = fm1_ms;
+    sy_midi_take();
+    if (sy_ui_keys_plain()) {
+        sy_keys_read();
+        sy_keys();
+    }
+}
+
 /* ---------------------------------------------------------------------------------- UBOOT, the update --- */
 static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as it is (debug, a flash backup) */
 {
@@ -299,7 +326,7 @@ static uint32_t sy_t_boot;                       /* TIMER4 at fm1_cstart (it run
 
 static void fm1_main(void)
 {
-    uint32_t i, ms_last, ms_t = 0, frame_t, build_t = 0, stack_t = 0, clean;
+    uint32_t i, ms_last, frame_t, build_t = 0, stack_t = 0, clean;
     {   /* the flash: the expected part, else none of it is touched; the update loader's staging left over: gone */
         uint32_t f = irq_save();
         flash_ok = FL_FAR(fl_jedec_ram)() == 0x856014u;
@@ -336,6 +363,7 @@ static void fm1_main(void)
     }
     ms_last = fm1_ms;
     frame_t = fm1_ms - 15u;
+    sy_loop_on = 1;
     for (;;) {
         uint32_t t;
         fm1_wdt_feed();
@@ -363,9 +391,7 @@ static void fm1_main(void)
         if (fm1_ms != ms_last) {                 /* a millisecond: the keys, the knobs, a build step, the flash */
             uint32_t d, building = wt_build_o != 0xFFu;
             t = fm1_ticks();
-            if (ms_t && (d = (t - ms_t) / FM1_TICKS_PER_US) > sy_bench.gap_max_us)
-                sy_bench.gap_max_us = d;
-            ms_t = t;
+            sy_keys_read();                      /* (sy_app_ms reads them first) */
             ms_last = fm1_ms;
             sy_app_ms();
             d = (fm1_ticks() - t) / FM1_TICKS_PER_US;
