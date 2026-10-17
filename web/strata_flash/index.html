@@ -230,6 +230,8 @@ const WHY = {
   nomidi: "This browser cannot reach the FM-1 by Web MIDI. Use Chrome or Edge, and open the page from localhost (serve.py).",
   denied: "MIDI (with SysEx) was not allowed. Allow MIDI for this site (the address bar's site settings) and try again.",
   notfound: "No FM-1 answered. Check the cable (a data cable, straight into the computer), close other MIDI apps, and try again.",
+  inbackup: "No FM-1 answered: after the backup it is still in backup mode (a USB disk, no MIDI). Switch it off, then " +
+    "on, wait for its screen, and press Find the FM-1 again.",
   model: "The device that answered is not an FM-1",
   stopped: "The FM-1 stopped answering. Replug the cable and press Find the FM-1: it stays in update mode until a write is finished.",
   lost: "The USB connection was lost. Replug the cable and press Find the FM-1 to finish.",
@@ -246,6 +248,7 @@ let image = null, midi = null, writing = false, pending = null, stock = null, st
 let ubootAsked = false;                                  // (backup mode: its confirmation shown first)
 const TOKEN = "__STRATA_TOKEN__";                        // (serve.py puts this run's token here)
 let bk = null, backupOk = false;                         // serve.py's backup report; a backup from the last 12 h
+let justBackedUp = false;                                // one made from this page, no FM-1 on MIDI since
 
 const log = (t) => { $("log").textContent += t + "\n"; };
 function say(text, kind = "") { $("status").textContent = text; $("status-card").dataset.kind = kind; }
@@ -254,7 +257,10 @@ function showErr(e) {
   say(code && WHY[code] ? WHY[code] + (e.detail ? ` (${e.detail})` : "") : "Error: " + (e && e.message || e), "err");
   log(String(e && e.stack || e));
 }
-function codeErr(code, detail = "") { const e = new Error(WHY[code] || code); e.code = code; e.detail = detail; return e; }
+function codeErr(code, detail = "") {
+  if (code === "notfound" && justBackedUp) code = "inbackup";   // (a backup made from this page: the FM-1 not switched off yet)
+  const e = new Error(WHY[code] || code); e.code = code; e.detail = detail; return e;
+}
 function describe(id) {
   if (/^ota-/i.test(id.model)) return "in update mode (an earlier write did not finish)";
   if (id.version === 15 || id.version < 900) return "the official firmware";
@@ -302,8 +308,13 @@ function showBackup() {
   st.textContent = [job, have].filter(Boolean).join(" ");
 }
 async function backupPoll() {
+  const was = bk && bk.state;
   try { const r = await fetch("api/backup", { cache: "no-store" }); bk = r.ok ? await r.json() : null; }
   catch (_) { bk = null; }
+  if ((was === "waiting" || was === "reading") && bk && bk.state === "verified") {
+    justBackedUp = true;
+    if (!writing) say("Backup made and checked. The FM-1 is still in backup mode: switch it off, then on, then Find the FM-1.", "warn");
+  }
   showBackup();
   gate();
 }
@@ -392,6 +403,7 @@ $("find").addEventListener("click", async () => {
     say("Looking for the FM-1…", "busy");
     const dev = await up.find();
     if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
     dev.link.close();
     const loader = /^ota-/i.test(dev.id.model);
     if ((loader ? dev.id.model.slice(4) : dev.id.model) !== "FM-1") throw codeErr("model", dev.id.text);
@@ -441,6 +453,7 @@ $("uboot-go").addEventListener("click", async () => {
     const up = new Updater(await getMidi(), log);
     const dev = await up.find();
     if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
     dev.link.send(SOFT_KEY);
     await sleep(200);
     dev.link.close();
@@ -469,6 +482,7 @@ $("stock-go").addEventListener("click", async () => {
     const up = new Updater(await getMidi(), log);
     const dev = await up.find();
     if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
     dev.link.close();
     stockPending = { loader: /^ota-/i.test(dev.id.model) };
     pending = null;

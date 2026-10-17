@@ -444,7 +444,7 @@ the 4 KiB allowed.
 The package has Felucca's identity (`FM-1_900`), update loader and layout: 610,090 bytes. The first device build also
 found three `strlen` calls in the effects' drawing (the host and Emscripten have one, the firmware not).
 
-### 8.2 The flasher (`web/strata_flash`, `flash_test.mjs`, 24 checks; `tests/serve_backup_test.py`, 13 tests)
+### 8.2 The flasher (`web/strata_flash`, `flash_test.mjs`, 26 checks; `tests/serve_backup_test.py`, 13 tests)
 
 The page as `make_flasher.py` makes it (Felucca's `fm1ota.js` and `fm1pkg.js`, unchanged, inlined), in headless Chrome
 against a simulated FM-1 on Web MIDI (after Felucca's `FakeFM1`: the handshake, step 1's reads, the reset into the
@@ -454,7 +454,7 @@ simulated console on Web Serial:
 | What | Checked |
 | --- | --- |
 | as it opens | the package's size, SHA-256 and identity checked; no confirmation, bar, Stop or report drawn; Find off until a backup from the last 12 h and all three boxes; no exception |
-| the backup step (serve.py's, simulated by the test's server) | none yet: Find and V15 off; Back up now sends the token and the page's Origin once; waiting (a device Windows could not read named), reading, verified, Find on; the server not an administrator, or a backup 20 h old: the reason shown, Find off |
+| the backup step (serve.py's, simulated by the test's server) | none yet: Find and V15 off; Back up now sends the token and the page's Origin once; waiting (a device Windows could not read named), reading, verified, Find on, the status saying to switch the FM-1 off and on; Find with it still in backup mode says so; the server not an administrator, or a backup 20 h old: the reason shown, Find off |
 | an install over the official firmware | Find names it (`FM-1_015`, official) and draws its confirmation; both steps, every byte right (47 reads), `FM-1_900` back, the bar full; not Done until the simulated FM-1 is switched off and on and answers |
 | the 2026-10-16 lockout | Strata written, then mute after the restart: never Done, the Flipper route named |
 | the FM-1 in update mode | Find says so; the write finished (41 reads, every byte right), then the restart check |

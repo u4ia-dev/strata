@@ -224,7 +224,7 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
   byte for byte by the flasher's builder.
 - **Verified on host and in the emulator:** the engine (114 checks, host and WebAssembly), the UI (78 checks), the
   MASTER level path, BENCH's page.
-- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 24 checks): the install and
+- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 26 checks): the install and
   V15 off without a backup from the last 12 hours; Back up now (the token and the page's Origin sent; waiting,
   reading, verified; a device Windows could not read named), the server not an administrator, a backup 20 h old;
   the install over the official firmware and the resume in update mode, every byte served checked, each Done only

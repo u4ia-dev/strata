@@ -295,6 +295,19 @@ try {
           /^Reading the flash, twice/.test(reading.t) && reading.find && done && /^Backup ready \(just now\)/.test(final) &&
           /switch it off and on/.test(final));
     check(`the start asked once, with the token and this page's Origin (${s.starts} start, ${s.refused} refused)`, s.starts === 1 && s.refused === 0);
+    const top = await status(sid);
+    check(`after the backup the status says: "${top.slice(0, 60)}..."`, /^Backup made and checked\. .*switch it off, then on/.test(top));
+    await send("Target.closeTarget", { targetId });
+  }
+  {   // a backup made here, the FM-1 still in backup mode (no MIDI): Find says so, not just "No FM-1"
+    const { sid, targetId } = await open({ backup: "none" });
+    await tick(sid);
+    await click(sid, "bk-start");
+    await until(sid, "!document.getElementById('find').disabled", 8000);
+    await click(sid, "find");
+    await until(sid, "document.getElementById('status-card').dataset.kind === 'err'", 8000);
+    const st = await status(sid);
+    check(`Find with the FM-1 still in backup mode: "${st.slice(0, 64)}..."`, /still in backup mode .*Switch it off, then on/.test(st));
     await send("Target.closeTarget", { targetId });
   }
   {   // the server not an administrator, or a backup 20 h old: the reason shown, Find off
