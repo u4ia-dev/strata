@@ -30,30 +30,42 @@ stop, MIDI out, ARP, the second core.
 
 Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep it. It holds what is on the FM-1 now
 (the firmware, and Felucca's projects if you have Felucca), and it is the way back to exactly this state. Make it
-**the same day as the install, by a route that enters backup mode at power-on** (below): that route still works when
-the firmware's own USB does not, and making the backup proves it works on this computer.
+**the same day as the install, by a route that enters backup mode at power-on**: that route still works when the
+firmware's own USB does not, and making the backup proves it works on this computer.
 
-1. **Backup mode.** The FM-1 has to be in the chip's own USB boot (a USB disk named `WL82 UBOOT1.00`).
-   - **The Flipper Zero route** ([merthsoft/flipper-fm1-recovery](https://github.com/merthsoft/flipper-fm1-recovery),
-     used on 2026-10-17). Its app `FM1 Recovery` (built for the Flipper's firmware: Momentum, API 86 here,
-     `%USERPROFILE%\fm1-recovery\flipper\api86\fm1_boot_key.fap`, copied to `/ext/apps/Tools/`) sends the chip's
-     USB key on the Flipper's own USB-C port while the FM-1 is switched on. The Flipper unplugged from the computer,
-     the FM-1 charged and off, one USB-C data cable between them: **OK** in the app, switch the FM-1 on, wait for
-     *Move FM1 cable to PC now*, move the cable to the computer without switching the FM-1 off. Windows shows the
-     `WL82 UBOOT1.00` disk.
-   - **The FM-1 Transporter** (a XIAO RP2040: MvaveFM1Unbricker's TRANSPORTER-GUIDE.md) does the same at power-on.
-   - *Not enough on its own:* the firmware's ways in, the flasher page's **Put the FM-1 in backup mode** (the soft
-     key `F0 22 24 35 7D F7`) and OCT− + OCT+ held 5 s on Felucca or Strata. From Strata on 2026-10-16 the chip
-     reached backup mode, but Windows never read it (*Unknown USB Device (Device Descriptor Request Failed)*, on a
-     direct port and behind a hub), and it went back to Strata about 14 s later. Whether they work on this computer
-     from the official firmware or Felucca: unverified.
+**The flasher page makes it,** and installs nothing (Strata or V15) without one from the last 12 hours: start its
+server in an administrator PowerShell (section 3, step 3), then its step 1.
+
+1. **Back up now** on the page. Then backup mode by the **Flipper Zero route**
+   ([merthsoft/flipper-fm1-recovery](https://github.com/merthsoft/flipper-fm1-recovery), used on 2026-10-17): its
+   app `FM1 Recovery` (built for the Flipper's firmware: Momentum, API 86 here,
+   `%USERPROFILE%\fm1-recovery\flipper\api86\fm1_boot_key.fap`, copied to `/ext/apps/Tools/`) sends the chip's USB
+   key on the Flipper's own USB-C port while the FM-1 is switched on. The Flipper unplugged from the computer, the
+   FM-1 charged and off, one USB-C data cable between them: **OK** in the app, switch the FM-1 on, wait for *Move FM1
+   cable to PC now*, move the cable to the computer without switching the FM-1 off.
 
    **If Windows offers to format a disk: Cancel.** Never format the `WL82 UBOOT1.00` disk.
-2. **Read it twice.** By the Flipper route: flipper-fm1-recovery's `tools/pc_backup.py` (README, "Back up on
-   Windows"; an administrator PowerShell, the device from `Get-CimInstance Win32_DiskDrive`, a new output folder each
-   time). It checks the chip, reads the flash twice and requires two identical files, then keeps running to hold the
-   FM-1 in backup mode: leave it running if you go on to section 6. Or with jl-uboot-tool, as MvaveFM1Unbricker's
-   UNBRICK-GUIDE.md does it. Find the device (an administrator PowerShell):
+2. **The page does the rest** (its server, `serve.py`): it waits for the `WL82 UBOOT1.00` disk, runs
+   flipper-fm1-recovery's `tools/pc_backup.py` on it (read-only: the chip key `0x980F` and flash `0x856014` checked,
+   the whole flash read twice, two identical files required), checks the image's boot head (the flash header, its
+   directory and the chip key, as `recovery_plan.py` checks a package), writes `backup.json` beside the two files in
+   `%USERPROFILE%\fm1-recovery\backup-YYYYMMDD-HHMMSS`, and lets the FM-1 go. A USB device Windows could not read
+   meanwhile is named on the page (on 2026-10-16 that was the FM-1). The install counts a backup only while both
+   files still match its receipt.
+3. **Leave backup mode:** switch the FM-1 off and on. Copy the backup folder somewhere else as well.
+
+Other ways into backup mode work for the page's backup too (it waits for the disk, however it got there): the
+page's **Put the FM-1 in backup mode** (the firmware's soft key `F0 22 24 35 7D F7`) and OCT− + OCT+ held 5 s on
+Felucca or Strata. *Not enough on their own:* from Strata on 2026-10-16 the chip reached backup mode but Windows never
+read it (*Unknown USB Device (Device Descriptor Request Failed)*, on a direct port and behind a hub), and it went back
+to Strata about 14 s later; from the official firmware or Felucca on this computer: unverified. (Backup mode that no
+computer has read ends by itself after about 13 s; once read, it stays until the FM-1 is switched off.)
+
+**Backups made another way** are the same thing, a raw 1 MiB image of the flash from address 0, and any of these
+tools can use any of them; the page counts only the ones it made. MvaveFM1Unbricker's `fm1_unbrick.py backup DIR`,
+the FM-1 Transporter's `dump` (its computer talks to the XIAO, not to a disk, so the page cannot make that one), or
+jl-uboot-tool by hand, as MvaveFM1Unbricker's UNBRICK-GUIDE.md does it. Find the device (an administrator
+PowerShell):
 
    ```powershell
    Get-CimInstance Win32_DiskDrive | Format-Table Index, Model, InterfaceType
@@ -79,9 +91,6 @@ the firmware's own USB does not, and making the backup proves it works on this c
    ```
 
    The two hashes must be equal (else try another cable or port and read again). Keep `backup.bin` somewhere safe.
-   MvaveFM1Unbricker's `python fm1_unbrick.py backup DIR` does the same steps for you.
-3. **Leave backup mode:** switch the FM-1 off and on. (Backup mode that no computer has read ends by itself after
-   about 13 s, back to the firmware; once read, it stays until the FM-1 is switched off.)
 
 ## 3. Install
 
@@ -94,12 +103,15 @@ the firmware's own USB does not, and making the backup proves it works on this c
    page on `127.0.0.1` is, and a page published on claude.ai is not allowed to use):
 
    ```powershell
-   python %USERPROFILE%\fm1-dev\strata\build\flasher\serve.py
+   py %USERPROFILE%\fm1-dev\strata\build\flasher\serve.py
    ```
 
-   Open **<http://127.0.0.1:8000/>** in Chrome or Edge. The page checks the package (size, SHA-256, identity) and
+   in an **administrator** PowerShell (right-click Start, Terminal (Admin)): it reads the backup-mode disk for
+   section 2, with flipper-fm1-recovery (`%USERPROFILE%\fm1-dev\fm1-flipper-recovery` with its `.local`;
+   `--recovery DIR` for another). When it cannot, it prints `Backups: OFF` and why, and the page says so too. Open
+   **<http://127.0.0.1:8000/>** in Chrome or Edge. The page checks the package (size, SHA-256, identity) and
    shows its SHA-256; it should match `Get-FileHash %USERPROFILE%\fm1-dev\strata\build\flasher\strata.fwsc`.
-4. Tick the four boxes, press **Find the FM-1**, and allow MIDI (with SysEx) when the browser asks. The page says
+4. The backup (section 2) and the three boxes, then **Find the FM-1**; allow MIDI (with SysEx) when the browser asks. The page says
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
@@ -161,7 +173,8 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
 - **To Felucca:** its installer, <https://hugelton.github.io/Felucca/>. It finds Strata's FM-1, because Strata keeps
   Felucca's update entry and USB name.
 - **To the official V15:** on the flasher page, pick M-VAVE's unmodified `FM-1.fwsc` (its SHA-256 is checked in the
-  page; nothing is uploaded), tick the backup and power boxes, **Return to official V15**. M-VAVE's own updater works
+  page; nothing is uploaded), with a backup from the last 12 hours (section 2) and the power box ticked, **Return to
+  official V15**. M-VAVE's own updater works
   too.
 - **To exactly what you had,** from your backup, with jl-uboot-tool in backup mode (section 2). Every range below is
   4 KiB aligned (jl-uboot-tool erases whole blocks); never write below `0x4000`, and leave the rest of the flash
@@ -211,11 +224,19 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
   byte for byte by the flasher's builder.
 - **Verified on host and in the emulator:** the engine (114 checks, host and WebAssembly), the UI (78 checks), the
   MASTER level path, BENCH's page.
-- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 18 checks): the install over
-  the official firmware and the resume in update mode, every byte served checked, each Done only after the
-  simulated FM-1 was switched off and on and answered; a Strata mute after that restart never Done, the Flipper route
-  named; the refusals (no FM-1, a device that is not one, a changed package, a file that is not V15); backup mode's
-  confirmation; the report over a simulated console.
+- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 24 checks): the install and
+  V15 off without a backup from the last 12 hours; Back up now (the token and the page's Origin sent; waiting,
+  reading, verified; a device Windows could not read named), the server not an administrator, a backup 20 h old;
+  the install over the official firmware and the resume in update mode, every byte served checked, each Done only
+  after the simulated FM-1 was switched off and on and answered; a Strata mute after that restart never Done, the
+  Flipper route named; the refusals (no FM-1, a device that is not one, a changed package, a file that is not V15);
+  backup mode's confirmation; the report over a simulated console.
+- **Verified on host** (`tests/serve_backup_test.py`, 13 tests, a fake `pc_backup.py` and disk watcher): the backup
+  step verified with its receipt, the FM-1 let go; refused for two reads that differ, a backup that stops, another
+  chip key, a boot head that does not check out; stopped while waiting with nothing read; no disk in time; the 12-hour
+  rule and files changed after the receipt; why it is off; HTTP: other hosts, POSTs without the token or this
+  page's Origin refused. The real disk watcher ran here once with no FM-1 (it ended on time, nothing found); with an
+  FM-1 in backup mode it is **unverified** until the next backup.
 - **Checked in the listing:** usb.c's `sie_wr` and `sie_rd` are out-of-line functions again, instruction for
   instruction Felucca's (only the `usb` struct's offsets differ); `V0.4` inlined them 12 times into the TIMER5
   interrupt. Against `V0.4`, function by function: 300 of 352 unchanged, every DSP function among them (`fx_eq` only
@@ -266,6 +287,6 @@ MIDI IN endpoint babbling, host-to-FM-1 fine, its first install fine) to exactly
   answers (section 6).
 
 **The rules from here.** Before any Strata build goes on the FM-1: a fresh double backup by the Flipper route (it
-also proves the route on the day). After it: the restart check, then the first report (section 5) after another
+also proves the route on the day; the flasher page makes it and will not write without it, section 2). After it: the restart check, then the first report (section 5) after another
 power-on. Felucca's drivers are not built at `-O2` again; a change to how they are compiled is checked in the
 listing against Felucca's and counts as a change that needs this hardware test.

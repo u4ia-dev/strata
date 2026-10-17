@@ -23,6 +23,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 | `node web/emu/strata_browser_test.mjs` | the emulator's one-file page in headless Chrome or Edge under five content security policies (§6.4); on Windows with Windows' Node |
 | `tools/build.py --strata` | Strata for the FM-1: `build/strata.bin`, `strata.dis`, `strata.fwsc`, and the checks of §8.1 (the JieLi toolchain and the AC79 SDK, as Felucca's build) |
 | `python3 web/strata_flash/make_flasher.py`, then `node web/strata_flash/flash_test.mjs` | the flasher into `build/flasher/` (only a package rebuilt byte for byte from the app and the loader just built), and its test in headless Chrome against a simulated FM-1 (§8.2; Windows' Node on Windows; screenshots into `build/flasher_shots/`) |
+| `py tests/serve_backup_test.py` | the flasher server's backup step with a fake `pc_backup.py` and disk watcher, and its HTTP rules (§8.2; Windows' Python) |
 
 ## 2. Verified on host
 
@@ -443,7 +444,7 @@ the 4 KiB allowed.
 The package has Felucca's identity (`FM-1_900`), update loader and layout: 610,090 bytes. The first device build also
 found three `strlen` calls in the effects' drawing (the host and Emscripten have one, the firmware not).
 
-### 8.2 The flasher (`web/strata_flash`, `flash_test.mjs`, 16 checks)
+### 8.2 The flasher (`web/strata_flash`, `flash_test.mjs`, 24 checks; `tests/serve_backup_test.py`, 13 tests)
 
 The page as `make_flasher.py` makes it (Felucca's `fm1ota.js` and `fm1pkg.js`, unchanged, inlined), in headless Chrome
 against a simulated FM-1 on Web MIDI (after Felucca's `FakeFM1`: the handshake, step 1's reads, the reset into the
@@ -452,13 +453,21 @@ simulated console on Web Serial:
 
 | What | Checked |
 | --- | --- |
-| as it opens | the package's size, SHA-256 and identity checked; no confirmation, bar or report drawn; Find off until all four boxes are ticked; no exception |
-| an install over the official firmware | Find names it (`FM-1_015`, official) and draws its confirmation; both steps, every byte right (47 reads), `FM-1_900` back, the bar full |
-| the FM-1 in update mode | Find says so; the write finished (41 reads, every byte right) |
+| as it opens | the package's size, SHA-256 and identity checked; no confirmation, bar, Stop or report drawn; Find off until a backup from the last 12 h and all three boxes; no exception |
+| the backup step (serve.py's, simulated by the test's server) | none yet: Find and V15 off; Back up now sends the token and the page's Origin once; waiting (a device Windows could not read named), reading, verified, Find on; the server not an administrator, or a backup 20 h old: the reason shown, Find off |
+| an install over the official firmware | Find names it (`FM-1_015`, official) and draws its confirmation; both steps, every byte right (47 reads), `FM-1_900` back, the bar full; not Done until the simulated FM-1 is switched off and on and answers |
+| the 2026-10-16 lockout | Strata written, then mute after the restart: never Done, the Flipper route named |
+| the FM-1 in update mode | Find says so; the write finished (41 reads, every byte right), then the restart check |
 | refusals | a device that is no FM-1 (nothing sent); no FM-1; Cancel (nothing sent); an "official" file that is not V15; the package changed by one byte (Find stays off) |
 | backup mode | a click on its button before its confirmation does nothing; after it, the soft key once and no update |
 | the report | `status` and `bench` read and shown, Copy on; RUN: `bench run`, then `status` and `bench` |
 | layout | no sideways scroll at 390 px; the dark scheme |
+
+`tests/serve_backup_test.py` (Windows' Python, after `tools/build.py --strata`; it uses flipper-fm1-recovery's
+`recovery_plan.py` beside the checkout) runs the server's backup job with a fake `pc_backup.py` and disk watcher:
+verified with its receipt and the FM-1 let go; refused for reads that differ, a backup that stops, another chip key, a
+boot head that does not check out; stopped while waiting, nothing read; no disk in time; the 12-hour rule, and files
+changed after the receipt; why it is off; and HTTP: another Host, a POST without the token or this page's Origin.
 
 Found by its screenshots: every confirmation was drawn from the start (a `display` rule beat the `hidden` attribute).
 The buttons behind two of them did nothing until Find; the backup mode's would have worked at once. Fixed (a
