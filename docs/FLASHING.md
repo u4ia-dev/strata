@@ -1,11 +1,12 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.4 HARDWARE TEST`) on an FM-1, testing
+This is the procedure for putting Strata's **hardware test build** (`V0.5 HARDWARE TEST`) on an FM-1, testing
 it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
-in Chrome or Edge, with no extra hardware. Installing custom firmware is at your own risk: read sections 2 and 7
-before you start.
+in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
-Nothing in this build has run on an FM-1 yet. Section 8 lists what was checked where.
+The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
+back. Section 9 says what happened and what changed; this build has the fix, and has not run on an FM-1 yet.
+Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
@@ -28,18 +29,31 @@ stop, MIDI out, ARP, the second core.
 ## 2. Before anything: a full backup
 
 Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep it. It holds what is on the FM-1 now
-(the firmware, and Felucca's projects if you have Felucca), and it is the way back to exactly this state.
+(the firmware, and Felucca's projects if you have Felucca), and it is the way back to exactly this state. Make it
+**the same day as the install, by a route that enters backup mode at power-on** (below): that route still works when
+the firmware's own USB does not, and making the backup proves it works on this computer.
 
-1. **Backup mode.** The FM-1 has to be in the chip's own USB boot (a USB disk named `WL82 UBOOT1.00`). Either:
-   - the flasher page's **Put the FM-1 in backup mode** button (section 3 starts the page). It sends the FM-1's
-     soft key (`F0 22 24 35 7D F7`) to whatever firmware runs: the official one, Felucca or Strata. *Unverified on
-     the official firmware by this project; Felucca's sources document it as the stock soft key.*
-   - on Felucca or Strata: hold **OCT−** and **OCT+** together for 5 seconds.
-   - or the way you usually do it.
+1. **Backup mode.** The FM-1 has to be in the chip's own USB boot (a USB disk named `WL82 UBOOT1.00`).
+   - **The Flipper Zero route** ([merthsoft/flipper-fm1-recovery](https://github.com/merthsoft/flipper-fm1-recovery),
+     used on 2026-10-17). Its app `FM1 Recovery` (built for the Flipper's firmware: Momentum, API 86 here,
+     `%USERPROFILE%\fm1-recovery\flipper\api86\fm1_boot_key.fap`, copied to `/ext/apps/Tools/`) sends the chip's
+     USB key on the Flipper's own USB-C port while the FM-1 is switched on. The Flipper unplugged from the computer,
+     the FM-1 charged and off, one USB-C data cable between them: **OK** in the app, switch the FM-1 on, wait for
+     *Move FM1 cable to PC now*, move the cable to the computer without switching the FM-1 off. Windows shows the
+     `WL82 UBOOT1.00` disk.
+   - **The FM-1 Transporter** (a XIAO RP2040: MvaveFM1Unbricker's TRANSPORTER-GUIDE.md) does the same at power-on.
+   - *Not enough on its own:* the firmware's ways in, the flasher page's **Put the FM-1 in backup mode** (the soft
+     key `F0 22 24 35 7D F7`) and OCT− + OCT+ held 5 s on Felucca or Strata. From Strata on 2026-10-16 the chip
+     reached backup mode, but Windows never read it (*Unknown USB Device (Device Descriptor Request Failed)*, on a
+     direct port and behind a hub), and it went back to Strata about 14 s later. Whether they work on this computer
+     from the official firmware or Felucca: unverified.
 
    **If Windows offers to format a disk: Cancel.** Never format the `WL82 UBOOT1.00` disk.
-2. **Read it twice** with jl-uboot-tool, as MvaveFM1Unbricker's UNBRICK-GUIDE.md does it. Find the device (an
-   administrator PowerShell):
+2. **Read it twice.** By the Flipper route: flipper-fm1-recovery's `tools/pc_backup.py` (README, "Back up on
+   Windows"; an administrator PowerShell, the device from `Get-CimInstance Win32_DiskDrive`, a new output folder each
+   time). It checks the chip, reads the flash twice and requires two identical files, then keeps running to hold the
+   FM-1 in backup mode: leave it running if you go on to section 6. Or with jl-uboot-tool, as MvaveFM1Unbricker's
+   UNBRICK-GUIDE.md does it. Find the device (an administrator PowerShell):
 
    ```powershell
    Get-CimInstance Win32_DiskDrive | Format-Table Index, Model, InterfaceType
@@ -66,7 +80,8 @@ Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep i
 
    The two hashes must be equal (else try another cable or port and read again). Keep `backup.bin` somewhere safe.
    MvaveFM1Unbricker's `python fm1_unbrick.py backup DIR` does the same steps for you.
-3. **Leave backup mode:** switch the FM-1 off and on.
+3. **Leave backup mode:** switch the FM-1 off and on. (Backup mode that no computer has read ends by itself after
+   about 13 s, back to the firmware; once read, it stays until the FM-1 is switched off.)
 
 ## 3. Install
 
@@ -88,8 +103,10 @@ Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep i
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-   The page says **Done** when the FM-1 reports `FM-1_900` again.
-5. Strata starts: the splash (`STRATA`, `V0.4 HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (`STRATA`, `V0.5 HARDWARE TEST`), then OSC A's WAVE page.
+6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
+   answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
+   fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.
 
 To rebuild the flasher after a change (WSL): `tools/build.py --strata`, then
 `python3 web/strata_flash/make_flasher.py` (it refuses a package that is not exactly the app and the loader just
@@ -119,7 +136,8 @@ Note what you see and hear, take photos of anything odd, and read the report (se
 8. **MIDI.** From a DAW over USB: notes, pitch bend, the mod wheel, CC 74 (the cutoff), a program change with
    PROGRAM on; MIDI LEARN. The TRS jack if you have a device for it.
 9. **USB audio.** Record the FM-1 in the DAW (an audio input named after the USB name): clean, no gaps.
-10. **Optional:** OCT− + OCT+ for 5 s: the countdown from 2 s, then UBOOT; switch off and on to return to Strata.
+10. **Optional:** OCT− + OCT+ for 5 s: the countdown from 2 s, then UBOOT. Note whether Windows shows the
+    `WL82 UBOOT1.00` disk or an unknown device; unread, the FM-1 returns to Strata by itself after ~13 s.
 
 ## 5. The report
 
@@ -131,6 +149,15 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
 
 ## 6. Going back
 
+- **When no updater reaches the FM-1** (Strata plays, but the page's Find, Felucca's installer and M-UPGRADE get no
+  answer; or the restart check failed): the Flipper Zero route, as on 2026-10-17. Backup mode by the Flipper and the
+  backup (section 2), `pc_backup.py` left running; then flipper-fm1-recovery's `tools/pc_restore.py` with the
+  package (the official `FM-1.fwsc`, a Felucca or a Strata package): first its offline plan, then, from a second
+  administrator PowerShell, `--write --keeper-pid <pc_backup.py's PID>`. It rewrites only the sectors of
+  `0x4000`–`0x92FFF` that differ, reads each back and then the whole flash, and never writes the boot head or the
+  data above. *Upstream's `pc_restore.py` refuses the official V15 package* (`Invalid file extent`: its empty and
+  resource entries); the fix used on 2026-10-17 is in `%USERPROFILE%\fm1-dev\fm1-flipper-recovery` (it takes the
+  official package only by its SHA-256, and with `--require-v15` refuses a boot head that is not V15's).
 - **To Felucca:** its installer, <https://hugelton.github.io/Felucca/>. It finds Strata's FM-1, because Strata keeps
   Felucca's update entry and USB name.
 - **To the official V15:** on the flasher page, pick M-VAVE's unmodified `FM-1.fwsc` (its SHA-256 is checked in the
@@ -169,26 +196,76 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
   puts it in backup mode by itself (the boot guard), where your backup or the official firmware can be written.
 - **A frozen screen, no crash screen:** the watchdog restarts it within ~8 s; two such boots and the boot guard puts
   it in backup mode. Leave it on for two minutes before anything else.
-- **Strata runs but something is wrong:** Felucca's installer or the official V15 (section 6), or backup mode by
-  OCT− + OCT+ for 5 s.
+- **Strata runs but something is wrong:** Felucca's installer or the official V15 (section 6); if none of them
+  finds the FM-1, the Flipper route (section 6, first item).
 - **A sound stops the unit** after it was restored at power-on: hold **HOME** while switching on, and Strata starts
   without restoring it (after a crash it does that by itself, and says SAFE START).
-- **The FM-1 does not appear on USB in any mode:** MvaveFM1Unbricker's README, "The FM-1 does not show up", then the
-  FM-1 Transporter (its TRANSPORTER-GUIDE.md).
+- **The FM-1 does not appear on USB in any mode:** the Flipper route or the FM-1 Transporter: both enter backup mode
+  at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
 
-- **Built and checked by the build** (`tools/build.py --strata`): the image (370,944 of 581,564 bytes), RAM (48,288
+- **Built and checked by the build** (`tools/build.py --strata`): the image (362,796 of 581,564 bytes), RAM (48,288
   of 73,728 bytes), the pool (9.2 KiB spare, over the 8 KiB margin), RAM code with no calls into the flash, no
   register access outside `hal/`, the interrupt stack (~2.4 KiB of 7.9 KiB, from the listing), the package rebuilt
   byte for byte by the flasher's builder.
 - **Verified on host and in the emulator:** the engine (114 checks, host and WebAssembly), the UI (78 checks), the
   MASTER level path, BENCH's page.
-- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 16 checks): the install over
-  the official firmware and the resume in update mode, every byte served checked; the refusals (no FM-1, a device
-  that is not one, a changed package, a file that is not V15); backup mode's confirmation; the report over a
-  simulated console.
-- **Needs this hardware test:** everything on the device: start-up, the audio's timing and sound, the panel, the
-  screen, the flash's timings, USB MIDI and audio, the console, the interrupt and main stacks' real use, and the CPU
-  rate (BENCH). **Unverified facts:** the official firmware's soft key (Felucca documents it); that the official
-  firmware takes this package exactly as it takes Felucca's (the same format, loader and identity, so it should).
+- **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 18 checks): the install over
+  the official firmware and the resume in update mode, every byte served checked, each Done only after the
+  simulated FM-1 was switched off and on and answered; a Strata mute after that restart never Done, the Flipper route
+  named; the refusals (no FM-1, a device that is not one, a changed package, a file that is not V15); backup mode's
+  confirmation; the report over a simulated console.
+- **Checked in the listing:** usb.c's `sie_wr` and `sie_rd` are out-of-line functions again, instruction for
+  instruction Felucca's (only the `usb` struct's offsets differ); `V0.4` inlined them 12 times into the TIMER5
+  interrupt. Against `V0.4`, function by function: 300 of 352 unchanged, every DSP function among them (`fx_eq` only
+  gained two padding `nop`s); the changed ones are the drivers, the two that call them (`fm1_main`,
+  `fm1_timer5_irq`) and the drivers that are calls again (`usb_poll`, `usb_retry`, `ota_service`, ...). The image is
+  362,796 bytes; the interrupt stack ~2.5 KiB.
+- **Needs this hardware test:** everything on the device, first of all **bulk IN after a power-on** (section 9):
+  start-up, the audio's timing and sound, the panel, the screen, the flash's timings, USB MIDI and audio, the
+  console, the interrupt and main stacks' real use, and the CPU rate (BENCH). **Unverified facts:** the cause in
+  section 9; the soft key from the official firmware and Felucca on this computer; that the official firmware takes
+  this package exactly as it takes Felucca's (the same format, loader and identity, so it should).
+
+## 9. The 2026-10-16 lockout
+
+**What happened** (`V0.4`, installed without a backup). The install said Done: Strata answered the handshake on its
+first start. From the next start on, every start, the FM-1 received USB and sent nothing: notes played, the soft key
+and the console's `uboot yes` arrived, but the handshake, the console's banner and every reply never came back
+(EP0 worked: it enumerated; EP1 and EP3 bulk IN did not). With no reply, no updater could reach it. Its own way into
+backup mode reached the chip's USB boot, which Windows could not read (`Device Descriptor Request Failed`), and the
+FM-1 went back to Strata after ~14 s. On 2026-10-17 the Flipper Zero route entered backup mode at power-on, Windows
+read it at once, the flash was backed up twice (identical; the boot head is V15's, the app area Strata's) and the
+official V15 written back (143 sectors, verified).
+
+**The likely cause** (unverified until this build runs). The first start after an install comes from the update
+loader by a core reset, which leaves the USB controller as the loader set it; every later start is a chip reset.
+Strata compiles Felucca's `usb.c` inside its own unit at `-O2`, the only Felucca-family firmware that does (Felucca and
+every fork build it at `-Os`, `-O2` only for their DSP): `sie_wr` and `sie_rd`, the controller's register accesses
+(a write to `CON1`, then a wait for `MC_ACK`), were inlined into the TIMER5 interrupt, the next access a few
+instructions after the last where Felucca's calls leave a dozen. If the access right after an `INDEX` change still
+reaches the old endpoint, `TXMAXP` (written first after `INDEX`) is never set for EP1 or EP3 while every receive
+register (written later) is: bulk IN dead, OUT and EP0 fine, and the first start fine on the loader's settings. It
+fits every observation; the mechanism is not proven. That `-O2` on `usb.c` is what breaks bulk IN is not this
+project's guess alone: OberVave, another FM-1 firmware, bisected the same failure on 2026-10-13 (every packet on the
+MIDI IN endpoint babbling, host-to-FM-1 fine, its first install fine) to exactly that, and went back to `-Os`
+(its `tools/build.py` and `CLAUDE.md`). Which line `-O2` breaks is unknown there too.
+
+**What changed.**
+
+- `tools/build.py --strata` builds Felucca's drivers (`usb.c`, `midi_uart.c`, `ota.c`) at `-Os` inside Strata's `-O2`
+  unit: the unit goes to LLVM IR, `tools/strata_drivers.py` marks those 57 functions `optsize` and keeps the 10
+  that Strata's code calls from being inlined into it, and the IR is compiled at `-O2`. Unmarked, that round trip
+  gives the same `strata.bin` byte for byte as before; marked, 300 of V0.4's 352 functions are unchanged and the
+  synth's are all among them (section 8).
+- `firmware/src/strata.c`: `sie_wr` and `sie_rd` declared `noinline, minsize` before `usb.c` is included, so they are
+  Felucca's functions whatever the inliner does; `usb.c` itself stays Felucca's.
+- The flasher's Done waits for a restart that is a real power-off (section 3, step 6).
+- Backups by a route that enters backup mode at power-on, the same day (section 2); the way back when no updater
+  answers (section 6).
+
+**The rules from here.** Before any Strata build goes on the FM-1: a fresh double backup by the Flipper route (it
+also proves the route on the day). After it: the restart check, then the first report (section 5) after another
+power-on. Felucca's drivers are not built at `-O2` again; a change to how they are compiled is checked in the
+listing against Felucca's and counts as a change that needs this hardware test.
