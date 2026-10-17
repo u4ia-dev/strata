@@ -109,12 +109,14 @@
     <ul class="checks">
       <li>
         <label><input type="checkbox" class="pre" id="c-backup">
-          <span>I have a <b>full flash backup</b> of this FM-1 (all 1 MiB, read twice, both copies the same SHA-256),
-          made with jl-uboot-tool or MvaveFM1Unbricker, and I keep it.</span></label>
+          <span>I have a <b>full flash backup</b> of this FM-1 made today (all 1 MiB, read twice, both copies the same
+          SHA-256), and the way I made it puts the FM-1 in backup mode <b>at power-on</b>: the Flipper Zero route or
+          the FM-1 Transporter (FLASHING.md, section 2). I keep it.</span></label>
         <div class="aside">
-          <p>The FM-1 must be in its backup mode for that (the chip's own USB boot, <code>WL82 UBOOT1.00</code>). This
-          button asks the firmware running now (official, Felucca or Strata) to go there. If Windows then offers to
-          format a disk: <b>Cancel</b>. When the backup is done, switch the FM-1 off and on again.</p>
+          <p>Backup mode is the chip's own USB boot (<code>WL82 UBOOT1.00</code>). Only a route that enters it at
+          power-on still works when the firmware's own USB does not: on 2026-10-16 the FM-1 could take in USB but not
+          send, and this button's way in (the firmware's soft key) never appeared on that computer either. The button
+          asks the firmware running now to go there; if Windows then offers to format a disk: <b>Cancel</b>.</p>
           <div class="row"><button id="uboot" disabled>Put the FM-1 in backup mode&hellip;</button></div>
           <div class="confirm" id="uboot-confirm" hidden>
             <p id="uboot-what">The FM-1 will stop its firmware and wait for jl-uboot-tool. Nothing is written.</p>
@@ -139,7 +141,8 @@
     <p>The FM-1's own update path, as Felucca's installer uses it: the firmware running now reads the package and
     starts the update loader, the loader writes the app area only (<code>0x4000</code>&ndash;<code>0x92FFF</code>;
     the boot head and your settings' sectors are never written), then the FM-1 restarts into Strata. About a
-    minute.</p>
+    minute. Then switch the FM-1 off and on when the page asks: it says Done only when Strata answers again after
+    that restart.</p>
     <div class="row"><button id="find" class="primary" disabled>Find the FM-1&hellip;</button></div>
     <div class="confirm" id="confirm" hidden>
       <p id="found"></p>
@@ -171,7 +174,8 @@
         its USB name.</li>
       <li><b>To the official V15:</b> pick M-VAVE's unmodified <code>FM-1.fwsc</code> (checked here by its SHA-256,
         never uploaded), then write it with the same update path. M-VAVE's own updater works too.</li>
-      <li><b>To exactly what you had:</b> write your full backup back with jl-uboot-tool (FLASHING.md, section 6).</li>
+      <li><b>To exactly what you had,</b> or when Strata does not answer: write your backup or the official V15 back by
+        the Flipper Zero route (FLASHING.md, section 6).</li>
     </ol>
     <label class="small">Official FM-1.fwsc (V15): <input id="stock-file" type="file" accept=".fwsc"></label>
     <div class="row"><button id="stock-go" class="danger" disabled>Return to official V15&hellip;</button></div>
@@ -189,8 +193,11 @@
       <li>Strata shows <b>STRATA CRASH</b>: take a photo. It restarts; a second crash within 30&nbsp;s puts it in backup
         mode by itself, where your backup can be written back.</li>
       <li>Backup mode by hand, while Strata runs: hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s (a
-        countdown shows from 2&nbsp;s).</li>
-      <li>Nothing on USB at all, in any mode: the FM-1 Transporter (MvaveFM1Unbricker's TRANSPORTER-GUIDE.md).</li>
+        countdown shows from 2&nbsp;s). If Windows then reports a USB device it cannot recognise, this way in does not
+        work on this computer: use the Flipper Zero route.</li>
+      <li>Strata does not answer any updater (it plays, but Find gets no answer): the Flipper Zero route
+        (FLASHING.md, section 6) or the FM-1 Transporter. Both enter backup mode at power-on, whatever the firmware
+        does.</li>
     </ul>
   </section>
 
@@ -215,6 +222,9 @@ const WHY = {
   lost: "The USB connection was lost. Replug the cable and press Find the FM-1 to finish.",
   noloader: "The FM-1 in update mode did not appear. Replug the cable and press Find the FM-1: it stays in update mode until finished.",
   noreturn: "The FM-1 did not come back after the write. Switch it off and on.",
+  norestart: "Strata did not answer after the restart: the FM-1 takes in USB but sends nothing back, so no updater can " +
+    "reach it now. Do not keep it: put the official V15 or your backup back by the Flipper Zero route (FLASHING.md, " +
+    "section 6), and send the log.",
   mismatch: "Written, but the FM-1 reports another firmware",
   badreq: "The FM-1 asked for something outside the package: stopped, nothing more sent. Press Find the FM-1 again.",
   badpkg: "The package beside this page is not the one it was made for (size, SHA-256 or identity). Run make_flasher.py again.",
@@ -292,6 +302,25 @@ function stepper() {
   };
 }
 
+// the last check: Strata answers after a real restart. Its first start comes straight from the update loader (a core
+// reset: the USB controller keeps the loader's settings), every later one from a chip reset, and on 2026-10-16 only
+// the first could send (FLASHING.md, section 9). So Done waits for the FM-1 to leave USB, come back, and answer.
+const FM1_PORT = /fm-1|felucca|ota|composite|sinco|usb-midi/i;   // (fm1ota.js find's)
+const fm1Ports = () => [...midi.inputs.values()].filter((p) => p.state !== "disconnected" && FM1_PORT.test(p.name || "")).length;
+async function restartCheck(product) {
+  say("Written, and Strata answered from its first start. Last check: switch the FM-1 off, then on again.", "warn");
+  while (fm1Ports()) await sleep(250);
+  log("restart check: the FM-1 left USB");
+  say("The FM-1 is off. Switch it on again.", "warn");
+  while (!fm1Ports()) await sleep(250);
+  log("restart check: the FM-1 is back on USB");
+  say("Checking Strata after the restart…", "busy");
+  const dev = await new Updater(midi, log).waitFor((id) => !IS_OTA(id), 15000);
+  if (dev) dev.link.close();
+  log(`restart check: ${dev ? dev.id.text + " answered" : "no answer"}`);
+  if (!dev || dev.id.text !== product) throw codeErr("norestart", dev ? dev.id.text : "");
+}
+
 // Find: what answers, shown before anything is written
 $("find").addEventListener("click", async () => {
   writing = true; gate();
@@ -329,7 +358,8 @@ $("write").addEventListener("click", async () => {
     } else {
       await up.install(image, meta.product, step);
     }
-    say(`Done: the FM-1 runs Strata (${meta.product}). Now step 3.`, "ok");
+    await restartCheck(meta.product);
+    say(`Done: Strata answers after a restart (${meta.product}). Now step 3.`, "ok");
   } catch (e) { showErr(e); }
   writing = false; gate();
 });

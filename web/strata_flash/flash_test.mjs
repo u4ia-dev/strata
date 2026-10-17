@@ -6,9 +6,11 @@
 // headless Chrome with a throwaway profile over the DevTools protocol (a pipe, no packages). Before the page runs, a
 // simulated FM-1 takes Web MIDI's place (the update protocol's device side: the handshake, step 1's reads, the reset
 // into the update loader, step 2's reads, the reset into the new firmware; every byte served checked against the
-// package) and a simulated console takes Web Serial's. Scenarios, each in a fresh page:
-//   the package checked, the install gated by the four boxes; an install over the official firmware; a resume (the
-//   FM-1 found in update mode); a device that is no FM-1; none at all; Cancel (nothing sent); backup mode (the soft
+// package) and a simulated console takes Web Serial's; the FM-1 can be switched off and on (fm.restart), and stay mute
+// after that (cfg.mute: it takes in USB but sends nothing, as on 2026-10-16). Scenarios, each in a fresh page:
+//   the package checked, the install gated by the four boxes; an install over the official firmware, Done only after
+//   the restart; a resume (the FM-1 found in update mode); the install whose Strata is mute after the restart, never
+//   Done; a device that is no FM-1; none at all; Cancel (nothing sent); backup mode (the soft
 //   key, nothing written); the report and RUN over the console; an official file that is not V15 refused; a package
 //   changed by one byte refused; no sideways scroll at a phone's width; the dark scheme.
 // Screenshots: OUT/flasher_light.png (the page as it opens), flasher_done.png (after an install), flasher_phone_dark.png.
@@ -52,7 +54,14 @@ const FAKE = (cfg) => `(() => {
     while (nb >= 8) { out.push(acc & 0xFF); acc >>>= 8; nb -= 8; } } return out; }
   const HS = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7], UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
   const SOFT = [0xF0, 0x22, 0x24, 0x35, 0x7D, 0xF7];
-  const fm = window.__fm1 = { served: 0, bad: 0, upgrades: 0, softkeys: 0, identity: "", image: null, log: [] };
+  const fm = window.__fm1 = { served: 0, bad: 0, upgrades: 0, softkeys: 0, identity: "", image: null, log: [],
+                              mute: false, restarts: 0 };
+  fm.restart = () => {                                                  // off (its ports gone), then on again
+    const id = fm.identity, name = [...access.inputs.values()].map((p) => p.name)[0] || "Felucca";
+    fm.restarts++;
+    boot("", "");
+    setTimeout(() => { boot(id, name); fm.mute = !!cfg.mute; }, 600);
+  };
   fetch("strata.fwsc").then((r) => r.arrayBuffer()).then((b) => {      // the logical image: the 20 markers out
     const raw = new Uint8Array(b), img = new Uint8Array(raw.length - 20);
     for (let i = 0; i < 20; i++) img.set(raw.subarray(i * 48, i * 48 + 47), i * 47);
@@ -89,6 +98,7 @@ const FAKE = (cfg) => `(() => {
   }
   function rx(d) {
     if (eq(d, HS)) {
+      if (fm.mute) return;                                              // (in, but nothing back)
       const t = [...new TextEncoder().encode(fm.identity)];
       tx([0xF0, ...pack7([0, 0x59, 0x11, 0, 0, 0, ...t, ...new Array(28 - t.length).fill(0)]), 0xF7]);
     } else if (eq(d, SOFT)) {
@@ -122,7 +132,7 @@ const FAKE = (cfg) => `(() => {
   Object.defineProperty(navigator, "requestMIDIAccess", { value: async () => access, configurable: true });
 
   const con = window.__con = { got: [] };                               // Strata's console (sy_console.c)
-  const REPLY = { "": "", status: "strata V0.4 HARDWARE TEST (FM-1_900)\\r\\nuptime_ms 61234\\r\\ncpu_pct 31\\r\\nhalf_us 905\\r\\n",
+  const REPLY = { "": "", status: "strata V0.5 HARDWARE TEST (FM-1_900)\\r\\nuptime_ms 61234\\r\\ncpu_pct 31\\r\\nhalf_us 905\\r\\n",
                   bench: "boot_ms 712\\r\\nhalf_max_us 1830\\r\\nframe_max_us 9100\\r\\nwait_max_us 11200\\r\\n",
                   "bench run": "RUN asked: 'bench' again in a second\\r\\n" };
   const port = { open: async () => {}, close: async () => {}, setSignals: async () => {}, readable: null, writable: null };
@@ -232,12 +242,33 @@ try {
     const found = await ev(sid, "document.getElementById('found').textContent");
     check("after Find: its confirmation drawn, Find itself off", await shown(sid, "confirm") && await ev(sid, "document.getElementById('find').disabled"));
     await click(sid, "write");
-    const done = await until(sid, "/^Done/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 90000);
-    const st = await status(sid), fm = await ev(sid, "({ ...window.__fm1, image: null })");
+    const asked = await until(sid, "/switch the FM-1 off/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 90000);
+    await sleep(1500);
+    const waiting = await status(sid);
+    check(`written, then not Done before a restart: "${waiting.slice(0, 60)}..."`,
+          asked && /switch the FM-1 off/.test(waiting) && !/^Done/.test(waiting));
+    await ev(sid, "window.__fm1.restart()");
+    const done = await until(sid, "/^Done/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 30000);
+    const st = await status(sid), fm = await ev(sid, "({ ...window.__fm1, image: null, restart: null })");
     check(`install over FM-1_015 ("${found.slice(0, 40)}..."): ${st.slice(0, 44)}; ${fm.served} reads, ${fm.bad} bad`,
-          done && /^Done/.test(st) && /FM-1_015/.test(found) && /official/.test(found) && fm.upgrades === 2 && fm.bad === 0 && fm.identity === "FM-1_900");
+          done && /^Done: Strata answers after a restart/.test(st) && /FM-1_015/.test(found) && /official/.test(found) &&
+          fm.upgrades === 2 && fm.bad === 0 && fm.identity === "FM-1_900" && fm.restarts === 1);
     check("the bar at 100 % after the install", await ev(sid, "document.getElementById('bar').value") === 100);
     await shot(sid, "flasher_done.png");
+    await send("Target.closeTarget", { targetId });
+  }
+  {   // the 2026-10-16 lockout: Strata written, then mute after the restart (in, nothing back): never Done
+    const { sid, targetId } = await open({ mode: "stock", mute: true });
+    await tick(sid);
+    await click(sid, "find");
+    await until(sid, "!document.getElementById('confirm').hidden", 8000);
+    await click(sid, "write");
+    await until(sid, "/switch the FM-1 off/.test(document.getElementById('status').textContent)", 90000);
+    await ev(sid, "window.__fm1.restart()");
+    const end = await until(sid, "document.getElementById('status-card').dataset.kind === 'err' || /^Done/.test(document.getElementById('status').textContent)", 40000);
+    const st = await status(sid);
+    check(`mute after the restart: "${st.slice(0, 64)}..."`,
+          end && !/^Done/.test(st) && /did not answer after the restart/.test(st) && /Flipper Zero route/.test(st));
     await send("Target.closeTarget", { targetId });
   }
   {   // the FM-1 already in update mode: the page finishes the write
@@ -247,10 +278,13 @@ try {
     await until(sid, "!document.getElementById('confirm').hidden", 8000);
     const found = await ev(sid, "document.getElementById('found').textContent");
     await click(sid, "write");
-    const done = await until(sid, "/^Done/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 60000);
-    const fm = await ev(sid, "({ ...window.__fm1, image: null })");
-    check(`resume in update mode: "${found.slice(0, 48)}...", ${fm.served} reads, ${fm.bad} bad`,
-          done && /update mode/.test(found) && fm.upgrades === 1 && fm.bad === 0 && fm.identity === "FM-1_900");
+    await until(sid, "/switch the FM-1 off/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 60000);
+    await ev(sid, "window.__fm1.restart()");
+    const done = await until(sid, "/^Done/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 30000);
+    const fm = await ev(sid, "({ ...window.__fm1, image: null, restart: null })");
+    check(`resume in update mode: "${found.slice(0, 48)}...", ${fm.served} reads, ${fm.bad} bad, then the restart`,
+          done && /^Done/.test(await status(sid)) && /update mode/.test(found) && fm.upgrades === 1 && fm.bad === 0 &&
+          fm.identity === "FM-1_900" && fm.restarts === 1);
     await send("Target.closeTarget", { targetId });
   }
   {   // another device on a port named like the FM-1: refused before anything is written
@@ -258,7 +292,7 @@ try {
     await tick(sid);
     await click(sid, "find");
     await until(sid, "document.getElementById('status-card').dataset.kind === 'err'", 8000);
-    const st = await status(sid), fm = await ev(sid, "({ ...window.__fm1, image: null })");
+    const st = await status(sid), fm = await ev(sid, "({ ...window.__fm1, image: null, restart: null })");
     check(`a device that is not an FM-1: "${st.slice(0, 60)}", nothing sent`,
           /not an FM-1/.test(st) && /XY-2_001/.test(st) && fm.upgrades === 0 && await ev(sid, "document.getElementById('confirm').hidden"));
     await send("Target.closeTarget", { targetId });
@@ -278,7 +312,7 @@ try {
     await until(sid, "!document.getElementById('confirm').hidden", 8000);
     await click(sid, "cancel");
     await sleep(2500);
-    const fm = await ev(sid, "({ ...window.__fm1, image: null })");
+    const fm = await ev(sid, "({ ...window.__fm1, image: null, restart: null })");
     check(`Cancel: "${(await status(sid)).slice(0, 40)}", no upgrade sent, Find on again`,
           fm.upgrades === 0 && /nothing was written/.test(await status(sid)) && !await ev(sid, "document.getElementById('find').disabled"));
     await send("Target.closeTarget", { targetId });
@@ -294,7 +328,7 @@ try {
     const none = (await ev(sid, "window.__fm1.softkeys")) === 0;
     await click(sid, "uboot-go");
     await until(sid, "window.__fm1.softkeys > 0 && document.getElementById('status-card').dataset.kind === 'ok'", 8000);
-    const fm = await ev(sid, "({ ...window.__fm1, image: null })");
+    const fm = await ev(sid, "({ ...window.__fm1, image: null, restart: null })");
     check(`backup mode: confirmed first, the soft key once, no upgrade ("${(await status(sid)).slice(0, 44)}...")`,
           !early && ignored && asked && none && fm.softkeys === 1 && fm.upgrades === 0 && /UBOOT1\.00/.test(await status(sid)));
     await send("Target.closeTarget", { targetId });
