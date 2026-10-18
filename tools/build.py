@@ -378,6 +378,10 @@ def check(img, syms, dis, rt):
         errors.append(f"RAM headroom {ram_len - bss} B < 4096 B")
     if pool_len - pool < 4096:                    # keep >= 4 KiB of the pool spare (8 KiB until integration showed
         errors.append(f"pool headroom {pool_len - pool} B < 4096 B")   # every platform buffer in it: V0.6, .bss's 4 KiB)
+    if UNIT == "strata":                          # strata.ld: the SRAM Felucca keeps for RAM code and debug, and NOINIT's
+        used = sym("_spare_bss_end") - sym("_spare_bss_start")   # rest (V0.66: the undo history, the FX lines there)
+        free = sym("_spare0_hi") - sym("_spare0_lo") + sym("_spare1_hi") - sym("_spare1_lo")
+        notes.append(f"spare SRAM: {used} B used (.spare_bss), {free} B left, watched on BENCH")
     return errors, notes
 
 
