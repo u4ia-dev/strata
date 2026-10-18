@@ -207,12 +207,12 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page();
   ex.web_buttons(1 << B.HOME);
   play(ex, 1.5);
-  const count = toast(), early = ex.web_test_page_section();
+  const count = cstr(ex, ex.web_test_cd()), early = ex.web_test_page_section();   // (the countdown's screen)
   ex.web_buttons(0);
   play(ex, 0.1);
   const after = [ex.web_test_page(), toast()];
   check(`HOME held: a countdown ("${count}"); let go at 1.5 s, nothing opens (section ${early}, the page kept, the footer "${after[1]}")`,
-        count === "HOLD: SETTINGS IN 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "");
+        count === "SETTINGS 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "" && cstr(ex, ex.web_test_cd()) === "");
   ex.web_buttons(1 << B.HOME);
   play(ex, 5.2);
   ex.web_buttons(0);
@@ -352,12 +352,12 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   const shape0 = ex.web_test_value(ID.L1_SHAPE), n0 = n();
   ex.web_buttons(1 << B.LFO);
   play(ex, 1.5);
-  const count = toast();
+  const count = cstr(ex, ex.web_test_cd());
   play(ex, 0.5);
   ex.web_buttons(0);
   play(ex, 0.1);
   check(`LFO held on POINTS: a countdown ("${count}"); let go at 2 s, nothing deleted (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}, the footer "${toast()}")`,
-        count === "HOLD: DELETE POINT 3 IN 4" && ex.web_test_value(ID.L1_SHAPE) === shape0 && n() === n0 && toast() === "");
+        count === "DELETE POINT 3 4" && ex.web_test_value(ID.L1_SHAPE) === shape0 && n() === n0 && toast() === "");
   ex.web_buttons(1 << B.LFO);
   play(ex, 5.3);
   const gone = toast();
@@ -644,9 +644,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   for (let i = 0; i < 6; i++) { m.web_enc(E.K4, 1); play(m, 0.004); }   // KNOB 4: how much, quickly
   play(m, 0.1);
   const b = mscr(), src = m.web_test_value(SRC8), dst = m.web_test_value(DST8), amt = m.web_test_value(AMT8);
-  check(`SEQ: "${seq[0]}" (the page stays: ${seq[1]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b, 22, 136)} pixels`,
+  check(`SEQ: "${seq[0]}" (the page stays: ${seq[1]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b)} pixels`,
         seq[0] === "SEQUENCER: IN A LATER VERSION" && seq[1] === SEC.OSCA && sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
-        s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b, 22, 136) > 300);
+        s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b) > 300);
 }
 {                                               // SCL: the keys' scale, its root, how they fit it, their velocity
   const u = await boot(), ut = () => cstr(u, u.web_test_toast());
@@ -896,12 +896,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         c1[0] === "TURN AGAIN: ALL CLEARED" && c1[1] === 1 && gt() === "THE LEARNED CCS CLEARED" &&
         g.web_test_set_get(6, -1) === 0);
 }
-{                                               // the chorus's taps: still in silence, moving with a note
-  const was = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => ex.web_test_chain(k)), won = ex.web_test_value(ID.CH_ON);
-  ex.web_test_set(ID.FXC1, 2);                  // (the chorus in the chain, alone, on; its page)
-  ex.web_test_set(ID.FXC1 + 1, 0);
-  ex.web_test_set(ID.CH_ON, 1);
-  goPage(ex, SEC.CHORUS, "CHORUS");
+{                                               // OTT's bands' levels: still in silence, moving with a note (the
+  const was = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => ex.web_test_chain(k)), won = ex.web_test_value(ID.OT_ON);   // STRATA
+  ex.web_test_set(ID.FXC1, 5);                  // UI's chorus draws its shape, still: OTT is the module's live one;
+  ex.web_test_set(ID.FXC1 + 1, 0);              // OTT in the chain, alone, on; its page)
+  ex.web_test_set(ID.OT_ON, 1);
+  goPage(ex, SEC.OTT, "OTT");
   play(ex, 1.6);
   const d0 = ex.web_screen_draws();
   play(ex, 1.0);
@@ -913,10 +913,10 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 3.0);
   const d1 = ex.web_screen_draws();
   play(ex, 1.0);
-  check(`CHORUS on: in silence its taps still (${still} blits in 1 s); a note: moving (${moving} in 0.5 s); after it, still again (${ex.web_screen_draws() - d1})`,
+  check(`OTT on: in silence its levels still (${still} blits in 1 s); a note: moving (${moving} in 0.5 s); after it, still again (${ex.web_screen_draws() - d1})`,
         still === 0 && moving >= 4 && ex.web_screen_draws() - d1 === 0);
   was.forEach((v, k) => ex.web_test_set(ID.FXC1 + k, v));   // (the chain as it was)
-  ex.web_test_set(ID.CH_ON, won);
+  ex.web_test_set(ID.OT_ON, won);
   tap(ex, B.EDIT);
 }
 {                                               // HOME: the sound and its output, live
@@ -975,7 +975,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_test_set(POS, p0 > 500 ? p0 - 40 : p0 + 40);
   const p1 = ex.web_test_value(POS);
   hold(2.3);
-  const cd = toast();
+  const cd = cstr(ex, ex.web_test_cd());
   ex.web_buttons(0);
   play(ex, 0.4);
   const early = [ex.web_test_slot_value(1, POS), toast()];
@@ -983,7 +983,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   ex.web_buttons(0);
   play(ex, 0.3);
   check(`SAVE held: a countdown ("${cd}"); let go at 2.3 s, USER 2 untouched (WT POS ${early[0]}, the footer "${early[1]}"); held 5 s, over USER 2 ("${toast()}"): its WT POS ${p0} -> ${ex.web_test_slot_value(1, POS)}`,
-        cd === "HOLD: SAVE OVER USER 2 IN 3" && early[0] === p0 && early[1] === "" && toast() === "SAVED OVER USER 2" &&
+        cd === "SAVE OVER USER 2 3" && early[0] === p0 && early[1] === "" && toast() === "SAVED OVER USER 2" &&
         ex.web_test_slot_value(1, POS) === p1);
   ex.web_test_set(POS, p1 > 500 ? p1 - 20 : p1 + 20);   // (a change USER 2 does not have)
   const p3 = ex.web_test_value(POS);
@@ -1060,7 +1060,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const del0 = [name(), ex.web_test_user_slot(), slotName(0), ex.web_test_oct()];
   ex.web_buttons(1 << B.OCTDN);
   play(ex, 1.5);
-  const dcd = toast();
+  const dcd = cstr(ex, ex.web_test_cd());
   ex.web_buttons(0);
   play(ex, 0.3);
   const kept = [slotName(0), ex.web_test_oct(), toast()];
@@ -1070,7 +1070,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 0.4);
   const del1 = [toast(), slotName(0), ex.web_test_user_slot(), name(), ex.web_test_oct()];
   check(`the browser: OCT- held, a countdown ("${dcd}"); let go at 1.5 s, nothing deleted ("${kept[0]}"), no octave (${kept[1]}); held 3 s: USER 1 deleted ("${del1[0]}", "${del1[1]}"), the sound plays on ("${del1[3]}", from no slot: ${del1[2]})`,
-        del0[1] === 0 && dcd === "HOLD: DELETE USER 1 IN 2" && kept[0] === del0[2] && kept[1] === del0[3] && kept[2] === "" &&
+        del0[1] === 0 && dcd === "DELETE USER 1 2" && kept[0] === del0[2] && kept[1] === del0[3] && kept[2] === "" &&
         del1[0] === "DELETED USER 1 · SAVE+OCT- UNDO" && del1[1] === "" && del1[2] === -1 && del1[3] === del0[0] &&
         del1[4] === del0[3]);
   hold(0.7);                                    // SAVE + OCT- straight after: put back

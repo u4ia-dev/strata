@@ -143,6 +143,7 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_store.c"
 #include "../../firmware/src/sy_sounds.h"
+#define STRATA_VERSION "V0.66 UI"                 /* (the boot screen's: the page names the build) */
 #include "../../firmware/src/sy_gfx.c"
 #include "../../firmware/src/sy_ui.c"
 #include "../../firmware/src/sy_ui_draw.c"
@@ -162,6 +163,10 @@ static uint32_t web_booted, web_boot_ms, web_last_frame, web_master_adc = 700;
 static float ring[RING * 2];
 static uint32_t ring_w, ring_r, web_samples_due;
 
+#ifndef WEB_FRAME_BEGIN
+#define WEB_FRAME_BEGIN() ((void)0)              /* (web/emu/strata_bench.c: a frame's drawing timed) */
+#define WEB_FRAME_END() ((void)0)
+#endif
 /* one millisecond of the device: the clock, the audio halves due by now, the main loop */
 static void web_ms(void)
 {
@@ -188,7 +193,9 @@ static void web_ms(void)
     sy_app_ms();
     if (fm1_ms - web_last_frame >= 15u) {                 /* a frame: ~60 a second, as the FM-1's main loop */
         web_last_frame = fm1_ms;
+        WEB_FRAME_BEGIN();
         sy_app_frame();
+        WEB_FRAME_END();
     }
 }
 
@@ -328,6 +335,46 @@ EXPORT int32_t web_test_learned(uint32_t cc) { return sy_ui_learned(cc & 127u); 
 EXPORT uint32_t web_test_lfo_phase(uint32_t k) { return sy_glfo[k & 1u].ph >> 16; }
 EXPORT int32_t web_test_bend(void) { return (int32_t)(sy_bend_v * 1000.0f + (sy_bend_v < 0.0f ? -0.5f : 0.5f)); }
 EXPORT uint32_t web_test_wheel(void) { return sy_wheel; }
+/* the screens the panel cannot reach here (sy_main.c's, which the emulator does not run): k 1, 2 SAFE START (after a
+ * crash, HOME held), 3 the power-on's (drawn at once), 4 OCT- + OCT+ held 3 s (USB BOOT's countdown), 0 none */
+EXPORT void web_test_screen(uint32_t k)
+{
+    if (k == 1u || k == 2u) {
+        sy_ui_safe(k);
+    } else if (k == 3u) {
+        uint32_t s;
+        for (s = 0; s < 240u; s += 80u) {
+            lk_begin(0, (int32_t)s, 240u, 80u);
+            ui_p_boot();
+            lcd_blit(0, s, 240u, 80u, cv_px);
+        }
+    } else {
+        ui.ub_t0 = k == 4u ? (fm1_ms - 3000u) | 1u : 0u;
+        ui.dirty = D_ALL;
+    }
+}
+/* the countdown shown (a long hold, sy_ui_draw.c): its title and its seconds, "SETTINGS 4"; "" none */
+EXPORT const char *web_test_cd(void)
+{
+    static char t[48];
+    uint32_t n;
+    float frac;
+    const char *sub, *sub2, *label;
+    t[0] = 0;
+    if (ui_view() == V_CD && ui_cd_view(&n, &frac, t, &sub, &sub2, &label))
+        sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
+    else
+        t[0] = 0;
+    return t;
+}
+/* effect instance i in (1) or bypassed (0), as FX held + its key sets it */
+EXPORT void web_test_fx_on(uint32_t i, uint32_t on)
+{
+    if (i < FXI_N) {
+        sy_patch.p[FXI_ON[i]] = on != 0;
+        sy_ui_touch();
+    }
+}
 /* page p shown at once (not SAVE's, the browser's: they open from SAVE); the pages' count */
 EXPORT uint32_t web_test_go(uint32_t p)
 {
@@ -399,7 +446,8 @@ EXPORT int32_t web_test_slot_value(uint32_t s, uint32_t id)
     return n > 0 && sp_unpack(&p, pk, (uint32_t)n) && id < SP_COUNT ? p.p[id] : -32768;
 }
 /* BENCH's row i (the emulator draws none: no clock of its own; 8 .. 15: RUN not yet run) at the widest figures a unit
- * shows: its ink, in pixels, less the room for it (above 0: it runs past the window); sy_bench as it was after */
+ * shows: its width, in pixels, less the room for it (x 186 to the margin at 236; above 0: it runs past); sy_bench as it
+ * was after */
 EXPORT int32_t web_test_bench_fit(uint32_t i)
 {
     char t[48];
@@ -421,12 +469,10 @@ EXPORT int32_t web_test_bench_fit(uint32_t i)
     sy_bench.run = (uint8_t)(i >= 8u ? 0u : 2u);
     sy_bench.run_int_us = sy_bench.run_flt_us = 99999u;
     sy_bench.gap_save_max_us = 999999u;
-    w = -1000;
-    for (sy_bench.frame_max_page = 0; sy_bench.frame_max_page < UI_NPG; sy_bench.frame_max_page++) {
-        int32_t wp;                               /* (SCREEN names the longest frame's section: every page's) */
-        ui_bench_row(i % 8u, t);
-        wp = text_w(&AF_XS, t) - (int32_t)UI_BENCH_ROOM;
-        w = wp > w ? wp : w;
+    {
+        float v, pk;
+        ui_bench_row(i % 8u, &v, &pk, t);
+        w = sy_floori(lk_tw(T7B, t, 0) + 0.999f) - 50;
     }
     sy_bench = was;
     sy_g.shed = shed;
