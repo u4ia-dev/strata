@@ -27,7 +27,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-133 checks in six programs (`tests/sy_*.c`), all passing (V0.65).
+135 checks in six programs (`tests/sy_*.c`), all passing (V0.66).
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -64,7 +64,19 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 92 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 94 checks; `sy_smoke`, 2)
+
+- **Admission** (V0.66): with a voice measured at 1/8 of a block and the rest of the block at 1/4, eight notes at once
+  get four voices (1/4 + 4 x 1/8 under 80 %) and four steal; with the cost not measured yet (a new sound), all eight.
+  (The host has no clock: the test sets what the FM-1 would have measured; nothing else is refused here, the golden
+  renders are unchanged.)
+- **The fades** (V0.66): every module type (13) at full MIX and DEPTH under a 220 Hz sine, added, taken out, bypassed,
+  back in and moved past DRIVE: the burst a change throws (the energy of the output's second difference over the 25
+  blocks from it) against 25 steady blocks before and after. V0.6's switches (one block) and dip (2 + 2 blocks): the
+  worst 188x (TAPE added), CHORUS and FLANGER added 75x, PHASER taken out 8.2x, DELAY 4.1x, REVERB moved 2.5x; V0.66
+  (eight blocks, a dip of 8 + 8, the modulated lines filled before they are heard): at most 1.27x (PHASER back in),
+  moved at most 0.94x. It found the lines' fault too: a CHORUS back in from bypassed read the sound of when it stopped
+  (2,591x before the fill). The golden renders are unchanged (at the start and at a load the modules join as before).
 
 - **Every smoothed value glides to a change** (V0.65, the memory audit): all 166 values turned to their other end while
   a sound plays, no patch load, each at its new value after 0.5 s. It fails on V0.6's code: 34 values short, the first
@@ -344,7 +356,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 89 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 90 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -444,6 +456,11 @@ as it did. Two checks more: BENCH's rows built at the widest figures a unit show
 clock of its own) fit the window (the widest, AUDIO, 20 px to spare; STACKS with its new SPARE note was 11 px over
 until it took the AUDIO row's form, "2.2 / 6.6 KB"); and every page's name ends within its 8 characters (V0.6's RING
 MOD pages ran on, §5.4).
+
+**V0.66**: the emulator plays its keys as the FM-1 now does, from its "TIMER5" (`sy_keys_tick` each millisecond)
+while they only play, from the main loop in the layers: every check above that plays a key passes either way. One
+check more: eight notes at once over MIDI all sound (the app starts two a block). BENCH's rows fit with the SCREEN
+row naming every page's section (7 px to spare).
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
@@ -558,11 +575,18 @@ The buttons behind two of them did nothing until Find; the backup mode's would h
 ### 8.3 What BENCH measures (SETTINGS > BENCH, the console's `bench`)
 
 - **AUDIO**: a half's render in µs (TIMER5's nested time taken off), the last and the longest, and the halves the DMA
-  had already left when their render ended (late).
+  had already left when their render ended (late). V0.66: those right after the interrupts were held (an erase, a
+  page's program, RUN: the audio hushed) are counted apart (the console's `halves_late_held`).
 - **CPU**: the guard's smoothed load, its budget steps and the voices it shed.
-- **SCREEN**: a frame's drawing (`sy_app_frame`), the last and the longest.
+- **SCREEN**: a frame's drawing (`sy_app_frame`), the last and the longest, in ms; V0.66: and the section of the
+  longest (the console's `frame_max_page`).
 - **KEYS**: the longest time between two of the main loop's millisecond passes: the keys, MIDI and the knobs wait at
-  most that long (frames and flash writes included).
+  most that long. V0.66: while the keys only play, TIMER5 plays them (10 kHz) and this counts nothing; it counts while
+  the main loop has them (a layer, a screen that types), drawing and, apart, over flash work ("11.2 · SAVES 52.1 MS").
+- **The event log** (V0.66, the console's `bench`, the last 32: `ev MS WHAT ARG`): late halves (their render, µs),
+  late halves after held interrupts, the USB audio's underruns, missed packets and stalls, the flash's operations,
+  sounds loaded, voices shed, notes refused a free voice, TIMER5 held over 0.6 ms, the keys left waiting over 20 ms
+  (drawing or saving) and frames over 50 ms.
 - **TABLES**: a wavetable build's longest step (a millisecond pass while it builds) and the whole build.
 - **FLASH**: the longest interrupts-off window of an erase and of a page's program (TIMER4 around the RAM driver's
   call), and the erases so far.

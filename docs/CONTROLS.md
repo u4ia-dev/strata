@@ -219,9 +219,10 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
 | BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |
 
-BENCH shows what the FM-1 measures, a row each: AUDIO, CPU, SCREEN, KEYS, TABLES, FLASH, STACKS, RUN (what each
-means: [TESTING.md](TESTING.md) §8.3; how to use it in the hardware test: [FLASHING.md](FLASHING.md) §4). The
-emulator says it has no clock of its own.
+BENCH shows what the FM-1 measures, a row each: AUDIO, CPU, SCREEN (V0.66: and the section of the longest frame),
+KEYS (V0.66: what the main loop held the keys up, drawing · over saves; on a page where the keys only play the scan's
+timer plays them), TABLES, FLASH, STACKS, RUN (what each means: [TESTING.md](TESTING.md) §8.3; how to use it in the
+hardware test: [FLASHING.md](FLASHING.md) §4). The emulator says it has no clock of its own.
 
 HOME leaves the SETTINGS. GLOBAL's TEMPO (BPM 20–300, TS-BEAT 1–16, TS-NOTE 1, 2, 4, 8, 16) and SCL's page are kept
 with the settings too, not with a sound.

@@ -14,11 +14,16 @@ emulator**, **needs hardware test**.
 | Pool (`.pool`) | 363,492 of 368,640 B | 358,692 of 380,928 B | 22,236 B free (V0.6: 5,148) |
 | Main stack (reserved) | 24,320 B | 12,032 B | deepest path ~6.6 KB from the listing; 4,968 B used on the unit after an hour (V0.5: 17.9 KiB) |
 | Interrupt stack (7,936 B reserved) | ~2.5 KB | ~2.5 KB | unchanged |
-| **RAM free in all** | **12.2 KiB** | **30.1 KiB** | |
+| **RAM free in all** | **12.2 KiB** | **30.1 KiB** | V0.66: **48.2 KiB** (27,168 B of `.bss`, 22,236 of the pool) |
 | SRAM Strata leaves unused | (not named) | 44 KiB | painted at power-on; BENCH says whether anything wrote there |
 
 The build keeps 4 KiB of `.bss` and 4 KiB of the pool spare (its checks fail below that); the free figures above
 include those margins.
+
+V0.66 (after V0.65's test found the spare SRAM untouched): the undo history (7,008 B) and the FX modules' short lines
+(12,288 B) moved into it (`strata.ld` `.spare_bss`, cleared at boot): `.data` + `.bss` 46,560 B (65,152 in V0.65);
+25,856 B of the spare SRAM left, still painted and watched; the image 327,184 B (the admission, the keys' timer path,
+the event log: +3 KB).
 
 ## 2. What V0.65 changed
 
@@ -101,7 +106,7 @@ them. If they hold through the test, a later version can put buffers there
 | Each glyph drawn at 2 sub-pixel places instead of 4 (S, M, XS, SB) | ~25 KB flash (an estimate) | text placed to the half pixel instead of the quarter: your call |
 | XS's and SB's kerning pairs, the same 2,030 B twice | 2 KB flash | Felucca's font generator: a change to its output |
 | The second instances' 76 rows of the parameter table, derived from the first's | 1.5 KB flash | every `SP[id]` read would go through a function |
-| The undo history (8 patches, 7,008 B) into a spare area, or kept packed | 7 KB / ~1.3 KB of `.bss` | the spare areas first need the hardware's word; packed, the ghost of a turn needs it unpacked |
+| The undo history (8 patches, 7,008 B) into a spare area, or kept packed | 7 KB / ~1.3 KB of `.bss` | done in V0.66 (the spare area: V0.65's test found it untouched) |
 | The HOME scope's copy (848 B) | 848 B | the UI would have to hold the capture until drawn |
 | Felucca's USB buffers (the console's 2 KB, the audio ring's 2 KB) | — | Felucca's driver, unchanged by rule; V0.5's audio counters say not to shrink the ring |
 

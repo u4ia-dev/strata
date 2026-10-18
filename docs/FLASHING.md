@@ -1,6 +1,6 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.65 HARDWARE TEST`) on an FM-1, testing
+This is the procedure for putting Strata's **hardware test build** (`V0.66 HARDWARE TEST`) on an FM-1, testing
 it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
@@ -9,7 +9,8 @@ back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the
 check and its report came back over USB, so bulk IN works after a power-on (**verified on hardware**, the V0.5
 report). `V0.6` is the build after that test: the FX chain, seven new effects and the UI changes the test asked for
 (section 1); it installed (2026-10-17), and its test waited for `V0.65`, the memory audit ([BUDGET.md](BUDGET.md)),
-which has not run on an FM-1 yet. Section 8 lists what was checked where.
+which ran on the FM-1 on 2026-10-18 (the test page's report); `V0.66` is the build after that report, not yet run on an
+FM-1. Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
@@ -40,6 +41,15 @@ KiB (it used 17.9 KiB on V0.5: one 17 KiB frame, gone), the pool 12 KiB larger, 
 bugs fixed: the FX FILTER's, BITCRUSH's, TREMOLO's, RING MOD's and TAPE's knobs changed nothing while a sound played
 (only a load took them), and RING MOD's header showed odd characters after its name. And 44 KiB of SRAM Strata does
 not use are watched, for later versions: BENCH's STACKS row ends in SPARE OK, or SPARE HIT if anything wrote there.
+
+**New in V0.66** (from V0.65's report; nothing on the panel changes but BENCH's KEYS and SCREEN rows): big chords no
+longer crackle (a note gets a free voice only while the time it needs fits: else it steals, as with every voice
+taken; two notes start a block); the chain's changes fade over ~6 ms (a move dips ~12 ms), CHORUS, FLANGER, TAPE and
+the FX FILTER switched in only once their lines hold the sound; the screen's SPI 5x faster (the clock other FM-1
+firmwares run); the keys played from the scan's timer while they only play, so drawing and saving no longer hold them
+up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB under the pad); BENCH counts late halves
+after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
+SRAM V0.65 found untouched.
 
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), MIDI clock, start and
 stop, MIDI out, ARP, the chords on SCL (V0.7), the second core.
@@ -133,7 +143,7 @@ PowerShell):
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-5. Strata starts: the splash (`STRATA`, `V0.65 HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (`STRATA`, `V0.66 HARDWARE TEST`), then OSC A's WAVE page.
 6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
    answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
    fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.
@@ -219,6 +229,24 @@ New in V0.65:
 19. **The screen's speed.** BENCH's SCREEN row (the last and the longest frame) after turning knobs on a few live pages
     (HOME with a note held, an envelope, the EQ, the chain view): the UI's code is built for size now, so its drawing
     may be slower than V0.6's. Note whether turning a knob on a graph page feels slower.
+
+New in V0.66:
+
+20. **The screen.** The panel's SPI runs 5x faster: every page draws whole and clean, no stripes, wrong colours or
+    torn rows (if anything looks wrong, a photo; the next build steps the clock back). Page changes should be quicker.
+21. **Big chords.** VOWEL PAD and SUPERSAW, eight notes at once (the test page's load test does it): no crackle; the
+    load table's late halves 0. Some notes may be stolen when the FM-1 has no time for them (the console's `bench`:
+    `voices_refused`).
+22. **The chain's changes, by ear.** CHORUS, FLANGER, TAPE, RING MOD and BITCRUSH at full MIX, a note held: add,
+    take out, bypass (FX held + F3), back, move (KNOB 3): no click (a move ducks the effects for ~12 ms; CHORUS,
+    FLANGER and TAPE come in ~20 ms after they are added, then fade in).
+23. **The keys while it draws and saves.** Play quick notes while flicking through pages, and right after a SAVE:
+    every note on time. BENCH's KEYS row counts only what the main loop held up (the layers); the console's
+    `keys_from_timer5` is 1 on a plain page.
+24. **VOWEL PAD.** Less hiss than V0.65's.
+25. **The event log.** After the test, the flasher's device report (or `bench` in a terminal) ends with the event
+    log: paste it with the report. With the USB audio recorded (a DAW, or the test page's audio), `uac_missed` and
+    `uac_underruns` entries say when its gaps were, next to what else happened then.
 
 ## 5. The report
 

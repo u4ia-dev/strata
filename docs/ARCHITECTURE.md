@@ -41,6 +41,20 @@ painted and watched on BENCH. The audit found and fixed two V0.6 bugs: the 34 va
 glided after a load (the FX FILTER, BITCRUSH, TREMOLO, RING MOD and TAPE knobs did nothing while a sound played), and
 RING MOD's page name ran on into the knobs' ids. **Verified on host and in emulator**; V0.65 **needs a hardware test**.
 
+**V0.66, after V0.65's test** (2026-10-18: the test page's report): a chord no longer overloads a half (the engine
+times its blocks and gives a new note a free voice only while the block's time it needs fits, else it steals, §13;
+the app starts at most two notes a block); the chain's switches fade over 5.8 ms and a move dips for 11.6 ms, and a
+module with a modulated line (CHORUS, FLANGER, TAPE, the FX FILTER's COMB) runs unheard until its line holds the
+sound playing before it is heard (§14; the worst burst 188x the steady output's on V0.6, 1.27x now); the panel's SPI
+at the other forks' 60 MHz (~44 MHz measured: a full redraw ~21 ms, was ~77); the keys played from TIMER5 while they
+only play, whatever the main loop draws or saves (§3); the USB audio's ring 1.45 ms deeper (Felucca's band made
+settable in `usb.c`, its own build unchanged); BENCH's late halves after flash work counted apart, KEYS split into
+drawing and saving, SCREEN naming the longest frame's section; an event log (late halves, the USB audio's underruns
+and missed packets, flash work, loads, voices shed and refused, TIMER5 held, long waits and frames: the console's
+`bench`); VOWEL PAD's noise from 150 to 40 (it was 6.6 dB under the pad: the fuzz the test heard); the undo history
+and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
+host and in emulator**; V0.66 **needs a hardware test**.
+
 **Hardware test build** (after Phase 4, before Phase 5, at your request): the FM-1 unit is built. `strata.c` includes
 Felucca's platform unchanged (the HAL, USB, TRS MIDI, the flash driver, the update entry `ota.c`; the update loader is
 Felucca's too) and Strata's sources; `sy_main.c` (power-on, the boot guard, the UBOOT entries, the update entry behind
@@ -750,5 +764,8 @@ whether Strata needs that is decided by the device test.
 | The interrupt stack (7,936 B: the audio's render, TIMER5 nested in it) | `build.py --strata` counts it from the listing (~2.4 KiB, 4 KiB allowed); BENCH reads both stacks' use on the unit (painted at power-on) |
 | The main stack, 12 KiB since V0.65 (24 KiB before; V0.5 used 17.9 KiB, one 17 KiB frame) | `build.py --strata` counts it from the listing (~6.6 KB, 8 KiB allowed; frames made in a register counted, an unknown one fails the build); BENCH's STACKS row on the unit; an overflow traps (the EMU stack limit) |
 | The main loop's code at `-Os` (V0.65) | the same C (instruction for instruction the same in the interrupts and the DSP, checked); the screen's drawing may be slower: BENCH's SCREEN row against V0.6's |
-| The 44 KiB Strata leaves unused (BUDGET.md §4) | painted at power-on, watched by BENCH (SPARE OK / HIT); nothing is put there until a hardware test says nothing else writes there |
+| The 44 KiB Strata leaves unused (BUDGET.md §4) | painted at power-on, watched by BENCH (SPARE OK / HIT); V0.65's test: untouched for 94 minutes; V0.66 puts 19 KiB there (the undo history, the FX lines), the rest still watched |
+| The keys from TIMER5 (V0.66) | only while they only play (`sy_ui_keys_plain`, refreshed each millisecond); their notes in one ring, from one producer at a time (the main loop sets the flag between its own readings); the emulator plays its keys the same way (90 checks) |
+| The panel's SPI at 60 MHz (V0.66) | the clock fm1-amb, fm1-ctl and fm1-fomni run on FM-1s (~44 MHz measured there); one define in `strata.c` to go back (`LCD_BAUD` 4) |
+| Admission (V0.66) | the engine's own block timing; the first two voices of a new sound measure it; the CPU guard stays behind it |
 | Strata's presets take Felucca's projects and samples area | said at install (§16); different magics, so neither misreads the other's records |
