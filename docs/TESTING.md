@@ -534,6 +534,23 @@ verified with its receipt and the FM-1 let go; refused for reads that differ, a 
 boot head that does not check out; stopped while waiting, nothing read; no disk in time; the 12-hour rule, and files
 changed after the receipt; why it is off; and HTTP: another Host, a POST without the token or this page's Origin.
 
+**The hardware test page** (`web/strata_flash/test.html`, `test_test.mjs`, 21 checks). `make_flasher.py` gives the
+page the facts of the app it ships: the RAM addresses of the patch's values (`sy_patch`) and of the audio side's
+(`sp_n`) from `build/strata.syms` (written by `build.py`), the parameter table read out of `build/strata.bin`
+(names, sections, ranges, flags, CCs: checked row by row) and three runs of its bytes as a fingerprint. In headless
+Chrome against a simulated FM-1 (its console's `status`, `bench`, `crash`, `inp` and `memr` answered from a model of
+the patch, whose values glide to a change within a few ms as `sy_param.c`'s do; its CCs mapped as `sy_app.c` maps
+them; the bank as a program change arrives), with the page's waits a tenth (`?fast`): as it opens; the automatic run
+on a good FM-1 (9 rows OK, 32 chords, the CC 74 value stored and followed, a user preset put back by bank and program);
+no SysEx asked for or sent, every console command one of the read-only six, every note ended; PROGRAM off (said, the
+load on the sound playing alone); another build on the FM-1 (said, the RAM checks skipped); the five fixed effects'
+knobs followed (OK) and, with V0.6's bug simulated, stuck (FAIL, each module marked); the chain's seven steps seen;
+the encoders (OK; WARN for a quiet one and lost transitions); the keys' wait (one console command, after the 25 s);
+three restarts reconnected and read, and one with a crash record (FAIL); no sideways scroll at 390 px; the dark
+scheme. Found by it: a backspace in the page's `?fast` pattern (a shell's heredoc), and the five effects' step ending
+before its RING MOD question could be answered. The page's USB audio check (the gaps: runs of digital silence inside
+a sounding note) has not run against a real stream: **unverified** until the hardware test.
+
 Found by its screenshots: every confirmation was drawn from the start (a `display` rule beat the `hidden` attribute).
 The buttons behind two of them did nothing until Find; the backup mode's would have worked at once. Fixed (a
 `[hidden]` rule and the backup's own guard); the test now checks what is drawn, not the attribute.

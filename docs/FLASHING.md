@@ -146,6 +146,26 @@ built).
 
 Note what you see and hear, take photos of anything odd, and read the report (section 5) at the end.
 
+**The test page does most of it** (V0.65): with the flasher served (section 3: `serve.py`; an administrator
+PowerShell is only needed for the backup step), open **<http://127.0.0.1:8000/test.html>** in Chrome or Edge, close the
+flasher's tab first (one page at a time can open the FM-1's ports), and work down it. It connects to the FM-1's MIDI
+port, its console and, if you want, its USB audio, checks that the FM-1 runs the very build the page was made for (a
+fingerprint of the app's bytes read over the console), then:
+
+- **runs by itself** (about two minutes): a clean start (no crash record, no safe start), the spare SRAM (item 18), a
+  note on and off (item 8), CC 74 moving the cutoff and the sound following it (read from Strata's RAM), program
+  changes, the load test on every starter sound with 1, 2, 4 and 8 notes (item 3: voices, CPU, the guard, late halves,
+  the gaps in the USB audio), BENCH RUN against V0.5's figures (item 4), the stacks (item 17), the USB audio's counters;
+- **guides**, and checks what it can: the five fixed effects' knobs, read from RAM while you turn them (item 16), the
+  chain's adds, take-outs, moves, bypasses and undo, read from the patch (item 11), the encoders and keys (item 5), the
+  keys' wait and a frame's drawing while you flick through pages (items 15, 19), three restarts (item 1);
+- **asks** what only you can judge (the sound, the screen, SAVE and the browser), with a note each.
+
+It plays notes, moves the cutoff and loads the starter sounds by program change (PROGRAM on: SETTINGS > MIDI, KNOB 4),
+so SAVE your sound first; it puts a user preset back at the end. It sends no SysEx and only the console's read-only
+commands (`status`, `bench`, `bench run`, `inp`, `crash`, `memr`), and writes nothing to the flash. Its report (copy, or
+save as a file) is what to paste into the conversation. The list below is the whole test, for reference.
+
 1. **Start-up.** Time from power on to the first page; the splash; whether it starts every time (try 3 power-ons).
 2. **Sound.** Play every starter sound (PRESETS steps them). Listen for clicks, crackle, dropouts, aliasing (a
    high note's metallic whine), DC thumps, and how a note ends. Turn MASTER: the level follows, without zipper noise.
@@ -206,7 +226,8 @@ On the flasher page, step 3: **Read the device report** opens Strata's USB seria
 the FM-1's) and reads `status` and `bench`; **Run BENCH's loops, then read** asks for RUN first. **Copy**, and paste
 the text into the conversation with what you heard and saw, and photos of any crash screen. The same console works
 in any serial terminal (115200 baud; type `help`). Its commands only read (`bench run` starts BENCH's loops);
-`uboot yes` enters backup mode.
+`uboot yes` enters backup mode. The test page (section 4) makes a fuller report: everything it measured and what you
+marked.
 
 ## 6. Going back
 
