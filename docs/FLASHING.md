@@ -1,6 +1,7 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.66 HARDWARE TEST`) on an FM-1, testing
+This is the procedure for putting Strata's **hardware test build** (`V0.66 HARDWARE TEST`; on the `strata-ui`
+branch its alternate, `V0.66 UI HARDWARE TEST`, the same with the screen redrawn: [UI.md](UI.md)) on an FM-1, testing
 it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
@@ -50,6 +51,12 @@ firmwares run); the keys played from the scan's timer while they only play, so d
 up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB under the pad); BENCH counts late halves
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
+
+**The UI build** (`strata-ui`, `V0.66 UI HARDWARE TEST`): V0.66 with the STRATA UI ([UI.md](UI.md)): one screen a
+module, the knobs' numbered handles on what each moves, a value only while its knob turns, Space Mono, warm white on
+black with one vermilion accent, HOME's bloom in place of the scope, the long holds as countdown screens. The engine,
+the panel's controls, the presets and settings, the package, its identity and the flash it writes are V0.66's. Its
+package: `build/strata.fwsc`, 610,090 bytes, sha256 `5638a66636d7d14e6e80270c62ade1467ba93c17abe685c8bcae3a028fdef2a8`.
 
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), MIDI clock, start and
 stop, MIDI out, ARP, the chords on SCL (V0.7), the second core.
@@ -143,7 +150,8 @@ PowerShell):
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-5. Strata starts: the splash (`STRATA`, `V0.66 HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (`STRATA`, `V0.66 HARDWARE TEST`; the UI build: two blooms over `STRATA` and
+   `WAVETABLE · FM-1 · V0.66 UI HARDWARE TEST`), then OSC A's WAVE page.
 6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
    answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
    fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.
@@ -179,7 +187,7 @@ save as a file) is what to paste into the conversation. The list below is the wh
 1. **Start-up.** Time from power on to the first page; the splash; whether it starts every time (try 3 power-ons).
 2. **Sound.** Play every starter sound (PRESETS steps them). Listen for clicks, crackle, dropouts, aliasing (a
    high note's metallic whine), DC thumps, and how a note ends. Turn MASTER: the level follows, without zipper noise.
-3. **Load.** HOME's header shows CPU %. On a few sounds (SUPERSAW's unison, a pad with every effect on), hold 1, 2,
+3. **Load.** HOME's header shows CPU % (the UI build: SETTINGS > BENCH's CPU row). On a few sounds (SUPERSAW's unison, a pad with every effect on), hold 1, 2,
    4 and 8 keys and note the CPU % and whether notes drop out (the guard sheds voices over 85 %).
 4. **BENCH.** Hold HOME 5 s for the SETTINGS, turn ALGORITHM to the last page, BENCH. Its rows: AUDIO (a half's
    render: the last and the longest, and how many came late), CPU (load, the guard's steps, voices shed), SCREEN (a
@@ -189,8 +197,12 @@ save as a file) is what to paste into the conversation. The list below is the wh
 5. **The panel.** Every button, every key, every encoder (both directions, slow and fast), MASTER; the LEDs (the keys
    on SCL show the scale; PLAY's green LED blinks the tempo while it runs). The hold layers (GLO bend, FX macros,
    LFO momentary, EDIT jump), the MOD layer (REC).
-6. **The screen.** Every page draws; the live pages (HOME's scope, an envelope, an LFO) move while notes play and
-   stop when they end; a turned knob's value follows without lag.
+6. **The screen.** Every page draws; the live pages (HOME's scope, the UI build's bloom, an envelope, an LFO) move
+   while notes play and stop when they end; a turned knob's value follows without lag. **The UI build**, besides:
+   each screen against the renders page ("Strata UI Firmware Renders": the emulator's pixels beside each design
+   board); BENCH's SCREEN row after a minute on HOME with a chord held (the bloom: V0.66's scope for comparison) and
+   after turning a knob on FILTER TONE quickly; the PAPER theme (SETTINGS > SCREEN) in daylight; the countdowns (HOME
+   held, SAVE held on a user preset); anything that flickers, tears or lags.
 7. **Saving.** SAVE once (a new version), SAVE twice (the browser), SAVE held 5 s (over its own slot), a rename in
    NAME IT; switch off and on: the sound playing comes back, the user presets are listed. Undo/redo (SAVE + OCT−/+).
 8. **MIDI.** From a DAW over USB: notes, pitch bend, the mod wheel, CC 74 (the cutoff), a program change with
@@ -315,6 +327,14 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **The UI build** (`V0.66 UI`, branch `strata-ui`): built and checked by the build: the image 326,280 bytes (V0.66
+  327,184; the fonts 39.0 KB, V0.66's 76.1), RAM 47,128 of 73,728 bytes, the pool 342,372 of 380,928 (the canvas 240
+  × 80), the spare SRAM 21,900 bytes used (the curves' cache), 23,296 left; the interrupt stack ~2.5 KB, the main stack
+  ~4.6 KB (8 KiB allowed); the package rebuilt by the flasher's builder (sha256 `5638a666...028fdef2a8`). **Verified in
+  the emulator**: 90 checks (`strata_emu_test.mjs`), every screen rendered (`strata_ui_shots.mjs`), the drawing's time
+  on the host against V0.66's (`strata_bench.c`, [UI.md](UI.md) §5). **Needs a hardware test**: everything in section
+  4, item 6.
 
 - **Built and checked by the build** (`tools/build.py --strata`, V0.65): the image (324,148 of 581,564 bytes; V0.6
   407,008), RAM (65,152 of 73,728 bytes: 8.4 KiB spare, over the 4 KiB margin), the pool (358,692 of 380,928 bytes:

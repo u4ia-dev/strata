@@ -380,7 +380,7 @@ and sent at once) and the flash's (a write takes no time). **Verified in emulato
 | The MOD layer | REC held opens it; a white key (A3) picks LFO 1 and plays nothing; KNOB 1 sets LFO 1's depth on WT POS in a matrix slot (5 slow detents: 1.0 %); released, it closes, the slot stays |
 | .. its leftovers | a slot it made and turned back to 0 is freed when it closes |
 | REC's gestures | a tap does nothing, a double tap latches the layer, a tap then lets it go |
-| The SETTINGS | HOME held: a countdown from the hold time ("HOLD: SETTINGS IN 4"); let go at 1.5 s, nothing opens, the footer cleared; held 5 s: the SETTINGS; KNOB 1 changes the palette and the screen with it (26,085 pixels); the eighth, MONO: not a pixel outside the window that is not grey |
+| The SETTINGS | HOME held: a countdown from the hold time ("HOLD: SETTINGS IN 4"; the UI build: its screen, `web_test_cd` "SETTINGS 4"); let go at 1.5 s, nothing opens, the footer cleared; held 5 s: the SETTINGS; KNOB 1 changes the palette and the screen with it (26,085 pixels); the eighth, MONO: not a pixel outside the window that is not grey |
 | OCT with EDIT held | the section's pages: OCT+ WAVE -> UNISON, OCT- back to WAVE, OCT- again round to OUTPUT; EDIT let go: no tap (the page stays); the keys' octave unchanged |
 | OCT with ENV held | OCT+ steps the section shown (OSC A); ENV held on past the hold time: no ENV 2 layer; let go: no tap |
 | OCT alone | the keys' octave +1 and back; the page stays |
@@ -390,7 +390,7 @@ and sent at once) and the flash's (a write takes no time). **Verified in emulato
 | .. KNOB 2, KNOB 4 | point 2 along the cycle (250 -> 253 slow; quickly no further than the next point, 500); the last point stays at the end; KNOB 4 on it curves the segment into it (+0.8 % for 4 slow detents) |
 | .. LFO twice | a point left of the one picked, halfway (625 between 500 and 750), on the curve, picked; the page stays POINTS. The first point picked: the new one right of it (250, halfway to 500) |
 | .. not | LFO twice from another family's page: no point (the LFO's next page); STAIRS shown (16 points): no 17th; the MOD layer: KNOB 3 changes nothing |
-| .. LFO held | from the hold time a countdown ("HOLD: DELETE POINT 3 IN 4"); let go at 2 s: nothing deleted, the footer cleared; held 5 s: point 3 goes (STAIRS drawn, 15 points), point 2 picked, the page stays; the first point picked: "THE END POINTS STAY"; a knob turned during the countdown stops it |
+| .. LFO held | from the hold time a countdown ("HOLD: DELETE POINT 3 IN 4"; the UI build: "DELETE POINT 3 4"); let go at 2 s: nothing deleted, the footer cleared; held 5 s: point 3 goes (STAIRS drawn, 15 points), point 2 picked, the page stays; the first point picked: "THE END POINTS STAY"; a knob turned during the countdown stops it |
 | Undo, redo | SAVE + OCT− twice takes back a level KNOB 3 set and the delete (SHAPE STAIRS, the drawn shape of 7 points); SAVE + OCT+ redoes the delete; SAVE let go: no page, no octave. On WT POS a gesture at a time (600 -> 606 in one, 607 a second later: undone 606, then 600; redone 606); a sound's load undone (PAD back to PLUCK) |
 | SYNC FIXED | LFO 1 SHAPE: SYNC FIXED, KNOB 3 steps the note value (1/4 -> 1/8D), RATE untouched; FREE: KNOB 3 the rate in Hz, the note value kept. DELAY: FIXED by default, KNOB 3 steps its note (1/8D -> 1/8); FREE: the time in ms |
 | GLOBAL | GLO tapped three times: the TEMPO page, 120 BPM 4/4; BPM 3 slow detents 123, held between 20 and 300; TS-BEAT 1-16; TS-NOTE 1, 2, 4, 8, 16; 300 BPM in eighths: 150 quarter notes a minute |
@@ -398,11 +398,11 @@ and sent at once) and the flash's (a write takes no time). **Verified in emulato
 | A knob turning | EQ POINTS, MID picked: KNOB 3 its gain, its cell lit, the curve before the turn kept (4,430 pixels); KNOB 4 its Q; LOW picked: LO Q; a second after the last detent both let go (2,813 pixels back) |
 | .. the MOD layer there | KNOB 3 sets LFO 1's depth on MID's gain (the point picked) |
 | The effects' order | FX held + ALGORITHM on DRIVE: DRIVE second ("DRIVE: 2 OF 6", FX ORDER 120); FX let go: no page step; ALGORITHM then follows the new order (after DRIVE: DELAY); two back: CHORUS first |
-| Live only with sound | CHORUS on: its taps still in a second of silence (0 blits), moving with a note (7 in 0.5 s), still again after it |
-| HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows sent 10 times); on another page no capture |
+| Live only with sound | CHORUS on: its taps still in a second of silence (0 blits), moving with a note (7 in 0.5 s), still again after it (the UI build: OTT's levels, its chorus drawn still) |
+| HOME | silence: nothing redrawn in a second (the flat capture drawn once); a note playing: the scope live (12 captures in 0.5 s, its rows sent 10 times; the UI build: the bloom); on another page no capture |
 | The WAVE page's warp | WARP BEND+, KNOB 4 turned quickly (AMOUNT 55.1 %): the table's frames drawn warped (7,766 pixels of the display), the frame before the turn kept |
 | SAVE once | a starter sound (PLUCK) saved at once as "PLUCK v2" in USER 1 ("SAVED: PLUCK v2 · USER 1"); the page stays; flash written, none refused. Once more: "PLUCK v3" in USER 2, USER 1 kept |
-| SAVE held | a countdown ("HOLD: SAVE OVER USER 2 IN 3" at 2.3 s); let go then: USER 2 untouched; held 5 s: over USER 2 ("SAVED OVER USER 2"), its stored WT POS the sound's |
+| SAVE held | a countdown ("HOLD: SAVE OVER USER 2 IN 3" at 2.3 s; the UI build: "SAVE OVER USER 2 3"); let go then: USER 2 untouched; held 5 s: over USER 2 ("SAVED OVER USER 2"), its stored WT POS the sound's |
 | .. with OCT | SAVE held + OCT−: undo (KNOB 1's edit taken back); held on past 5 s: USER 2 not saved over |
 | .. a starter sound | held and let go: "NOTHING TO SAVE OVER: TAP SAVE", nothing written |
 | SAVE twice | the browser, nothing saved; KNOB 2 loads as it turns (USER 1, then USER 2 again from the flash, its WT POS as saved over) |
@@ -476,6 +476,22 @@ publishing host may set. Headless Chrome 155 (its own profile, audio muted), fro
 
 The only errors are the refusals the policies make. Not covered: the sound itself (muted; the Node tests check it),
 Web MIDI, and the publishing host's own policy, which is not known here.
+
+### 6.5 The UI build: its screens and its drawing's time (`strata-ui`)
+
+- **Every screen** (`web/emu/strata_ui_shots.mjs`, after `build_strata.sh`): 75 PNGs in `build/emu_strata/ui_shots`,
+  each named after the design board it was built from, each reached as the panel reaches it (a page by its section, a
+  knob turned for a turning shot, a button held for a layer or a countdown, SAVE tapped; `web_test_screen` for the
+  screens only sy_main.c draws: SAFE START, power-on, USB BOOT's countdown), at 240 and 480 px. Looked at beside the
+  boards ("Strata UI Firmware Renders"); found that way and fixed: a steep curve's stroke stretched over the whole
+  screen (an instant attack, BITCRUSH's steps: the slope's widening now stops at 45 degrees and goes across beyond it),
+  the flanger's comb aliased on the log axis (now linear, 0 .. 3 kHz), the sub an octave down drawn half a cycle.
+- **The drawing's time** (`web/emu/strata_bench.c`, built natively): each frame's work timed in five sessions of the
+  panel, the same file against V0.66's tree; the table in [UI.md](UI.md) §5. First run: HOME's bloom +7 % over
+  V0.66's scope, a knob turning on FILTER +87 %, ENV with voices +125 %: each page was drawn three times, once a
+  strip. Brought under V0.66's in every session by: a page's curves computed once a frame, the canvas cleared and the
+  rows hashed two pixels at a time, a live frame redrawing only the rows its live parts take, a knob's turn only the
+  body's rows, the stipple a store a dot, the bloom's segments without a pixel's bounds check.
 
 ## 7. Needs hardware test
 

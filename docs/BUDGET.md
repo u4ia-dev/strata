@@ -119,3 +119,18 @@ them. If they hold through the test, a later version can put buffers there
   patterns and clips are small (a 16-step pattern of 8 tracks: well under 1 KB); a sampler's voices need little state
   and read their samples from the flash as Felucca's do. The constraint stays the CPU: the second core (§19 of
   ARCHITECTURE.md) is still off.
+
+## 7. The UI build (`strata-ui`, V0.66 UI)
+
+The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --strata`):
+
+| | V0.66 | V0.66 UI | |
+| --- | --- | --- | --- |
+| The app image | 327,184 B | 326,280 B | the fonts: Space Mono, six faces full ASCII and two sparse, 2 phases: 39.0 KB (Inter Tight's five: 76.1 KB) |
+| RAM `.data` + `.bss` | 46,560 B | 47,128 B | the rows' hashes: the whole screen's 240 (the display's 114 before) |
+| The pool | 358,692 B | 342,372 B | the canvas 240 × 80 (the screen in three strips), 240 × 114 before |
+| The spare SRAM | 19,296 B | 21,900 B | a page's curves kept for its frame's other strips (3 × 217 floats) |
+
+The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
+sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
+shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.

@@ -10,7 +10,7 @@ hardware test asked for (the FX chain, the new effects, SELECT and ALGORITHM, th
 | Control | What it does |
 | --- | --- |
 | 27 keys, F3 to G5 | play notes; in some layers and screens they pick, toggle, jump or type (below) |
-| OCT− / OCT+ | the keys' octave, −3 to +3 (the header of SCL's page shows it) |
+| OCT− / OCT+ | the keys' octave, −3 to +3 (the top line of SCL's page shows it) |
 | KNOB 1–4 | the four values on the screen, left to right |
 | SELECT | the next or previous section of the family shown (OSC A, OSC B, SUB, NOISE, FILTER; an effect module; ..) |
 | ALGORITHM | the next or previous page of the section shown |
@@ -23,10 +23,11 @@ hardware test asked for (the FX chain, the new effects, SELECT and ALGORITHM, th
 | PLAY | the transport |
 | ARP | the arpeggiator, in a later version |
 
-The screen has five parts: the header (the section, the page and its number, and on the right what the page needs: the
-oscillator's pitch, an envelope's or LFO's tabs, a module's place in the FX chain, the slots in use, the keys' octave), the
-display (the graph), four knob cells (a dial or a list; the one turning is lit), and the footer (the modulation sources
-in use on this page, or a word for a moment).
+The screen (the STRATA UI: [UI.md](UI.md)) is one picture a module: a top line (the module's name and its dot, the
+family's module dots or the chain's squares, a word at the right), the body (what the module does, with the four
+knobs' numbered handles on what each moves; the knob turning: its handle vermilion, its value in a flag beside it, the
+shape before the turn dashed), and a bottom row (the section's pages as zones, ALGORITHM's; or a word for a
+moment).
 
 ## The pages
 
@@ -56,7 +57,7 @@ Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's P
 amount; a destination steps only through what can be modulated, an effect's only while its module is in the chain).
 With SYNC FIXED, an LFO's RATE, the delay's TIME and the flanger's, phaser's and tremolo's RATE are note values, one a
 detent. There are no ON knobs: EDIT + OCT+ / OCT− turns the source or the filter shown on or off, and the FX-held keys
-bypass a module (the header's light shows it).
+bypass a module (the dot before its name shows it).
 
 ## The FX chain
 
@@ -74,8 +75,8 @@ the **chain view**, laid out as the preset browser: the 13 types at the left, th
 | FX twice | the module picked opened: its pages; SELECT steps the chain's modules, ALGORITHM a module's pages; FX twice there: back to the chain view, that module picked |
 
 Each type plays twice at most (DRIVE 2, EQ 2, ..), DELAY and REVERB once: "PHASER: TWO AT MOST", "DELAY: ONE AT
-MOST"; "THE CHAIN IS FULL: 8 MODULES". Undo (SAVE + OCT−) takes back each add, take-out, move and bypass. The header
-shows the chain's modules of 8 and their cost on one core (the cost model's estimate: REVERB ~13 %, the others 1–6 %).
+MOST"; "THE CHAIN IS FULL: 8 MODULES". Undo (SAVE + OCT−) takes back each add, take-out, move and bypass. The top
+line shows the chain's modules of 8 and their cost on one core (the cost model's estimate: REVERB ~13 %, the others 1–6 %).
 
 | Module | Pages: KNOB 1 · 2 · 3 · 4 |
 | --- | --- |
@@ -129,8 +130,8 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 
 ## The layers
 
-A layer lasts while its button is held (the MOD layer can be latched by a double tap). A banner names it, the footer
-says how it ends, and its button breathes (a held MOD layer's is lit).
+A layer lasts while its button is held (the MOD layer can be latched by a double tap). A banner names it and says
+how it ends, and its button breathes (a held MOD layer's is lit).
 
 | Layer | Its button | The knobs | The keys | Let go |
 | --- | --- | --- | --- | --- |
@@ -147,9 +148,10 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
 
 - **SAVE once**: the sound is saved at once as a new preset, its next version: "WARM PAD v2" (one above the highest
   version of that name in a user slot; a starter sound's first is "SUPERSAW v2"), in the first free slot of 128, its
-  category kept. The footer says where: "SAVED: WARM PAD v2 · USER 3". The single tap waits 300 ms for a second one.
-- **SAVE held 5 s**: the sound is saved over its own slot after a countdown ("HOLD: SAVE OVER USER 3 IN 4"); letting go,
-  OCT, a knob or another button stop it. A sound that is not a user preset has no slot to save over.
+  category kept. A word at the bottom says where: "SAVED: WARM PAD v2 · USER 3". The single tap waits 300 ms for a
+  second one.
+- **SAVE held 5 s**: the sound is saved over its own slot after a countdown (a ring that empties: "SAVE OVER USER 3");
+  letting go, OCT, a knob or another button stop it. A sound that is not a user preset has no slot to save over.
 - **SAVE twice: the browser.** KNOB 1 the category (ALL, BASS, LEAD, PAD, PLUCK, KEYS, FX, SEQ, OTHER, with their
   counts), KNOB 2 the preset (loaded as it turns), KNOB 3 the bank (ALL, STARTER, USER). SAVE twice or HOME: back.
 - **OCT− held 3 s in the browser: the user preset playing deleted** after a countdown ("HOLD: DELETE USER 3 IN 2";
@@ -203,7 +205,7 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 | 20 | OSC B WT POS | 71 | FILTER RESO |
 | 74 | FILTER CUTOFF | 91, 93, 94 | REVERB, CHORUS, DELAY MIX |
 
-- **MIDI LEARN** (SETTINGS > MIDI > LEARN ON): turn a knob on any page (its parameter is picked; the footer names it),
+- **MIDI LEARN** (SETTINGS > MIDI > LEARN ON): turn a knob on any page (its parameter is picked; the bottom row names it),
   move a controller: that CC sets the parameter from then on, in place of what either had. OCT− takes the picked
   parameter's CC away, OCT+ (or LEARN OFF) ends it. 32 learned CCs at most, kept with the settings; a learned CC comes
   before a parameter's own. CLEAR (turned twice within 2 s) forgets them all. CC 0, 32, 64 and 120–127 are never
@@ -214,7 +216,7 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 
 | Page | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
 | --- | --- | --- | --- | --- |
-| SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO | HELP: a section's hint in the footer as it opens (on by default) | GLOW: the LEDs' glow, HIGH or LOW | |
+| SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO | HELP: a section's hint at the bottom as it opens (on by default) | GLOW: the LEDs' glow, HIGH or LOW | |
 | PANEL | ACCEL: the knobs' speed sensitivity | HOLD: 300, 400, 500 or 600 ms before a held button's layer | | |
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
 | BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |

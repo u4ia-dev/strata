@@ -567,6 +567,11 @@ the chain, in FX ORDER's order (verified on host).
 
 ## 17. User interface (built in Phase 4; [CONTROLS.md](CONTROLS.md) is the reference for the panel)
 
+**On the `strata-ui` branch** (V0.66 UI) the screen is the STRATA UI, described in [UI.md](UI.md): one screen a module
+drawn in three strips of 80 rows, the knobs' handles on what each moves, Space Mono, HOME's bloom. The rest of this
+section describes V0.66's screen, which that build replaces; the pages, the knobs, the layers and the buttons below
+are the same in both.
+
 **Phase 4, at the look stop** (verified in emulator; the design: the Strata Screen Design canvas, approved with its
 seven palettes and STRATA's amber as the default). The screen is five regions, each drawn only when it changes and sent
 on its own (one canvas strip at a time): a header (the section, its power light, the page and its number, at the right
