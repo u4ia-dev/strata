@@ -70,9 +70,14 @@ static struct {
     uint32_t known;                              /* 1: the FM-1's figures */
     uint32_t boot_ms;                            /* power-on to the first frame */
     uint32_t half_us, half_max_us, late;         /* a half's render: the last, the longest; halves the DMA had left */
+    uint32_t late_held;                          /* .. late after the interrupts were held (flash work, RUN: hushed) */
     uint32_t frame_us, frame_max_us;             /* a frame's drawing: the last, the longest */
-    uint32_t gap_max_us;                         /* the longest between two of the main loop's millisecond passes:
-                                                  * the keys, MIDI and the knobs wait this long at most */
+    uint16_t frame_max_page;                     /* .. the page the longest was of (UI_PG) */
+    uint32_t gap_max_us, gap_save_max_us;        /* the longest the main loop left the keys (a layer open, a screen that
+                                                  * types: else TIMER5 plays them), MIDI and the knobs waiting: while it
+                                                  * drew, and over flash work (a SAVE, the background saves) */
+    uint32_t t5_gap_max_us;                      /* the longest between two TIMER5 ticks (10 kHz: the keys' scan, the
+                                                  * USB audio's packets; longer only with the interrupts held) */
     uint32_t step_max_us, build_max_ms;          /* a wavetable build: its longest step (a frame), its whole time */
     uint32_t erase_n, erase_max_us, prog_max_us; /* the flash: erases, the longest (4 KiB), a page's program */
     uint32_t stack_isr, stack_main;              /* bytes of the interrupts' and the main loop's stacks ever used */
@@ -809,7 +814,7 @@ static int32_t ui_accel(uint32_t e, int32_t s, int32_t range)
  * kept once undone) */
 #define UI_NHIST 8u
 #define UI_GESTURE_MS 1000u
-static sy_patch_t ui_hist[UI_NHIST];                /* (4.7 KB) */
+static sy_patch_t ui_hist[UI_NHIST] SY_SPARE;       /* (7 KB: in strata.ld's spare SRAM since V0.66) */
 static uint16_t ui_hist_id[UI_NHIST];               /* .. the preset each was (sy_app_entry_now) */
 
 static uint32_t ui_hist_ix(uint32_t j) { return (ui.h_first + j) % UI_NHIST; }
@@ -1210,7 +1215,8 @@ static void ui_bench_turn(int32_t item)
         }
     } else {
         sy_bench.half_max_us = sy_bench.frame_max_us = sy_bench.gap_max_us = sy_bench.step_max_us = 0;
-        sy_bench.late = 0;
+        sy_bench.gap_save_max_us = sy_bench.t5_gap_max_us = 0;
+        sy_bench.late = sy_bench.late_held = 0;
         ui_toast("THE PEAKS CLEARED");
     }
     ui.dirty |= D_KNOBS | D_DISP | D_FOOT;

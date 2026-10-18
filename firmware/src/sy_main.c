@@ -16,6 +16,7 @@
  * millisecond, sy_app_frame every 15 ms; MASTER; the console; BENCH's timings and its RUN. */
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
+extern uint32_t _spare_bss_start[], _spare_bss_end[];   /* (strata.ld: the undo history, the FX lines) */
 extern char _ustack_top[];
 
 #define SY_CRASH_BG 0x5000u                      /* the crash screen's: fixed, outside the palettes */
@@ -25,12 +26,17 @@ extern char _ustack_top[];
 /* 10 kHz, above the audio's priority (Felucca's main.c): the key / LED scan and the milliseconds always; the USB and
  * the TRS polls at 2 kHz when not nested in the audio's render; nested, only the USB audio input's packet (it cannot
  * wait for a render), and the time spent there is taken off the render's load */
+static volatile uint32_t sy_t5_gap;              /* the longest between two ticks since the main loop last looked */
 void fm1_timer5_irq(void)
 {
-    static uint32_t sub, owed;
+    static uint32_t sub, owed, last;
     uint32_t t0 = fm1_ticks(), usb_due = sub % 5u == 0u;
     fm1_timer5_ack();
+    if (last && t0 - last > sy_t5_gap)
+        sy_t5_gap = t0 - last;
+    last = t0;
     fm1_input_tick();
+    sy_keys_tick();                              /* (the keys while they only play: sy_app.c) */
     {   /* milliseconds from the 24 MHz TIMER4 (robust to a late tick) */
         static uint32_t last, acc;
         acc += t0 - last;
@@ -126,14 +132,14 @@ static uint32_t sy_stack_used(const char *lo, const char *top)
  * _spare1, NOINIT after .noinit), painted at power-on: BENCH counts the bytes anything wrote there since (none
  * expected: the ROM is not running, every DMA buffer is in .bss or the pool), so that a later version can take them */
 extern uint32_t _spare0_lo[], _spare0_hi[], _spare1_lo[], _spare1_hi[];
-#define SY_SPARE 0xA55A5AA5u
+#define SY_SPARE_MARK 0xA55A5AA5u
 static void sy_spare_paint(void)
 {
     uint32_t *p;
     for (p = _spare0_lo; p < _spare0_hi; p++)
-        *p = SY_SPARE;
+        *p = SY_SPARE_MARK;
     for (p = _spare1_lo; p < _spare1_hi; p++)
-        *p = SY_SPARE;
+        *p = SY_SPARE_MARK;
     sy_bench.spare = 4u * (uint32_t)((_spare0_hi - _spare0_lo) + (_spare1_hi - _spare1_lo));
 }
 static uint32_t sy_spare_hit(void)               /* the spare words not as painted, in bytes */
@@ -141,9 +147,9 @@ static uint32_t sy_spare_hit(void)               /* the spare words not as paint
     const uint32_t *p;
     uint32_t n = 0;
     for (p = _spare0_lo; p < _spare0_hi; p++)
-        n += *p != SY_SPARE;
+        n += *p != SY_SPARE_MARK;
     for (p = _spare1_lo; p < _spare1_hi; p++)
-        n += *p != SY_SPARE;
+        n += *p != SY_SPARE_MARK;
     return 4u * n;
 }
 
@@ -196,18 +202,84 @@ static void sy_midi_take(void)
     }
 }
 
+/* ---------------------------------------------------------------------------------------- the event log --- */
+/* V0.66: what happened, and when (ms since the power-on), for a report (the console's `bench` prints it): halves that
+ * came late, and late after the interrupts were held (hushed: unheard); the USB audio's underruns (the ring empty: a
+ * frame repeated), missed packets (none queued when the host asked: a gap) and stalls; the flash's erases and
+ * programs; sounds loaded; voices shed by the guard and notes refused a free voice (the admission: sy_engine.c); TIMER5
+ * held over 0.6 ms; the keys left waiting over 20 ms by the main loop (drawing, or saving); frames over 50 ms. The
+ * main loop writes it, every millisecond: what the counters moved by. The last 32 */
+enum { EV_LATE, EV_HELD, EV_UNDERRUN, EV_MISSED, EV_STALL, EV_FLASH, EV_LOAD, EV_SHED, EV_REFUSED, EV_TIMER5, EV_KEYS,
+       EV_SAVEWAIT, EV_FRAME, EV_N };
+static const char *const EV_NAMES[EV_N] = {"late_us", "late_held", "uac_underruns", "uac_missed", "uac_stalls",
+                                            "flash_ops", "load", "shed", "refused", "timer5_gap_us", "keys_wait_ms",
+                                            "save_wait_ms", "frame_ms"};
+#define SY_NLOG 32u
+static struct {
+    uint32_t ms;
+    uint16_t arg;
+    uint8_t type;
+} sy_log[SY_NLOG];
+static uint32_t sy_nlog;
+static void sy_log_ev(uint32_t type, uint32_t arg)
+{
+    uint32_t i = sy_nlog++ % SY_NLOG;
+    sy_log[i].ms = fm1_ms;
+    sy_log[i].arg = (uint16_t)(arg > 65535u ? 65535u : arg);
+    sy_log[i].type = (uint8_t)type;
+}
+static void sy_log_poll(void)                    /* every millisecond */
+{
+    static uint32_t late, held, und, mis, stl, ops, loads, shed, refused;
+    uint32_t g = sy_t5_gap / FM1_TICKS_PER_US;
+    sy_t5_gap = 0;
+    if (g > sy_bench.t5_gap_max_us)
+        sy_bench.t5_gap_max_us = g;
+    if (g > 600u)
+        sy_log_ev(EV_TIMER5, g);
+    if (sy_bench.late != late)
+        sy_log_ev(EV_LATE, sy_late_us), late = sy_bench.late;
+    if (sy_bench.late_held != held)
+        sy_log_ev(EV_HELD, sy_bench.late_held - held), held = sy_bench.late_held;
+#if FELUCCA_UAC
+    if (uac.underruns != und)
+        sy_log_ev(EV_UNDERRUN, uac.underruns - und), und = uac.underruns;
+    if (uac.missed != mis)
+        sy_log_ev(EV_MISSED, uac.missed - mis), mis = uac.missed;
+    if (uac.stalls != stl)
+        sy_log_ev(EV_STALL, uac.stalls - stl), stl = uac.stalls;
+#endif
+    if (sy_flash_ops != ops)
+        sy_log_ev(EV_FLASH, sy_flash_ops - ops), ops = sy_flash_ops;
+    if (sy_loads != loads)
+        sy_log_ev(EV_LOAD, sy_sound), loads = sy_loads;
+    if (sy_g.shed != shed)
+        sy_log_ev(EV_SHED, sy_g.shed - shed), shed = sy_g.shed;
+    if (sy_adm.refused != refused)
+        sy_log_ev(EV_REFUSED, sy_adm.refused - refused), refused = sy_adm.refused;
+}
+
 /* the keys and MIDI between the main loop's millisecond passes: a full redraw holds the loop for up to ~90 ms (BENCH
  * on V0.5: the keys waited 91 ms), most of it waiting for a strip's DMA to the panel. lcd.c calls this before each
- * such wait: once a millisecond, MIDI's ring taken and, when the keys only play (no layer, no screen that types:
- * sy_ui_keys_plain), the keys read, so a note waits a strip at most. BENCH's KEYS row: the longest between two
- * readings of the keys, either here or the millisecond pass */
+ * such wait: once a millisecond, MIDI's ring taken. V0.66: while the keys only play, TIMER5 plays them (sy_app.c
+ * sy_keys_tick); when the main loop has them (a layer, a screen that types), BENCH's KEYS row is the longest between
+ * two of its readings, drawing or over flash work */
 static uint8_t sy_loop_on;                       /* the main loop running (the splash draws before it) */
 static uint32_t sy_keys_t;                       /* TIMER4 at the keys' last reading */
 static void sy_keys_read(void)
 {
-    uint32_t t = fm1_ticks(), d;
-    if (sy_keys_t && (d = (t - sy_keys_t) / FM1_TICKS_PER_US) > sy_bench.gap_max_us)
-        sy_bench.gap_max_us = d;
+    static uint32_t ops;
+    uint32_t t = fm1_ticks(), d, save = sy_flash_ops != ops;
+    ops = sy_flash_ops;
+    if (sy_keys_t && !sy_keys_isr) {
+        d = (t - sy_keys_t) / FM1_TICKS_PER_US;
+        if (save && d > sy_bench.gap_save_max_us)
+            sy_bench.gap_save_max_us = d;
+        else if (!save && d > sy_bench.gap_max_us)
+            sy_bench.gap_max_us = d;
+        if (d > 20000u)
+            sy_log_ev(save ? EV_SAVEWAIT : EV_KEYS, d / 1000u);
+    }
     sy_keys_t = t;
 }
 static void sy_lcd_idle(void)
@@ -217,7 +289,7 @@ static void sy_lcd_idle(void)
         return;
     last = fm1_ms;
     sy_midi_take();
-    if (sy_ui_keys_plain()) {
+    if (!SY_KEYS_ISR && sy_ui_keys_plain()) {    /* (without TIMER5's keys: read them here) */
         sy_keys_read();
         sy_keys();
     }
@@ -330,6 +402,7 @@ static void sy_bench_run(void)
     t0 = fm1_ticks();
     fsink = sy_run_flt(SY_RUN_FLT);
     sy_bench.run_flt_us = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
+    sy_irq_held = 2;                             /* (the halves after it: late, unheard: sy_app.c) */
     irq_restore(f);
     sy_hush_end();
     sy_bench.run = 2;
@@ -420,6 +493,7 @@ static void fm1_main(void)
             sy_keys_read();                      /* (sy_app_ms reads them first) */
             ms_last = fm1_ms;
             sy_app_ms();
+            sy_log_poll();
             d = (fm1_ticks() - t) / FM1_TICKS_PER_US;
             if (building && d > sy_bench.step_max_us)
                 sy_bench.step_max_us = d;
@@ -438,7 +512,9 @@ static void fm1_main(void)
             sy_app_frame();
             sy_bench.frame_us = (fm1_ticks() - t) / FM1_TICKS_PER_US;
             if (sy_bench.frame_us > sy_bench.frame_max_us)
-                sy_bench.frame_max_us = sy_bench.frame_us;
+                sy_bench.frame_max_us = sy_bench.frame_us, sy_bench.frame_max_page = ui.page;
+            if (sy_bench.frame_us > 50000u && sy_bench.boot_ms)
+                sy_log_ev(EV_FRAME, sy_bench.frame_us / 1000u);
             if (!sy_bench.boot_ms)
                 sy_bench.boot_ms = (fm1_ticks() - sy_t_boot) / (1000u * FM1_TICKS_PER_US);
         }
@@ -478,6 +554,8 @@ void fm1_cstart(void)
     for (d = _bss_start; d < _bss_end; d++)
         *d = 0;
     for (d = _pool_start; d < _pool_end; d++)
+        *d = 0;
+    for (d = _spare_bss_start; d < _spare_bss_end; d++)
         *d = 0;
     for (s = _data_load, d = _data_start; d < _data_end; s++, d++)
         *d = *s;

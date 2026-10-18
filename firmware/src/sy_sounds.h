@@ -31,7 +31,7 @@ static const test_sound_t SOUNDS[8] = {
                      {SP_M1_SRC, SRC_ENV2}, {SP_M1_DST, SP_F_CUT}, {SP_M1_AMT, 450}, {SP_V_MODE, 2}, {-1, 0}}, CAT_BASS},
     {"vowel pad", {{SP_A_TABLE, 28}, {SP_A_UNI, 5}, {SP_A_DETUNE, 200}, {SP_F_ON, 1}, {SP_F_TYPE, FT_FORMANT},
                    {SP_L2_RATE, 300}, {SP_M2_SRC, SRC_LFO2}, {SP_M2_DST, SP_F_CUT}, {SP_M2_AMT, 300},
-                   {SP_NZ_ON, 1}, {SP_NZ_TYPE, 1}, {SP_NZ_LEVEL, 150}, {SP_OT_ON, 1}, {-1, 0}}, CAT_PAD},
+                   {SP_NZ_ON, 1}, {SP_NZ_TYPE, 1}, {SP_NZ_LEVEL, 40}, {SP_OT_ON, 1}, {-1, 0}}, CAT_PAD},
     {"ott growl", {{SP_A_TABLE, 41}, {SP_A_POS, 700}, {SP_A_WARP, WARP_BENDP}, {SP_A_WAMT, 500}, {SP_B_ON, 1},
                    {SP_B_TABLE, 47}, {SP_B_OCT, -1}, {SP_F_ON, 1}, {SP_F_TYPE, FT_BP12}, {SP_F_CUT, 600},
                    {SP_OT_ON, 1}, {SP_DR_ON, 1}, {SP_DR_TYPE, DRV_TUBE}, {-1, 0}}, CAT_BASS},

@@ -20,8 +20,10 @@
 
 #if defined(__PI32V2__)
 #define SY_POOL __attribute__((section(".pool")))   /* app.ld's 360 KiB POOL (not cleared at boot: init it) */
-#else
+#define SY_SPARE __attribute__((section(".spare_bss")))   /* strata.ld: SRAM Felucca keeps for RAM code and RAM-run */
+#else                                                    /* debug, unused by Strata until V0.66 (cleared at boot) */
 #define SY_POOL
+#define SY_SPARE
 #endif
 
 /* ------------------------------------------------------------- math --- */

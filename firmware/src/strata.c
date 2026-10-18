@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.65 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
+#define STRATA_VERSION "V0.66 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"
@@ -54,6 +54,10 @@ static volatile uint32_t fm1_ms;                 /* milliseconds (sy_main.c's TI
 #include "libc.c"
 static void sy_lcd_idle(void);                   /* sy_main.c: the keys and MIDI read while a screen strip goes out */
 #define LCD_IDLE() sy_lcd_idle()
+#define LCD_BAUD 0u                              /* the panel's SPI: lsb / (BAUD + 1), 0 = 60 MHz (~44 MHz measured by
+                                                  * fm1-amb, fm1-ctl and fm1-fomni, the FM-1 forks that run it so;
+                                                  * ST7789 <= ~62 MHz). Felucca's 4 (12 MHz): a full redraw ~77 ms of
+                                                  * SPI, the frames of V0.65's test 90 ms (V0.66; needs a hardware test) */
 #include "lcd.c"
 #define CV_MAX (240u * 114u)     /* the canvas: Strata's largest strip is the display's, 240 x 114 (Felucca's 240 x 124:
                                   * 4,800 bytes of the pool) */
@@ -71,6 +75,12 @@ static uint8_t fx_lowcut;                        /* (panel.c's Felucca settings 
 static void sie_wr(uint32_t r, uint32_t v) __attribute__((noinline, minsize));
 static uint32_t sie_rd(uint32_t r) __attribute__((noinline, minsize));
 #define HALF_FRAMES 128          /* usb.c's USB audio input: the frames a render writes (sy_app.c SY_HALF) */
+#define UA_PRIME 168u            /* .. its ring's band, 64 frames (1.45 ms) more than Felucca's 104 / 80 / 128 (V0.66: */
+#define UA_LO 144u               /* V0.65's test, 14 underruns while the load test ran: a render started late found */
+#define UA_HI 192u               /* the ring empty); the USB recording 1.45 ms later, the band as wide */
+#define UA_PRIME48 183u          /* .. at 48 kHz, the same in 48 kHz frames (Felucca's 113 / 87 / 139, + 70) */
+#define UA_LO48 157u
+#define UA_HI48 209u
 #include "usb.c"
 #if FELUCCA_UART
 #include "midi_uart.c"
@@ -80,6 +90,9 @@ static uint32_t sie_rd(uint32_t r) __attribute__((noinline, minsize));
 static int st_read(uint32_t off, void *dst, uint32_t n);   /* the flash's hooks (sy_hw.c, below: they need the */
 static int st_erase(uint32_t off);                          /* audio's ring and BENCH) */
 static int st_prog(uint32_t off, const void *src, uint32_t n);
+#define SY_TICKS() fm1_ticks()   /* the engine's admission (sy_engine.c): TIMER4, 24 MHz; a sample 544 ticks */
+#define SY_TICKS_BLK (SY_BLK * 544u)   /* (44,117.6 Hz = 24 MHz / 544): a block, 17,408 */
+#define SY_KEYS_ISR 1            /* the keys from TIMER5 while they only play (sy_app.c, sy_main.c; V0.66) */
 #include "sy_core.h"
 #include "sy_wt.c"
 #include "sy_wtgen.c"

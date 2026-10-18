@@ -38,6 +38,32 @@ static struct {                              /* the CPU guard */
     uint32_t shed;                           /* voices shed */
 } sy_g;
 
+/* admission (V0.66): a chord of eight VOWEL PADs took one half 3.85 ms of its 2.90 (BENCH on V0.65: 3 halves late)
+ * before the guard, which only reads a half once it is over, shed five voices. So the engine times its blocks (the
+ * platform's clock, SY_TICKS: none on the host and in the emulator, where nothing is refused) and a new voice takes a
+ * free one only while the block's time it is measured to need fits: the voices' own (a voice's, measured, times one
+ * more than sound now) and the rest of the block's (the effects, the matrix) under 80 % of a block. Else it steals, as
+ * POLY does with every voice taken. A sound's load forgets the voice's cost: its first two voices measure it (the
+ * app starts at most two notes a block) */
+#ifndef SY_TICKS
+#define SY_TICKS() 0u                        /* the platform's clock (strata.c: TIMER4) */
+#define SY_TICKS_BLK 0u                      /* .. its ticks in a block's time (0: no admission) */
+#endif
+static uint32_t sy_loads;                    /* sounds taken (sy_patch_swap: the event log) */
+static struct {
+    uint32_t vt, bt;                         /* a voice's time a block (smoothed), the rest of the block's */
+    uint32_t refused;                        /* notes that stole for want of time (BENCH, the event log) */
+} sy_adm;
+static int sy_admit(void)
+{
+    uint32_t i, n = 0;
+    if (!SY_TICKS_BLK || !sy_adm.vt)
+        return 1;
+    for (i = 0; i < SY_NVOICE; i++)
+        n += sy_v[i].on != 0;
+    return !n || sy_adm.bt + (n + 1u) * sy_adm.vt <= SY_TICKS_BLK / 5u * 4u;
+}
+
 /* ------------------------------------------------------------------------------------- the tables --- */
 static uint8_t wt_build_o = 0xFF;            /* the oscillator whose table is being built */
 
@@ -174,7 +200,10 @@ static void sy_note_on(uint32_t note, uint32_t vel)
     if (!v)
         for (i = 0; i < np; i++)
             if (!sy_v[i].on) {
-                v = &sy_v[i];
+                if (sy_admit())
+                    v = &sy_v[i];
+                else
+                    sy_adm.refused++;                /* (a free voice, but no time for it: steal) */
                 break;
             }
     if (!v) {
@@ -473,7 +502,7 @@ static inline void sy_dc_store(float *st, float x1, float y1)
 static void sy_patch_swap(void);
 static void sy_block(int32_t *out)
 {
-    uint32_t i, k;
+    uint32_t i, k, t0 = SY_TICKS(), tv, nv = 0;
     float vs[SRC_VOICE_LAST + 1u], vol0 = sy_vol, vol1, dv;
     sy_voice_t *newest = 0;
     if (sy_next_st)
@@ -512,10 +541,12 @@ static void sy_block(int32_t *out)
     }
     for (i = 0; i < SY_BLK; i++)
         sy_mix_l[i] = sy_mix_r[i] = 0.0f;
+    tv = SY_TICKS();
     for (i = 0; i < SY_NVOICE; i++) {
         sy_voice_t *v = &sy_v[i];
         if (!v->on)
             continue;
+        nv++;
         voice_block(v, sy_mix_l, sy_mix_r);
         if (!v->on && v->next_vel) {                 /* a steal's fade is over: the new note */
             uint32_t n = v->next_note, vel = v->next_vel;
@@ -523,6 +554,7 @@ static void sy_block(int32_t *out)
             voice_start(v, n, vel, sy_last_pitch, sy_glide_on(0));
         }
     }
+    tv = SY_TICKS() - tv;
     vol1 = sp_db_gain((int32_t)(sp_lin(SP_V_VOL, mod_get(sy_goff, SP_V_VOL)) + 0.5f));
     dv = (vol1 - vol0) * (1.0f / (float)SY_BLK);
     {                                                /* the volume, ramped, and no DC into the effects (warps, */
@@ -575,6 +607,12 @@ static void sy_block(int32_t *out)
         }
         sy_out_pk = (uint16_t)pk;
     }
+    if (SY_TICKS_BLK) {                              /* (admission: a voice's time, quick to follow; the rest's) */
+        uint32_t rest = SY_TICKS() - t0 - tv;
+        if (nv)
+            sy_adm.vt = (sy_adm.vt + tv / nv) / 2u;
+        sy_adm.bt = (sy_adm.bt * 3u + rest) / 4u;
+    }
 }
 
 /* ------------------------------------------------------------------------------------ the sound --- */
@@ -604,6 +642,9 @@ static void sy_patch_swap(void)
         return;
     sy_patch = sy_next;
     sp_snap();
+    sy_adm.vt = 0;                           /* (a voice's cost: the new sound's, measured anew) */
+    sy_loads++;
+    fx.settle = 1;                           /* (its modules join switched in: the voices are out, as at the start) */
     lfo_dr_seq = 1u;                         /* (its drawn shapes: taken at this block's start) */
     for (i = 0; i < SY_NOSC; i++)            /* a table the new sound does not share: nothing reads it until */
         if ((uint32_t)sy_patch.p[i ? SP_B_TABLE : SP_A_TABLE] != wt_tab[i].id)   /* sy_service rebuilds it */
@@ -639,6 +680,7 @@ static void sy_init(void)
     sy_nstack = 0;
     sy_uni_budget = SY_UNI_BUDGET;
     memset(&sy_g, 0, sizeof sy_g);
+    memset(&sy_adm, 0, sizeof sy_adm);
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
     sy_lfo_sync = 0;

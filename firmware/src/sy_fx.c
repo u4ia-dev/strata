@@ -3,9 +3,11 @@
 /* STRATA effects (docs/ARCHITECTURE.md §14): a chain of up to eight modules in the patch's order (FX CHAIN, sy_param.c
  * FXC1 .. FXC8), then the LIMITER; global, stereo, float. A module is an instance of a type (sy_param.c FXI_*: two of
  * each, one DELAY and one REVERB) with its ON (in the chain or bypassed) and a MIX (OTT: DEPTH; EQ, TREMOLO: none). A
- * new chain is taken with every module's wet part faded out over two blocks and back over two (fx_block: a dip of 3 ms,
- * no click); a module that joins starts from rest (its state and its line cleared). A module bypassed fades over a
- * block (its mix ramps from or to 0); one that is bypassed and silent costs nothing. Delay lines are int16 at 1/2 of
+ * new chain is taken with every module's wet part faded out over eight blocks and back over eight (fx_block: a dip of
+ * 11.6 ms; V0.6's 2.9 ms ticked with RING MOD, BITCRUSH and TAPE at full mix); a module that joins starts from rest (its
+ * state and its line cleared). A module joining, going, bypassed or back fades over eight blocks (5.8 ms: its switch,
+ * fx.sw, a step of 1/8 a block; V0.6: one block), except at the start and at a sound's load (fx.settle: nothing plays
+ * through the effects then, they join as before); one that is bypassed and silent costs nothing. Delay lines are int16 at 1/2 of
  * full scale (headroom for feedback): the delay's, the reverb's and the choruses' in the pool, the flangers', the
  * tapes' and the FX filters' (COMB) in .bss. The delay and the reverb run at half the rate (22 kHz: twice the time in
  * the same memory, half the work; their tails stop near 10 kHz anyway): a 1-2-1 filter and every other sample in,
@@ -67,7 +69,8 @@ static int16_t fx_dly[2][FX_DLY_N] SY_POOL;
 static int16_t fx_rv[FX_RV_TOTAL] SY_POOL;
 static int16_t fx_rvpre[FX_RV_PRE] SY_POOL;
 static int16_t fx_rvap[FX_RV_AP0 + FX_RV_AP1] SY_POOL;
-static int16_t fx_flg[2][2][FX_LN], fx_tap[2][2][FX_LN], fx_comb[2][2][FX_LN];   /* [instance][side] */
+static int16_t fx_flg[2][2][FX_LN] SY_SPARE, fx_tap[2][2][FX_LN] SY_SPARE, fx_comb[2][2][FX_LN] SY_SPARE;   /* [instance] */
+                                                  /* [side]: 12 KiB in strata.ld's spare SRAM (V0.66; .bss before) */
 _Static_assert(FX_RV_TOTAL * 2u + FX_RV_PRE * 2u + (FX_RV_AP0 + FX_RV_AP1) * 2u <= 24u * 1024u, "reverb in 24 KiB");
 
 static uint8_t fx_lo;                     /* the CPU guard: OTT's upward compression off, the reverb on 4 lines */
@@ -109,9 +112,12 @@ typedef struct {                          /* TAPE */
 
 static struct {
     float mix[FXI_N];                     /* each instance's mix at the end of the last block (0: out) */
+    float sw[FXI_N];                      /* .. its switch (in, out, bypassed), 0..1, a step of FX_SW_STEP a block */
+    uint8_t fill[FXI_N];                  /* .. switched on from silence: blocks left running unheard (its line) */
+    uint8_t settle;                       /* the start, a sound's load: modules join switched in (sy_engine.c) */
     uint8_t ch[NFXC], n;                  /* the chain playing: its instances, their count */
     uint32_t out;                         /* .. instances on their way out (faded over a block, then gone) */
-    uint8_t dip;                          /* a new chain: blocks of its dip left (4: down, down, the swap, up, up) */
+    uint8_t dip;                          /* a new chain: blocks of its dip left (2 x FX_DIP_BLKS: down, the swap, up) */
     float duck;                           /* every module's wet part this block (1: as set) */
     float drv_lp[2][2];                   /* DRIVE: its tone's low pass [instance][side] */
     fx_cho_t cho[2];
@@ -142,6 +148,7 @@ static void fx_join(uint32_t i)           /* instance i from rest (it joins the 
 {
     uint32_t k = fx_nth(i);
     fx.mix[i] = 0.0f;
+    fx.sw[i] = fx.settle ? 1.0f : 0.0f;
     switch (FXI_TYPE[i]) {
     case FXT_DRIVE: fx.drv_lp[k][0] = fx.drv_lp[k][1] = 0.0f; break;
     case FXT_CHORUS:
@@ -202,6 +209,7 @@ static void fx_init(void)
 {
     uint32_t i;
     memset(&fx, 0, sizeof fx);
+    fx.settle = 1;
     for (i = 0; i < FXI_N; i++)
         fx_join(i);
     fx.lim_g = 1.0f;
@@ -224,13 +232,33 @@ static inline int16_t fx_q(float x)        /* float -> a line's int16 (1/2 full 
 }
 #define FX_DQ (1.0f / 16383.0f)
 
-/* a module's mix for this block (0 when bypassed), and whether it runs */
+/* a module's mix for this block: its MIX through its switch (in: 1; bypassed or going: 0; a step of 1/8 a block
+ * towards it) and the dip; whether it runs. A module with a modulated line (CHORUS, FLANGER, TAPE, the FX FILTER's
+ * COMB) switched on from silence (joined, or back from bypassed: it has not run since) first runs unheard for its line's
+ * length, so that the line holds the sound playing before any of it is heard: else the read crosses from silence (or
+ * the sound of when it stopped) into the new at full mix (tests/sy_engine_test.c t_fades: CHORUS, FLANGER and TAPE
+ * added 75x .. 188x the steady output's burst on V0.6) */
+#ifndef FX_SW_STEP
+#define FX_SW_STEP (1.0f / 8.0f)               /* (1: V0.6's one block, for tests/sy_engine_test.c's comparison) */
+#endif
+static const uint8_t FX_FILL[FXT_N] = {[FXT_CHORUS] = 24, [FXT_FLANGER] = 16, [FXT_TAPE] = 16, [FXT_FFILT] = 16};
 static int fx_mixes(uint32_t k, uint32_t on_id, float m1, float *m0)
 {
+    float s = fx.sw[k], to = sy_patch.p[on_id] && !((fx.out >> k) & 1u) ? 1.0f : 0.0f;
     *m0 = fx.mix[k];
-    if (!sy_patch.p[on_id] || ((fx.out >> k) & 1u))
-        m1 = 0.0f;
-    m1 *= fx.duck;
+    if (to <= 0.0f)
+        fx.fill[k] = 0;
+    else if (s <= 0.0f && FX_FILL[FXI_TYPE[k]]) {       /* (on from silence: its line first) */
+        if (!fx.fill[k])
+            fx.fill[k] = FX_FILL[FXI_TYPE[k]];
+        if (--fx.fill[k]) {
+            fx.mix[k] = 0.0f;
+            return 1;
+        }
+    }
+    s = to > s ? sy_minf(to, s + FX_SW_STEP) : sy_maxf(to, s - FX_SW_STEP);
+    fx.sw[k] = s;
+    m1 *= s * fx.duck;
     fx.mix[k] = m1;
     return *m0 > 0.0f || m1 > 0.0f;
 }
@@ -1200,13 +1228,14 @@ static int fx_within(const uint8_t *a, uint32_t n, const uint8_t *b, uint32_t m)
 }
 
 /* the modules in the chain's order. The patch's chain against the one playing: modules only added (the others in
- * their order), taken at once, each new one from rest and its mix from 0 over its first block (as an effect switched
- * on); modules only taken out, each faded out over a block first (fx.out), then gone; any other change (a module
- * moved), taken while every wet part is out: two blocks down (to half, to none), the swap, two blocks up (each
- * ramped across its block by fx_mixes) */
+ * their order), taken at once, each new one from rest and switched in over eight blocks (fx_mixes); modules only
+ * taken out, each switched out over eight blocks first (fx.out), then gone; any other change (a module moved), taken
+ * while every wet part is out: FX_DIP_BLKS blocks down, the swap, FX_DIP_BLKS up (each ramped across its block) */
+#ifndef FX_DIP_BLKS
+#define FX_DIP_BLKS 8u                          /* (2: V0.6's dip) */
+#endif
 static void fx_block(float *l, float *r)
 {
-    static const float DUCK[5] = {1.0f, 1.0f, 0.5f, 0.0f, 0.5f};   /* by dip */
     uint8_t want[NFXC];
     uint32_t i, j, n = fx_chain_want(want), same = n == fx.n, keep = 0;
     for (i = 0; i < n; i++)
@@ -1234,10 +1263,10 @@ static void fx_block(float *l, float *r)
                 }
             fx.n = (uint8_t)j;
         } else {
-            fx.dip = 4u;
+            fx.dip = 2u * FX_DIP_BLKS;
         }
     }
-    if (fx.dip == 2u) {                                 /* (the swap: the modules that join from rest) */
+    if (fx.dip == FX_DIP_BLKS) {                        /* (the swap: the modules that join from rest) */
         uint32_t was = 0;
         for (i = 0; i < fx.n; i++)
             was |= 1u << fx.ch[i];
@@ -1247,7 +1276,8 @@ static void fx_block(float *l, float *r)
             if (!((was >> fx.ch[i]) & 1u))
                 fx_join(fx.ch[i]);
     }
-    fx.duck = DUCK[fx.dip];
+    fx.duck = fx.dip > FX_DIP_BLKS ? (float)(fx.dip - FX_DIP_BLKS - 1u) * (1.0f / (float)FX_DIP_BLKS)   /* down */
+              : fx.dip ? (float)(FX_DIP_BLKS + 1u - fx.dip) * (1.0f / (float)FX_DIP_BLKS) : 1.0f;      /* up */
     if (fx.dip)
         fx.dip--;
     for (i = 0; i < fx.n; i++)
@@ -1261,4 +1291,5 @@ static void fx_block(float *l, float *r)
         fx.n = (uint8_t)j;
     }
     fx_limit(l, r);
+    fx.settle = 0;
 }

@@ -65,6 +65,8 @@ static int st_erase(uint32_t off)
     fm1__led_lines(0);
     rc = FL_FAR(fl_erase4k_ram)(off, &took);
     st_timed(t0, &sy_bench.erase_max_us);
+    sy_irq_held = 2;                             /* (the halves after it: late, hushed: sy_app.c) */
+    sy_flash_ops++;
     irq_restore(f);
     sy_bench.erase_n++;
     return rc;
@@ -87,6 +89,8 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)   /* a page at a t
         t0 = fm1_ticks();
         rc = FL_FAR(fl_prog_ram)(off, s, chunk, &took);
         st_timed(t0, &sy_bench.prog_max_us);
+        sy_irq_held = 2;
+        sy_flash_ops++;
         irq_restore(f);
         if (rc)
             return rc;

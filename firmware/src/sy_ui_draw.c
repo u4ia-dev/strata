@@ -1222,10 +1222,13 @@ static void ui_bench_row(uint32_t i, char *t)       /* row i's figures into t (4
     } else if (i == 1u) {                       /* "38 % · GUARD 0 · SHED 0" */
         e = sp_put(sp_fix(e, sy_app_load(), 0u, 0), " % \xB7 GUARD ");
         sp_fix(sp_put(sp_fix(e, sy_g.level + sy_g.fx_lo, 0u, 0), " \xB7 SHED "), (int32_t)sy_g.shed, 0u, 0);
-    } else if (i == 2u) {                       /* "4.10 / 9.80 MS" */
-        sp_put(ui_ms2(sp_put(ui_ms2(e, sy_bench.frame_us), " / "), sy_bench.frame_max_us), " MS");
-    } else if (i == 3u) {                       /* "11.20 MS AT MOST" */
-        sp_put(ui_ms2(e, sy_bench.gap_max_us), " MS AT MOST");
+    } else if (i == 2u) {                       /* "4.1 / 9.8 MS · EQ": the longest's section */
+        e = sp_fix(sp_put(sp_fix(e, (int32_t)(sy_bench.frame_us / 100u), 1u, 0), " / "),
+                   (int32_t)(sy_bench.frame_max_us / 100u), 1u, 0);
+        sp_put(sp_put(e, " MS \xB7 "), ui_sec_name(UI_PG[sy_bench.frame_max_page].sec));
+    } else if (i == 3u) {                       /* "11.2 · SAVES 52.1 MS": the main loop's (TIMER5's: none) */
+        e = sp_fix(e, (int32_t)(sy_bench.gap_max_us / 100u), 1u, 0);
+        sp_put(sp_fix(sp_put(e, " \xB7 SAVES "), (int32_t)(sy_bench.gap_save_max_us / 100u), 1u, 0), " MS");
     } else if (i == 4u) {                       /* "STEP 3.20 · ALL 48 MS" */
         e = ui_ms2(sp_put(e, "STEP "), sy_bench.step_max_us);
         sp_put(sp_fix(sp_put(e, " \xB7 ALL "), (int32_t)sy_bench.build_max_ms, 0u, 0), " MS");

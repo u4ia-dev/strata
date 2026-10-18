@@ -240,9 +240,19 @@ static void con_bench(void)
     con_kv("half_max_us", (int32_t)sy_bench.half_max_us);
     con_kv("half_budget_us", (int32_t)(SY_HALF * 1000000u / 44118u));
     con_kv("halves_late", (int32_t)sy_bench.late);
+    con_kv("halves_late_held", (int32_t)sy_bench.late_held);
+    con_kv("voices_refused", (int32_t)sy_adm.refused);
     con_kv("frame_us", (int32_t)sy_bench.frame_us);
     con_kv("frame_max_us", (int32_t)sy_bench.frame_max_us);
+    con_puts("frame_max_page ");
+    con_puts(ui_sec_name(UI_PG[sy_bench.frame_max_page].sec));
+    con_putc(' ');
+    con_puts(UI_PG[sy_bench.frame_max_page].name);
+    con_puts("\r\n");
     con_kv("wait_max_us", (int32_t)sy_bench.gap_max_us);
+    con_kv("wait_save_max_us", (int32_t)sy_bench.gap_save_max_us);
+    con_kv("keys_from_timer5", sy_keys_isr);
+    con_kv("timer5_gap_max_us", (int32_t)sy_bench.t5_gap_max_us);
     con_kv("build_step_max_us", (int32_t)sy_bench.step_max_us);
     con_kv("build_max_ms", (int32_t)sy_bench.build_max_ms);
     con_kv("flash_erases", (int32_t)sy_bench.erase_n);
@@ -260,6 +270,19 @@ static void con_bench(void)
     con_kv("run_flt_loops", (int32_t)SY_RUN_FLT);
     con_kv("run_flt_us", (int32_t)sy_bench.run_flt_us);
     con_kv("key_press_max_us", (int32_t)(fm1_in_stat.press_max / FM1_TICKS_PER_US));
+    {                                                   /* the event log (sy_main.c), oldest first: ev MS WHAT ARG */
+        uint32_t i = sy_nlog > SY_NLOG ? sy_nlog - SY_NLOG : 0u;
+        con_kv("events", (int32_t)sy_nlog);
+        for (; i < sy_nlog; i++) {
+            con_puts("ev ");
+            con_dec((int32_t)sy_log[i % SY_NLOG].ms);
+            con_putc(' ');
+            con_puts(EV_NAMES[sy_log[i % SY_NLOG].type]);
+            con_putc(' ');
+            con_dec(sy_log[i % SY_NLOG].arg);
+            con_puts("\r\n");
+        }
+    }
 }
 
 /* input scan (hal/fm1_input.h fm1_in_stat) since the last `inp`, then cleared: tick gaps (= LED

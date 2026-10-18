@@ -79,15 +79,19 @@ static struct {
  * 48..119 with no glitch; one render was once seen 29 frames under the floor: a packet (46) must
  * still be in hand then. */
 #define UA_N 512u                /* ring, frames (16-bit L | R << 16); a power of two */
+#ifndef UA_PRIME                 /* (an app may set the band: Strata's strata.c) */
 #define UA_PRIME 104u            /* silence ahead of the first rendered frame */
 #define UA_LO 80u                /* a render may start late: keep a packet and more in hand */
 #define UA_HI 128u
+#endif
 #define UAC_RATE 44100u
 #if FELUCCA_UAC_48K
 /* 48 kHz: the same times in 48 kHz frames (x 160 / 147); a render of HALF_FRAMES gives 139..140 frames */
+#ifndef UA_PRIME48
 #define UA_PRIME48 113u
 #define UA_LO48 87u
 #define UA_HI48 139u
+#endif
 #define UA_REND48 ((HALF_FRAMES * 160u + 146u) / 147u)
 #define UA_MAXF 49u              /* frames in the largest packet: 48 + 1 */
 _Static_assert(UA_HI48 + UA_REND48 + UA_MAXF < UA_N, "the ring holds the band, a render and a packet (48 kHz)");

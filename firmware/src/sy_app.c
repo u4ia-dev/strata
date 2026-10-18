@@ -55,6 +55,18 @@ typedef struct {
     volatile uint32_t w, r;
 } sy_ring_t;
 static sy_ring_t sy_ev_ui, sy_ev_midi;
+static sy_ring_t sy_ev_key;                      /* the keys' notes (V0.66): from TIMER5 while the keys only play, else
+                                                  * from the main loop (one of them at a time: sy_keys_isr) */
+#define SY_STARTS_BLK 2u                         /* note-ons a block at most (V0.66): a chord's voices start over a few
+                                                  * blocks (8 notes: 2.2 ms), no block pays for all their starts, and the
+                                                  * first two measure a new sound's cost (sy_engine.c admission) */
+static uint32_t sy_ev_starts;                    /* .. this block's so far */
+
+/* the interrupts held off (V0.66: sy_hw.c's flash work, BENCH's RUN): the halves that come late after it are
+ * counted apart (the audio was hushed: nothing was heard), and the event log sees the flash's work */
+static volatile uint8_t sy_irq_held;             /* halves left that count as after it */
+static volatile uint32_t sy_flash_ops;           /* erases and programs so far */
+static volatile uint32_t sy_late_ms, sy_late_us; /* the last late half: when, its render */
 
 static int sy_ev_push(sy_ring_t *g, uint32_t type, uint32_t a, uint32_t b)
 {
@@ -75,10 +87,14 @@ static void sy_ev_drain(sy_ring_t *g)
         const sy_ev_t *e = &g->q[g->r % SY_EVQ];
         switch (e->type) {
         case SY_EV_NOTE:
-            if (e->b)
+            if (e->b) {
+                if (sy_ev_starts >= SY_STARTS_BLK)
+                    return;                      /* (the rest next block, in order) */
+                sy_ev_starts++;
                 sy_note_on(e->a, e->b);
-            else
+            } else {
                 sy_note_off(e->a);
+            }
             break;
         case SY_EV_BEND: sy_bend((int32_t)(e->a | (uint32_t)e->b << 7)); break;
         case SY_EV_CC: sy_cc(e->a, e->b); break;
@@ -119,7 +135,9 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
         int32_t *o = &sy_abuf[half * SY_HALF_WORDS], g0 = sy_master_now, g1 = sy_master_q12;
         SY_HALF_START();
         for (b = 0; b < SY_HALF; b += SY_BLK) {
+            sy_ev_starts = 0;
             sy_ev_drain(&sy_ev_ui);
+            sy_ev_drain(&sy_ev_key);
             sy_ev_drain(&sy_ev_midi);
             sy_block(o + 2u * b);
             sy_master_blk(o + 2u * b, g0, g1, b);
@@ -136,8 +154,14 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
         sy_bench.half_us = us;
         if (us > sy_bench.half_max_us)
             sy_bench.half_max_us = us;
-        if (fm1_audio_free_half() != half)
-            sy_bench.late++;                     /* (the DMA moved on while this half rendered) */
+        if (fm1_audio_free_half() != half) {    /* (the DMA moved on while this half rendered) */
+            if (sy_irq_held)
+                sy_bench.late_held++;            /* (after the interrupts were held: hushed, unheard) */
+            else
+                sy_bench.late++, sy_late_ms = fm1_ms, sy_late_us = us;
+        }
+        if (sy_irq_held)
+            sy_irq_held--;
     }
     SY_ISR_EXIT();
 }
@@ -523,30 +547,66 @@ static int sy_app_held(uint32_t k) { return k < SY_NKEY && sy_keynote[k] != 0xFF
 static int32_t sy_app_oct(void) { return sy_oct; }
 static void sy_app_octave(int32_t d) { sy_oct = sy_clampi(sy_oct + d, -3, 3); }
 
-/* the keys: a press plays (or, in REC's MOD layer, picks a source: sy_ui_key), a release ends what it started */
-static void sy_keys(void)
+/* the keys: a press plays (or, in REC's MOD layer, picks a source: sy_ui_key), a release ends what it started.
+ * V0.66: while the keys only play (no layer, no screen that types, SCL not held: sy_ui_keys_plain), TIMER5 plays them
+ * at 10 kHz (sy_keys_tick), whatever the main loop is drawing or saving; else the main loop does (sy_keys), the UI
+ * first. sy_keys_isr says which, set by the main loop every millisecond (SY_KEYS_ISR: the platform's; 0, the main
+ * loop always). Their notes go into one ring either way (sy_ev_key), from one of them at a time: the main loop sets
+ * the flag only between its own readings, and a TIMER5 tick runs to its end before the main loop goes on */
+#ifndef SY_KEYS_ISR
+#define SY_KEYS_ISR 0
+#endif
+static volatile uint8_t sy_keys_isr;
+static void sy_key_up(uint32_t k, uint32_t *now)        /* a key let go: the note it started ends */
+{
+    if (sy_keynote[k] == 0xFF)
+        return;
+    if (sy_ev_push(&sy_ev_key, SY_EV_NOTE, sy_keynote[k], 0))
+        sy_keynote[k] = 0xFF;
+    else
+        *now |= 1u << k;                     /* (the ring full: the release again next time) */
+}
+static void sy_key_down(uint32_t k, int32_t n, uint32_t v)
+{
+    if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_key, SY_EV_NOTE, (uint32_t)n, v)) {
+        sy_keynote[k] = (uint8_t)n;
+        sy_key_note = n;
+        sy_key_vel = (int32_t)v;
+    }
+}
+static void sy_keys(void)                        /* main loop */
 {
     uint32_t now = fm1_in.notes & ((1u << SY_NKEY) - 1u), chg = now ^ sy_keyprev, k;
+    if (sy_keys_isr)
+        return;
     for (k = 0; k < SY_NKEY; k++) {
         if (!((chg >> k) & 1u))
             continue;
         if ((now >> k) & 1u) {
             int32_t n = sy_ui_key_note(k, sy_oct);  /* (SCL's fit; -1 silent) */
             uint32_t v = sy_ui_key_vel();
-            if (sy_ui_key(k))
-                continue;
-            if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_ui, SY_EV_NOTE, (uint32_t)n, v)) {
-                sy_keynote[k] = (uint8_t)n;
-                sy_key_note = n;
-                sy_key_vel = (int32_t)v;
-            }
-        } else if (sy_keynote[k] != 0xFF) {
-            if (sy_ev_push(&sy_ev_ui, SY_EV_NOTE, sy_keynote[k], 0))
-                sy_keynote[k] = 0xFF;
-            else
-                now |= 1u << k;                  /* (the ring full: the release again next time) */
+            if (!sy_ui_key(k))
+                sy_key_down(k, n, v);
+        } else {
+            sy_key_up(k, &now);
         }
     }
+    sy_keyprev = now;
+}
+static void sy_keys_tick(void)                   /* TIMER5 (the emulator: its millisecond), the keys only playing */
+{
+    uint32_t now, chg, k;
+    if (!sy_keys_isr)
+        return;
+    now = fm1_in.notes & ((1u << SY_NKEY) - 1u);
+    chg = now ^ sy_keyprev;
+    for (k = 0; chg && k < SY_NKEY; k++)
+        if ((chg >> k) & 1u) {
+            if ((now >> k) & 1u)
+                sy_key_down(k, sy_ui_key_note(k, sy_oct), sy_ui_key_vel());
+            else
+                sy_key_up(k, &now);
+        }
     sy_keyprev = now;
 }
 
@@ -580,6 +640,7 @@ static SY_NOINLINE void sy_app_boot(void)
  * one was loading, the flash's work */
 static void sy_app_ms(void)
 {
+    sy_keys_isr = (uint8_t)(SY_KEYS_ISR && sy_ui_keys_plain());
     sy_keys();
     sy_ui_ms();
     sy_service();
