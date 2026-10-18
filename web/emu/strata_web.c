@@ -122,6 +122,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)
 }
 
 /* ------------------------------------------------------------------------------ the app and the synth --- */
+#define CV_MAX (240u * 114u)                       /* (strata.c's: the canvas Strata's largest strip needs) */
 #include "../../firmware/src/gfx.c"                /* (its fonts, palettes and keycaps: build/gen) */
 static uint8_t fx_lowcut;                        /* (panel.c's settings_init sets Felucca's low cut: not Strata's) */
 static uint32_t web_dim_lo;
@@ -394,6 +395,45 @@ EXPORT int32_t web_test_slot_value(uint32_t s, uint32_t id)
     sy_patch_t p;
     int n = ss_user_get(s, pk, sizeof pk);
     return n > 0 && sp_unpack(&p, pk, (uint32_t)n) && id < SP_COUNT ? p.p[id] : -32768;
+}
+/* BENCH's row i (the emulator draws none: no clock of its own; 8 .. 15: RUN not yet run) at the widest figures a unit
+ * shows: its ink, in pixels, less the room for it (above 0: it runs past the window); sy_bench as it was after */
+EXPORT int32_t web_test_bench_fit(uint32_t i)
+{
+    char t[48];
+    int32_t w;
+    __typeof__(sy_bench) was = sy_bench;
+    __typeof__(sy_g.shed) shed = sy_g.shed;
+    sy_g.shed = 9999u;
+    sy_bench.known = 1;
+    sy_bench.half_us = sy_bench.half_max_us = 9999u;   /* (a half: 2.9 ms at most) */
+    sy_bench.late = 99999u;
+    sy_bench.frame_us = sy_bench.frame_max_us = 999999u;
+    sy_bench.gap_max_us = 999999u;
+    sy_bench.step_max_us = 99999u;
+    sy_bench.build_max_ms = 99999u;
+    sy_bench.erase_max_us = sy_bench.prog_max_us = 99999u;
+    sy_bench.stack_isr = 7936u;
+    sy_bench.stack_main = 12032u;
+    sy_bench.spare_hit = 4u;
+    sy_bench.run = (uint8_t)(i >= 8u ? 0u : 2u);
+    sy_bench.run_int_us = sy_bench.run_flt_us = 99999u;
+    ui_bench_row(i % 8u, t);
+    w = text_w(&AF_XS, t) - (int32_t)UI_BENCH_ROOM;
+    sy_bench = was;
+    sy_g.shed = shed;
+    return w;
+}
+/* the pages whose name does not end within its field (the header would run on into the knobs' ids), 0 none */
+EXPORT uint32_t web_test_page_names_bad(void)
+{
+    uint32_t p, k, n = 0;
+    for (p = 0; p < UI_NPG; p++) {
+        for (k = 0; k < sizeof UI_PG[p].name && UI_PG[p].name[k]; k++)
+            ;
+        n += k == sizeof UI_PG[p].name;
+    }
+    return n;
 }
 /* the FX chain: slot k's instance + 1 (0 none); the chain view's slot and type picked */
 EXPORT int32_t web_test_chain(uint32_t k) { return k < NFXC ? sy_patch.p[SP_FXC1 + k] : 0; }

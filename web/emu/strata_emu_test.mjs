@@ -1199,6 +1199,15 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const ha = play(a, 0.5).h, hb = play(b, 0.5).h;
   check("the same input twice: the same sound, bit for bit", ha === hb);
 }
+{
+  const ROW = ["AUDIO", "CPU", "SCREEN", "KEYS", "TABLES", "FLASH", "STACKS", "RUN"];
+  const over = Array.from({ length: 16 }, (_, i) => ex.web_test_bench_fit(i));   // (the emulator draws no BENCH)
+  const worst = over.indexOf(Math.max(...over));
+  check(`BENCH's rows at their widest figures fit the window (the widest, ${ROW[worst % 8]}: ${over[worst] > 0 ?
+        over[worst] + " px over" : -over[worst] + " px to spare"})`, over[worst] <= 0);
+  check(`every page's name ends within its 8 characters (V0.6: RING MOD's ran on into its knobs' ids)`,
+        ex.web_test_page_names_bad() === 0);
+}
 
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);
