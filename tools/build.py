@@ -191,11 +191,17 @@ def build_loader():
 
 # ---- app
 
+def ld_script():
+    """the linker script: Felucca's firmware/app.ld; Strata's firmware/strata.ld (V0.65: its main stack 12 KiB, the
+    pool 12 KiB larger, its unused areas named)"""
+    return FW / ("strata.ld" if UNIT == "strata" else "app.ld")
+
+
 def ld_regions():
-    """firmware/app.ld's MEMORY regions: name -> (origin, length)"""
+    """the linker script's MEMORY regions: name -> (origin, length)"""
     regs = {}
     for m in re.finditer(r"^\s*(\w+)\s*\([rwx]+\)\s*:\s*ORIGIN\s*=\s*(\w+),\s*LENGTH\s*=\s*(\w+)",
-                         (FW / "app.ld").read_text(), re.M):
+                         ld_script().read_text(), re.M):
         n = m.group(3)
         regs[m.group(1)] = (int(m.group(2), 0), int(n[:-1], 0) * 1024 if n.endswith("K") else int(n, 0))
     return regs
@@ -270,7 +276,7 @@ def link_app(obj):
     """the app linked (firmware/app.ld) and its image: .text, then .ram_text, .c1_text and .data at their load
     addresses; build/UNIT.elf, .dis, .bin"""
     elf = OUT / f"{UNIT}.elf"
-    tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
+    tc("pi32v2/bin/ld", "-T", ld_script(), OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
        *([OUT / "fm1_cpu1.o"] if CPU2 else []), obj, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin", "c1text.bin"):
         (OUT / sect).unlink(missing_ok=True)
@@ -397,18 +403,24 @@ def isr_table(src, name):
     return set(re.findall(r"[A-Za-z_]\w*", re.sub(r"/\*.*?\*/", " ", m.group(1), flags=re.S)))
 
 
-def isr_stack_check(dis):
+def stack_funcs(dis, icalls):
+    """each function's frame, callees and calls through a register, from the listing. A frame too large for an
+    immediate is made in a register (rK = -N, then sp = rK + sp: V0.6's ui_draw_disp, 17,284 B): counted too; an
+    sp set from a register of no known value is an error"""
     fn_re = re.compile(r"^([A-Za-z_$][\w.$]*):$")
     push_re = re.compile(r"\[--sp\] = \{([^}]*)\}|\[--sp\] = (\w+)\s*$")
     adj_re = re.compile(r"\bsp \+= (-\d+)")
+    const_re = re.compile(r"\br(\d+) = (-?\d+)(?: <|\s*$)")
+    spset_re = re.compile(r"\bsp = r(\d+)\b")
     call_re = re.compile(r"\b(call|goto) -?\d+ <([\w.$]+?)(\+0x[0-9A-Fa-f]+)? :")
     icall_re = re.compile(r"\bcall r\d+\b")
     lines = dis.splitlines()
-    funcs, cur = {}, None
+    funcs, cur, consts, errors = {}, None, {}, []
     for i, ln in enumerate(lines):
         m = fn_re.match(ln)                 # (a label that starts with '.': a jump table inside the function)
         if m:
             cur = funcs.setdefault(m.group(1), {"frame": 0, "calls": set(), "icalls": 0})
+            consts = {}
             continue
         if cur is None:
             continue
@@ -421,15 +433,31 @@ def isr_stack_check(dis):
         m = adj_re.search(ln)
         if m:
             cur["frame"] -= int(m.group(1))
+        m = const_re.search(ln)
+        if m:
+            consts[m.group(1)] = int(m.group(2))
+        m = spset_re.search(ln)
+        if m:                               # (rK negative: a frame made; positive: the epilogue giving it back)
+            k = consts.get(m.group(1))
+            if k is None:
+                errors.append(f"stack: {[f for f in funcs if funcs[f] is cur][0]} sets sp from a register "
+                              f"the count does not know ({ln.strip()})")
+            elif k < 0:
+                cur["frame"] -= k
         m = call_re.search(ln)
         if m and (m.group(1) == "call" or not m.group(3)):
             cur["calls"].add(m.group(2))
         if icall_re.search(ln) and not any("<unknown instruction>" in x for x in lines[max(0, i - 2):i + 3]):
             cur["icalls"] += 1
-    for f, (src, table) in ISR_ICALLS.items():
+    for f, (src, table) in icalls.items():
         if f in funcs:
             funcs[f]["calls"] |= isr_table(src, table) & set(funcs)
-    errors, memo = [], {}
+    return funcs, errors
+
+
+def isr_stack_check(dis):
+    funcs, errors = stack_funcs(dis, ISR_ICALLS)
+    memo = {}
 
     def depth(f, path):
         if f in memo:
@@ -450,6 +478,34 @@ def isr_stack_check(dis):
         errors.append(f"interrupt stack {total} B (audio {a}, TIMER5 {t}, wrappers) > {ISR_STACK_MAX} B")
     return errors, [f"interrupt stack ~{total} B of {ISR_STACK_MAX} allowed (7,936): audio {a} B, TIMER5 nested "
                     f"{t} B, wrappers {2 * ISR_WRAP} B"]
+
+
+# STRATA (V0.65): the main loop's stack (strata.ld _ustack_lo .. _ustack_top, 12,032 B; Felucca's app.ld 24,320),
+# counted as the interrupts' from the power-on's root, its deepest path held to MAIN_STACK_MAX: the rest is for what
+# the count cannot follow (the flash's hooks and the console's commands, called through a register; the boot's own).
+# BENCH's STACKS row reads its real use on the unit (V0.6: 17.9 KiB, one 17 KiB frame)
+MAIN_ROOTS_STACK = ("fm1_cstart",)
+MAIN_ICALLS = {"ui_draw_disp": ("sy_ui_draw.c", "UI_GRAPH")}     # the display's graphs, by G_*
+MAIN_STACK_MAX = 8192
+
+
+def main_stack_check(dis):
+    funcs, _ = stack_funcs(dis, MAIN_ICALLS)      # (its errors: isr_stack_check's)
+    memo, errors = {}, []
+
+    def depth(f, path):
+        if f in memo:
+            return memo[f]
+        d = funcs.get(f)
+        if d is None or f in path:
+            return (0, ())
+        best = max([depth(c, path + (f,)) for c in d["calls"] if c != f] or [(0, ())])
+        memo[f] = (d["frame"] + best[0], (f,) + best[1])
+        return memo[f]
+    total, path = max(depth(r, ()) for r in MAIN_ROOTS_STACK)
+    if total > MAIN_STACK_MAX:
+        errors.append(f"main stack {total} B > {MAIN_STACK_MAX} B: {' > '.join(path)}")
+    return errors, [f"main stack ~{total} B of {MAIN_STACK_MAX} allowed (12,032): {' > '.join(path[:4])} ..."]
 
 
 # Every hardware register access lives in hal/. In src/, engines/src/ and loader/ (comments stripped):
@@ -530,8 +586,9 @@ def main():
     errors, notes = check(img, syms, dis, rt)
     if UNIT == "strata":
         e2, n2 = isr_stack_check(dis)
-        errors += e2
-        notes += n2
+        e3, n3 = main_stack_check(dis)
+        errors += e2 + e3
+        notes += n2 + n3
     hal_err = mmio_check()
     errors += hal_err
     if not hal_err:
