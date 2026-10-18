@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
-/* STRATA's user interface on the FM-1, Phase 4 (docs/ARCHITECTURE.md §17; its look: the Strata Screen Design canvas).
+/* STRATA's user interface on the FM-1, Phase 4 (docs/ARCHITECTURE.md §17; its look: the STRATA UI, docs/UI.md).
  *   - Pages: a section's parameters four to a page, KNOB 1-4 left to right as on the panel, and what the display
  *     draws. A family button shows its sections' pages: a tap, the next page (EDIT: of the section ALGORITHM
  *     picked; the other families through all of theirs); ALGORITHM picks the family's section, SELECT steps its
  *     pages; OCT- / OCT+ with a family button (or REC) held, the section's pages, round (the octave stays, the
  *     button's release and hold do nothing). HOME: the sound playing, the macros, the output live; HOME held 5 s:
- *     the SETTINGS (COLOR: the palette; ACCEL: the knobs' feel; a countdown in the footer from HOLD). FX: DRIVE,
+ *     the SETTINGS (COLOR: the palette; ACCEL: the knobs' feel; a countdown screen from HOLD). FX: DRIVE,
  *     CHORUS, DELAY, REVERB, OTT, EQ. GLO's GLOBAL page: BPM (20-300), TS-BEAT (1-16 beats a bar), TS-NOTE (the
  *     note a beat is: 1 2 4 8 16).
  *   - Knobs: speed-sensitive (a slow turn 0.1 % a detent, a quick one up to 5 %; ACCEL OFF: 1 % a detent); a list,
@@ -15,7 +15,7 @@
  *     on the filter's and the effects' pages the part of the graph it moves, its value in a flag, the shape before
  *     the turn dashed behind, until the gesture ends (UI_GESTURE_MS without a turn).
  *   - SAVE (sy_ui_save.c): tapped once, the sound saved as a new preset at once (its next version, "NAME v2");
- *     held 5 s, over its own slot (a countdown in the footer from HOLD); tapped twice, the browser (SAVE there:
+ *     held 5 s, over its own slot (a countdown screen from HOLD); tapped twice, the browser (SAVE there:
  *     NAME IT for the sound playing). SAVE + OCT- undoes, SAVE + OCT+ redoes: the patch's last 8 states (an edit
  *     gesture or a sound's load each).
  *   - An LFO's POINTS page: KNOB 1 picks a point (round), KNOB 2 moves it along the cycle (between its
@@ -23,7 +23,7 @@
  *     last point: the one into it). A shape other than DRAWN shows its points; the first edit draws from them
  *     (SHAPE DRAWN). LFO tapped twice on the page: a point left of the one picked, halfway to the one before (the
  *     first point picked: right of it), on the curve. LFO held 5 s on the page: the point picked goes (a countdown
- *     in the footer from HOLD; let go, a knob or another button stops it; the first and last points stay).
+ *     screen from HOLD; let go, a knob or another button stops it; the first and last points stay).
  *   - The MOD layer: REC held (a double tap latches it, a tap lets it go). A white key picks the source, a knob
  *     sets that source's depth on its parameter: a matrix slot, made when needed and freed when the layer closes
  *     at 0. ENV held: the same for ENV 2 (an envelope onto a knob).
@@ -35,12 +35,12 @@
  *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
  *   - PLAY: the transport on and off (the FREE LFOs start on the beat; PLAY's green LED on, its own blinking each
  *     beat). ARP: a word (the arpeggiator comes in v1).
- *   - The SETTINGS (HOME held 5 s): SCREEN (the palette, HELP: a hint in the footer entering a section, the LEDs'
+ *   - The SETTINGS (HOME held 5 s): SCREEN (the palette, HELP: a hint at the bottom entering a section, the LEDs'
  *     GLOW), PANEL (ACCEL, the HOLD time), MIDI (its CHANNEL, LEARN, CLEAR the learned CCs, PROGRAM changes).
  *     MIDI LEARN on: the next knob turned on any page picks its parameter, the next CC is set to it (OCT- takes
  *     the picked one's away, OCT+ ends it); a learned CC is set before a parameter's own.
- *   - The screen in five regions (header, display, the four knob cells, footer), each drawn when it changes, one
- *     canvas at a time (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
+ *   - The screen: one picture a module (the STRATA UI, docs/UI.md), drawn in strips and sent by the rows that changed
+ *     (sy_ui_draw.c); the LEDs (sy_ui_draw.c sy_ui_leds).
  * MIDI's clock, start and stop come with integration (the real MIDI path). Needs sy_app.c's keys and sounds (declared here), panel.c, gfx.c, sy_gfx.c, the engine and
  * sy_text.c. */
 
@@ -101,9 +101,10 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_BROWSE (SEC_COUNT + 3)
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 #define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
-enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_FILTER, G_DRIVE, G_CHORUS, G_DELAY,
-       G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL, G_MIDI, G_BENCH, G_CHAIN, G_FLANGER,
-       G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE };
+enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
+       G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
+       G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
+       G_N };                                       /* (sy_ui_draw.c UI_PAGE: each one's page) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -112,11 +113,11 @@ typedef struct {
     int16_t id[4];                                  /* KNOB 1-4: parameters (or UI_* items), -1 none */
 } ui_page_t;
 #define UI_OSC(O, S)                                                                                      \
-    {S, G_WT3D, "WAVE", {SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT}},                     \
+    {S, G_WAVE, "WAVE", {SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT}},                     \
     {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH}},                \
-    {S, G_UNI, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},              \
-    {S, G_WT2D, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                  \
-    {S, G_WT2D, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},
+    {S, G_SPREAD, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},           \
+    {S, G_PITCH, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                 \
+    {S, G_OUT, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},
 #define UI_ENV(E, S)                                                                                      \
     {S, G_ENV, "ADSR", {SP_##E##_ATK, SP_##E##_DEC, SP_##E##_SUS, SP_##E##_REL}},                          \
     {S, G_ENV, "SHAPE", {SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV}},
@@ -156,18 +157,18 @@ typedef struct {
 static const ui_page_t UI_PG[] = {
     UI_OSC(A, SEC_OSCA)
     UI_OSC(B, SEC_OSCB)
-    {SEC_SUB, G_LIST, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW}},
-    {SEC_SUB, G_LIST, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, -1, -1}},
-    {SEC_NOISE, G_LIST, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
-    {SEC_NOISE, G_LIST, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, -1, -1}},
+    {SEC_SUB, G_SUB, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW}},
+    {SEC_SUB, G_OUT, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, -1, -1}},
+    {SEC_NOISE, G_NOISE, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
+    {SEC_NOISE, G_OUT, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, -1, -1}},
     {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
     {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
     UI_ENV(E1, SEC_ENV1)
     UI_ENV(E2, SEC_ENV2)
     UI_LFO(L1, SEC_LFO1)
     UI_LFO(L2, SEC_LFO2)
-    {SEC_VOICE, G_LIST, "VOICE", {SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE}},
-    {SEC_VOICE, G_LIST, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
+    {SEC_VOICE, G_VOICE, "VOICE", {SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE}},
+    {SEC_VOICE, G_PLAY, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
     {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
     {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
@@ -297,9 +298,6 @@ static uint32_t ui_jump_sec(uint32_t k)
     i = sp_chain_at(sy_patch.p, c - UI_JUMP_FX);
     return i < 0 ? 0xFFu : SEC_DRIVE + (uint32_t)i;
 }
-/* the footer's sources (the design's chips) */
-static const uint8_t UI_CHIP_SRC[8] = {SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_MAC1, SRC_MAC2, SRC_MAC3, SRC_MAC4};
-static const char *const UI_CHIP_NAME[8] = {"E1", "E2", "L1", "L2", "M1", "M2", "M3", "M4"};
 
 /* ------------------------------------------------------------------------------------------- state --- */
 #define D_HEAD 1u
@@ -355,7 +353,7 @@ static struct {
     uint32_t edit_t;                                /* the last edit (a gesture: none for UI_GESTURE_MS before); 0 none */
     uint32_t en_t[NE];                              /* an encoder's last turn (the speed) */
     int8_t en_dir[NE];
-    char toast[32];                                 /* a word in the footer, until toast_t */
+    char toast[32];                                 /* a word in the bottom row, until toast_t */
     uint32_t toast_t;
     uint32_t live_t;                                /* a live graph's last frame */
     uint16_t sv_ret;                                /* SAVE, the browser: the page to go back to */
@@ -369,7 +367,11 @@ static struct {
     uint16_t br_want;                               /* .. a preset to load (its id + 1; 0 none) */
     uint8_t undel;                                  /* .. a preset just deleted: SAVE + OCT- puts it back (sy_app.c) */
     uint8_t ctype, cslot;                           /* the FX chain view: the type picked (left), the slot (right; */
-} ui;                                               /* past the last module: the place to add one) */
+                                                    /* past the last module: the place to add one) */
+    uint32_t ub_t0;                                 /* OCT- + OCT+ held (sy_main.c): its countdown from then; 0 none */
+    uint8_t safe;                                   /* SAFE START shown (1 a crash before, 2 HOME held), until safe_t */
+    uint32_t safe_t;
+} ui;
 
 static void ui_toast(const char *s)
 {
@@ -379,6 +381,22 @@ static void ui_toast(const char *s)
     ui.toast[i] = 0;
     ui.toast_t = fm1_ms + 1500u;
     ui.dirty |= D_FOOT;
+}
+
+/* SAFE START's screen gone (a button, a knob) */
+static void ui_safe_end(void)
+{
+    if (!ui.safe)
+        return;
+    ui.safe = 0;
+    ui.dirty = D_ALL;
+}
+/* sy_app.c: the sound before was not brought back (1: a crash, a hang or a failed boot before; 2: HOME held) */
+static void sy_ui_safe(uint32_t why)
+{
+    ui.safe = (uint8_t)why;
+    ui.safe_t = fm1_ms + 6000u;
+    ui.dirty = D_ALL;
 }
 
 /* MIDI's (sy_app.c sy_midi_in): this CC is for LEARN (1: taken, nothing else to do with it); channel ch (0 .. 15)
@@ -510,18 +528,7 @@ static uint32_t ui_mod_span(uint32_t id, uint32_t pick, float *olo, float *ohi, 
     }
     return n;
 }
-/* source src moves something on the page shown */
-static int ui_src_on_page(uint32_t src)
-{
-    uint32_t s, k;
-    for (s = 0; s < NSLOT; s++)
-        if (sy_patch.p[SP_M1_SRC + 3u * s] == (int32_t)src && sy_patch.p[SP_M1_AMT + 3u * s])
-            for (k = 0; k < 4u; k++)
-                if (UI_PG[ui.page].id[k] >= 0 && sy_patch.p[SP_M1_DST + 3u * s] == ui_virt(UI_PG[ui.page].id[k]))
-                    return 1;
-    return 0;
-}
-static int ui_src_used(uint32_t src)                /* .. anything */
+static int ui_src_used(uint32_t src)                /* source src moves anything */
 {
     uint32_t s;
     for (s = 0; s < NSLOT; s++)
@@ -531,7 +538,7 @@ static int ui_src_used(uint32_t src)                /* .. anything */
 }
 
 /* ---------------------------------------------------------------------------------------- navigation --- */
-/* HELP: a section's hint in the footer as it opens, 2 s (0 none: its footer says it, or it needs none) */
+/* HELP: a section's hint at the bottom as it opens, 2 s (0 none: its page says it, or it needs none) */
 static const char *ui_hint(uint32_t sec)
 {
     if (sec == SEC_OSCA || sec == SEC_OSCB || sec == SEC_SUB || sec == SEC_NOISE || sec == SEC_FILTER)
@@ -664,15 +671,15 @@ static uint32_t ui_cslot(void)                       /* the slot picked, kept in
     return ui.cslot > top ? top : ui.cslot;
 }
 static int32_t ui_cinst(void) { return sp_chain_at(sy_patch.p, ui_cslot()); }   /* its module, -1 the empty place */
-static int32_t ui_cmix(void)                         /* .. its MIX (OTT: DEPTH; TREMOLO: DEPTH; EQ: none) */
+static int32_t ui_cmix_of(int32_t i)                 /* instance i's MIX (OTT: DEPTH; TREMOLO: DEPTH; EQ: none) */
 {
     static const int16_t MIX[FXT_N] = {SP_DR_MIX, SP_CH_MIX, SP_DL_MIX, SP_RV_MIX, SP_OT_DEPTH, -1, SP_FL_MIX,
                                        SP_PH_MIX, SP_FF_MIX, SP_CR_MIX, SP_TR_DEPTH, SP_RG_MIX, SP_TP_MIX};
-    int32_t i = ui_cinst();
     if (i < 0 || MIX[FXI_TYPE[i]] < 0)
         return -1;
     return MIX[FXI_TYPE[i]] + (int32_t)FXI_OFF((uint32_t)i);
 }
+static int32_t ui_cmix(void) { return ui_cmix_of(ui_cinst()); }   /* .. the slot picked's */
 /* the type's instance free to add (-1: both in the chain, or its one) */
 static int32_t ui_cfree(uint32_t t)
 {
@@ -1017,7 +1024,7 @@ static void ui_lfo_add(void)
 }
 
 /* a long hold, UI_LONG_MS: LFO on the POINTS page deletes the point picked (not the first or the last; the one before
- * it picked), HOME opens the SETTINGS, SAVE writes the sound over its own slot. From HOLD a countdown in the footer;
+ * it picked), HOME opens the SETTINGS, SAVE writes the sound over its own slot. From HOLD a countdown screen;
  * let go, a knob, another button, OCT (its pages, or SAVE's undo and redo: a chord), another page or the MOD layer
  * stop it */
 #define UI_LONG_MS 5000u
@@ -1031,8 +1038,7 @@ static void ui_cd_stop(void)
     if (ui.cd_btn == NB)
         return;
     ui.cd_btn = NB;
-    ui.toast[0] = 0;
-    ui.dirty |= D_FOOT;
+    ui.dirty |= D_DISP;                             /* (the countdown's screen: the page back) */
 }
 static void ui_lfo_del_arm(void)                    /* (LFO's hold, on POINTS) */
 {
@@ -1073,7 +1079,6 @@ static void ui_browse_del(void);                    /* sy_ui_save.c */
 static void ui_cd_tick(void)                        /* every millisecond while it counts */
 {
     uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left, dur = b == B_OCTDN ? UI_DEL_MS : UI_LONG_MS;
-    char s[32], *e;
     if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || ui.mod ||
         (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT) || (b == B_SAVE && sy_app_slot() < 0) ||
         (b == B_OCTDN && (ui_sec() != SEC_BROWSE || sy_app_slot() < 0))) {
@@ -1082,39 +1087,19 @@ static void ui_cd_tick(void)                        /* every millisecond while i
     }
     if (held >= dur) {
         ui.cd_btn = NB;
-        if (b == B_LFO) {
+        ui.dirty |= D_DISP;
+        if (b == B_LFO)
             ui_lfo_del();
-        } else if (b == B_SAVE) {
-            ui.toast[0] = 0;
+        else if (b == B_SAVE)
             ui_save_over();
-        } else if (b == B_OCTDN) {
-            ui.toast[0] = 0;
+        else if (b == B_OCTDN)
             ui_browse_del();
-        } else {
-            ui.toast[0] = 0;
+        else
             ui_go(ui_first_page(SEC_MENU));
-        }
         return;
     }
-    left = (dur - held + 999u) / 1000u;
-    if (left != ui.cd_s) {                          /* "HOLD: DELETE POINT 3 IN 4", "HOLD: SETTINGS IN 4", */
-                                                    /* "HOLD: SAVE OVER USER 3 IN 4" */
-        ui.cd_s = (uint8_t)left;
-        e = sp_put(s, "HOLD: ");
-        if (b == B_LFO) {
-            uint32_t k = ui_lfo();
-            sp_draw_t t;
-            e = sp_fix(sp_put(e, "DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
-        } else if (b == B_SAVE) {
-            e = sp_fix(sp_put(e, "SAVE OVER USER "), sy_app_slot() + 1, 0u, 0);
-        } else if (b == B_OCTDN) {
-            e = sp_fix(sp_put(e, "DELETE USER "), sy_app_slot() + 1, 0u, 0);
-        } else {
-            e = sp_put(e, "SETTINGS");
-        }
-        sp_fix(sp_put(e, " IN "), (int32_t)left, 0u, 0);
-        ui_toast(s);
-    }
+    left = (dur - held + 999u) / 1000u;             /* (sy_ui_draw.c: the countdown's screen, its ring live) */
+    ui.cd_s = (uint8_t)left;
 }
 
 /* the MOD layer: source pick's depth on parameter id, by s steps */
@@ -1410,6 +1395,7 @@ static void ui_knob(uint32_t k, int32_t s)
 {
     int32_t id = ui_virt(UI_PG[ui.page].id[k]);     /* (the EQ's POINTS: the picked point's own) */
     const sp_desc_t *d;
+    ui_safe_end();
     ui_cd_stop();
     if (ui.lay == LAY_PERF || ui.lay == LAY_MAC) {
         ui_lay_knob(k, s, EN_K1 + k);
@@ -1431,7 +1417,7 @@ static void ui_knob(uint32_t k, int32_t s)
     }
     id = ui_eff(id);
     d = &SP[id];
-    if (ui.learn && ui.ml_pick != id) {             /* (MIDI LEARN: this knob's parameter picked, the footer */
+    if (ui.learn && ui.ml_pick != id) {             /* (MIDI LEARN: this knob's parameter picked, the bottom row */
         ui.ml_pick = (int16_t)id;                   /* saying so at once) */
         ui.toast[0] = 0;
         ui.dirty |= D_FOOT | D_DISP;
@@ -1460,12 +1446,9 @@ static void ui_knob(uint32_t k, int32_t s)
         ui_edit();
     }
     sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
-    ui.dirty |= D_KNOB(k) | D_DISP;
-    if (ui_is_sync((uint32_t)id))
-        ui.dirty |= D_KNOBS;                        /* (RATE, TIME: Hz or ms, or a note value) */
-    if (ui_sec_power(ui_sec()) == id || UI_PG[ui.page].graph == G_WT3D || UI_PG[ui.page].graph == G_WT2D ||
-        ui_sec() == SEC_MATRIX)
-        ui.dirty |= D_HEAD;                         /* (the light; OCT SEM FIN; the slots in use) */
+    ui.dirty |= D_KNOB(k) | D_DISP;                 /* (the page's body: sy_ui_draw.c redraws rows 16 .. 221) */
+    if (ui_sec() == SEC_LFO1 || ui_sec() == SEC_LFO2 || ui_sec() == SEC_MATRIX)
+        ui.dirty |= D_HEAD;                         /* (their top line: an LFO's rate and mode, the slots in use) */
 }
 
 /* a parameter changed from elsewhere (MIDI, a sound): what shows it */
@@ -1484,6 +1467,7 @@ static int ui_src_sec(uint32_t s)                   /* a section EDIT + OCT turn
 
 static void ui_press(uint32_t b)
 {
+    ui_safe_end();
     if (b != ui.cd_btn)
         ui_cd_stop();
     if ((b == B_OCTDN || b == B_OCTUP) && ui_sec() == SEC_SAVE) {   /* SAVE's screen: OCT+ the symbols, OCT- deletes */

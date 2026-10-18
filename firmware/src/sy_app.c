@@ -627,7 +627,7 @@ static SY_NOINLINE void sy_app_boot(void)
     sy_ui_boot();
     sy_flash_boot();
     if (sy_boot_skipped)
-        ui_toast(sy_boot_safe ? "SAFE START: SOUND NOT RESTORED" : "HOME HELD: SOUND NOT RESTORED");
+        sy_ui_safe(sy_boot_safe ? 1u : 2u);         /* (SAFE START's screen) */
     sp_snap();
     lfo_dr_seq = 1u;                             /* (the sound's drawn shapes: taken at the first block) */
     sy_tables_now();

@@ -11,7 +11,7 @@
  * a boot before this one that died, and the sound that was playing is not restored; the app (sy_app.c); USB, TRS
  * MIDI, the TIMER5 tick; the vectors write-protected; the interrupts on.
  * The main loop: the watchdog; the update entry (the M-UPGRADE handshake answers FELUCCA_ID; the upgrade command runs
- * ota.c's session behind the engine's hush); the UBOOT entries (OCT- + OCT+ held 5 s, a countdown in the footer from
+ * ota.c's session behind the engine's hush); the UBOOT entries (OCT- + OCT+ held 5 s, a countdown screen from
  * 2 s; the SysEx soft key; the console's `uboot yes`); MIDI in, USB and TRS, to sy_app.c; sy_app_ms once each
  * millisecond, sy_app_frame every 15 ms; MASTER; the console; BENCH's timings and its RUN. */
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
@@ -300,9 +300,9 @@ static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as 
 {
     fm1_audio_stop();
     lcd_fill(0, 0, 240, 240, sk.ground);
-    draw_text_line(0, 100, 240, &AF_M, why, sk.text, sk.ground, 1);
-    draw_text_line(0, 126, 240, &AF_XS, "THE CHIP'S USB BOOT: FOR FLASH TOOLS", sk.label, sk.ground, 1);
-    draw_text_line(0, 140, 240, &AF_XS, "POWER OFF AND ON TO LEAVE IT", sk.label, sk.ground, 1);
+    draw_text_line(0, 100, 240, &AF_M, why, sk.ink, sk.ground, 1);
+    draw_text_line(0, 126, 240, &AF_XS, "THE CHIP'S USB BOOT: FOR FLASH TOOLS", sk.mid, sk.ground, 1);
+    draw_text_line(0, 140, 240, &AF_XS, "POWER OFF AND ON TO LEAVE IT", sk.mid, sk.ground, 1);
     fm1_delay_ms(20);
     usb_detach();
     fm1_delay_ms(30);
@@ -310,32 +310,26 @@ static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as 
     fm1_enter_uboot();
 }
 
-/* OCT- + OCT+ held 5 s: UBOOT, a countdown in the footer from 2 s; letting go of either stops it */
+/* OCT- + OCT+ held 5 s: UBOOT, its countdown (sy_ui_draw.c: a ring that empties) from 2 s; letting go of either stops
+ * it */
 static void sy_uboot_chord(void)
 {
     static uint32_t t0;
-    static uint8_t shown;
     uint32_t both = (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]), held;
     if ((fm1_in.buttons & both) != both) {
-        if (shown) {
-            shown = 0;
-            ui_toast("UBOOT STOPPED");
+        if (ui.ub_t0) {
+            ui.ub_t0 = 0;
+            ui.dirty = D_ALL;
+            ui_toast("USB BOOT STOPPED");
         }
         t0 = fm1_ms;
         return;
     }
     held = fm1_ms - t0;
-    if (held > 5000u) {
+    if (held > 5000u)
         sy_uboot("UBOOT");
-    } else if (held > 2000u) {
-        uint32_t left = (5000u - held + 999u) / 1000u;
-        if (left != shown) {
-            char t[32];
-            shown = (uint8_t)left;
-            sp_put(sp_fix(sp_put(t, "HOLD: UBOOT IN "), (int32_t)left, 0u, 0), ", LET GO TO STOP");
-            ui_toast(t);
-        }
-    }
+    else if (held > 2000u && !ui.ub_t0)
+        ui.ub_t0 = t0 | 1u;
 }
 
 /* the engine hushed (its notes stopped, the ring silent) for what holds the interrupts off; then back as it was (a
@@ -410,13 +404,15 @@ static void sy_bench_run(void)
 }
 
 /* ------------------------------------------------------------------------------------------ power-on --- */
-static void sy_splash(void)
+static void sy_splash(void)                      /* the design's power-on (sy_ui_draw.c ui_p_boot), a strip at a time */
 {
+    uint32_t s;
     sy_palette(0);
-    lcd_fill(0, 0, 240, 240, sk.ground);
-    draw_text_line(0, 88, 240, &AF_L, "STRATA", sk.sound, sk.ground, 1);
-    draw_text_line(0, 128, 240, &AF_S, STRATA_VERSION, sk.text, sk.ground, 1);
-    draw_text_line(0, 206, 240, &AF_XS, "A WAVETABLE SYNTH \xB7 A FELUCCA FORK", sk.label, sk.ground, 1);
+    for (s = 0; s < 240u; s += 80u) {
+        lk_begin(0, (int32_t)s, 240u, 80u);
+        ui_p_boot();
+        lcd_blit(0, s, 240u, 80u, cv_px);
+    }
 }
 
 static uint32_t crash_seen __attribute__((section(".noinit")));   /* fm1_crash.count at the last boot */

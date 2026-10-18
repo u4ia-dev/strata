@@ -129,15 +129,15 @@ static void ota_show(uint32_t step, int32_t code)
                                        "WAITING FOR THE HOST", "RESTARTING INTO THE LOADER"};
     char b[24], *e;
     lcd_fill(0, 0, 240, 240, sk.ground);
-    draw_text_line(0, 92, 240, &AF_M, "UPDATE", sk.text, sk.ground, 1);
+    draw_text_line(0, 92, 240, &AF_M, "UPDATE", sk.ink, sk.ground, 1);
     if (step < 9u) {
-        draw_text_line(0, 124, 240, &AF_S, STEP[step < 6u ? step : 0], sk.label, sk.ground, 1);
+        draw_text_line(0, 124, 240, &AF_S, STEP[step < 6u ? step : 0], sk.mid, sk.ground, 1);
         return;
     }
     e = code == 1 ? sp_put(b, "DRY RUN OK") : sp_fix(sp_put(b, "STOPPED: "), code, 0u, 0);
     (void)e;
-    draw_text_line(0, 124, 240, &AF_S, b, sk.now, sk.ground, 1);
-    draw_text_line(0, 148, 240, &AF_XS, "NOTHING WAS WRITTEN: STRATA GOES ON", sk.label, sk.ground, 1);
+    draw_text_line(0, 124, 240, &AF_S, b, sk.hot, sk.ground, 1);
+    draw_text_line(0, 148, 240, &AF_XS, "NOTHING WAS WRITTEN: STRATA GOES ON", sk.mid, sk.ground, 1);
     fm1_delay_ms(1500);
 }
 

@@ -29,7 +29,8 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.66 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
+#define STRATA_VERSION "V0.66 UI HARDWARE TEST"   /* the splash and the console (the strata-ui build); build.py
+                                                   * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"
@@ -59,8 +60,8 @@ static void sy_lcd_idle(void);                   /* sy_main.c: the keys and MIDI
                                                   * ST7789 <= ~62 MHz). Felucca's 4 (12 MHz): a full redraw ~77 ms of
                                                   * SPI, the frames of V0.65's test 90 ms (V0.66; needs a hardware test) */
 #include "lcd.c"
-#define CV_MAX (240u * 114u)     /* the canvas: Strata's largest strip is the display's, 240 x 114 (Felucca's 240 x 124:
-                                  * 4,800 bytes of the pool) */
+#define CV_MAX (240u * 80u)      /* the canvas: the STRATA UI draws its screen in three strips of 80 rows (sy_ui_draw.c;
+                                  * V0.66's largest strip, the display's, was 240 x 114: 16,320 bytes of the pool more) */
 #include "gfx.c"
 static uint8_t fx_lowcut;                        /* (panel.c's Felucca settings hook: not Strata's) */
 #include "panel.c"

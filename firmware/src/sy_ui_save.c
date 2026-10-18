@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
-/* STRATA's SAVE and preset browser (the Strata Screen Design canvas, "Saving and presets", approved; ARCHITECTURE.md
- * §16), on sy_ui.c's pages and sy_ui_draw.c's regions:
+/* STRATA's SAVE and preset browser (the STRATA UI design's SAVE AND PRESETS boards; ARCHITECTURE.md
+ * §16), on sy_ui.c's pages, drawn with sy_gfx.c's kit:
  *   - SAVE tapped once (no second tap within UI_DTAP_MS): the sound saved at once as a new preset, its next version
  *     ("WARM PAD v2": one above the highest its base has in a user slot; a starter sound's "SUPERSAW v2"), in the
  *     first free slot, its category kept. Nothing opens: the keys keep playing.
- *   - SAVE held 5 s: from the hold time a countdown in the footer, then the sound written over its own slot. Let go
- *     before, an OCT (SAVE + OCT: undo, redo), a knob or another button stop it; a sound from no user slot has none
- *     (let go: the footer says to tap).
+ *   - SAVE held 5 s: from the hold time a countdown (a ring that empties), then the sound written over its own slot.
+ *     Let go before, an OCT (SAVE + OCT: undo, redo), a knob or another button stop it; a sound from no user slot has
+ *     none (let go: a toast says to tap).
  *   - SAVE tapped twice: the browser. The categories with their counts, the presets of the one picked (the starter
  *     sounds, then the user's), KNOB 1 the category, KNOB 2 the preset (it loads as it turns), KNOB 3 the bank (all,
  *     starter, user); SAVE twice or HOME: back; SAVE once: NAME IT for the sound playing.
@@ -16,7 +16,7 @@
  *     KNOB 4 the slot (its own: a rename; a sound from no user slot: the first free one). SAVE writes it, HOME goes
  *     back to the browser unsaved.
  * Every write: the audio hushed around the flash work (sy_app.c).
- * Needs sy_ui.c, sy_ui_draw.c (WX WY WW WH, ui_text_c, ui_pill), sy_gfx.c, sy_store.c and sy_app.c's presets
+ * Needs sy_ui.c, sy_ui_draw.c (ui_H, ui_hot, ui_ink, ui_boot_f), sy_gfx.c, sy_store.c and sy_app.c's presets
  * (declared in sy_ui.c). */
 
 static const char UI_ABC[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";   /* the keys F3 .. G5: letters, a space */
@@ -358,182 +358,174 @@ static void ui_save_ms(void)                        /* every millisecond: a pres
 }
 
 /* ------------------------------------------------------------------------------------------- drawing --- */
-/* the knobs' cells: a pill each */
-static void ui_save_cell(int32_t id, int act)
+/* the knobs' names and values, as their flags say them */
+static void ui_save_flag(int32_t id, char *t)
 {
-    static const char *const NAME[7] = {"CURSOR", "LETTER", "CATEGORY", "SLOT", "CATEGORY", "PRESET", "BANK"};
+    static const char *const NAME[7] = {"CURSOR ", "LETTER ", "CATEGORY ", "SLOT ", "CATEGORY ", "PRESET ", "BANK "};
     static const char *const BANK[3] = {"ALL", "STARTER", "USER"};   /* (as HOME and the list name them) */
-    char t[16];
+    char *e = sp_put(t, NAME[id - UI_SCUR]);
     if (id == UI_SCUR) {
-        sp_fix(t, (int32_t)ui.sv_cur + 1, 0u, 0);
+        sp_fix(e, (int32_t)ui.sv_cur + 1, 0u, 0);
     } else if (id == UI_SCHR) {                     /* (at the end: one more to add) */
         char c = ui.sv_cur < ui.sv_len ? ui.sv_name[ui.sv_cur] : 0;
         if (!c)
-            sp_put(t, "ADD");
+            sp_put(e, "ADD");
         else if (c == ' ')
-            sp_put(t, "SPACE");
+            sp_put(e, "SPACE");
         else
-            t[0] = c, t[1] = 0;
+            e[0] = c, e[1] = 0;
     } else if (id == UI_SCAT) {
-        sp_put(t, CAT_NAMES[ui.sv_cat]);
+        sp_put(e, CAT_NAMES[ui.sv_cat]);
     } else if (id == UI_SSLOT) {
-        sp_fix(sp_put(t, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0);
+        sp_fix(sp_put(e, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0);
     } else if (id == UI_BCAT) {
-        sp_put(t, ui.br_cat ? CAT_NAMES[ui.br_cat - 1u] : "ALL");
+        sp_put(e, ui.br_cat ? CAT_NAMES[ui.br_cat - 1u] : "ALL");
     } else if (id == UI_BBANK) {
-        sp_put(t, BANK[ui.br_bank % 3u]);
+        sp_put(e, BANK[ui.br_bank % 3u]);
     } else {
         uint16_t ids[SY_NFACT + SS_NUSER];
         uint32_t at, n = ui_browse_list(ids, &at);
         if (at < n)
-            sp_fix(sp_put(sp_fix(t, (int32_t)at + 1, 0u, 0), "/"), (int32_t)n, 0u, 0);
+            sp_fix(sp_put(sp_fix(e, (int32_t)at + 1, 0u, 0), " OF "), (int32_t)n, 0u, 0);
         else
-            sp_fix(sp_put(t, "-/"), (int32_t)n, 0u, 0);
+            sp_fix(sp_put(e, "- OF "), (int32_t)n, 0u, 0);
     }
-    ui_pill(t, 0, act);
-    ui_text_c(0, 46, 60, &AF_XS, NAME[id - UI_SCUR], act ? sk.now : sk.label, sk.ground);
 }
 
-/* the header's right: SAVE's slot, the browser's category and place */
-static void ui_save_head(char *t)
+/* the top line's word: NAME IT (a rename: RENAME), the browser and the presets in its category */
+static void ui_save_label(char *t)
 {
     if (ui_sec() == SEC_SAVE) {
-        sp_fix(sp_put(t, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0);
+        sp_put(t, ui_save_renaming() ? "RENAME" : "NAME IT");
     } else {
         uint16_t ids[SY_NFACT + SS_NUSER];
-        uint32_t at, n = ui_browse_list(ids, &at);
-        char *e = sp_put(sp_put(t, ui.br_cat ? CAT_NAMES[ui.br_cat - 1u] : "ALL"), " ");
-        if (at < n)
-            e = sp_fix(e, (int32_t)at + 1, 0u, 0);
-        else
-            e = sp_put(e, "-");
-        sp_fix(sp_put(e, "/"), (int32_t)n, 0u, 0);
+        uint32_t at;
+        sp_fix(sp_put(t, "BROWSER \xB7 "), (int32_t)ui_browse_list(ids, &at), 0u, 0);
     }
 }
 
-/* the 27 keys, F3 .. G5, each with what it types (the one typed last lit a moment) */
-static void ui_save_keys(int32_t y)
+/* NAME IT: the name in its sixteen cells (the cursor's inverted; at the end the place to add one, +), the category
+ * and the slot it goes to (a rename, one taken, an empty one), letters or numbers, and the 27 keys with what each
+ * types (the one typed last bold a moment) */
+static void ui_p_save(void)
 {
-    static const uint8_t BLACK[12] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0};   /* from F */
-    const char *ch = ui.sv_sym ? UI_SYM : UI_ABC;
-    uint32_t k, w = 0, pass;
-    for (pass = 0; pass < 2u; pass++)               /* the white keys, then the black over them */
-        for (k = 0, w = 0; k < 27u; k++) {
-            int black = BLACK[k % 12u], on = k == ui.sv_key;
-            char s[6];
-            if (!black) {
-                if (!pass) {
-                    int32_t x = WX + 5 + (int32_t)(w * 27u) / 2;
-                    uint16_t bg = on ? sk.now : sk.raised;
-                    cv_rrect(x, y, 13, 52, 2, on ? sk.now : sk.rline2, sk.display);
-                    cv_rrect(x + 1, y + 1, 11, 50, 1, bg, on ? sk.now : sk.rline2);
-                    if (ch[k] == ' ')
-                        sp_put(s, "SP");
-                    else
-                        s[0] = ch[k], s[1] = 0;
-                    cv_text_on(x + (13 - text_w(&AF_XS, s)) / 2, y + 38, &AF_XS, s, on ? sk.ground : sk.text, bg);
-                }
-                w++;
-            } else if (pass) {
-                int32_t x = WX + 5 + (int32_t)(w * 27u) / 2 - 5;
-                uint16_t bg = on ? sk.now : sk.ground;
-                cv_rrect(x, y, 9, 30, 2, on ? sk.now : sk.rline, sk.raised);
-                cv_rrect(x + 1, y + 1, 7, 28, 1, bg, on ? sk.now : sk.rline);
-                s[0] = ch[k];
-                s[1] = 0;
-                cv_text_on(x + (9 - text_w(&AF_XS, s)) / 2, y + 17, &AF_XS, s, on ? sk.ground : sk.label, bg);
-            }
-        }
-}
-
-/* NAME IT: what it is (a rename, a sound to name), the name with its cursor (a version's suffix in SOUND), what
- * happens to the slot, the keys' map */
-static void ui_g_save(void)
-{
-    char t[40], *e;
-    const char *occ = sy_app_slot_name(ui.sv_slot);
-    int32_t x, i, cx, own = ui_save_renaming();
-    cv_text_on(WX + 4, WY + 3, &AF_XS, own ? "RENAME THE SOUND" : "NAME THE SOUND", sk.dim, sk.display);
-    sp_put(sp_fix(t, ui.sv_len, 0u, 0), "/16");
-    cv_text_r(WX + WW - 4, WY + 3, &AF_XS, t, sk.faint, sk.display);
-    cv_rrect(WX + 4, WY + 17, WW - 8, 24, 3, sk.rline2, sk.display);   /* the name, its cursor */
-    cv_rrect(WX + 5, WY + 18, WW - 10, 22, 2, sk.raised, sk.rline2);
+    const char *occ = sy_app_slot_name(ui.sv_slot), *ch = ui.sv_sym ? UI_SYM : UI_ABC;
+    uint32_t i, k;
+    float cx = 24.0f + 12.0f * (float)ui.sv_cur, x, w;
+    char t[32], f[32];
+    lk_kb_t kb;
+    for (i = 0; i < 16u; i++) {
+        float bx = 24.0f + 12.0f * (float)i;
+        char c[2] = {i < ui.sv_len ? ui.sv_name[i] : i == ui.sv_len ? '+' : 0, 0};
+        int cur = i == ui.sv_cur;
+        if (cur)
+            lk_box(bx, 33.0f, bx + 11.0f, 54.0f, ui_ink(ui_hot(0) || ui_hot(1)));
+        lk_seg(bx + 1.0f, 57.0f, bx + 10.0f, 57.0f, cur ? 3.0f : 1.0f, cur ? ui_ink(ui_hot(0)) : sk.line);
+        if (c[0] && c[0] != ' ')
+            lk_text_c(bx + 5.5f, 36.0f, T12B, c, cur ? sk.ground : c[0] == '+' && i == ui.sv_len ? sk.mid : sk.ink,
+                      cur ? ui_ink(ui_hot(0) || ui_hot(1)) : sk.ground, 0, 16);
+    }
+    w = lk_tw(T7B, CAT_NAMES[ui.sv_cat % CAT_COUNT], 40) + 10.0f;   /* the category, the slot */
+    lk_frame(24.5f, 80.5f, w - 1.0f, 12.0f, 1.0f, ui_ink(ui_hot(2)));
+    lk_text(29.0f, 82.0f, T7B, CAT_NAMES[ui.sv_cat % CAT_COUNT], ui_ink(ui_hot(2)), sk.ground, 40, 9);
     {
-        char base[17];
-        uint32_t ver = ui_name_ver(ui.sv_name, base), bl = ver > 1u ? ui_strlen(base) : ui.sv_len;
-        x = cv_text_on(WX + 10, WY + 21, &AF_M, base, sk.text, sk.raised);
-        if (ver > 1u)
-            x = cv_text_on(x, WY + 21, &AF_M, ui.sv_name + bl, sk.sound, sk.raised);
-        for (cx = WX + 10, i = 0; i < (int32_t)ui.sv_cur; i++) {   /* (the cursor after its characters) */
-            char c[2] = {ui.sv_name[i], 0};
-            cx += text_w(&AF_M, c);
-        }
-        (void)x;
-        cv_rect(cx, WY + 22, 2, 15, sk.now);
+        char *e = sp_put(sp_fix(sp_put(t, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0), " \xB7 ");
+        sp_put(e, ui_save_renaming() ? "RENAME" : occ ? (ui_streq(occ, ui.sv_name) ? "SAVES OVER" : "REPLACES") : "EMPTY");
+        lk_fit(f, sizeof f, t, T7B, 40, 82.0f);
+        w = lk_tw(T7B, f, 40) + 10.0f;
+        lk_frame(92.5f, 80.5f, w - 1.0f, 12.0f, 1.0f, ui_ink(ui_hot(3)));
+        lk_text(97.0f, 82.0f, T7B, f, ui_ink(ui_hot(3)), sk.ground, 40, 9);
     }
-    if (own)                                        /* the slot: its own (a rename), another's, empty (a copy: the */
-        e = occ && !ui_streq(occ, ui.sv_name) ? sp_put(sp_put(t, "RENAMES "), occ) : sp_put(t, "SAVES OVER ITSELF");
-    else if (occ)                                   /* sound's own slot kept) */
-        e = sp_put(sp_put(t, "REPLACES "), occ);
-    else if (sy_app_slot() >= 0)
-        e = sp_fix(sp_put(sp_put(t, sy_patch.name), " STAYS IN USER "), sy_app_slot() + 1, 0u, 0);
-    else
-        e = sp_put(t, "AN EMPTY SLOT");
-    (void)e;
-    ui_text_c(WX + 4, WY + 43, WW - 8, &AF_XS, t, occ && !own ? sk.label : sk.faint, sk.display);
-    ui_save_keys(WY + 54);
+    x = lk_chip(184.0f, 80.0f, "ABC", !ui.sv_sym);
+    lk_chip(x, 80.0f, "123", ui.sv_sym);
+    lk_kb(&kb, 8.0f, 118.0f, 224.0f, 78.0f);
+    for (k = 0; k < 27u; k++) {
+        char s[3] = {ch[k], 0, 0};
+        int on = k == ui.sv_key;
+        float kx = lk_kb_cx(&kb, k);
+        if (ch[k] == ' ')
+            s[0] = 'S', s[1] = 'P';
+        if (LK_BLACK[k % 12u])
+            lk_text_c(kx, 104.0f, on ? T7B : T7, s, on ? sk.ink : sk.mid, sk.ground, 0, 0);
+        else
+            lk_text_c(kx, 180.0f, on ? T7B : T7, s, on ? sk.ink : sk.mid, sk.ground, 0, 0);
+    }
+    lk_text(8.0f, 206.0f, T7, "SAVE WRITES IT \xB7 HOME: BACK \xB7 OCT- DELETES", sk.mid, sk.ground, 20, 0);
+    ui_H(0, cx + 0.5f, 61.0f);
+    ui_H(1, cx + 0.5f, 20.0f);
+    ui_H(2, 10.0f, 80.0f);
+    ui_H(3, 78.0f, 80.0f);
 }
 
-/* the browser: the categories with their counts (the one picked raised), the presets of it, the one playing marked */
-static void ui_g_browse(void)
+/* the browser: the categories with their counts (the one picked bold), the presets of it (the one playing outlined,
+ * a small bloom at its end; ST a starter sound, U and its slot a user's), the bank's chips */
+static void ui_p_browse(void)
 {
+    static const char *const BANK[3] = {"ALL", "STARTER", "USER"};
     uint16_t ids[SY_NFACT + SS_NUSER], all[SY_NFACT + SS_NUSER];
     uint32_t at, n = ui_browse_list(ids, &at), c, k, first, na = sy_app_list(ui.br_bank, 0, all);
     char t[24];
+    float x, sy = 42.0f;
     for (c = 0; c < 9u; c++) {                      /* ALL, then each category */
         uint32_t cnt = 0;
-        int32_t y = WY + 3 + (int32_t)c * 11;
+        float y = 42.0f + (float)(c * 13u);
         int on = c == ui.br_cat;
         uint8_t cat;
         for (k = 0; k < na; k++)
             cnt += !c || (sy_app_entry(all[k], &cat) && cat + 1u == c);
-        if (on)
-            cv_rrect(WX + 3, y, 68, 11, 2, sk.raised, sk.display);
-        cv_text_on(WX + 7, y + CAP_IN(XS, 11), &AF_XS, c ? CAT_NAMES[c - 1u] : "ALL",
-                   on ? sk.text : cnt ? sk.text2 : sk.faint, on ? sk.raised : sk.display);
+        lk_text(20.0f, y, on ? T7B : T7, c ? CAT_NAMES[c - 1u] : "ALL", on ? ui_ink(ui_hot(0)) : sk.mid, sk.ground, 40, 0);
         sp_fix(t, (int32_t)cnt, 0u, 0);
-        cv_text_r(WX + 67, y + CAP_IN(XS, 11), &AF_XS, t, on ? sk.label : sk.faint, on ? sk.raised : sk.display);
+        lk_text(62.0f, y, T7, t, on ? sk.ink : sk.line, sk.ground, 0, 0);
     }
-    cv_rect(WX + 74, WY + 4, 1, 100, sk.dline);
+    lk_seg(80.0f, 40.0f, 80.0f, 156.0f, 1.0f, sk.line);
     if (!n) {
-        ui_text_c(WX + 78, WY + 40, 145, &AF_XS, "NONE HERE YET", sk.faint, sk.display);
-        return;
-    }
-    first = at < n && at > 2u ? at - 2u : 0u;       /* five rows, the one playing in the middle when it can be */
-    if (n > 5u && first > n - 5u)
-        first = n - 5u;
-    for (k = first; k < n && k < first + 5u; k++) {
-        int32_t y = WY + 3 + (int32_t)(k - first) * 18;
-        int on = k == at;
-        uint8_t cat;
-        const char *nm = sy_app_entry(ids[k], &cat);
-        uint16_t bg = on ? sk.raised : sk.display;
-        char up[17];
-        uint32_t j;
-        for (j = 0; nm && nm[j] && j < 16u; j++)    /* (the starter sounds' names are lowercase in their table; */
-            up[j] = ids[k] < SY_USER && nm[j] >= 'a' && nm[j] <= 'z' ? (char)(nm[j] - 32) : nm[j];   /* a user's v2 stays) */
-        up[j] = 0;
-        if (on) {
-            cv_rrect(WX + 78, y, 145, 16, 3, sk.rline2, sk.display);
-            cv_rrect(WX + 79, y + 1, 143, 14, 2, sk.raised, sk.rline2);
-            cv_rect(WX + 83, y + 4, 2, 9, sk.now);
+        lk_text(96.0f, 42.0f, T8, "NONE HERE YET", sk.mid, sk.ground, 20, 0);
+    } else {
+        first = at < n && at > 2u ? at - 2u : 0u;   /* six rows, the one playing third when it can be */
+        if (n > 6u && first > n - 6u)
+            first = n - 6u;
+        for (k = first; k < n && k < first + 6u; k++) {
+            float y = 42.0f + (float)((k - first) * 16u);
+            int on = k == at;
+            uint8_t cat;
+            const char *nm = sy_app_entry(ids[k], &cat);
+            char up[17];
+            uint32_t j;
+            for (j = 0; nm && nm[j] && j < 16u; j++)    /* (the starter sounds' names are lowercase in their table; */
+                up[j] = ids[k] < SY_USER && nm[j] >= 'a' && nm[j] <= 'z' ? (char)(nm[j] - 32) : nm[j];   /* a user's v2 stays) */
+            up[j] = 0;
+            lk_text(96.0f, y, on ? T8B : T8, lk_fit(t, sizeof t, nm ? up : "?", on ? T8B : T8, 20, 86.0f),
+                    on ? sk.ink : sk.mid, sk.ground, 20, 0);
+            if (ids[k] >= SY_USER)
+                sp_fix(sp_put(t, "U"), (int32_t)(ids[k] - SY_USER) + 1, 0u, 0);
+            else
+                sp_put(t, ids[k] + 1u < SY_NFACT ? "ST" : "");
+            lk_text(186.0f, y + 1.0f, T7, t, ids[k] >= SY_USER ? sk.mid : sk.line, sk.ground, 0, 0);
+            if (on)
+                sy = y;
         }
-        cv_text_on(WX + 89, y + CAP_IN(XS, 16), &AF_XS, nm ? up : "?", on ? sk.text : sk.text2, bg);
-        if (ids[k] >= SY_USER)
-            sp_fix(sp_put(t, "USER "), (int32_t)(ids[k] - SY_USER) + 1, 0u, 0);
-        else
-            sp_put(t, ids[k] + 1u < SY_NFACT ? "STARTER" : "");
-        cv_text_r(WX + 218, y + CAP_IN(XS, 16), &AF_XS, t, on ? sk.label : sk.faint, bg);
+        if (at < n) {                               /* the one playing: outlined, its small bloom */
+            uint32_t i;
+            float vx = 0.0f, vy = -1.0f, cs = sy_cos2pi(1.0f / 60.0f), sn = sy_sin2pi(1.0f / 60.0f), px = 0.0f, py = 0.0f;
+            lk_frame(90.5f, sy - 3.5f, 141.0f, 16.0f, 1.0f, ui_ink(ui_hot(1)));
+            for (i = 0; i <= 60u; i++) {
+                float r = 4.0f + 2.0f * ui_boot_f((float)i / 60.0f, 1), bx = 221.0f + r * vx, by = sy + 4.5f + r * vy, nx;
+                if (i)
+                    lk_wu(px, py, bx, by, 1.0f, sk.ink);
+                px = bx;
+                py = by;
+                nx = vx * cs - vy * sn;
+                vy = vx * sn + vy * cs;
+                vx = nx;
+            }
+        }
     }
-    cv_text_on(WX + 78, WY + 95, &AF_XS, "OCT- HOLD: DEL \xB7 SAVE+OCT-: UNDO", sk.faint, sk.display);
+    x = 96.0f;
+    for (k = 0; k < 3u; k++)
+        x = lk_chip(x, 20.0f, BANK[k], k == ui.br_bank % 3u);
+    lk_text(8.0f, 196.0f, T7, "SAVE: NAME IT \xB7 SAVE TWICE OR HOME: BACK", sk.mid, sk.ground, 20, 0);
+    lk_text(8.0f, 206.0f, T7, "OCT- HELD 3 S: DELETE THE USER PRESET PLAYING", sk.mid, sk.ground, 20, 0);
+    ui_H(0, 6.0f, 42.0f + 13.0f * (float)(ui.br_cat % 9u) - 1.0f);
+    ui_H(1, 83.0f, sy - 1.0f);
+    ui_H(2, 82.0f, 21.0f);
 }
