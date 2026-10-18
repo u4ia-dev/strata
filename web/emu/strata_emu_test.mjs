@@ -1200,6 +1200,15 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check("the same input twice: the same sound, bit for bit", ha === hb);
 }
 {
+  const c = await boot();                               // (V0.66: at most two note-ons a block; none lost)
+  play(c, 0.1);
+  for (const n of [48, 52, 55, 59, 62, 65, 69, 72]) c.web_midi(0x90, n, 90);
+  play(c, 0.05);
+  const v = c.web_test_voices();
+  for (const n of [48, 52, 55, 59, 62, 65, 69, 72]) c.web_midi(0x80, n, 0);
+  check(`eight notes at once over MIDI: all eight sound (${v}), started two a block`, v === 8);
+}
+{
   const ROW = ["AUDIO", "CPU", "SCREEN", "KEYS", "TABLES", "FLASH", "STACKS", "RUN"];
   const over = Array.from({ length: 16 }, (_, i) => ex.web_test_bench_fit(i));   // (the emulator draws no BENCH)
   const worst = over.indexOf(Math.max(...over));

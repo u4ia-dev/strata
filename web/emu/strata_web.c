@@ -149,6 +149,7 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_ui_fx.c"
 #include "../../firmware/src/sy_ui_save.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
+#define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
 
 #undef __attribute__
@@ -183,6 +184,7 @@ static void web_ms(void)
     }
     if (!web_booted || (int32_t)(fm1_ms - web_boot_ms) < 0)
         return;
+    sy_keys_tick();                                       /* (TIMER5's: the keys while they only play) */
     sy_app_ms();
     if (fm1_ms - web_last_frame >= 15u) {                 /* a frame: ~60 a second, as the FM-1's main loop */
         web_last_frame = fm1_ms;
@@ -418,8 +420,14 @@ EXPORT int32_t web_test_bench_fit(uint32_t i)
     sy_bench.spare_hit = 4u;
     sy_bench.run = (uint8_t)(i >= 8u ? 0u : 2u);
     sy_bench.run_int_us = sy_bench.run_flt_us = 99999u;
-    ui_bench_row(i % 8u, t);
-    w = text_w(&AF_XS, t) - (int32_t)UI_BENCH_ROOM;
+    sy_bench.gap_save_max_us = 999999u;
+    w = -1000;
+    for (sy_bench.frame_max_page = 0; sy_bench.frame_max_page < UI_NPG; sy_bench.frame_max_page++) {
+        int32_t wp;                               /* (SCREEN names the longest frame's section: every page's) */
+        ui_bench_row(i % 8u, t);
+        wp = text_w(&AF_XS, t) - (int32_t)UI_BENCH_ROOM;
+        w = wp > w ? wp : w;
+    }
     sy_bench = was;
     sy_g.shed = shed;
     return w;
