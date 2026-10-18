@@ -1,0 +1,892 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2026 brandonmbarone -->
+<!-- STRATA's hardware test, run from the computer (docs/FLASHING.md section 4): what can be measured from outside runs
+     by itself, what needs the panel is a guided step the page checks. It plays notes and sends controllers and
+     program changes over USB MIDI (channel 1, no SysEx), reads the console's read-only commands (status, bench, inp,
+     crash, memr: the RAM addresses of this very app, make_flasher.py's META), and listens to the FM-1's USB audio.
+     It writes nothing to the FM-1's flash and sends nothing that updates or restarts it. Served beside the flasher
+     (make_flasher.py, serve.py): http://127.0.0.1:8000/test.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata hardware test</title>
+<style>
+:root { --bg: #f4f2ec; --card: #fffdf7; --fg: #1d1b17; --mute: #676052; --line: #d9d3c5; --acc: #0d6b66;
+        --acc-ink: #ffffff; --bad: #a3361f; --warn: #8a5a00; --ok: #2d6a2f; --chip: #ece7da; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131210; --card: #1c1a16; --fg: #ece7dc; --mute: #a69e8e; --line: #36322a; --acc: #4db0a8;
+          --acc-ink: #0e1413; --bad: #e57c63; --warn: #e0b052; --ok: #7cc47f; --chip: #29261f; color-scheme: dark; }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 14px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0; display: flex; gap: 8px; align-items: baseline; text-wrap: balance; }
+h2 .n { color: var(--acc); font-variant-numeric: tabular-nums; }
+h3 { font-size: 15px; margin: 0; }
+p, li { margin: 0; color: var(--mute); max-width: 70ch; }
+ol, ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+b, strong { color: var(--fg); }
+code { font: 13px ui-monospace, Consolas, monospace; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid;
+          gap: 10px; min-width: 0; }
+.step { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+label { display: flex; gap: 6px; align-items: center; color: var(--mute); min-width: 0; }
+select, input[type=text] { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+                           background: var(--bg); color: var(--fg); max-width: 100%; min-width: 0; }
+input[type=text] { flex: 1 1 220px; }
+button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+         color: var(--fg); cursor: pointer; }
+button.primary { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); }
+button.small { padding: 4px 10px; font-size: 13px; }
+button:disabled { opacity: .45; cursor: default; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12.5px;
+        font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); } .chip.warn { color: var(--warn); }
+.chip.run { color: var(--acc); } .chip.off { color: var(--mute); }
+.state { color: var(--fg); font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--mute); font-weight: 600; font-size: 12.5px; letter-spacing: .02em; }
+td.detail { color: var(--mute); }
+pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+      overflow: auto; max-height: 420px; font: 12.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+      word-break: break-word; }
+.tasks { list-style: none; padding: 0; }
+.tasks li { display: flex; gap: 8px; align-items: baseline; }
+.tasks li::before { content: "○"; color: var(--mute); }
+.tasks li.done::before { content: "●"; color: var(--ok); }
+.tasks li.bad::before { content: "✕"; color: var(--bad); }
+.warn-text { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Strata hardware test</h1>
+  <p>Runs the tests of <code>FLASHING.md</code> section 4 that the computer can do by itself, and guides the ones that
+    need the panel, checking the result where it can. It plays notes and sends controllers and program changes over USB
+    MIDI, reads Strata's console, and can listen to the FM-1's USB audio. <b>It writes nothing to the FM-1's flash</b>
+    and sends no update or backup-mode command.</p>
+  <p id="facts" class="state"></p>
+
+  <section>
+    <h2><span class="n">0</span>Before you start</h2>
+    <ul>
+      <li>Close the flasher's tab, M-Upgrade, DAWs and other MIDI apps: one app at a time can open the FM-1's ports.</li>
+      <li>On the FM-1, SETTINGS (HOME held 5 s) &gt; MIDI: <b>CHANNEL</b> ANY or 1, and <b>PROGRAM</b> ON (KNOB 4), so the
+        page can switch sounds. With PROGRAM off the load test runs on the sound playing only.</li>
+      <li>The page changes the sound playing (it loads the starter sounds and moves the cutoff); it puts your preset
+        back at the end if it came from a user slot. <b>SAVE anything you want to keep first.</b></li>
+      <li>MASTER at a comfortable level: the load test plays chords of up to eight notes.</li>
+    </ul>
+    <label><input type="checkbox" id="ready"> Done: other apps closed, my sound saved</label>
+  </section>
+
+  <section>
+    <h2><span class="n">1</span>Connect</h2>
+    <div class="row">
+      <button id="c-midi" class="primary" disabled>Connect MIDI</button>
+      <span id="s-midi" class="state">not connected</span>
+    </div>
+    <div class="row">
+      <button id="c-con" class="primary" disabled>Connect the console</button>
+      <span id="s-con" class="state">not connected</span>
+    </div>
+    <div class="row">
+      <button id="c-audio" disabled>Listen to its USB audio (optional)</button>
+      <select id="audio-dev" hidden></select>
+      <span id="s-audio" class="state">off: the gaps in the sound are not checked</span>
+    </div>
+    <p id="s-build" class="state"></p>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>Automatic tests</h2>
+    <p>About two minutes. Hands off the FM-1 while it runs; listen for clicks and dropouts.</p>
+    <div class="row">
+      <button id="auto" class="primary" disabled>Run the automatic tests</button>
+      <button id="stop" disabled>Stop</button>
+      <span id="s-auto" class="state"></span>
+    </div>
+    <div class="scroll"><table id="t-auto"><thead><tr><th>Test</th><th>Result</th><th>Detail</th></tr></thead>
+      <tbody></tbody></table></div>
+    <div class="scroll" id="load-wrap" hidden><table id="t-load"><thead><tr><th>Sound</th><th>Notes</th><th>Voices</th>
+      <th>CPU</th><th>Guard</th><th>Shed</th><th>Late</th><th>Longest half so far</th><th>Audio gaps</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>Guided steps</h2>
+    <p>Each step says what to do on the panel; the page watches the FM-1 and ticks what it saw. Mark a step when it is
+      done, or say it did not work.</p>
+
+    <div class="step" id="g-fx">
+      <h3>A. The five fixed effects' knobs (item 16)</h3>
+      <p>For each of FX FILTER, BITCRUSH, TREMOLO, RING MOD and TAPE: on FX, KNOB 1 to the type, <b>FX + OCT+</b> adds
+        it, <b>FX twice</b> opens it; then turn any of its knobs while the note plays. The page checks that the sound's
+        value follows the knob (V0.6: it stayed where the sound loaded it).</p>
+      <ul class="tasks" id="fx-tasks"></ul>
+      <div class="row">
+        <span>RING MOD's header shows its name alone:</span>
+        <button class="small" data-yn="ringhdr" data-v="yes">Yes</button>
+        <button class="small" data-yn="ringhdr" data-v="no">No: something after it</button>
+      </div>
+      <div class="row">
+        <button data-start="fx" disabled>Start</button>
+        <button data-done="fx" disabled>Done</button>
+        <button data-fail="fx" disabled>It did not work</button>
+        <span class="state" data-status="fx"></span>
+      </div>
+    </div>
+
+    <div class="step" id="g-chain">
+      <h3>B. The chain (item 11)</h3>
+      <p>On FX's chain view, while the note plays. Listen at each step: a move dips the effects for 3 ms, an add or a
+        take-out should be heard only as the effect coming or going.</p>
+      <ul class="tasks" id="chain-tasks"></ul>
+      <div class="row">
+        <span>Clicks heard:</span>
+        <button class="small" data-yn="clicks" data-v="none">None</button>
+        <button class="small" data-yn="clicks" data-v="some">Some</button>
+      </div>
+      <div class="row">
+        <button data-start="chain" disabled>Start</button>
+        <button data-done="chain" disabled>Done</button>
+        <button data-fail="chain" disabled>It did not work</button>
+        <span class="state" data-status="chain"></span>
+      </div>
+    </div>
+
+    <div class="step" id="g-panel">
+      <h3>C. The encoders and keys (item 5)</h3>
+      <p>Press Start, then turn each of the seven encoders both ways, slowly and quickly, and press every key once (on
+        a page where the keys play), then Done.</p>
+      <div class="row">
+        <button data-start="panel" disabled>Start</button>
+        <button data-done="panel" disabled>Done</button>
+        <span class="state" data-status="panel"></span>
+      </div>
+    </div>
+
+    <div class="step" id="g-draw">
+      <h3>D. The keys and the screen while it draws (items 15 and 19)</h3>
+      <p>First SETTINGS (HOME held 5 s), ALGORITHM to BENCH, and turn <b>KNOB 2</b>: it clears the peaks. Then press
+        Start and for 25 s flick through pages (SELECT, ALGORITHM, the family buttons) and turn knobs on graph pages (an
+        envelope, an LFO, the EQ, the FX FILTER, the chain view) while the page holds a chord. The page sends nothing
+        to the console meanwhile, so it does not slow the FM-1's main loop.</p>
+      <div class="row">
+        <button data-start="draw" disabled>Start</button>
+        <button data-fail="draw" disabled>It felt slow</button>
+        <span class="state" data-status="draw"></span>
+      </div>
+    </div>
+
+    <div class="step" id="g-boot">
+      <h3>E. Switching off and on (item 1)</h3>
+      <p>Press Start, switch the FM-1 off, wait two seconds, switch it on. The page reconnects and reads how the start
+        went. Do it three times.</p>
+      <div class="row">
+        <button data-start="boot" disabled>Start</button>
+        <button data-fail="boot" disabled>It did not start</button>
+        <span class="state" data-status="boot"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>Listen and look</h2>
+    <p>What only ears and eyes can judge. Mark each and add a note where something was odd.</p>
+    <div class="row"><button id="play-all" disabled>Play each starter sound</button>
+      <span class="state" id="s-play"></span></div>
+    <div class="scroll"><table id="t-look"><thead><tr><th>Check</th><th>Result</th><th>Note</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>The report</h2>
+    <p>Copy it into the conversation when you are done (or save it as a file).</p>
+    <div class="row">
+      <button id="copy" class="primary">Copy the report</button>
+      <button id="save">Save it as a file</button>
+    </div>
+    <pre id="report"></pre>
+  </section>
+</main>
+<script>
+"use strict";
+const META = /*META*/;
+const $ = (id) => document.getElementById(id);
+const FAST = /[?&]fast(&|$)/.test(location.search) ? 10 : 1;                 // (test_test.mjs: every wait a tenth)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms / FAST));
+const T0 = Date.now();
+const stamp = () => ((Date.now() - T0) / 1000).toFixed(1).padStart(6);
+
+// ---------------------------------------------------------------------------------------------- the build's facts
+const P = META.params.map(([name, sec, lo, hi, flags, cc], id) => ({ id, name, sec, lo, hi, flags, cc }));
+const SECS = META.secs, SEC_DRIVE = SECS.indexOf("DRIVE");
+const find = (sec, name) => P.find((p) => SECS[p.sec] === sec && p.name === name);
+const SMOOTH = (p) => (p.flags & META.flags.smooth) !== 0;
+const CHAIN = P.filter((p) => /^CHAIN [1-8]$/.test(p.name)).map((p) => p.id);         // FX CHAIN: CHAIN 1 .. 8
+const instSec = (inst) => SEC_DRIVE + inst;                                           // sy_param.c: SEC_DRIVE + FXI
+const instName = (inst) => SECS[instSec(inst)] || `#${inst}`;
+const typeOf = (secName) => secName.replace(/ 2$/, "");
+const onOf = (inst) => P.find((p) => p.sec === instSec(inst) && p.name === "ON");
+const norm = (p, v) => Math.fround(Math.fround(v - p.lo) / Math.fround(p.hi - p.lo));   // sy_param.c sp_norm_of
+const FIXED = ["FX FILTER", "BITCRUSH", "TREMOLO", "RING MOD", "TAPE"];               // the modules V0.6 left stuck
+const HI = P.filter((p) => p.id >= 256 && SMOOTH(p));                                // .. their values, from id 256 up
+const CUT = find("FILTER", "CUTOFF");
+const ALLOWED = /^(|status|bench|bench run|inp|crash|memr 0x[0-9A-F]{8} \d{1,3})$/;    // read-only, nothing else
+$("facts").textContent = `For ${META.version} (${META.product}), package SHA-256 ${META.sha256.slice(0, 16)}…`;
+
+// ------------------------------------------------------------------------------------------------- the report
+const R = { started: new Date().toISOString(), device: [], auto: [], load: [], guided: {}, look: {}, log: [] };
+function log(t) { R.log.push(`${stamp()}  ${t}`); report(); }
+function report() {
+  const L = [];
+  L.push(`Strata hardware test (test.html), ${R.started}`);
+  L.push(`build ${META.version} ${META.product} sha256 ${META.sha256}`);
+  L.push(`browser ${navigator.userAgent}`);
+  for (const d of R.device) L.push(d);
+  L.push("", "== automatic");
+  for (const a of R.auto) L.push(`${a.result.toUpperCase().padEnd(5)} ${a.name}: ${a.detail}`);
+  if (R.load.length) {
+    L.push("", "== load (sound, notes: voices, cpu %, guard level+fx_lo, shed, late, half_max_us, audio gaps)");
+    for (const r of R.load) L.push(`${r.sound.padEnd(16)} ${String(r.notes).padStart(2)}: ${r.voices} v, ${r.cpu} %, ` +
+      `guard ${r.guard}, shed +${r.shed}, late +${r.late}, half_max ${r.half_max} us, gaps ${r.gaps}`);
+  }
+  L.push("", "== guided");
+  for (const [k, g] of Object.entries(R.guided)) L.push(`${g.result.toUpperCase().padEnd(5)} ${k}: ${g.detail}`);
+  L.push("", "== listen and look");
+  for (const [k, v] of Object.entries(R.look)) L.push(`${(v.result || "-").toUpperCase().padEnd(7)} ${k}${v.note ? ": " + v.note : ""}`);
+  L.push("", "== log", ...R.log.slice(-400));
+  $("report").textContent = L.join("\n");
+}
+
+// ----------------------------------------------------------------------------------------------------- MIDI
+let midi = null;
+const held = new Set();
+function output() {
+  if (!midi) return null;
+  const outs = [...midi.outputs.values()].filter((p) => p.state === "connected");
+  return outs.find((p) => /felucca|fm-1/i.test(p.name || "")) || null;
+}
+function send(bytes) {
+  const o = output();
+  if (!o) throw new Error("the FM-1's MIDI port is not there");
+  o.send(bytes);
+}
+function noteOn(n, v = 100) { send([0x90, n, v]); held.add(n); }
+function noteOff(n) { try { send([0x80, n, 0]); } catch (_) {} held.delete(n); }
+function allOff() {
+  for (const n of [...held]) noteOff(n);
+  try { send([0xB0, 123, 0]); } catch (_) {}                                         // (all notes off)
+}
+const cc = (n, v) => send([0xB0, n, v]);
+const program = (k) => send([0xC0, k & 127]);
+window.addEventListener("pagehide", allOff);
+
+// -------------------------------------------------------------------------------------------- the console
+const con = {
+  port: null, reader: null, writer: null, buf: "", alive: false, queue: Promise.resolve(), lost: null,
+  async open(port) {
+    this.port = port;
+    await port.open({ baudRate: 115200 });
+    this.reader = port.readable.getReader();
+    this.writer = port.writable.getWriter();
+    this.alive = true;
+    this.buf = "";
+    const dec = new TextDecoder();
+    (async () => {
+      while (this.alive) {
+        const r = await this.reader.read().catch(() => ({ done: true }));
+        if (r.done) break;
+        this.buf += dec.decode(r.value, { stream: true });
+        if (this.buf.length > 200000) this.buf = this.buf.slice(-100000);
+      }
+      if (this.alive) { this.alive = false; await this.drop(); if (this.lost) this.lost(); }   // (unplugged, off)
+    })();
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+    await sleep(400);
+    await this.cmd("");
+  },
+  async close() {
+    this.alive = false;
+    try { await this.reader.cancel(); } catch (_) {}
+    await this.drop();
+  },
+  async drop() {                                                                       // (so the port opens again)
+    try { this.reader.releaseLock(); } catch (_) {}
+    try { this.writer.releaseLock(); } catch (_) {}
+    try { await this.port.close(); } catch (_) {}
+  },
+  cmd(line, ms = 4000) {                                                               // one at a time, in order
+    if (!ALLOWED.test(line)) return Promise.reject(new Error(`not a command this page sends: ${line}`));
+    const run = async () => {
+      if (!this.alive) throw new Error("the console is not connected");
+      const start = this.buf.length;
+      await this.writer.write(new TextEncoder().encode(line + "\r"));
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        const t = this.buf.slice(start), i = t.indexOf("\r\n"), j = t.lastIndexOf("\r\n> ");
+        if (i >= 0 && j >= i && t.endsWith("> ")) return t.slice(i + 2, j + 2);       // (the echo, then the reply)
+        await sleep(15);
+      }
+      throw new Error(`no answer to "${line}"`);
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => {});
+    return p;
+  },
+  async kv(line) {
+    const t = await this.cmd(line), m = {};
+    for (const ln of t.split(/\r?\n/)) { const k = ln.match(/^([a-z_0-9]+) (.*)$/); if (k) m[k[1]] = k[2].trim(); }
+    m._text = t;
+    return m;
+  },
+  async memr(addr, n) {                                                                // RAM or the app's bytes
+    const out = new Uint8Array(n);
+    for (let off = 0; off < n; off += 256) {
+      const len = Math.min(256, n - off), a = addr + off;
+      let got = null;
+      for (let tries = 0; tries < 3 && !got; tries++) {
+        const t = await this.cmd(`memr 0x${a.toString(16).toUpperCase().padStart(8, "0")} ${len}`);
+        const bytes = [];
+        for (const m of t.matchAll(/^([0-9A-F]{8}):((?: [0-9A-F]{2})+)/gm))
+          for (const h of m[2].trim().split(" ")) bytes.push(parseInt(h, 16));
+        if (bytes.length === len) got = bytes;                                         // (a reply cut short: again)
+      }
+      if (!got) throw new Error(`memr ${a.toString(16)} ${len}: a short reply`);
+      out.set(got, off);
+    }
+    return out;
+  },
+  async values(id0, n) {                                                               // the patch's stored values
+    const b = await this.memr(META.addr.sy_patch + 2 * id0, 2 * n), d = new DataView(b.buffer);
+    return Array.from({ length: n }, (_, k) => d.getInt16(2 * k, true));
+  },
+  async norms(id0, n) {                                                                // .. as the audio side has them
+    const b = await this.memr(META.addr.sp_n + 4 * id0, 4 * n), d = new DataView(b.buffer);
+    return Array.from({ length: n }, (_, k) => d.getFloat32(4 * k, true));
+  },
+};
+let sameBuild = false;
+const num = (m, k) => (m[k] === undefined ? NaN : Number(m[k]));
+
+async function findPort() {                                                            // a port this page was given
+  const ports = await navigator.serial.getPorts();
+  return ports.find((p) => { const i = p.getInfo(); return i.usbVendorId === 0x1209 && i.usbProductId === 0x0001; }) || null;
+}
+async function reconnect(ms) {                                                         // after the FM-1 started again
+  const end = Date.now() + ms / FAST;
+  while (Date.now() < end) {
+    const port = await findPort();
+    if (port) {
+      try { await con.open(port); return true; } catch (_) { try { await port.close(); } catch (__) {} }
+    }
+    await sleep(500);
+  }
+  return false;
+}
+
+// ----------------------------------------------------------------------------------------------- USB audio
+const audio = { ctx: null, gaps: 0, peak: 0, on: false };
+const TAP = `class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.run = 0; this.pk = 0; this.n = 0; this.loud = 0; }
+  process(ins) {
+    const ch = ins[0];
+    if (!ch || !ch.length) return true;
+    const l = ch[0], r = ch[1] || ch[0];
+    for (let i = 0; i < l.length; i++) {
+      const a = Math.max(Math.abs(l[i]), Math.abs(r[i]));
+      if (a > this.pk) this.pk = a;
+      if (a < 1e-7) this.run++;
+      else { if (this.run >= 48 && this.loud > 0.01) this.port.postMessage({ gap: this.run }); this.run = 0; }
+      if (++this.n === 1024) { this.port.postMessage({ peak: this.pk }); this.loud = this.pk; this.pk = 0; this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("tap", Tap);`;
+async function audioStart(deviceId) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId }, channelCount: 2,
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  audio.ctx = new AudioContext();
+  await audio.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([TAP], { type: "text/javascript" })));
+  const node = new AudioWorkletNode(audio.ctx, "tap", { numberOfInputs: 1, numberOfOutputs: 0 });
+  node.port.onmessage = (e) => {
+    if (e.data.gap) { audio.gaps++; log(`audio: a gap of ${e.data.gap} samples (${(e.data.gap / audio.ctx.sampleRate * 1000).toFixed(1)} ms) in the sound`); }
+    if (e.data.peak !== undefined) audio.peak = Math.max(audio.peak, e.data.peak);
+  };
+  audio.ctx.createMediaStreamSource(stream).connect(node);
+  audio.on = true;
+}
+const audioMark = () => ({ gaps: audio.gaps, t: Date.now(), peak: (audio.peak = 0) });
+
+// ---------------------------------------------------------------------------------------------- the results UI
+const CHIP = { ok: "ok", fail: "bad", warn: "warn", info: "off", skip: "off", run: "run" };
+function chip(result) { return `<span class="chip ${CHIP[result] || "off"}">${result.toUpperCase()}</span>`; }
+function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]); }
+function autoRow(name, result, detail) {
+  R.auto.push({ name, result, detail });
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${esc(name)}</td><td>${chip(result)}</td><td class="detail">${esc(detail)}</td>`;
+  $("t-auto").tBodies[0].append(tr);
+  report();
+}
+function loadRow(r) {
+  R.load.push(r);
+  $("load-wrap").hidden = false;
+  const tr = document.createElement("tr");
+  tr.innerHTML = [r.sound, r.notes, r.voices, `${r.cpu} %`, r.guard, `+${r.shed}`, `+${r.late}`, `${(r.half_max / 1000).toFixed(2)} ms`,
+    audio.on ? r.gaps : "–"].map((x) => `<td>${esc(x)}</td>`).join("");
+  $("t-load").tBodies[0].append(tr);
+  report();
+}
+function guided(key, result, detail) {
+  R.guided[key] = { result, detail };
+  const s = document.querySelector(`[data-status="${key}"]`);
+  if (s) s.innerHTML = `${chip(result)} ${esc(detail)}`;
+  report();
+}
+
+// -------------------------------------------------------------------------------------------- connect, gating
+let busy = false, stopAsked = false;
+function gate() {
+  const ready = $("ready").checked, m = !!output(), c = con.alive;
+  $("c-midi").disabled = !ready || busy;
+  $("c-con").disabled = !ready || busy || !navigator.serial;
+  $("c-audio").disabled = !ready || busy || audio.on;
+  $("auto").disabled = busy || !m || !c;
+  $("stop").disabled = !busy;
+  $("play-all").disabled = busy || !m;
+  for (const b of document.querySelectorAll("[data-start]")) {
+    const k = b.dataset.start, need = k === "panel" ? c : k === "boot" ? c : m && c;
+    b.disabled = busy || !need || !!running[k];
+  }
+  for (const b of document.querySelectorAll("[data-done],[data-fail]")) b.disabled = !running[b.dataset.done || b.dataset.fail];
+}
+$("ready").addEventListener("change", gate);
+
+$("c-midi").addEventListener("click", async () => {
+  try {
+    if (!navigator.requestMIDIAccess) throw new Error("this browser has no Web MIDI: use Chrome or Edge");
+    midi = await navigator.requestMIDIAccess({ sysex: false });
+    const show = () => {
+      const o = output();
+      $("s-midi").textContent = o ? `"${o.name}"` : "no FM-1 port: is it on and plugged in?";
+      gate();
+    };
+    midi.onstatechange = (e) => { log(`MIDI ${e.port.type} "${e.port.name}" ${e.port.state}`); show(); };
+    show();
+    if (output()) log(`MIDI: "${output().name}"`);
+  } catch (e) { $("s-midi").textContent = `${e.name || "error"}: ${e.message}`; }
+});
+
+async function preflight() {
+  R.device = [];
+  const st = await con.kv("status"), first = st._text.split(/\r?\n/)[0] || "";
+  R.device.push(`device: ${first}`, `sound: ${st.sound || "?"} (user slot ${st.user_slot})`);
+  const m = first.match(/^strata (.+) \((FM-1_\d+)\)/);
+  let same = !!m && m[1] === META.version && m[2] === META.product;
+  if (same) {
+    for (const [a, hex] of META.fingerprint) {
+      const b = await con.memr(a, 16);
+      if (Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("") !== hex) same = false;
+    }
+  }
+  sameBuild = same;
+  $("s-build").innerHTML = same ? `${chip("ok")} the FM-1 runs this very build: the RAM checks are on` :
+    `${chip("warn")} the FM-1 runs ${esc(m ? m[1] : "something else")}: the checks that read its RAM are off (they need this page's build)`;
+  R.device.push(same ? "build: the FM-1 runs this page's build (fingerprint matched)" : `build: NOT this page's (${first})`);
+  report();
+  gate();
+}
+$("c-con").addEventListener("click", async () => {
+  try {
+    const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+    if (con.alive) await con.close();
+    await con.open(port);
+    con.lost = () => { $("s-con").textContent = "lost (switched off?)"; log("console: lost"); gate(); };
+    $("s-con").textContent = "connected";
+    log("console: connected");
+    await preflight();
+  } catch (e) { $("s-con").textContent = `${e.name || "error"}: ${e.message}`; gate(); }
+});
+$("c-audio").addEventListener("click", async () => {
+  try {
+    const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });                 // (the names, once allowed)
+    tmp.getTracks().forEach((t) => t.stop());
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
+    const sel = $("audio-dev");
+    sel.innerHTML = "";
+    for (const d of devs) sel.add(new Option(d.label || d.deviceId, d.deviceId));
+    const best = devs.find((d) => /felucca|fm-1/i.test(d.label));
+    if (best) sel.value = best.deviceId;
+    sel.hidden = false;
+    const go = async () => {
+      if (audio.ctx) { await audio.ctx.close(); audio.ctx = null; }
+      await audioStart(sel.value);
+      $("s-audio").textContent = `listening to "${sel.selectedOptions[0].text}"`;
+      log(`audio: "${sel.selectedOptions[0].text}", ${audio.ctx.sampleRate} Hz`);
+      gate();
+    };
+    sel.onchange = go;
+    await go();
+  } catch (e) { $("s-audio").textContent = `${e.name || "error"}: ${e.message}`; }
+});
+
+// ------------------------------------------------------------------------------------------ automatic tests
+async function waitFor(fn, ms, every = 150) {
+  const end = Date.now() + ms / FAST;
+  while (Date.now() < end) { const v = await fn(); if (v) return v; await sleep(every); }
+  return null;
+}
+async function soundName() { return (await con.kv("status")).sound || ""; }
+
+const AUTO = [
+  ["The FM-1 starts clean", async () => {
+    const st = await con.kv("status"), cr = await con.cmd("crash");
+    const crash = !/no crash record/.test(cr);
+    const bad = num(st, "safe_start") !== 0 || num(st, "bootguard_failed") !== 0;
+    return [crash || bad ? "warn" : "ok", `${crash ? "a crash record: " + cr.replace(/\s+/g, " ").trim() : "no crash record"}; ` +
+      `safe start ${st.safe_start}, boot guard ${st.bootguard_failed}, up ${(num(st, "uptime_ms") / 1000).toFixed(0)} s`];
+  }],
+  ["The spare SRAM untouched (item 18)", async () => {
+    const b = await con.kv("bench");
+    if (b.spare_bytes === undefined) return ["skip", "this build does not watch it"];
+    return [num(b, "spare_changed_bytes") === 0 ? "ok" : "fail", `${b.spare_changed_bytes} of ${b.spare_bytes} bytes written since the power-on`];
+  }],
+  ["A MIDI note plays and ends (item 8)", async () => {
+    allOff();
+    await sleep(300);
+    const m = audioMark();
+    noteOn(60);
+    const on = await waitFor(async () => num(await con.kv("status"), "voices") >= 1, 1500);
+    await sleep(500);
+    const heard = audio.peak;
+    noteOff(60);
+    const off = await waitFor(async () => num(await con.kv("status"), "voices") === 0, 6000, 300);
+    const a = audio.on ? `; USB audio ${heard > 0.003 ? "carried it (peak " + heard.toFixed(3) + ")" : "SILENT"}, gaps ${audio.gaps - m.gaps}` : "";
+    if (!on) return ["fail", "no voice started: SETTINGS > MIDI > CHANNEL must be ANY or 1"];
+    return [off && (!audio.on || heard > 0.003) ? "ok" : "fail", `a voice on, then ${off ? "off" : "STILL ON after 6 s"}${a}`];
+  }],
+  ["A controller glides: CC 74, the cutoff (item 8)", async () => {
+    if (!sameBuild) return ["skip", "needs this page's build (RAM reads)"];
+    const [v0] = await con.values(CUT.id, 1), d2 = v0 > (CUT.lo + CUT.hi) / 2 ? 20 : 110;
+    const want = Math.max(CUT.lo, Math.min(CUT.hi, CUT.lo + Math.trunc((CUT.hi - CUT.lo) * d2 / 127)));
+    const t0 = Date.now();
+    cc(74, d2);
+    const got = await waitFor(async () => {
+      const [v] = await con.values(CUT.id, 1), [n] = await con.norms(CUT.id, 1);
+      return v === want && n === norm(CUT, want) ? Date.now() - t0 : 0;
+    }, 1500, 40);
+    cc(74, Math.round((v0 - CUT.lo) * 127 / (CUT.hi - CUT.lo)));
+    await sleep(100);
+    const [back] = await con.values(CUT.id, 1);
+    return [got ? "ok" : "fail", got ? `stored ${want}, the sound there within ${got} ms; put back to ${back} (was ${v0})`
+      : `the stored value or the sound's did not reach ${want}`];
+  }],
+  ["Program change (PROGRAM on)", async () => {
+    program(0);
+    await sleep(900);
+    const a = await soundName();
+    program(1);
+    await sleep(900);
+    const b = await soundName();
+    pcOn = a !== b;
+    return [pcOn ? "ok" : "warn", pcOn ? `0: ${a}, 1: ${b}` : "the sound did not change: PROGRAM is off (SETTINGS > MIDI, KNOB 4); the load test runs on the sound playing"];
+  }],
+  ["The load: 1, 2, 4 and 8 notes on each starter sound (item 3)", async () => {
+    const CH = { 1: [60], 2: [60, 67], 4: [48, 60, 64, 67], 8: [36, 48, 55, 60, 64, 67, 72, 76] };
+    let late = 0, gaps = 0, maxCpu = 0, rows = 0;
+    for (let k = 0; k < (pcOn ? 8 : 1) && !stopAsked; k++) {
+      if (pcOn) { program(k); await sleep(1000); }
+      const sound = await soundName();
+      starters[k] = sound;
+      for (const n of [1, 2, 4, 8]) {
+        if (stopAsked) break;
+        const s0 = await con.kv("status"), m = audioMark();
+        for (const x of CH[n]) noteOn(x, 96);
+        await sleep(2000);
+        const s1 = await con.kv("status");
+        allOff();
+        const r = { sound, notes: n, voices: num(s1, "voices"), cpu: num(s1, "cpu_pct"),
+                    guard: `${s1.guard_level}+${s1.guard_fx_lo}`, shed: num(s1, "voices_shed") - num(s0, "voices_shed"),
+                    late: num(s1, "halves_late") - num(s0, "halves_late"), half_max: num(s1, "half_max_us"),
+                    gaps: audio.gaps - m.gaps };
+        loadRow(r);
+        late += r.late; gaps += r.gaps; maxCpu = Math.max(maxCpu, r.cpu); rows++;
+        await sleep(700);
+      }
+    }
+    return [late || gaps ? "warn" : "ok", `${rows} chords: ${late} late halves (V0.5's load test: ${META.v05.halves_late}), ` +
+      `${audio.on ? gaps + " gaps in the USB audio, " : ""}CPU at most ${maxCpu} %`];
+  }],
+  ["BENCH RUN: the core's speed (item 4)", async () => {
+    await con.cmd("bench run");
+    const b = await waitFor(async () => { const x = await con.kv("bench"); return num(x, "run") === 2 ? x : null; }, 4000, 400);
+    if (!b) return ["fail", "RUN did not finish"];
+    const ri = META.run.int_insns * META.run.int_loops / num(b, "run_int_us"), rf = META.run.flt_insns * META.run.flt_loops / num(b, "run_flt_us");
+    const v5i = META.run.int_insns * META.run.int_loops / META.run.v05_int_us, v5f = META.run.flt_insns * META.run.flt_loops / META.run.v05_flt_us;
+    const near = Math.abs(ri / v5i - 1) < 0.05 && Math.abs(rf / v5f - 1) < 0.05;
+    return [near ? "ok" : "warn", `integer ${b.run_int_us} us = ${ri.toFixed(0)} instructions a us, float ${b.run_flt_us} us = ` +
+      `${rf.toFixed(0)} (V0.5: ${v5i.toFixed(0)} and ${v5f.toFixed(0)}, the same loops)`];
+  }],
+  ["The stacks (item 17)", async () => {
+    const b = await con.kv("bench"), main = num(b, "stack_main_used"), size = num(b, "stack_main_size");
+    return [main <= 8192 ? "ok" : main < size ? "warn" : "fail", `main ${main} of ${size} bytes (V0.5: ${META.v05.stack_main} of 24,320), ` +
+      `interrupts ${b.stack_irq_used} of ${b.stack_irq_size}`];
+  }],
+  ["The USB audio's counters", async () => {
+    const s = await con.kv("status");
+    const keys = ["uac_underruns", "uac_overruns", "uac_missed", "uac_stalls"];
+    const d = keys.map((k) => `${k.slice(4)} +${num(s, k) - num(uacStart, k)}`).join(", ");
+    return ["info", `during the run: ${d} (alt ${s.uac_alt}, ${s.uac_hz} Hz, rate ${s.uac_rate_hz})`];
+  }],
+];
+let pcOn = false, uacStart = {}, starters = [];
+$("auto").addEventListener("click", async () => {
+  busy = true; stopAsked = false; gate();
+  $("t-auto").tBodies[0].innerHTML = ""; $("t-load").tBodies[0].innerHTML = ""; R.auto = []; R.load = [];
+  const st0 = await con.kv("status").catch(() => ({}));
+  uacStart = st0;
+  try {
+    for (const [name, fn] of AUTO) {
+      if (stopAsked) { autoRow(name, "skip", "stopped"); continue; }
+      $("s-auto").textContent = `running: ${name}`;
+      try { const [res, det] = await fn(); autoRow(name, res, det); }
+      catch (e) { autoRow(name, "fail", `${e.message}`); }
+    }
+    $("s-auto").textContent = "done";
+  } finally {
+    allOff();
+    try {                                                                              // the sound playing put back
+      const k = starters.indexOf(st0.sound);
+      if (pcOn && num(st0, "user_slot") >= 0) { cc(0, 1); program(num(st0, "user_slot")); cc(0, 0); log(`put back: user slot ${st0.user_slot}`); }
+      else if (pcOn && k >= 0) { program(k); log(`put back: ${st0.sound}`); }
+      else if (pcOn) log(`not put back: "${st0.sound}" was neither a user slot nor a starter sound (unsaved)`);
+    } catch (_) {}
+    busy = false; gate();
+  }
+});
+$("stop").addEventListener("click", () => { stopAsked = true; allOff(); });
+
+// --------------------------------------------------------------------------------------------- guided steps
+const running = {};
+function tasks(id, list) {
+  $(id).innerHTML = list.map(([k, t]) => `<li data-task="${k}">${esc(t)}</li>`).join("");
+}
+function tick(id, k, cls = "done", extra = "") {
+  const li = $(id).querySelector(`[data-task="${k}"]`);
+  if (!li || li.classList.contains("done")) return;
+  li.className = cls;
+  if (extra) li.textContent += ` (${extra})`;
+}
+const ticked = (id) => [...$(id).querySelectorAll("li")].map((li) => `${li.className === "done" ? "ok" : li.className === "bad" ? "FAIL" : "-"} ${li.textContent}`);
+
+const GUIDED = {
+  // A: the fixed effects' values follow while a note plays
+  async fx(stop) {
+    tasks("fx-tasks", FIXED.map((t) => [t, `${t}: turn one of its knobs`]));
+    const id0 = Math.min(...HI.map((p) => p.id)), n = Math.max(...HI.map((p) => p.id)) - id0 + 1;
+    let last = await con.values(id0, n);
+    const pend = new Map(), seen = {};
+    noteOn(60, 90); noteOn(67, 90);
+    while (!stop.now) {
+      await sleep(250);
+      const v = await con.values(id0, n), s = await con.norms(id0, n);
+      for (const p of HI) {
+        const k = p.id - id0, type = typeOf(SECS[p.sec]);
+        if (v[k] !== last[k]) pend.set(p.id, { t: Date.now(), v: v[k] });
+        const q = pend.get(p.id);
+        if (!q) continue;
+        if (s[k] === norm(p, v[k])) { pend.delete(p.id); if (!seen[type]) { seen[type] = "ok"; tick("fx-tasks", type, "done", `${SECS[p.sec]} ${p.name} followed`); } }
+        else if (v[k] === q.v && Date.now() - q.t > 1500 / FAST) { pend.delete(p.id); seen[type] = "stuck"; tick("fx-tasks", type, "bad", `${SECS[p.sec]} ${p.name} STUCK`); }
+      }
+      last = v;
+      if (FIXED.every((t) => seen[t]))
+        document.querySelector('[data-status="fx"]').textContent = "all five tried: answer the header question, then Done";
+    }
+    allOff();
+    const ok = FIXED.filter((t) => seen[t] === "ok"), bad = FIXED.filter((t) => seen[t] === "stuck");
+    return [bad.length ? "fail" : ok.length === FIXED.length ? "ok" : "warn",
+      `${ok.length} of 5 followed${bad.length ? ", STUCK: " + bad.join(", ") : ""}${ok.length + bad.length < 5 ? ", not tried: " +
+        FIXED.filter((t) => !seen[t]).join(", ") : ""}; RING MOD's header: ${R.look.ringhdr ? R.look.ringhdr.result : "not said"}`];
+  },
+  // B: the chain, read from the patch (CHAIN 1 .. 8, each module's ON)
+  async chain(stop) {
+    tasks("chain-tasks", [["add", "add a module (FX + OCT+)"], ["out", "take one out (FX + OCT-)"],
+      ["move", "move one (KNOB 3)"], ["two", "two of a type in the chain (DRIVE and DRIVE 2, say)"],
+      ["byp", "FX held: F3 bypasses module 1"], ["unbyp", "FX held: F3 again brings it back"],
+      ["undo", "undo a step (SAVE + OCT-)"]]);
+    const ons = P.filter((p) => p.name === "ON" && p.sec >= SEC_DRIVE).map((p) => p.id);
+    const lo = Math.min(...CHAIN, ...ons), hi = Math.max(...CHAIN, ...ons);
+    const read = async () => {
+      const v = await con.values(lo, hi - lo + 1), at = (id) => v[id - lo];
+      const mods = CHAIN.map((id) => at(id)).filter((x) => x > 0).map((x) => x - 1);
+      return { mods, key: mods.join(","), on: mods.map((i) => at(onOf(i).id)) };
+    };
+    let cur = await read();
+    const hist = [cur.key], m = audioMark();
+    noteOn(48, 90); noteOn(60, 90); noteOn(64, 90);
+    while (!stop.now) {
+      await sleep(400);
+      const nx = await read();
+      if (nx.key !== cur.key) {
+        const a = [...cur.mods].sort().join(), b = [...nx.mods].sort().join();
+        if (nx.mods.length > cur.mods.length) tick("chain-tasks", "add", "done", nx.mods.map(instName).join(" > "));
+        else if (nx.mods.length < cur.mods.length) tick("chain-tasks", "out");
+        else if (a === b) tick("chain-tasks", "move");
+        if (hist.length >= 2 && nx.key === hist[hist.length - 2]) tick("chain-tasks", "undo");
+        hist.push(nx.key);
+        log(`chain: ${nx.mods.map(instName).join(" > ") || "(empty)"}`);
+      } else {
+        nx.on.forEach((o, i) => { if (cur.on[i] === 1 && o === 0) tick("chain-tasks", "byp"); if (cur.on[i] === 0 && o === 1) tick("chain-tasks", "unbyp"); });
+      }
+      const types = nx.mods.map((i) => typeOf(instName(i)));
+      if (types.some((t, i) => types.indexOf(t) !== i)) tick("chain-tasks", "two");
+      cur = nx;
+    }
+    allOff();
+    const done = [...$("chain-tasks").querySelectorAll("li.done")].length;
+    return [done === 7 ? "ok" : "warn", `${done} of 7 seen; clicks heard: ${R.look.clicks ? R.look.clicks.result : "not said"}` +
+      `${audio.on ? `; USB audio gaps meanwhile: ${audio.gaps - m.gaps}` : ""}`];
+  },
+  // C: the encoders and keys (inp: counted since the last inp)
+  async panel(stop) {
+    await con.cmd("inp");
+    while (!stop.now) await sleep(200);
+    const t = await con.cmd("inp"), e = (t.match(/enc moves\/lost\/detent state:([^\r\n]*)/) || [])[1] || "";
+    const enc = e.trim().split(/\s+/).filter(Boolean).map((x) => x.split("/").map(Number));
+    const keys = Number((t.match(/key_presses (\d+)/) || [])[1] || 0);
+    const quiet = enc.map((x, i) => (x[0] < 8 ? i + 1 : 0)).filter(Boolean), lost = enc.reduce((s, x) => s + (x[1] || 0), 0);
+    return [enc.length === 7 && !quiet.length && !lost && keys >= 27 ? "ok" : "warn",
+      `encoders (moves/lost): ${enc.map((x) => x[0] + "/" + x[1]).join(" ")}${quiet.length ? "; few moves on " + quiet.join(", ") : ""}; ` +
+      `${lost} transitions lost; ${keys} key presses (27 keys)`];
+  },
+  // D: the keys' longest wait and a frame's drawing, with nothing sent to the console meanwhile
+  async draw(stop) {
+    noteOn(48, 80); noteOn(55, 80); noteOn(64, 80);
+    for (let s = 25; s > 0 && !stop.now; s--) {
+      document.querySelector('[data-status="draw"]').textContent = `${s} s: flick through pages, turn knobs`;
+      await sleep(1000);
+    }
+    allOff();
+    const b = await con.kv("bench"), w = num(b, "wait_max_us");
+    return [w < 20000 ? "ok" : "warn", `the keys waited at most ${(w / 1000).toFixed(1)} ms (V0.5: ${(META.v05.wait_max_us / 1000).toFixed(0)} ms); ` +
+      `a frame ${(num(b, "frame_us") / 1000).toFixed(1)} ms, the longest ${(num(b, "frame_max_us") / 1000).toFixed(1)} ms ` +
+      `(cleared on BENCH first? the figures count since then)`];
+  },
+  // E: off and on: the page reconnects and reads the start
+  async boot(stop) {
+    const runs = [];
+    for (let n = 1; n <= 3 && !stop.now; n++) {
+      document.querySelector('[data-status="boot"]').textContent = `${n} of 3: switch the FM-1 off`;
+      await waitFor(async () => !con.alive || stop.now, 120000, 200);
+      if (stop.now) break;
+      document.querySelector('[data-status="boot"]').textContent = `${n} of 3: now switch it on`;
+      const t0 = Date.now(), back = await reconnect(60000);
+      if (!back) { runs.push(`${n}: did not come back within 60 s`); break; }
+      const st = await con.kv("status"), b = await con.kv("bench"), cr = await con.cmd("crash");
+      runs.push(`${n}: back after ${((Date.now() - t0) / 1000).toFixed(1)} s, boot ${b.boot_ms} ms, safe start ${st.safe_start}, ` +
+        `${/no crash record/.test(cr) ? "no crash" : "CRASH " + cr.replace(/\s+/g, " ").trim()}`);
+      log(`restart ${runs[runs.length - 1]}`);
+      if (n < 3) await sleep(1500);
+    }
+    const bad = runs.some((r) => /CRASH|did not|safe start 1/.test(r));
+    return [bad ? "fail" : runs.length === 3 ? "ok" : "warn", runs.join("; ") || "not done"];
+  },
+};
+for (const b of document.querySelectorAll("[data-start]")) {
+  b.addEventListener("click", async () => {
+    const k = b.dataset.start, stop = { now: false };
+    running[k] = stop; busy = true; gate();
+    guided(k, "run", "watching");
+    try { const [res, det] = await GUIDED[k](stop); guided(k, res, det); }
+    catch (e) { guided(k, "fail", e.message); allOff(); }
+    finally { running[k] = null; busy = false; gate(); }
+  });
+}
+for (const b of document.querySelectorAll("[data-done]")) b.addEventListener("click", () => { if (running[b.dataset.done]) running[b.dataset.done].now = true; });
+for (const b of document.querySelectorAll("[data-fail]")) b.addEventListener("click", () => {
+  const k = b.dataset.fail;
+  if (running[k]) running[k].now = true;
+  R.guided[`${k} (said)`] = { result: "fail", detail: "the tester: it did not work" };
+  report();
+});
+for (const b of document.querySelectorAll("[data-yn]")) b.addEventListener("click", () => {
+  R.look[b.dataset.yn] = { result: b.dataset.v };
+  for (const o of document.querySelectorAll(`[data-yn="${b.dataset.yn}"]`)) o.classList.toggle("primary", o === b);
+  report();
+});
+
+// --------------------------------------------------------------------------------------------- listen and look
+const LOOK = [
+  ["sounds", "Every starter sound: no clicks, crackle, dropouts, metallic whine on high notes, thumps; notes end cleanly"],
+  ["master", "MASTER: the level follows, no zipper noise"],
+  ["pages", "Every page draws; HOME's scope, an envelope and an LFO move while notes play, stop when they end"],
+  ["select", "SELECT picks the section, ALGORITHM the page, in every family"],
+  ["editoct", "EDIT + OCT- turns the section shown off, EDIT + OCT+ on"],
+  ["glo", "GLO: VOICE, MATRIX, GLOBAL; SEQ says the sequencer comes in a later version"],
+  ["fxear", "The new effects by ear, each knob to its ends: FLANGER, PHASER, the FX FILTER's types (COMB at a high RESO, DJ), BITCRUSH, TREMOLO and AUTOPAN, RING MOD, TAPE"],
+  ["save", "SAVE once (a new version), twice (the browser), held 5 s (over its slot), a rename; off and on: the sound and the list come back"],
+  ["browser", "In the browser: OCT- held 3 s deletes the user preset (a countdown), SAVE + OCT- at once brings it back; a V0.5 preset loads, its effects as the chain"],
+];
+for (const [k, t] of LOOK) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${esc(t)}</td><td><div class="row"><button class="small" data-look="${k}" data-v="ok">OK</button>` +
+    `<button class="small" data-look="${k}" data-v="problem">Problem</button></div></td>` +
+    `<td><input type="text" data-note="${k}" placeholder="what, where"></td>`;
+  $("t-look").tBodies[0].append(tr);
+}
+document.querySelectorAll("[data-look]").forEach((b) => b.addEventListener("click", () => {
+  const k = b.dataset.look;
+  R.look[k] = { ...(R.look[k] || {}), result: b.dataset.v };
+  document.querySelectorAll(`[data-look="${k}"]`).forEach((o) => o.classList.toggle("primary", o === b));
+  report();
+}));
+document.querySelectorAll("[data-note]").forEach((i) => i.addEventListener("input", () => {
+  const k = i.dataset.note;
+  R.look[k] = { ...(R.look[k] || {}), note: i.value };
+  report();
+}));
+$("play-all").addEventListener("click", async () => {
+  busy = true; gate();
+  try {
+    const PHRASE = [[48, 60, 64, 67], [60], [64], [67], [72], [76], [79], [84]];
+    for (let k = 0; k < (pcOn ? 8 : 1); k++) {
+      if (pcOn) { program(k); await sleep(900); }
+      const name = con.alive ? await soundName() : `sound ${k}`;
+      $("s-play").textContent = `playing ${name}`;
+      for (const ch of PHRASE) { for (const n of ch) noteOn(n, 90); await sleep(ch.length > 1 ? 900 : 220); for (const n of ch) noteOff(n); }
+      await sleep(900);
+    }
+    $("s-play").textContent = pcOn ? "done: the eight starter sounds" : "done (PROGRAM off: the sound playing only)";
+  } catch (e) { $("s-play").textContent = e.message; }
+  allOff();
+  busy = false; gate();
+});
+
+// ---------------------------------------------------------------------------------------------- the report out
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("report").textContent); $("copy").textContent = "Copied"; setTimeout(() => ($("copy").textContent = "Copy the report"), 1500); }
+  catch (_) { const r = document.createRange(); r.selectNodeContents($("report")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+});
+$("save").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([$("report").textContent], { type: "text/plain" }));
+  a.download = `strata-test-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
+  a.click();
+});
+if (!window.isSecureContext || !navigator.requestMIDIAccess || !navigator.serial)
+  $("s-build").innerHTML = `<span class="warn-text">Open this page at http://127.0.0.1:8000/test.html in Chrome or Edge (Web MIDI, Web Serial).</span>`;
+log(`page opened: Web MIDI ${!!navigator.requestMIDIAccess}, Web Serial ${!!navigator.serial}, secure ${window.isSecureContext}`);
+gate();
+</script>
+</body>
+</html>

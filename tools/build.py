@@ -290,6 +290,7 @@ def link_app(obj):
                                ("common/bin/objdump", "-d", "-j", ".ram_text", *(("-j", ".c1_text") if CPU2 else ()),
                                 elf))
     (OUT / f"{UNIT}.dis").write_text(dis)
+    (OUT / f"{UNIT}.syms").write_text(syms)        # (the flasher's test page: RAM addresses, the parameter table)
 
     def symv(name):
         return int(re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M).group(1), 16)
