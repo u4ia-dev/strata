@@ -122,6 +122,31 @@ static uint32_t sy_stack_used(const char *lo, const char *top)
     return (uint32_t)(top - (const char *)p);
 }
 
+/* the SRAM Strata leaves unused (strata.ld: _spare0, RAMTEXT after the RAM code and Felucca's RAM-run debug room;
+ * _spare1, NOINIT after .noinit), painted at power-on: BENCH counts the bytes anything wrote there since (none
+ * expected: the ROM is not running, every DMA buffer is in .bss or the pool), so that a later version can take them */
+extern uint32_t _spare0_lo[], _spare0_hi[], _spare1_lo[], _spare1_hi[];
+#define SY_SPARE 0xA55A5AA5u
+static void sy_spare_paint(void)
+{
+    uint32_t *p;
+    for (p = _spare0_lo; p < _spare0_hi; p++)
+        *p = SY_SPARE;
+    for (p = _spare1_lo; p < _spare1_hi; p++)
+        *p = SY_SPARE;
+    sy_bench.spare = 4u * (uint32_t)((_spare0_hi - _spare0_lo) + (_spare1_hi - _spare1_lo));
+}
+static uint32_t sy_spare_hit(void)               /* the spare words not as painted, in bytes */
+{
+    const uint32_t *p;
+    uint32_t n = 0;
+    for (p = _spare0_lo; p < _spare0_hi; p++)
+        n += *p != SY_SPARE;
+    for (p = _spare1_lo; p < _spare1_hi; p++)
+        n += *p != SY_SPARE;
+    return 4u * n;
+}
+
 /* ------------------------------------------------------------------------------------------- MASTER --- */
 /* the pot, read before the audio starts (the first block at its level), then smoothed a frame at a time; Felucca's
  * curve: the pot's square (1023: 4088 of 4096) */
@@ -347,6 +372,7 @@ static void fm1_main(void)
         fm1_input_scan();                        /* (sy_app.c sy_flash_boot reads it) */
     sy_boot_safe = !clean;
     sy_stack_paint();
+    sy_spare_paint();
     sy_bench.known = 1;
     sy_master_boot();
     sy_app_boot();                               /* (the engine, the UI, the flash's; the audio's interrupt attached) */
@@ -420,6 +446,7 @@ static void fm1_main(void)
             stack_t = fm1_ms;
             sy_bench.stack_isr = sy_stack_used(_sstack_lo, _sstack_top);
             sy_bench.stack_main = sy_stack_used(_ustack_lo, _ustack_top);
+            sy_bench.spare_hit = sy_spare_hit();
         }
     }
 }

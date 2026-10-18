@@ -76,6 +76,7 @@ static struct {
     uint32_t step_max_us, build_max_ms;          /* a wavetable build: its longest step (a frame), its whole time */
     uint32_t erase_n, erase_max_us, prog_max_us; /* the flash: erases, the longest (4 KiB), a page's program */
     uint32_t stack_isr, stack_main;              /* bytes of the interrupts' and the main loop's stacks ever used */
+    uint32_t spare, spare_hit;                   /* the SRAM Strata leaves unused (sy_main.c), bytes; .. written since */
     uint32_t run_int_us, run_flt_us;             /* RUN: a fixed integer loop and a float loop, each timed */
     uint8_t run;                                 /* RUN: 1 asked (the platform's main loop runs it), 2 done */
 } sy_bench;
@@ -101,7 +102,8 @@ enum { G_LIST, G_WT3D, G_WT2D, G_UNI, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME, G_
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
-    char name[8];                                   /* the page's name in the header */
+    char name[9];                                   /* the page's name in the header (8 at most: V0.6's [8] left "RING
+                                                     * MOD" without its end, the header ran on into id[]) */
     int16_t id[4];                                  /* KNOB 1-4: parameters (or UI_* items), -1 none */
 } ui_page_t;
 #define UI_OSC(O, S)                                                                                      \

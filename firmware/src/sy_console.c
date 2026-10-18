@@ -252,6 +252,8 @@ static void con_bench(void)
     con_kv("stack_irq_size", (int32_t)(_sstack_top - _sstack_lo));
     con_kv("stack_main_used", (int32_t)sy_bench.stack_main);
     con_kv("stack_main_size", (int32_t)(_ustack_top - _ustack_lo));
+    con_kv("spare_bytes", (int32_t)sy_bench.spare);
+    con_kv("spare_changed_bytes", (int32_t)sy_bench.spare_hit);
     con_kv("run", sy_bench.run);
     con_kv("run_int_loops", (int32_t)SY_RUN_INT);
     con_kv("run_int_us", (int32_t)sy_bench.run_int_us);

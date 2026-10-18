@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.6 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
+#define STRATA_VERSION "V0.65 HARDWARE TEST"   /* the splash and the console; build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"
@@ -55,6 +55,8 @@ static volatile uint32_t fm1_ms;                 /* milliseconds (sy_main.c's TI
 static void sy_lcd_idle(void);                   /* sy_main.c: the keys and MIDI read while a screen strip goes out */
 #define LCD_IDLE() sy_lcd_idle()
 #include "lcd.c"
+#define CV_MAX (240u * 114u)     /* the canvas: Strata's largest strip is the display's, 240 x 114 (Felucca's 240 x 124:
+                                  * 4,800 bytes of the pool) */
 #include "gfx.c"
 static uint8_t fx_lowcut;                        /* (panel.c's Felucca settings hook: not Strata's) */
 #include "panel.c"

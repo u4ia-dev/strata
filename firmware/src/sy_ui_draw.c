@@ -1211,10 +1211,41 @@ static void ui_g_midi(void)
  * drawing; the longest wait of the keys, MIDI and the knobs; a wavetable build (a step, the whole); the flash; the
  * stacks; RUN's two loops. The emulator has no clock of its own: it says so */
 static char *ui_ms2(char *e, uint32_t us) { return sp_fix(e, (int32_t)(us / 10u), 2u, 0); }
+#define UI_BENCH_X 52                               /* a row's figures: from here to the window's edge, 6 px in */
+#define UI_BENCH_ROOM (WW - UI_BENCH_X - 6)
+static void ui_bench_row(uint32_t i, char *t)       /* row i's figures into t (48 bytes) */
+{
+    char *e = t;
+    if (i == 0u) {                              /* "1.12 / 2.40 MS · 0 LATE" */
+        e = ui_ms2(sp_put(ui_ms2(e, sy_bench.half_us), " / "), sy_bench.half_max_us);
+        sp_put(sp_fix(sp_put(e, " MS \xB7 "), (int32_t)sy_bench.late, 0u, 0), " LATE");
+    } else if (i == 1u) {                       /* "38 % · GUARD 0 · SHED 0" */
+        e = sp_put(sp_fix(e, sy_app_load(), 0u, 0), " % \xB7 GUARD ");
+        sp_fix(sp_put(sp_fix(e, sy_g.level + sy_g.fx_lo, 0u, 0), " \xB7 SHED "), (int32_t)sy_g.shed, 0u, 0);
+    } else if (i == 2u) {                       /* "4.10 / 9.80 MS" */
+        sp_put(ui_ms2(sp_put(ui_ms2(e, sy_bench.frame_us), " / "), sy_bench.frame_max_us), " MS");
+    } else if (i == 3u) {                       /* "11.20 MS AT MOST" */
+        sp_put(ui_ms2(e, sy_bench.gap_max_us), " MS AT MOST");
+    } else if (i == 4u) {                       /* "STEP 3.20 · ALL 48 MS" */
+        e = ui_ms2(sp_put(e, "STEP "), sy_bench.step_max_us);
+        sp_put(sp_fix(sp_put(e, " \xB7 ALL "), (int32_t)sy_bench.build_max_ms, 0u, 0), " MS");
+    } else if (i == 5u) {                       /* "ERASE 21.00 · PAGE 0.60" */
+        ui_ms2(sp_put(ui_ms2(sp_put(e, "ERASE "), sy_bench.erase_max_us), " \xB7 PAGE "), sy_bench.prog_max_us);
+    } else if (i == 6u) {                       /* "2.1 / 3.4 KB · SPARE OK": the interrupts', the main loop's */
+        e = sp_fix(e, (int32_t)(sy_bench.stack_isr * 10u / 1024u), 1u, 0);
+        e = sp_put(sp_fix(sp_put(e, " / "), (int32_t)(sy_bench.stack_main * 10u / 1024u), 1u, 0), " KB");
+        sp_put(e, sy_bench.spare_hit ? " \xB7 SPARE HIT" : " \xB7 SPARE OK");   /* (sy_main.c, the console) */
+    } else if (sy_bench.run == 2u) {            /* "INT 5.10 · FLOAT 9.80 MS" */
+        e = ui_ms2(sp_put(e, "INT "), sy_bench.run_int_us);
+        sp_put(ui_ms2(sp_put(e, " \xB7 FLOAT "), sy_bench.run_flt_us), " MS");
+    } else {
+        sp_put(e, sy_bench.run ? "RUNNING" : "KNOB 1: TWO LOOPS TIMED");
+    }
+}
 static void ui_g_bench(void)
 {
     static const char *const ROW[8] = {"AUDIO", "CPU", "SCREEN", "KEYS", "TABLES", "FLASH", "STACKS", "RUN"};
-    char t[48], *e;
+    char t[48];
     uint32_t i;
     if (!sy_bench.known) {
         cv_text_on(WX + 8, WY + 6, &AF_SB, "BENCH TIMES THE FM-1", sk.text, sk.display);
@@ -1223,33 +1254,9 @@ static void ui_g_bench(void)
     }
     for (i = 0; i < 8u; i++) {
         int32_t y = WY + 2 + (int32_t)i * 13;
-        e = t;
-        if (i == 0u) {                              /* "1.12 / 2.40 MS · 0 LATE" */
-            e = ui_ms2(sp_put(ui_ms2(e, sy_bench.half_us), " / "), sy_bench.half_max_us);
-            sp_put(sp_fix(sp_put(e, " MS \xB7 "), (int32_t)sy_bench.late, 0u, 0), " LATE");
-        } else if (i == 1u) {                       /* "38 % · GUARD 0 · SHED 0" */
-            e = sp_put(sp_fix(e, sy_app_load(), 0u, 0), " % \xB7 GUARD ");
-            sp_fix(sp_put(sp_fix(e, sy_g.level + sy_g.fx_lo, 0u, 0), " \xB7 SHED "), (int32_t)sy_g.shed, 0u, 0);
-        } else if (i == 2u) {                       /* "4.10 / 9.80 MS" */
-            sp_put(ui_ms2(sp_put(ui_ms2(e, sy_bench.frame_us), " / "), sy_bench.frame_max_us), " MS");
-        } else if (i == 3u) {                       /* "11.20 MS AT MOST" */
-            sp_put(ui_ms2(e, sy_bench.gap_max_us), " MS AT MOST");
-        } else if (i == 4u) {                       /* "STEP 3.20 · ALL 48 MS" */
-            e = ui_ms2(sp_put(e, "STEP "), sy_bench.step_max_us);
-            sp_put(sp_fix(sp_put(e, " \xB7 ALL "), (int32_t)sy_bench.build_max_ms, 0u, 0), " MS");
-        } else if (i == 5u) {                       /* "ERASE 21.00 · PAGE 0.60" */
-            ui_ms2(sp_put(ui_ms2(sp_put(e, "ERASE "), sy_bench.erase_max_us), " \xB7 PAGE "), sy_bench.prog_max_us);
-        } else if (i == 6u) {                       /* "IRQ 2.1 · MAIN 3.4 KB" */
-            e = sp_fix(sp_put(e, "IRQ "), (int32_t)(sy_bench.stack_isr * 10u / 1024u), 1u, 0);
-            sp_put(sp_fix(sp_put(e, " \xB7 MAIN "), (int32_t)(sy_bench.stack_main * 10u / 1024u), 1u, 0), " KB");
-        } else if (sy_bench.run == 2u) {            /* "INT 5.10 · FLOAT 9.80 MS" */
-            e = ui_ms2(sp_put(e, "INT "), sy_bench.run_int_us);
-            sp_put(ui_ms2(sp_put(e, " \xB7 FLOAT "), sy_bench.run_flt_us), " MS");
-        } else {
-            sp_put(e, sy_bench.run ? "RUNNING" : "KNOB 1: TWO LOOPS TIMED");
-        }
+        ui_bench_row(i, t);
         cv_text_on(WX + 6, y, &AF_XS, ROW[i], sk.label, sk.display);
-        cv_text_on(WX + 52, y, &AF_XS, t, i == 7u && sy_bench.run != 2u ? sk.faint : sk.text, sk.display);
+        cv_text_on(WX + UI_BENCH_X, y, &AF_XS, t, i == 7u && sy_bench.run != 2u ? sk.faint : sk.text, sk.display);
     }
 }
 
@@ -1389,59 +1396,47 @@ static void ui_g_home(void)
 static uint32_t ui_rowh[114];
 static uint8_t ui_rows_ok;
 
+/* each G_*'s drawing, called through this table: called from a switch, every one of them was inlined into
+ * ui_draw_disp, and their locals did not share the stack (V0.6: one 17,284-byte frame, the main stack's 17.9 KiB
+ * of 24.3 on BENCH); called through the table, the deepest is one graph's own */
+static void ui_g_wt2d_osc(void) { ui_g_wt2d(0); }
+static void ui_g_wt2d_uni(void) { ui_g_wt2d(1); }
+static void ui_g_layer(void)                        /* (a hold layer's own) */
+{
+    if (ui.lay == LAY_PERF)
+        ui_g_perf();
+    else if (ui.lay == LAY_MAC)
+        ui_g_mac();
+    else
+        ui_g_jump();
+}
+static void (*const UI_GRAPH[])(void) = {
+    [G_LIST] = ui_g_list, [G_WT3D] = ui_g_wt3d, [G_WT2D] = ui_g_wt2d_osc, [G_UNI] = ui_g_wt2d_uni,
+    [G_ENV] = ui_g_env, [G_LFO] = ui_g_lfo, [G_TEMPO] = ui_g_tempo, [G_COLOR] = ui_g_color, [G_HOME] = ui_g_home,
+    [G_FILTER] = ui_g_filter, [G_DRIVE] = ui_g_drive, [G_CHORUS] = ui_g_chorus, [G_DELAY] = ui_g_delay,
+    [G_REVERB] = ui_g_reverb, [G_OTT] = ui_g_ott, [G_EQ] = ui_g_eq, [G_SAVE] = ui_g_save, [G_BROWSE] = ui_g_browse,
+    [G_MATRIX] = ui_g_matrix, [G_KEYS] = ui_g_keys, [G_PANEL] = ui_g_panel, [G_MIDI] = ui_g_midi,
+    [G_BENCH] = ui_g_bench, [G_CHAIN] = ui_g_chain, [G_FLANGER] = ui_g_flanger, [G_PHASER] = ui_g_phaser,
+    [G_FFILT] = ui_g_ffilt, [G_CRUSH] = ui_g_crush, [G_TREM] = ui_g_trem, [G_RING] = ui_g_ring, [G_TAPE] = ui_g_tape,
+};
+_Static_assert(sizeof UI_GRAPH / sizeof UI_GRAPH[0] == G_TAPE + 1u, "a graph for every G_*");
+
 /* the display; from row r0 only (0: all of it): HOME's scope alone. Only the band of rows that changed goes to the
  * panel: a voice's dot moving sends a few rows, an envelope held at its sustain none (the SPI, 12 MHz, takes 36 ms
  * for all 114) */
 static void ui_draw_disp(uint32_t r0)
 {
     uint16_t line = ui.mod ? sk.mline : sk.dline;
-    uint32_t y, x, lo = 114u, hi = 0u;
+    uint32_t y, x, lo = 114u, hi = 0u, g = UI_PG[ui.page].graph;
     if (!ui_rows_ok)
         r0 = 0;
     cv_begin(240, 114, sk.ground);
     cv_rrect(6, 3, 228, 110, 4, line, sk.ground);
     cv_rrect(7, 4, 226, 108, 3, sk.display, line);
-    switch (ui.lay == LAY_PERF || ui.lay == LAY_MAC || ui.lay == LAY_JUMP ? 0xFFu : UI_PG[ui.page].graph) {
-    case 0xFFu:                                     /* (a hold layer's own) */
-        if (ui.lay == LAY_PERF)
-            ui_g_perf();
-        else if (ui.lay == LAY_MAC)
-            ui_g_mac();
-        else
-            ui_g_jump();
-        break;
-    case G_WT3D: ui_g_wt3d(); break;
-    case G_WT2D: ui_g_wt2d(0); break;
-    case G_UNI: ui_g_wt2d(1); break;
-    case G_ENV: ui_g_env(); break;
-    case G_LFO: ui_g_lfo(); break;
-    case G_TEMPO: ui_g_tempo(); break;
-    case G_COLOR: ui_g_color(); break;
-    case G_HOME: ui_g_home(); break;
-    case G_FILTER: ui_g_filter(); break;
-    case G_DRIVE: ui_g_drive(); break;
-    case G_CHORUS: ui_g_chorus(); break;
-    case G_DELAY: ui_g_delay(); break;
-    case G_REVERB: ui_g_reverb(); break;
-    case G_OTT: ui_g_ott(); break;
-    case G_EQ: ui_g_eq(); break;
-    case G_SAVE: ui_g_save(); break;
-    case G_BROWSE: ui_g_browse(); break;
-    case G_MATRIX: ui_g_matrix(); break;
-    case G_KEYS: ui_g_keys(); break;
-    case G_PANEL: ui_g_panel(); break;
-    case G_MIDI: ui_g_midi(); break;
-    case G_BENCH: ui_g_bench(); break;
-    case G_CHAIN: ui_g_chain(); break;
-    case G_FLANGER: ui_g_flanger(); break;
-    case G_PHASER: ui_g_phaser(); break;
-    case G_FFILT: ui_g_ffilt(); break;
-    case G_CRUSH: ui_g_crush(); break;
-    case G_TREM: ui_g_trem(); break;
-    case G_RING: ui_g_ring(); break;
-    case G_TAPE: ui_g_tape(); break;
-    default: ui_g_list(); break;
-    }
+    if (ui.lay == LAY_PERF || ui.lay == LAY_MAC || ui.lay == LAY_JUMP)
+        ui_g_layer();
+    else
+        UI_GRAPH[g <= G_TAPE ? g : G_LIST]();
     for (y = r0; y < cv_h; y++) {
         const uint16_t *p = &cv_px[y * cv_w];
         uint32_t h = 2166136261u;                   /* (FNV-1a) */

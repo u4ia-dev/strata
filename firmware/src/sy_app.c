@@ -552,8 +552,9 @@ static void sy_keys(void)
 
 /* --------------------------------------------------------------------------------------- main loop --- */
 /* power-on: the panel, the engine with the first starter sound (no fade: nothing plays yet), the UI, then what the
- * flash keeps (the user presets' index, the settings, the sound that was playing), the audio */
-static void sy_app_boot(void)
+ * flash keeps (the user presets' index, the settings, the sound that was playing), the audio. (Not inlined: its two
+ * patches and the settings' buffer, ~2.6 KB, would stay in fm1_main's frame, under every frame the loop draws) */
+static SY_NOINLINE void sy_app_boot(void)
 {
     sy_patch_t p;
     uint32_t k;
