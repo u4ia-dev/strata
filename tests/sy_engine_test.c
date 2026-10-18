@@ -32,6 +32,8 @@
  *    screen draws, bounded with every frequency jumping, its states 0 after silence; FX ORDER: every code an order,
  *    the order set the order played, a new one mid-note without a click;
  * 9. cost: host time of a half (128 frames) for a light and two heavy cases, against real time. */
+#define SY_TICKS() 0u              /* (the admission's clock: none here, so nothing is measured; a block's ticks as the */
+#define SY_TICKS_BLK 17408u        /* FM-1's, for the admission's test, which sets what it would have measured) */
 #define SY_ENGINE 1
 #include "sy_host.h"
 #include "../firmware/src/sy_sounds.h"
@@ -544,6 +546,28 @@ static void t_voices(void)
         check("CPU guard: a half near its deadline (the nested interrupts in): over 90 % a step at once, over 94 % the "
               "effects cheaper, over 96 % a voice shed at once",
               b0 == 48u && b1 == 48u && !k && f1 == 1 && sy_uni_budget < 40u && sh == 1u);
+    }
+    {                                                     /* admission (V0.66): a voice only where its time fits */
+        uint32_t on1, on2, ref;
+        eng_reset();
+        set(SP_V_POLY, 8);
+        snap();
+        sy_adm.vt = SY_TICKS_BLK / 8u;                    /* (as measured: a voice 1/8 of a block, the rest 1/4) */
+        sy_adm.bt = SY_TICKS_BLK / 4u;
+        for (i = 0; i < 8u; i++)
+            sy_note_on(48 + 3 * i, 100);
+        on1 = nvoices();
+        ref = sy_adm.refused;
+        eng_reset();                                      /* (not measured yet: a new sound) */
+        set(SP_V_POLY, 8);
+        snap();
+        for (i = 0; i < 8u; i++)
+            sy_note_on(48 + 3 * i, 100);
+        on2 = nvoices();
+        printf("engine: admission: 8 notes, a voice 1/8 of a block: %u voices, %u refused a free one (stealing); "
+               "the cost not measured yet: %u voices\n", (unsigned)on1, (unsigned)ref, (unsigned)on2);
+        check("admission: a chord's voices only as many as the block's time holds under 80 % (1/4 + 4 x 1/8), the "
+              "others steal; with the cost not measured yet (a new sound), every one", on1 == 4u && ref == 4u && on2 == 8u);
     }
 }
 
@@ -1638,7 +1662,7 @@ static double chain_step(void (*change)(void), double *steady, uint32_t *dip)
             double d = fabs((double)l[i] - (double)(i ? l[i - 1u] : prev));
             if (b > blocks(0.3f) && b < blocks(0.6f) - 1u)
                 st = fmax(st, d);
-            else if (b >= blocks(0.6f) - 1u && b < blocks(0.6f) + 8u)
+            else if (b >= blocks(0.6f) - 1u && b < blocks(0.6f) + 24u)   /* (the dip: 16 blocks) */
                 near = fmax(near, d);
             else if (b > blocks(0.8f))
                 st2 = fmax(st2, d);
@@ -1686,7 +1710,7 @@ static void t_chain(void)
     near = chain_step(ch_take_ott, &st, &dip);
     printf("engine: chain: OTT taken out under a sine through DRIVE and OTT: largest step %.4f near it, steady %.4f\n",
            near, st);
-    check("chain: a module taken out fades out over a block, then is gone (no dip, no click)",
+    check("chain: a module taken out fades out (over 8 blocks), then is gone (no dip, no click)",
           near < 2.0 * st && dip == 0u && fx.n == 1u && fx.ch[0] == FXI_DRIVE && !fx.out);
     eng_reset();
     sy_patch.p[SP_DR_AMT] = 600;
@@ -1711,7 +1735,7 @@ static void t_chain(void)
             if (b == 20u)
                 sy_patch.p[SP_FL_ON] = 0;
             fx_run(l, r);
-            for (i = 0; b > 21u && i < SY_BLK; i++)
+            for (i = 0; b > 29u && i < SY_BLK; i++)           /* (switched out over 8 blocks) */
                 exact &= l[i] == x[i] && r[i] == x[i];
         }
         check("chain: a module bypassed (its ON off, the FX-held keys') is the input bit for bit once faded", exact);
@@ -1765,6 +1789,77 @@ static void t_chain(void)
         check("chain: the slots as the audio side takes them: an instance once, none after the first empty slot",
               fx.n == 2u && fx.ch[0] == FXI_TAPE && fx.ch[1] == FXI_RING);
     }
+}
+
+/* the fades (V0.66): every type at full MIX (and DEPTH) under a 220 Hz sine, changed at 0.6 s: added (op 0), taken
+ * out (1), bypassed (2), back in (3), moved past DRIVE (4). The burst a change makes: the energy of the output's second
+ * difference (the high frequencies a quick ramp throws) over 25 blocks from the change, against the same over 25
+ * steady blocks before it and after it (the larger) */
+static double fade_burst(uint32_t inst, uint32_t op)
+{
+    uint8_t ch[2] = {(uint8_t)inst, FXI_DRIVE};
+    double ph = 0, e[3] = {0, 0, 0};
+    float p1 = 0.0f, p2 = 0.0f;
+    uint32_t b, i, c = blocks(0.6f), k;
+    eng_reset();
+    for (k = 0; k < SP_COUNT; k++)
+        if (sp_inst_of(k) == (int32_t)inst && (!strcmp(SP[k].name, "MIX") || !strcmp(SP[k].name, "DEPTH")))
+            sy_patch.p[k] = SP[k].hi;
+    sy_patch.p[SP_DR_AMT] = 600;
+    if (op == 0u)
+        chain(ch, 0u);
+    else
+        chain(ch, op == 4u ? 2u : 1u);
+    if (op == 3u)
+        sy_patch.p[FXI_ON[inst]] = 0;
+    snap();
+    for (b = 0; b < blocks(1.6f); b++) {
+        float l[SY_BLK], r[SY_BLK];
+        if (b == c) {
+            if (op == 0u)
+                chain(ch, 1u);
+            else if (op == 1u)
+                chain(ch, 0u);
+            else if (op == 4u) {
+                uint8_t sw[2] = {FXI_DRIVE, (uint8_t)inst};
+                chain(sw, 2u);
+            } else
+                sy_patch.p[FXI_ON[inst]] = op == 3u;
+        }
+        for (i = 0; i < SY_BLK; i++, ph += 220.0 / (double)SY_FS)
+            l[i] = r[i] = (float)(0.3 * sin(2.0 * M_PI * ph));
+        fx_run(l, r);
+        for (i = 0; i < SY_BLK; i++) {
+            double d = (double)l[i] - 2.0 * (double)p1 + (double)p2;
+            int w = b + 31u >= c && b + 5u < c ? 0 : b + 1u >= c && b < c + 24u ? 1 : b >= c + 40u && b < c + 65u ? 2 : -1;
+            p2 = p1;
+            p1 = l[i];
+            if (w >= 0)
+                e[w] += d * d;
+        }
+    }
+    return e[1] / fmax(fmax(e[0], e[2]), 1e-12);
+}
+
+static void t_fades(void)
+{
+    static const char *const OP[5] = {"added", "taken out", "bypassed", "back in", "moved"};
+    double worst = 0, w2 = 0;
+    uint32_t t, op, wt = 0, wo = 0;
+    for (t = 0; t < FXT_N; t++)
+        for (op = 0; op < 5u; op++) {
+            double r = fade_burst(FXT_INST[t][0], op);
+            if (getenv("FADES"))
+                printf("    %-10s %-10s %8.2f\n", FXT_NAMES[t], OP[op], r);
+            if (r > worst)
+                worst = r, wt = t, wo = op;
+            if (op == 4u && r > w2)
+                w2 = r;
+        }
+    printf("engine: fades: the largest burst %.2fx the steady output's (%s %s); moved, at most %.2fx\n", worst,
+           FXT_NAMES[wt], OP[wo], w2);
+    check("the fades: every module type at full MIX added, taken out, bypassed, back in and moved under a sine: no "
+          "burst over 1.5x the steady output's (V0.6's one-block switches and 2.9 ms dip: see TESTING.md)", worst < 1.5);
 }
 
 /* ---------------------------------------------------------------------------------- the new modules --- */
@@ -2109,6 +2204,7 @@ int main(int argc, char **argv)
     t_fx_order();
     t_eq();
     t_chain();
+    t_fades();
     t_fx_new();
     t_cost();
     return t_done();
