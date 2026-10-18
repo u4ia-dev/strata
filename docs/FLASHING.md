@@ -125,7 +125,7 @@ PowerShell):
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-5. Strata starts: the splash (`STRATA`, `V0.5 HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (`STRATA`, `V0.6 HARDWARE TEST`), then OSC A's WAVE page.
 6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
    answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
    fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.
