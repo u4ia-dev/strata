@@ -296,6 +296,17 @@ marked.
   Strata's main-loop code at `-Os` (331 functions; the interrupts and the DSP the same instructions as without it),
   the package rebuilt byte for byte by the flasher's builder (sha256 `4ad8161a...5826e01b`). Felucca's own build:
   byte for byte as before.
+- **Verified on hardware, V0.65's report (2026-10-18, the flasher's device report after 63 min of use):** it installed
+  and runs; boot 769 ms; the main stack 4,968 of 12,032 bytes used (V0.5: 17.9 KiB: the stack fix holds), the
+  interrupts' 2,192 of 7,936; the 45,056 spare bytes untouched (26 flash erases, little MIDI, no USB audio stream in
+  that hour); BENCH RUN integer 3,892 µs (V0.5's, to the µs: ~180 instructions a µs), float 2,916 µs (V0.5 3,055: ~154,
+  probably where the loop sits in the flash's cache); the flash as V0.5 (erase 17.4 ms, page 2.06 ms); 17 % CPU with no
+  voice on SUPERSAW (its CHORUS and REVERB run for their tails: the cost model's ~5 + ~13 %). Read with care: 8 late
+  halves while no half's render passed 2,582 of 2,901 µs: the interrupts were held off, not the render late; each of
+  the 26 erases holds them 17 ms behind the hush, in silence, and the half after one counts as late (BENCH should leave
+  those out: next version). The keys' longest wait 84 ms and a frame's 107 ms are the hour's peaks, SAVEs and the
+  background saves (an erase and 15 pages, ~50 ms with the main loop held) and full redraws included: the test page's
+  step D measures them with the peaks cleared. The test page itself has not run yet.
 - **Verified on hardware, V0.5's report (2026-10-17):** the restart check (bulk IN after a power-on); the core's
   rate, ~180 instructions a µs on integer code and ~147 on float (BENCH RUN); a half's render 172 µs idle, 2,766 µs
   at the load test's peak (95 %, 5 late, 1 voice shed); the keys' longest wait 91 ms; the stacks (main 17.9 of 24.3

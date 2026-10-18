@@ -12,7 +12,7 @@ emulator**, **needs hardware test**.
 | App image (of the app slot's 581,564 B) | 407,008 B | 324,148 B | 257,416 B free (V0.6: 174,556) |
 | `.data` + `.bss` (of 73,728 B) | 66,368 B | 65,152 B | 8,576 B free (V0.6: 7,360) |
 | Pool (`.pool`) | 363,492 of 368,640 B | 358,692 of 380,928 B | 22,236 B free (V0.6: 5,148) |
-| Main stack (reserved) | 24,320 B | 12,032 B | deepest path ~6.6 KB from the listing |
+| Main stack (reserved) | 24,320 B | 12,032 B | deepest path ~6.6 KB from the listing; 4,968 B used on the unit after an hour (V0.5: 17.9 KiB) |
 | Interrupt stack (7,936 B reserved) | ~2.5 KB | ~2.5 KB | unchanged |
 | **RAM free in all** | **12.2 KiB** | **30.1 KiB** | |
 | SRAM Strata leaves unused | (not named) | 44 KiB | painted at power-on; BENCH says whether anything wrote there |
@@ -87,8 +87,10 @@ delay 66,176 B (750 ms), the canvas 54,720 B, the reverb 23,662 B, the voices 14
 FX modules' lines 12,288 B (`.bss`) and 8,192 B (the choruses), the undo history 7,008 B.
 
 The spare areas are SRAM no Strata code, DMA or interrupt touches (the hardware's write limits cover only the two guard
-bands and the reserved top; the ROM is not running while Strata does). That they stay untouched is **needs hardware
-test**: V0.65 paints them and BENCH watches them. If they hold through the test, a later version can put buffers there
+bands and the reserved top; the ROM is not running while Strata does). That they stay untouched: a first **yes on
+hardware** (2026-10-18: 0 of 45,056 bytes changed after 63 minutes, 26 flash erases among them, but little MIDI and no
+USB audio stream); the test page's run (MIDI and the USB audio) is the next look. V0.65 paints them and BENCH watches
+them. If they hold through the test, a later version can put buffers there
 (the undo history, the FX lines, a groovebox's patterns) without taking from the pool.
 
 ## 5. What is left (not done in V0.65)
