@@ -116,7 +116,8 @@ def generate():
             [tools / "gen_tables.py", GEN / "felucca_tables.h"],
             [tools / "gen_fm6_patches.py", GEN / "felucca_fm6.h"],
             [tools / "gen_samples.py", GEN / "felucca_samples.h"]]
-    if UNIT == "strata":            # Strata: its wavetables' recipes (strata_wt.h); none of Felucca's sounds
+    if UNIT == "strata":            # Strata: its wavetables' recipes (strata_wt.h); none of Felucca's sounds. The
+        cmds[0][3] = "space-mono"   # STRATA UI (strata-ui): Space Mono, the design's sizes (gen_aa_font.py)
         cmds = [*cmds[:4], [tools / "gen_wavetables.py", GEN]]
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
