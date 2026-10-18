@@ -27,7 +27,7 @@ From the repository root, on Linux or WSL2 (python3 with numpy, a C compiler):
 
 ## 2. Verified on host
 
-132 checks in six programs (`tests/sy_*.c`), all passing (V0.6).
+133 checks in six programs (`tests/sy_*.c`), all passing (V0.65).
 
 ### 2.1 Wavetables (`sy_wt_test`, 8 checks)
 
@@ -64,7 +64,11 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 | Stability: every type × 5 cutoffs × 3 resonances × 2 drives, the cutoff jumping 20 Hz ↔ 20 kHz every block | never NaN / Inf, largest output 4.9, no denormal state, every state exactly 0 after 40 s of silence (the self-oscillating ladder aside) |
 | MIX 0 | the input, bit for bit |
 
-### 2.4 Engine (`sy_engine_test`, 91 checks; `sy_smoke`, 2)
+### 2.4 Engine (`sy_engine_test`, 92 checks; `sy_smoke`, 2)
+
+- **Every smoothed value glides to a change** (V0.65, the memory audit): all 166 values turned to their other end while
+  a sound plays, no patch load, each at its new value after 0.5 s. It fails on V0.6's code: 34 values short, the first
+  the FX FILTER's CUTOFF (the gliding values' ids were kept in bytes, so every id from 256 up was another one; §5.4).
 
 - **The FX chain** (V0.6): a module added under a sine joins at once, no dip, no click (the largest step 0.061 near
   it, steady 0.075); one taken out fades out over a block, then is gone (0.054, steady 0.054); two swapped dip the wet
@@ -231,6 +235,8 @@ page's rate at integration; the second core (ARCHITECTURE.md §19) doubles the r
 
 ### 4.4 RAM on the target
 
+(Phase 2's figures for the engine alone. The whole unit's, and the V0.65 audit: [BUDGET.md](BUDGET.md).)
+
 From the probe object (`build/cost/sy.o`), the engine without the UI, after the delay went to 750 ms a side:
 
 | Section | Bytes | Largest |
@@ -304,6 +310,18 @@ renders of the sounds that use them re-recorded:
   once the order changed what ran before the reverb. PLATE now sums its own four lines; HALL is unchanged bit for bit.
   A test fills the stack with NaN before PLATE runs on silence and asks for silence out (it fails on the old code).
 
+### 5.4 Two more, found by the memory audit (V0.65)
+
+[BUDGET.md](BUDGET.md) is the audit. Reading where every byte goes turned up two V0.6 bugs, both fixed:
+
+- **34 values never glided after a load.** The list of smoothed values still on their way kept their ids in bytes;
+  V0.6's chain took the parameters to 312, and an id from 256 up came back as another (`(uint8_t)i`): that value's
+  flag stayed set and it never moved again. Every smoothed value of the FX FILTER, BITCRUSH, TREMOLO, RING MOD and TAPE
+  (both instances) was hit: their knobs, MIDI and the undo changed the patch but not the sound until a load. The new
+  check (§2.4) fails on the old code. The tests had set those values before a load, never while a sound played.
+- **RING MOD's page name ran on.** `char name[8]` and "RING MOD": C keeps the 8 characters and drops the end without a
+  warning, so the header read on into the knobs' ids. An emulator check (§6.3) asks every page's name to end in time.
+
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
 The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. The emulator's page
@@ -311,7 +329,8 @@ has also run in headless Chrome (§6.4); the workbench's page has not been opene
 
 ### 6.1 The engine as WebAssembly (`tests/sy_wasm.sh`)
 
-The six host programs (§2) built with `emcc` and run under Node: 114 checks, all passing, the golden renders included.
+The six host programs (§2) built with `emcc` and run under Node: 133 checks (V0.65), all passing, the golden renders
+included.
 The WebAssembly engine plays the eight test sounds' phrases bit for bit as the host build does (neither fuses a
 multiply and an add: the host's baseline x86-64 has no FMA, the WebAssembly is built with `-ffp-contract=off`). So the
 workbench and the emulator sound as the host-verified engine does.
@@ -325,7 +344,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 87 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 89 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -420,6 +439,12 @@ nothing deleted, held 3 s USER 1 deleted (the sound playing on, from no slot), S
 OCT- tapped there: the octave. Found by them: chain edits made within a second of each other were one undo step
 (each add, take-out and bypass is a step of its own now).
 
+**V0.65** (the memory audit): the display's graphs are called through a table now, and every page above still draws
+as it did. Two checks more: BENCH's rows built at the widest figures a unit shows (the emulator draws no BENCH: no
+clock of its own) fit the window (the widest, AUDIO, 20 px to spare; STACKS with its new SPARE note was 11 px over
+until it took the AUDIO row's form, "2.2 / 6.6 KB"); and every page's name ends within its 8 characters (V0.6's RING
+MOD pages ran on, §5.4).
+
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
 `build_strata.sh` also writes the page as one file (`make_page_strata.py`): the module as base64, the font as a data:
@@ -458,10 +483,10 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 ### 8.1 The build's checks (`tools/build.py --strata`)
 
 Felucca's checks, unchanged, on Strata's unit: `_start` at the app's address and the entry stub; the RAM code (the flash
-driver) with no calls into the flash; no reference into the chip's ROM; the image within the app slot (V0.6: 407,008
-of 581,564 bytes); `.data` + `.bss` with 4 KiB spare (66,368 of 73,728 bytes: 7.2 KiB) and the pool with 4 KiB
-(363,492 of 368,640 bytes: 5.0 KiB spare; the margin was 8 KiB until integration had shown every platform buffer in
-it); every register access in `hal/`. That last one caught `SY_CBAR` (an empty barrier written in a
+driver) with no calls into the flash; no reference into the chip's ROM; the image within the app slot (V0.65: 324,148
+of 581,564 bytes; V0.6 407,008); `.data` + `.bss` with 4 KiB spare (65,152 of 73,728 bytes: 8.4 KiB) and the pool with
+4 KiB (358,692 of 380,928 bytes: 21.7 KiB spare; Strata's `strata.ld` gives the pool 12 KiB of Felucca's main stack;
+the margin was 8 KiB until integration had shown every platform buffer in it); every register access in `hal/`. That last one caught `SY_CBAR` (an empty barrier written in a
 form the lint does not take): Felucca's own build had failed on it since Phase 2.
 
 New for Strata, **the interrupt stack**. The audio's render and TIMER5, nested in it, share the system stack (7,936
@@ -469,7 +494,17 @@ bytes). From the listing: each function's pushes and stack adjustments make its 
 deepest callee's (a call, or a tail call); calls through the oscillator kernels', the filter types' and the effects'
 tables take every function their initializers name (read from the source, so a new kernel counts at once), and any
 other call through a register fails the build. Now ~2.5 KiB (V0.6: the audio 2,228 bytes, TIMER5 196, the two
-wrappers 56) of the 4 KiB allowed; the effects' table is the chain's (`FX_RUN`, a function a type).
+wrappers 56) of the 4 KiB allowed; the effects' table is the chain's (`FX_RUN`, a function a type). V0.65: a frame
+too big for an immediate, made in a register (`rK = -N`, then `sp = rK`), is counted too (V0.6's 17 KB `ui_draw_disp`
+frame was one: the count had seen 52 bytes of it), and an `sp` set from a register of no known value fails the build.
+
+New in V0.65, **the main stack** (`strata.ld`: 12,032 bytes, Felucca's 24,320): counted the same way from the power-on
+(`fm1_cstart`), the display's graphs through their table (`UI_GRAPH`), held to 8 KiB (the rest for the flash's hooks
+and the console's commands, called through a register, which the count does not follow). Now ~6.6 KB: `fm1_cstart` >
+`sy_ui_frame` > `ui_draw_disp` > `ui_g_delay`. And **the size pass** (`tools/strata_drivers.py`): Strata's main-loop
+files at `-Os` (331 functions), what an interrupt reaches kept at `-O2`. With the pass on and off the audio interrupt,
+`voice_block`, `fx_ffilt`, TIMER5 and `usb_poll` are the same instructions (compared in the listings, addresses
+aside); Felucca's own build is byte for byte what it was (512,144 bytes).
 
 The package has Felucca's identity (`FM-1_900`), update loader and layout: 610,090 bytes. The first device build also
 found three `strlen` calls in the effects' drawing (the host and Emscripten have one, the firmware not).
@@ -514,7 +549,10 @@ The buttons behind two of them did nothing until Find; the backup mode's would h
 - **TABLES**: a wavetable build's longest step (a millisecond pass while it builds) and the whole build.
 - **FLASH**: the longest interrupts-off window of an erase and of a page's program (TIMER4 around the RAM driver's
   call), and the erases so far.
-- **STACKS**: both stacks painted at power-on (below where the boot runs, 512 bytes clear), their unpainted depth.
+- **STACKS**: both stacks painted at power-on (below where the boot runs, 512 bytes clear), their unpainted depth:
+  the interrupts' / the main loop's, in KB (V0.65; "IRQ 2.2 · MAIN 17.9 KB" before). Then **SPARE OK** or **SPARE HIT**:
+  the 44 KiB of SRAM Strata leaves unused (BUDGET.md §4), painted at power-on, every word checked each half second;
+  HIT means something wrote there (the console's `bench`: `spare_bytes`, `spare_changed_bytes`).
 - **RUN**: two loops (100,000 integer and 50,000 float iterations) timed with the interrupts off behind the hush;
   their instructions are counted in `build/strata.dis` (`sy_run_int`, `sy_run_flt`), so their times give the core's
   rate.

@@ -1,6 +1,6 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.6 HARDWARE TEST`) on an FM-1, testing
+This is the procedure for putting Strata's **hardware test build** (`V0.65 HARDWARE TEST`) on an FM-1, testing
 it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
@@ -8,7 +8,8 @@ The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every 
 back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the fix: it passed the flasher's restart
 check and its report came back over USB, so bulk IN works after a power-on (**verified on hardware**, the V0.5
 report). `V0.6` is the build after that test: the FX chain, seven new effects and the UI changes the test asked for
-(section 1); it has not run on an FM-1 yet. Section 8 lists what was checked where.
+(section 1); it installed (2026-10-17), and its test waited for `V0.65`, the memory audit ([BUDGET.md](BUDGET.md)),
+which has not run on an FM-1 yet. Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
@@ -32,6 +33,13 @@ types, BITCRUSH, TREMOLO / AUTOPAN, RING MOD, TAPE), SELECT picks the section an
 the browser (and putting it back). Two fixes from V0.5's report: the keys and MIDI are read while a redraw waits for
 the screen (the keys waited 91 ms), and the CPU guard steps at once when a half nears its deadline (5 halves were
 late). Presets saved by V0.5 load, their effects that were on as the chain.
+
+**New in V0.65** (the memory audit, [BUDGET.md](BUDGET.md); nothing on the panel changes): 83 KB less code (the UI,
+the console and the presets' store built for size, the sound's code and the interrupts as before), the main stack 12
+KiB (it used 17.9 KiB on V0.5: one 17 KiB frame, gone), the pool 12 KiB larger, RAM free 30 KiB (V0.6: 12). Two V0.6
+bugs fixed: the FX FILTER's, BITCRUSH's, TREMOLO's, RING MOD's and TAPE's knobs changed nothing while a sound played
+(only a load took them), and RING MOD's header showed odd characters after its name. And 44 KiB of SRAM Strata does
+not use are watched, for later versions: BENCH's STACKS row ends in SPARE OK, or SPARE HIT if anything wrote there.
 
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), MIDI clock, start and
 stop, MIDI out, ARP, the chords on SCL (V0.7), the second core.
@@ -125,7 +133,7 @@ PowerShell):
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-5. Strata starts: the splash (`STRATA`, `V0.6 HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (`STRATA`, `V0.65 HARDWARE TEST`), then OSC A's WAVE page.
 6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
    answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
    fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.
@@ -177,6 +185,20 @@ New in V0.6:
     it comes back. A preset saved by V0.5: loads, its effects as the chain.
 15. **The fixes.** BENCH's KEYS row after flicking through pages while playing (under ~20 ms, against V0.5's 91 ms);
     AUDIO's late halves after the load test (item 3: none, or fewer than V0.5's 5).
+
+New in V0.65:
+
+16. **The new modules' knobs while a note plays.** FX FILTER, BITCRUSH, TREMOLO, RING MOD and TAPE (and a second of
+    one): turn each knob with a note held; the sound follows at once (V0.6: nothing until a sound loaded). RING MOD's
+    header: its name alone, nothing after it.
+17. **The stacks.** After the whole test (every page, the DELAY's, FLANGER's and PHASER's graphs among them, a few
+    saves and loads), BENCH's STACKS row: the main stack (the second figure) under ~8 KB of its 12; the first, the
+    interrupts', as before (~2.2).
+18. **The spare SRAM.** At the end, STACKS should still say **SPARE OK**. If it says SPARE HIT, note when it changed,
+    and the console's `bench`: `spare_changed_bytes`. Either way nothing breaks: Strata keeps nothing there.
+19. **The screen's speed.** BENCH's SCREEN row (the last and the longest frame) after turning knobs on a few live pages
+    (HOME with a note held, an envelope, the EQ, the chain view): the UI's code is built for size now, so its drawing
+    may be slower than V0.6's. Note whether turning a knob on a graph page feels slower.
 
 ## 5. The report
 
@@ -245,19 +267,24 @@ in any serial terminal (115200 baud; type `help`). Its commands only read (`benc
 
 ## 8. What was checked, and where
 
-- **Built and checked by the build** (`tools/build.py --strata`, V0.6): the image (407,008 of 581,564 bytes), RAM
-  (66,368 of 73,728 bytes: 7.2 KiB spare, over the 4 KiB margin), the pool (363,492 of 368,640 bytes: 5.0 KiB spare,
-  over its margin, 4 KiB since V0.6), RAM code with no calls into the flash, no register access outside `hal/`, the
-  interrupt stack (~2.5 KiB of 7.9 KiB, from the listing), usb.c, midi_uart.c and ota.c still at `-Os` (57
-  functions), the package rebuilt byte for byte by the flasher's builder (sha256 `d2d79880...35a0b`).
+- **Built and checked by the build** (`tools/build.py --strata`, V0.65): the image (324,148 of 581,564 bytes; V0.6
+  407,008), RAM (65,152 of 73,728 bytes: 8.4 KiB spare, over the 4 KiB margin), the pool (358,692 of 380,928 bytes:
+  21.7 KiB spare, over its 4 KiB margin; `strata.ld` gives it 12 KiB of Felucca's main stack), RAM code with no calls
+  into the flash, no register access outside `hal/`, the interrupt stack (~2.5 KiB of 7.9 KiB) and the main stack
+  (~6.6 KB of 12, 8 KiB allowed), both from the listing, usb.c, midi_uart.c and ota.c still at `-Os` (57 functions),
+  Strata's main-loop code at `-Os` (331 functions; the interrupts and the DSP the same instructions as without it),
+  the package rebuilt byte for byte by the flasher's builder (sha256 `4ad8161a...5826e01b`). Felucca's own build:
+  byte for byte as before.
 - **Verified on hardware, V0.5's report (2026-10-17):** the restart check (bulk IN after a power-on); the core's
   rate, ~180 instructions a µs on integer code and ~147 on float (BENCH RUN); a half's render 172 µs idle, 2,766 µs
   at the load test's peak (95 %, 5 late, 1 voice shed); the keys' longest wait 91 ms; the stacks (main 17.9 of 24.3
   KiB, interrupts 2.2 of 7.9 KiB); the flash (erase 17.4 ms, page 2.0 ms); boot 765 ms.
-- **Verified on host and in the emulator:** the engine (132 checks, host and WebAssembly: the chain's adds, take-outs
+- **Verified on host and in the emulator:** the engine (133 checks, host and WebAssembly; V0.65: every smoothed value
+  glides to a change while a sound plays, which V0.6 failed for 34; the chain's adds, take-outs
   and moves without a click, a module bypassed bit for bit, two of a type, every new module at its corners and the
   FX filter's 21 types with the cutoff jumping, the responses of the filter, phaser, flanger, ring mod, tremolo and
-  tape; the golden renders unchanged: the six effects of before play as they did), the UI (87 checks: the chain view,
+  tape; the golden renders unchanged: the six effects of before play as they did), the UI (89 checks; V0.65: BENCH's
+  rows fit, every page's name ends in time; the chain view,
   its adds, take-outs, moves, limits, bypass, MIX and undo, a second EQ's pages; EDIT + OCT; the matrix on GLO; a
   preset deleted and put back), the workbench (5), the MASTER level path, BENCH's page. The keys read during a
   redraw's waits are the FM-1's alone (lcd.c's hook): **needs this hardware test**.

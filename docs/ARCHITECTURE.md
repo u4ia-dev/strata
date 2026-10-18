@@ -32,6 +32,15 @@ asked for (§17: SELECT and ALGORITHM, the chain view, no ON knobs, the matrix o
 read during a redraw and the CPU guard's step at a half's deadline (§3, §13). **Verified in emulator** and on host;
 V0.6 **needs a hardware test**.
 
+**V0.65, the memory audit** (2026-10-17, before V0.6's hardware test, at your request; [BUDGET.md](BUDGET.md) is the
+audit): 83 KB less code (Strata's main-loop files built for size, as Felucca builds its UI, the DSP and whatever an
+interrupt runs kept at `-O2`), the main stack's 17 KiB frame gone (the graphs called through a table), the main stack
+12 KiB in Strata's own linker script (`firmware/strata.ld`) and its 12 KiB in the pool, the canvas 240 × 114, a
+smoothed value's target worked out again (RAM free 12.2 KiB -> 30.1 KiB); 44 KiB of SRAM Strata leaves unused named,
+painted and watched on BENCH. The audit found and fixed two V0.6 bugs: the 34 values with ids from 256 up never
+glided after a load (the FX FILTER, BITCRUSH, TREMOLO, RING MOD and TAPE knobs did nothing while a sound played), and
+RING MOD's page name ran on into the knobs' ids. **Verified on host and in emulator**; V0.65 **needs a hardware test**.
+
 **Hardware test build** (after Phase 4, before Phase 5, at your request): the FM-1 unit is built. `strata.c` includes
 Felucca's platform unchanged (the HAL, USB, TRS MIDI, the flash driver, the update entry `ota.c`; the update loader is
 Felucca's too) and Strata's sources; `sy_main.c` (power-on, the boot guard, the UBOOT entries, the update entry behind
@@ -53,7 +62,7 @@ CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 te
 | CPU | one pi32v2 core at 360 MHz for audio (the second is a v1 option), ~205 listing instructions/µs on integer code; single-precision FPU on the general registers (`-mcpu=r3 -mfprev1`), timing on the device unknown |
 | Audio | 44,117.6 Hz; 128-frame halves (2,901 µs) rendered in the ALNK0 interrupt in four blocks of 32 samples |
 | Budget | plan for ≤ 75 % of a half at the worst case (Felucca sheds voices at 85 %); ~8 % goes to the system |
-| RAM | 72 KiB `.data/.bss` + 360 KiB pool (+ 24 KiB RAM code) |
+| RAM | 72 KiB `.data/.bss` + 360 KiB pool (+ 24 KiB RAM code); V0.65: 372 KiB pool, the main stack 12 KiB (BUDGET.md §4) |
 | Flash | app slot 581,564 B; user store `0x97000–0xDFFFF`; settings `0xFC000–0xFEFFF` |
 | Panel | 27 keys (no velocity), 14 buttons, 7 relative encoders (no push), MASTER pot, an LED under every key and button, 240 × 240 screen (~77 ms for a full redraw) |
 | MIDI | USB in/out, TRS in only (the FM-1 has no MIDI out jack: §15) |
@@ -78,7 +87,7 @@ sounds and the keys.
 
 | Kept from Felucca (unchanged where possible, so upstream fixes merge) | Replaced or new in Strata |
 | --- | --- |
-| `firmware/hal/*` (all of it), `firmware/loader/*` (the update loader, byte for byte), `crt0.S`, `app.ld` (region sizes may move between RAM and POOL) | `strata.c` (the unit), `st_core.h` (types, sizes) |
+| `firmware/hal/*` (all of it), `firmware/loader/*` (the update loader, byte for byte), `crt0.S`, `app.ld` (region sizes may move between RAM and POOL; V0.65: Strata links with `strata.ld`, `app.ld`'s map with a 12 KiB main stack) | `strata.c` (the unit), `st_core.h` (types, sizes) |
 | `libc.c`, `lcd.c`, `gfx.c`, the generated fonts, icons, keycaps and palettes | `st_param.c` (the parameter table), `st_patch.c` (patch, undo, preset format) |
 | `usb.c` (USB-MIDI, UAC audio input, CDC console, SysEx frames), `midi_uart.c` (TRS in) | `st_wt.c` (wavetable pool, mips), `st_wtgen.c` (generator, FFT, recipes), `st_osc.c` (oscillator kernels, warps, unison) |
 | `fm1_flash.h` driver, `storage.c` (A/B sector objects), `storage_hw.c` | `st_voice.c` (sub, noise, filter, amp, a voice's render), `st_env.c`, `st_lfo.c`, `st_mod.c` (matrix, macros) |
@@ -739,4 +748,7 @@ whether Strata needs that is decided by the device test.
 | A flash erase longer than measured (the datasheet's maximum) | the hush holds silence in the ring for any length; the keys and MIDI wait meanwhile (a SAVE is deliberate; the background writes wait for 3 s of silence) |
 | Keys' latency while a live page draws (the main loop reads the keys) | only changed rows are sent (§17); the BENCH page times a frame; if needed the keys go to the TIMER5 tick as Felucca's input scan does |
 | The interrupt stack (7,936 B: the audio's render, TIMER5 nested in it) | `build.py --strata` counts it from the listing (~2.4 KiB, 4 KiB allowed); BENCH reads both stacks' use on the unit (painted at power-on) |
+| The main stack, 12 KiB since V0.65 (24 KiB before; V0.5 used 17.9 KiB, one 17 KiB frame) | `build.py --strata` counts it from the listing (~6.6 KB, 8 KiB allowed; frames made in a register counted, an unknown one fails the build); BENCH's STACKS row on the unit; an overflow traps (the EMU stack limit) |
+| The main loop's code at `-Os` (V0.65) | the same C (instruction for instruction the same in the interrupts and the DSP, checked); the screen's drawing may be slower: BENCH's SCREEN row against V0.6's |
+| The 44 KiB Strata leaves unused (BUDGET.md §4) | painted at power-on, watched by BENCH (SPARE OK / HIT); nothing is put there until a hardware test says nothing else writes there |
 | Strata's presets take Felucca's projects and samples area | said at install (§16); different magics, so neither misreads the other's records |
