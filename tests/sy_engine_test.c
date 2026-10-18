@@ -285,6 +285,26 @@ static void t_params(void)
         check("values read as stored (GLIDE, VEL AMP, STEREO, PREDELAY, the LFOs' DELAY, RISE, SMOOTH) take a change "
               "at once, without a patch load", ok && tested >= 8u);
     }
+    {                                                     /* every smoothed value glides to a change (V0.6 kept the */
+        uint32_t i, nsm = 0, hi = 0, bad = 0, first = SP_COUNT;   /* moving ones' ids in bytes: from 256 up, stuck) */
+        eng_reset();
+        snap();
+        for (i = 0; i < SP_COUNT; i++)                    /* (written as the knobs and MIDI write: no patch load) */
+            if (SP[i].flags & F_SMOOTH) {
+                sy_patch.p[i] = (int16_t)(sy_patch.p[i] == SP[i].hi ? SP[i].lo : SP[i].hi);
+                nsm++;
+                hi += i >= 256u;
+            }
+        run(blocks(0.5f), 0);
+        for (i = 0; i < SP_COUNT; i++)
+            if ((SP[i].flags & F_SMOOTH) && sp_n[i] != sp_norm_of(i, sy_patch.p[i]))
+                bad++, first = first < i ? first : i;
+        if (bad)
+            printf("    %u smoothed values short of a change, the first %s %s\n", (unsigned)bad,
+                   SEC_NAMES[SP[first].sec], SP[first].name);
+        check("every smoothed value (166, the 34 from id 256 up: FX FILTER, BITCRUSH, TREMOLO, RING MOD, TAPE, both) "
+              "glides to a change while a sound plays, without a patch load", nsm >= 160u && hi >= 30u && !bad);
+    }
     {                                                     /* every value as text (sy_text.c) */
         static const struct {
             uint16_t id;

@@ -348,12 +348,16 @@ enum { CAT_BASS, CAT_LEAD, CAT_PAD, CAT_PLUCK, CAT_KEYS, CAT_FX, CAT_SEQ, CAT_OT
 
 static sy_patch_t sy_patch;          /* the sound playing (the edit buffer) */
 static float sp_n[SP_COUNT];         /* audio side: each value normalised 0..1 (the continuous ones smoothed) */
-static float sp_t[SP_COUNT];         /* .. where each is going: its stored value normalised */
 static union {
     int16_t v[SP_COUNT];
     uint32_t w[SP_NPAIR];
-} sp_last;                           /* .. the stored values sp_t is of */
-static uint8_t sp_mv[SP_COUNT], sp_mvf[SP_COUNT], sp_nmv;   /* the smoothed values still on their way */
+} sp_last;                           /* .. the stored values they follow (a smoothed one glides to its normalised) */
+/* the smoothed values still on their way: their ids, and a bit each (on the list). V0.6 kept the ids in bytes: an id
+ * from 256 up (the FX FILTER's, BITCRUSH's, TREMOLO's, RING MOD's and TAPE's, 34 values) came back as another one,
+ * and after a sound's load that value never moved again. Where each goes is worked out again from sp_last a block,
+ * not kept (V0.65: 1,248 bytes; the same division, the same values) */
+static uint16_t sp_mv[SP_COUNT], sp_nmv;
+static uint32_t sp_mvf[(SP_COUNT + 31u) / 32u];
 #define SP_SMOOTH_K 0.0700f          /* a block's step of the one-pole: tau 10 ms (1 - e^(-32 / (0.010 fs))) */
 
 static inline float sp_norm_of(uint32_t id, int32_t v)
@@ -451,9 +455,10 @@ static void sp_snap(void)
     uint32_t i;
     for (i = 0; i < SP_COUNT; i++) {
         sp_last.v[i] = sy_patch.p[i];
-        sp_n[i] = sp_t[i] = sp_norm_of(i, sp_last.v[i]);
-        sp_mvf[i] = 0;
+        sp_n[i] = sp_norm_of(i, sp_last.v[i]);
     }
+    for (i = 0; i < (SP_COUNT + 31u) / 32u; i++)
+        sp_mvf[i] = 0;
     sp_nmv = 0;
 }
 
@@ -463,11 +468,10 @@ static void sp_snap(void)
 static void sp_changed(uint32_t i)
 {
     sp_last.v[i] = sy_patch.p[i];
-    sp_t[i] = sp_norm_of(i, sp_last.v[i]);
     if (!(SP[i].flags & F_SMOOTH))
-        sp_n[i] = sp_t[i];
-    else if (!sp_mvf[i])
-        sp_mvf[i] = 1, sp_mv[sp_nmv++] = (uint8_t)i;
+        sp_n[i] = sp_norm_of(i, sp_last.v[i]);
+    else if (!((sp_mvf[i >> 5] >> (i & 31u)) & 1u))
+        sp_mvf[i >> 5] |= 1u << (i & 31u), sp_mv[sp_nmv++] = (uint16_t)i;
 }
 
 static void sp_block(void)
@@ -482,10 +486,10 @@ static void sp_block(void)
         sp_changed(SP_COUNT - 1u);
     for (k = 0; k < sp_nmv;) {
         uint32_t id = sp_mv[k];
-        float t = sp_t[id], d = t - sp_n[id];
+        float t = sp_norm_of(id, sp_last.v[id]), d = t - sp_n[id];
         sp_n[id] = sy_absf(d) < 1e-5f ? t : sp_n[id] + d * SP_SMOOTH_K;
         if (sp_n[id] == t)
-            sp_mvf[id] = 0, sp_mv[k] = sp_mv[--sp_nmv];
+            sp_mvf[id >> 5] &= ~(1u << (id & 31u)), sp_mv[k] = sp_mv[--sp_nmv];
         else
             k++;
     }
