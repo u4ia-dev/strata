@@ -55,6 +55,13 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
+**V0.67, the STRATA UI** (2026-10-18, after the UI build's install): the screen of [UI.md](UI.md) made legible
+(nothing under 9 px, the labels in a colour of their own, larger handles, flags and zones, the how-to lines off the
+screens), a VALUES zone on every module (its values large, a knob there stepping the finest unit), twelve themes, and
+HOME's bloom as a sunflower that opens with the sound and swirls at each note; the screens checked for overlaps in the
+emulator (`web_lint`). RAM and the pool as V0.66 UI's; the image 339,112 B (BUDGET.md §8). **Verified on host and in
+emulator**; V0.67 **needs a hardware test**.
+
 **Hardware test build** (after Phase 4, before Phase 5, at your request): the FM-1 unit is built. `strata.c` includes
 Felucca's platform unchanged (the HAL, USB, TRS MIDI, the flash driver, the update entry `ota.c`; the update loader is
 Felucca's too) and Strata's sources; `sy_main.c` (power-on, the boot guard, the UBOOT entries, the update entry behind

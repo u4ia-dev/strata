@@ -1,8 +1,7 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.66 HARDWARE TEST`; on the `strata-ui`
-branch its alternate, `V0.66 UI HARDWARE TEST`, the same with the screen redrawn: [UI.md](UI.md)) on an FM-1, testing
-it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.67 HARDWARE TEST`: V0.66 with the STRATA UI,
+made legible: [UI.md](UI.md)) on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -52,7 +51,16 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
-**The UI build** (`strata-ui`, `V0.66 UI HARDWARE TEST`): V0.66 with the STRATA UI ([UI.md](UI.md)): one screen a
+**New in V0.67** (from the UI build's install, "some of the text is too small"; [UI.md](UI.md)): nothing on the screen
+under 9 px (the labels 7 → 9, the top line and the zones 8 → 10, the flags 9 → 12, a module's word 12 → 14), the
+labels in their own brighter colour on every theme, larger handles, chips and zones, the how-to lines gone from the
+screens, the MATRIX four slots at a time, the browser's presets at 12 px; **VALUES**, a zone at the end of every
+module's pages: its knobs' values large, a knob there stepping the finest unit; four more themes (MOSS, DUSK, SAND,
+NEON); HOME's bloom as a sunflower that opens with the sound and swirls at each note. RAM, the pool and the engine are
+V0.66 UI's; the image 12.8 KB larger (the fonts). Package `build/strata.fwsc`, 610,090 bytes, sha256
+`8219aeea6023bbd3b1794d24df6133ff348f9c0017b244a9a33d91900b46c3d9`.
+
+**The UI build** (`strata-ui`, `V0.66 UI HARDWARE TEST`, installed 2026-10-18): V0.66 with the STRATA UI ([UI.md](UI.md)): one screen a
 module, the knobs' numbered handles on what each moves, a value only while its knob turns, Space Mono, warm white on
 black with one vermilion accent, HOME's bloom in place of the scope, the long holds as countdown screens. The engine,
 the panel's controls, the presets and settings, the package, its identity and the flash it writes are V0.66's. Its
@@ -327,6 +335,16 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.67**: built and checked by the build: the image 339,112 bytes, RAM 47,128 of 73,728 bytes, the pool 342,372 of
+  380,928, the spare SRAM 21,900 bytes used and 23,296 left, the interrupt stack ~2.5 KB, the main stack ~4.6 KB (8 KiB
+  allowed), register access in `hal/` only; the package rebuilt by the flasher's builder (sha256 `8219aeea...0b46c3d9`).
+  **Verified on host**: the engine's 94 checks (`sy_tests.sh`, and as WebAssembly), the drawing's time against V0.66
+  UI's ([UI.md](UI.md) §5). **Verified in the emulator**: 93 checks (`strata_emu_test.mjs`, the screens' check on all
+  149 pages among them), 80 screens rendered and checked (`strata_ui_shots.mjs`), the flasher's 26 checks, the test
+  page's 21, the emulator's page in a browser (6), the backup server's 13. **Needs a hardware test**: the legibility on
+  the panel, VALUES' fine steps, the twelve themes, the bloom, BENCH's SCREEN row (the test page's "Listen and look":
+  the four V0.67 rows).
 
 - **The UI build** (`V0.66 UI`, branch `strata-ui`): built and checked by the build: the image 326,280 bytes (V0.66
   327,184; the fonts 39.0 KB, V0.66's 76.1), RAM 47,128 of 73,728 bytes, the pool 342,372 of 380,928 (the canvas 240

@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,3 +134,28 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 8. V0.67 (the STRATA UI made legible) and the room left
+
+From the build (`tools/build.py --strata`, 2026-10-18):
+
+| | V0.66 | V0.66 UI | V0.67 | Left for what comes next |
+| --- | ---: | ---: | ---: | --- |
+| App image (of the app slot's 581,564 B) | 327,184 B | 326,280 B | 339,112 B | **242,452 B** (41.7 % of the slot) |
+| `.data` + `.bss` (of 73,728 B) | 46,560 B | 47,128 B | 47,128 B | **26,600 B** (the build keeps 4 KiB of it spare: 22,504 usable) |
+| Pool (of 380,928 B) | 358,692 B | 342,372 B | 342,372 B | **38,556 B** (4 KiB kept spare: 34,460 usable) |
+| Spare SRAM (`.spare_bss`, of 45,196 B) | 19,296 B | 21,900 B | 21,900 B | **23,296 B** (watched on BENCH) |
+| Main stack (12,032 B reserved) | | ~4,564 B | ~4,572 B | 8,192 B allowed by the build: ~3.6 KB of depth |
+| Interrupt stack (7,936 B reserved) | ~2.5 KB | ~2.5 KB | ~2,496 B | 4,096 B allowed: ~1.6 KB |
+| The user store's free part (`0xCB000`–`0xDFFFF`) | 84 KiB | 84 KiB | 84 KiB | **84 KiB** for user content (samples, patterns) |
+
+What V0.67 spent, all in flash (RAM and the pool are V0.66 UI's to the byte): the fonts 39.0 → 48.6 KB (nothing
+under 9 px), the 72 VALUES pages' table rows (1.4 KB) and their page (0.9 KB), the knobs' names and values split out
+for VALUES (1.4 KB), the screens' larger layouts. The bloom: its state 8 B, as the trace's; HOME's code 50 B less.
+
+**RAM free in all: 48.7 KiB** (26,600 B of `.data` + `.bss` and 23,296 of the spare SRAM; the pool's 38,556 besides:
+86.4 KiB counting the pool). For a groovebox's patterns, an arpeggiator's and a chord memory's state, these are
+plenty (a 16-step pattern of 8 tracks: well under 1 KB). What is short is the CPU (ARCHITECTURE.md §13: a chord of
+eight two-oscillator voices with unison and the full rack does not fit one core at the expected rate; the second core
+is still off) and the flash for built-in content (242 KB: ~22 s of 4-bit ADPCM at 22 kHz, or factory presets by the
+thousand at ~0.6 KB each). [UI.md](UI.md) §5 has the drawing's time.

@@ -29,6 +29,13 @@ knobs' numbered handles on what each moves; the knob turning: its handle vermili
 shape before the turn dashed), and a bottom row (the section's pages as zones, ALGORITHM's; or a word for a
 moment).
 
+**VALUES** (V0.67): every module (OSC A and B, SUB, NOISE, FILTER, ENV 1 and 2, LFO 1 and 2, VOICE, each FX module)
+has one more zone at the end of its pages, VALUES: its pages' knobs again, a page each in the same order ("VALUES
+1/5" holds WAVE's four, "2/5" UNISON's, ..), each value large with its bar, the range its modulation takes it and the
+source. A knob there moves the parameter's finest step a detent (0.1 % of its range; a list one entry) however fast it
+turns: for an exact value. ALGORITHM and OCT− / OCT+ with the family button held reach the VALUES pages; a family
+button's tap steps the drawings only.
+
 ## The pages
 
 A family button's tap shows its pages: the first tap the family's page shown last, the next taps step through its pages
@@ -216,7 +223,7 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 
 | Page | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
 | --- | --- | --- | --- | --- |
-| SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO | HELP: a section's hint at the bottom as it opens (on by default) | GLOW: the LEDs' glow, HIGH or LOW | |
+| SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO, MOSS, DUSK, SAND, NEON (V0.67's four) | HELP: a section's hint at the bottom as it opens (on by default) | GLOW: the LEDs' glow, HIGH or LOW | |
 | PANEL | ACCEL: the knobs' speed sensitivity | HOLD: 300, 400, 500 or 600 ms before a held button's layer | | |
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
 | BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |

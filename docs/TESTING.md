@@ -356,7 +356,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 90 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 93 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -492,6 +492,25 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   strip. Brought under V0.66's in every session by: a page's curves computed once a frame, the canvas cleared and the
   rows hashed two pixels at a time, a live frame redrawing only the rows its live parts take, a knob's turn only the
   body's rows, the stipple a store a dot, the bloom's segments without a pixel's bounds check.
+
+**V0.67** (the UI made legible; [UI.md](UI.md)):
+
+- **The screens' check** (`web_lint` in `strata_web.c`, under `LK_LINT`): the screen drawn twice into buffers of its
+  own, with its text and without; a pixel the text changed fails if under it or beside it lies anything but the
+  ground, the text's own ground or a blend of the two; two texts' ink boxes may not meet; a text may not reach within
+  2 px of the screen's edges; no text in MID or LINE; no two knobs' handles on one place. The shots script runs it on
+  each of its 80 screens (`lint.txt`, marked PNGs in `lint/`): its first run on V0.67's type found 24 screens with
+  findings (a handle's ring on a title, chips past the edge, the MOD layer's codes on its keys' borders, the theme
+  names crossing), all fixed; now clean. New checks in `strata_emu_test.mjs`: every one of the 149 pages clean in
+  silence; FILTER's VALUES page: a quick turn of 20 detents moves the cutoff 20 (TONE's page: 600, accelerated); EDIT
+  tapped on MORE steps to TONE (the VALUES pages skipped); the bloom: a bud in silence (open 0, swirl 0), 0.15 s into a
+  note swirling and opening (0.65, 0.83), at 1.75 s open and unwound (0.90, 0.06), 4 s after the release a bud again
+  (0.01) and nothing sent in the next second. The palette's check: round from STRATA to the twelfth, NEON.
+- **The bloom over time** (`strata_bloom_study.mjs`): 17 frames of it (a note's swirl, a second note above, the
+  release, a chord) on one sheet; read by eye.
+- **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on
+  one machine, interleaved, 7 runs each: at or under it in each but HOME in silence (+5 µs in 2 s, nothing drawn);
+  [UI.md](UI.md) §5.
 
 ## 7. Needs hardware test
 
