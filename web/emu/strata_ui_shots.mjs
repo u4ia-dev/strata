@@ -18,10 +18,11 @@ ex.web_master(700);
 ex.web_boot();
 ex.web_test_set_get(0, 0);                      // (HELP's hints off)
 const run = (s) => { for (let n = Math.max(1, Math.round(s * 44118 / 128)); n > 0; n--) ex.web_render(128); };
-const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, REC: 11, OCTDN: 12, OCTUP: 13 };   // panel.c B_*
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, PLAY: 10, REC: 11, OCTDN: 12,
+            OCTUP: 13 };                                                                     // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
-              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41 };                                    // SEC_*
+              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42 };                           // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
@@ -264,6 +265,11 @@ shot("VoicePlay");
 shot("Matrix");
 go(SEC.GLOBAL, "TEMPO");
 shot("Tempo");
+ex.web_test_chd(21, 1);                         // (V0.75: CLOCK IN MIDI, no clock yet: the panel's tempo)
+run(0.05);
+shot("TempoClock");
+ex.web_test_chd(21, 0);
+run(0.05);
 go(SEC.KEYS, "SCALE");
 turn(0, 2);                                     // MINOR
 rest();
@@ -300,7 +306,7 @@ held(16, 0.15);
 shot("ChordKey");
 ex.web_keys(0);
 run(0.3);
-go(SEC.KEYS, "PERFORM");
+go(SEC.ARP, "PERFORM");                         // (V0.75: ARP held, ARP's pages)
 ex.web_test_chd(4, 1);                          // PERFORM on
 for (const [st, id, move, feel] of [[0, "PerfStrum", 0, 40], [1, "PerfStrum2", 1, 0], [2, "PerfArp", 2, 2],
                                      [3, "PerfPattern", 4, 60], [4, "PerfHarp", 0, 0], [5, "PerfSlop", 0, 80]]) {
@@ -312,6 +318,67 @@ for (const [st, id, move, feel] of [[0, "PerfStrum", 0, 40], [1, "PerfStrum2", 1
 }
 ex.web_test_chd(5, 0);
 ex.web_test_chd(4, 0);
+
+// ---- V0.75: the ARP (the keys C4 E4 G4 B4 latched; UP-DOWN over 2 octaves; twelve steps of every kind; GROOVE)
+ex.web_test_chd(0, 0);                          // (MODE OFF: the keys themselves, no bass)
+ex.web_test_chd(9, 0);
+ex.web_test_chd(4, 1);
+ex.web_test_chd(5, 2);
+ex.web_test_chd(6, 9);                          // 1/16, UP-DOWN, 2 octaves
+ex.web_test_chd(7, 2);
+ex.web_test_chd(8, 2);
+ex.web_test_chd(17, 60);                        // GATE 60 %, SWING 58 %, LATCH, LENGTH 12
+ex.web_test_chd(18, 58);
+ex.web_test_chd(19, 1);
+ex.web_test_chd(20, 12);
+for (const [i, kind, lvl, oct, rat, chn, sld] of [[0, 0, 100, 2, 1, 100, 0], [1, 0, 60, 2, 1, 100, 0], [2, 1, 100, 2, 1, 100, 0],
+     [3, 0, 80, 3, 2, 100, 0], [4, 2, 100, 2, 1, 100, 0], [5, 0, 45, 2, 1, 50, 0], [6, 0, 100, 1, 1, 100, 1],
+     [7, 0, 70, 2, 3, 100, 0], [8, 0, 90, 2, 1, 100, 0], [9, 1, 100, 2, 1, 100, 0], [10, 0, 55, 3, 1, 100, 0],
+     [11, 0, 100, 2, 4, 75, 0]])
+  [kind, lvl, oct, rat, chn, sld].forEach((v, f) => ex.web_test_step(i, f, v));
+run(0.05);                                      // (the settings taken: MODE's change forgets what is held)
+ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4) | (1 << 18));   // (C4 E4 G4 B4, then let go: latched)
+run(0.1);
+ex.web_keys(0);
+run(0.62);
+shot("ArpPerform");
+go(SEC.ARP, "STEPS");
+turn(0, 3);                                     // step 4 picked: 2 hits an octave up at 80 %
+run(0.3);
+shot("ArpSteps");
+turn(2, -2);                                    // its LEVEL turning
+shot("ArpStepsTurn");
+rest();
+go(SEC.ARP, "RATCHET");
+turn(0, 8);                                     // step 12: 4 hits, CHANCE 75 %
+run(0.3);
+shot("ArpRatchet");
+rest();
+go(SEC.ARP, "GROOVE");
+run(0.3);
+shot("ArpGroove");
+turn(1, 6);                                     // SWING to 64 %, turning
+shot("ArpGrooveTurn");
+rest();
+go(SEC.ARP, "PERFORM");
+ex.web_test_chd(7, 12);                         // CHORD over 3 octaves
+ex.web_test_chd(8, 3);
+run(0.3);
+shot("ArpChord");
+ex.web_test_chd(5, 3);                          // PATTERN 7 with GROOVE's swing and gate
+ex.web_test_chd(7, 6);
+run(0.3);
+shot("ArpPattern");
+ex.web_test_chd(19, 0);                         // (all back: LATCH off, the steps as they were, PERFORM off, MODE KEY)
+ex.web_test_chd(20, 16);
+ex.web_test_chd(17, 50);
+ex.web_test_chd(18, 50);
+for (let i = 0; i < 16; i++) [0, 100, 2, 1, 100, 0].forEach((v, f) => ex.web_test_step(i, f, v));
+ex.web_test_chd(5, 0);
+ex.web_test_chd(4, 0);
+ex.web_test_chd(0, 1);
+ex.web_test_chd(9, 1);
+run(0.4);
 go(SEC.KEYS, "BASS");
 held(14, 0.1);                                  // G4: G major (C major's), the bass under it
 shot("Bass");

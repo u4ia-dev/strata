@@ -106,5 +106,21 @@ int main(void)
         run(40);
     }
     report("FILTER VALUES, KNOB 2 turning, 2 s");
+    run(1500);
+    web_test_chd(4, 1);                             /* V0.75: ARP over C E G, 1/16 at 120 BPM: its pages as it plays */
+    web_test_chd(5, 2);
+    run(50);
+    page(SEC_ARP, "PERFORM");
+    web_keys(chord);
+    run(300);
+    start();
+    run(2000);
+    report("ARP PERFORM, the arpeggio playing, 2 s");
+    page(SEC_ARP, "STEPS");
+    run(300);
+    start();
+    run(2000);
+    report("ARP STEPS, the arpeggio playing, 2 s");
+    web_keys(0);
     return 0;
 }

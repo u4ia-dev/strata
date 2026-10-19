@@ -31,12 +31,12 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, VOICE: 9, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, REVERB: 15,
               OTT: 16, EQ: 17, EQ2: 21, PHASER: 24, PHASER2: 25, CHAIN: 36, MENU: 37, GLOBAL: 38, SAVE: 39, BROWSE: 40,
-              KEYS: 41 };                                                                     // SEC_*
+              KEYS: 41, ARP: 42 };                                                            // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
              PH_ON: 236, EQ2_MID: 209, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
-             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
+             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, CLOCK: 1067, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 const pid = (x, sec, nm, k) => {               // the parameter at knob k of a page, found by its section and name
   const p = x.web_test_page();
@@ -458,7 +458,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   ex.web_enc(E.K3, -9); play(ex, 0.03);
   const n1 = t()[2];
   check(`GLO, from VOICE three taps: GLOBAL (section ${sec}) ${name()} (${items}): ${a[0]} BPM ${a[1]}/${a[2]}`,
-        sec === SEC.GLOBAL && name() === "TEMPO" && items.join() === [ID.BPM, ID.TSB, ID.TSN, -1].join() &&
+        sec === SEC.GLOBAL && name() === "TEMPO" && items.join() === [ID.BPM, ID.TSB, ID.TSN, ID.CLOCK].join() &&
         a[0] === 120 && a[1] === 4 && a[2] === 4 && a[3] === 12000);
   check(`.. BPM: 3 slow detents ${a[0]} -> ${b[0]}, held between 20 and 300 (${lo}, ${hi}); TS-BEAT 1-16 (${tsb}, ${tsb1}, ${tsb16}); TS-NOTE 1 2 4 8 16 (${n8[2]}, ${n16}, ${n1}); 300 BPM in eighths: ${n8[3] / 100} quarter notes a minute`,
         b[0] === 123 && lo === 20 && hi === 300 && tsb === 7 && tsb1 === 1 && tsb16 === 16 && n8[2] === 8 &&
@@ -1127,7 +1127,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
                 "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "DRIVE 2", "CHORUS 2", "OTT 2", "EQ 2",
                 "FLANGER", "FLANGER 2", "PHASER", "PHASER 2", "FX FILTER", "FX FILTER 2", "BITCRUSH", "BITCRUSH 2",
                 "TREMOLO", "TREMOLO 2", "RING MOD", "RING MOD 2", "TAPE", "TAPE 2", "CHAIN", "MENU", "GLOBAL", "SAVE",
-                "BROWSE", "KEYS"];
+                "BROWSE", "KEYS", "ARP"];
   const here = () => `${SECN[z.web_test_page_section()]} ${cstr(z, z.web_test_page_name())}`;
   const hush = () => { for (let k = 0; k < 40 && play(z, 0.25).peak > 1e-5; k++); play(z, 0.3); };
   const idleDraws = () => { play(z, 1.2); const d0 = z.web_screen_draws(); play(z, 1.0); return z.web_screen_draws() - d0; };
@@ -1357,6 +1357,238 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(c2, 0.3);
   check(`chords: after a power cycle FREE ${c2.web_test_chd(0, -1)}, the style ${c2.web_test_chd(5, -1)} (ARP), BASS ${c2.web_test_chd(9, -1)}, MIDI IN ${c2.web_test_chd(12, -1)}`,
         c2.web_test_chd(0, -1) === 2 && c2.web_test_chd(5, -1) === 2 && c2.web_test_chd(9, -1) === 1 && c2.web_test_chd(12, -1) === 1);
+}
+{                                               // V0.75: the ARP (sy_chord.c: MODE, the steps, GROOVE, LATCH, the beat)
+  const c = await boot();
+  let mask = 0;
+  const FS = 44117.647, SMP = FS * 60 / 120 / 4;   // (a 1/16 at 120 BPM: 5514.7 samples)
+  const set = (f, v) => { c.web_test_chd(f, v); play(c, 0.01); };
+  const st = (i, f, v) => c.web_test_step(i, f, v);
+  const K = (n) => n - 53;
+  const sent = (m0, on) => {                    // what went out over USB since m0: [note, velocity, time] (ons or offs)
+    const r = [];
+    for (let i = m0; i < c.web_test_mout_n(); i++) {
+      const p = c.web_test_mout(i);
+      if (((p >> 8) & 0xF0) === (on ? 0x90 : 0x80)) r.push([(p >> 16) & 127, (p >> 24) & 127, c.web_test_mout_t(i)]);
+    }
+    return r;
+  };
+  const hold = (notes) => { for (const n of notes) { mask |= 1 << K(n); c.web_keys(mask); play(c, 0.004); } };
+  const letgo = () => { mask = 0; c.web_keys(0); play(c, 0.4); };
+  const steps0 = () => { for (let i = 0; i < 16; i++) { st(i, 0, 0); st(i, 1, 100); st(i, 2, 2); st(i, 3, 1); st(i, 4, 100); st(i, 5, 0); } };
+  play(c, 0.3);
+  set(13, 1);                                   // USB OUT: the arpeggio read from what it sends
+  set(4, 1);                                    // PERFORM: ARP, 1/16 at 120 BPM, half a step long
+  set(5, 2);
+  const run = (mode, oct, notes, secs) => {     // MODE over the notes held: the first note-ons
+    set(7, mode);
+    set(8, oct);
+    const m0 = c.web_test_mout_n();
+    hold(notes);
+    play(c, secs);
+    letgo();
+    return sent(m0, 1).map((x) => x[0]);
+  };
+  const CEG = [60, 64, 67], m = {};
+  for (const [nm, mode, oct] of [["UP", 0, 1], ["DOWN", 1, 1], ["UP-DOWN", 2, 1], ["DOWN-UP", 3, 1], ["UP & DOWN", 4, 1],
+                                 ["OUTSIDE IN", 8, 1], ["INSIDE OUT", 9, 1], ["PINKY", 10, 1], ["THUMB", 11, 1],
+                                 ["UP 2 OCT", 0, 2]])
+    m[nm] = run(mode, oct, CEG, 0.95).slice(0, 8).join(" ");
+  m["AS PLAYED"] = run(5, 1, [67, 60, 64], 0.6).slice(0, 4).join(" ");
+  m["CHORD 2 OCT"] = run(12, 2, CEG, 0.3).slice(0, 6).join(" ");
+  const want = { "UP": "60 64 67 60 64 67 60 64", "DOWN": "67 64 60 67 64 60 67 64", "UP-DOWN": "60 64 67 64 60 64 67 64",
+                 "DOWN-UP": "67 64 60 64 67 64 60 64", "UP & DOWN": "60 64 67 67 64 60 60 64",
+                 "OUTSIDE IN": "60 67 64 60 67 64 60 67", "INSIDE OUT": "64 67 60 64 67 60 64 67",
+                 "PINKY": "60 67 64 67 60 67 64 67", "THUMB": "60 64 60 67 60 64 60 67", "UP 2 OCT": "60 64 67 72 76 79 60 64",
+                 "AS PLAYED": "67 60 64 67", "CHORD 2 OCT": "60 64 67 72 76 79" };
+  const bad = Object.keys(want).filter((k) => m[k] !== want[k]);
+  check(`ARP: MODE over C E G: ${Object.keys(want).map((k) => `${k} ${m[k]}`).join(", ")}`, bad.length === 0);
+
+  set(7, 0);                                    // the steps: LENGTH 4: PLAY, TIE, REST, PLAY (3 hits, an octave up, 50 %)
+  set(8, 1);
+  set(20, 4);
+  st(1, 0, 1);
+  st(2, 0, 2);
+  st(3, 3, 3); st(3, 2, 3); st(3, 1, 50);
+  let m0 = c.web_test_mout_n();
+  hold(CEG);
+  play(c, 1.05);
+  letgo();
+  const on1 = sent(m0, 1), off1 = sent(m0, 0), t0 = on1.length ? on1[0][2] : 0;
+  const at = (x) => Math.round((x[2] - t0) / SMP * 100) / 100;   // a time in steps from the first note
+  const seq1 = on1.map((x) => `${x[0]}@${at(x)}/${x[1]}`).join(" ");
+  const off60 = off1.find((x) => x[0] === 60), r76 = on1.filter((x) => x[0] === 76).map(at);
+  check(`.. the steps (PLAY, TIE, REST, 3 hits +1 OCT at 50 %): ${seq1}; C4 held through the TIE, off at ${off60 ? at(off60) : "-"} steps`,
+        on1.map((x) => x[0]).join() === "60,76,76,76,67,72,72,72,64" && r76.length === 3 && Math.abs(r76[0] - 3) < 0.02 &&
+        Math.abs(r76[1] - 3.33) < 0.02 && Math.abs(r76[2] - 3.67) < 0.02 && on1[1][1] === 50 && on1[0][1] === 100 &&
+        Math.abs(at(on1[4]) - 4) < 0.02 && off60 && Math.abs(at(off60) - 1.5) < 0.02);
+
+  steps0();                                     // GATE 25 %, SWING 75 %: the odd steps half a step late
+  set(20, 16);
+  set(17, 25);
+  set(18, 75);
+  st(5, 4, 0);                                  // (step 6: CHANCE 0 %, a gap: its note passed over)
+  m0 = c.web_test_mout_n();
+  hold(CEG);
+  play(c, 0.95);
+  letgo();
+  const on2 = sent(m0, 1), off2 = sent(m0, 0), t2 = on2[0][2];
+  const tt = on2.map((x) => Math.round((x[2] - t2) / SMP * 100) / 100);
+  const len2 = on2.slice(0, 4).map((x) => { const o = off2.find((y) => y[0] === x[0] && y[2] > x[2]); return o ? Math.round((o[2] - x[2]) / SMP * 100) / 100 : -1; });
+  check(`.. GATE 25 %, SWING 75 %: steps at ${tt.join(" ")} (step 6 left out by CHANCE 0 %: ${on2.map((x) => x[0]).join(" ")}), each ${len2.join(" ")} of a step`,
+        tt.slice(0, 5).every((x, i) => Math.abs(x - [0, 1.5, 2, 3.5, 4][i]) < 0.02) && Math.abs(tt[5] - 6) < 0.02 &&
+        on2.map((x) => x[0]).slice(0, 7).join() === "60,64,67,60,64,60,64" && len2.every((x) => Math.abs(x - 0.25) < 0.02));
+  st(5, 4, 100);
+  set(18, 50);
+  set(17, 50);
+  st(0, 5, 1);                                  // SLIDE on step 1: C4 on until E4 has started
+  m0 = c.web_test_mout_n();
+  hold(CEG);
+  play(c, 0.2);
+  letgo();
+  const on3 = sent(m0, 1), off3 = sent(m0, 0);
+  const sl = [on3.find((x) => x[0] === 64), off3.find((x) => x[0] === 60)];
+  st(0, 5, 0);
+  check(`.. SLIDE: C4 off ${sl[0] && sl[1] ? sl[1][2] - sl[0][2] : "-"} samples after E4 began (legato)`,
+        sl[0] && sl[1] && sl[1][2] > sl[0][2] && sl[1][2] - sl[0][2] <= 96);
+
+  set(19, 1);                                   // LATCH: let go, it plays on; the next press after, what is held anew
+  m0 = c.web_test_mout_n();
+  hold(CEG);
+  mask = 0; c.web_keys(0);
+  play(c, 0.6);
+  const latched = sent(m0, 1).length;
+  hold([62]);
+  mask = 0; c.web_keys(0);
+  play(c, 0.15);
+  m0 = c.web_test_mout_n();
+  play(c, 0.5);
+  const anew = [...new Set(sent(m0, 1).map((x) => x[0]))].join(" ");
+  set(19, 0);                                   // LATCH off: what was let go goes
+  play(c, 0.2);
+  m0 = c.web_test_mout_n();
+  play(c, 0.4);
+  const after = sent(m0, 1).length;
+  check(`.. LATCH: C E G let go, ${latched} notes in 0.6 s; D4 pressed and let go: ${anew} alone; LATCH off: ${after} notes after`,
+        latched >= 4 && anew === "62" && after === 0);
+
+  tap(c, B.PLAY);                               // PLAY: the steps on its beat (a key's first note at the next step)
+  play(c, 0.3);
+  const tNow = c.web_test_arp(8), q0 = c.web_test_arp(1) / 1000, tRun = tNow - q0 * FS * 60 / 120;
+  m0 = c.web_test_mout_n();
+  const tPress = c.web_test_arp(8);
+  hold([60]);
+  play(c, 0.6);
+  letgo();
+  const on4 = sent(m0, 1), g4 = on4.map((x) => (x[2] - tRun) / SMP);
+  const wait4 = on4.length ? (on4[0][2] - tPress) / SMP : -1;
+  check(`.. PLAY on: the steps on its beat (${g4.map((x) => x.toFixed(2)).join(" ")} steps from its start), the first ${wait4.toFixed(2)} of a step after the key`,
+        on4.length >= 4 && g4.every((x) => Math.abs(x - Math.round(x)) < 0.02) && wait4 > 0 && wait4 <= 1.01 &&
+        c.web_test_arp(0) === 1);
+  tap(c, B.PLAY);
+
+  set(21, 1);                                   // CLOCK IN MIDI: 24 clocks, a start, clocks: the tempo, the steps on them
+  const P = 9 * 128;                            // (a clock every 9 renders: 1152 samples, 95.7 quarter notes a minute)
+  const clk = (n) => { for (let i = 0; i < n; i++) { c.web_midi(0xF8, 0, 0); play(c, 9 * 128 / 44118 + 1e-6); } };
+  clk(30);
+  c.web_midi(0xFA, 0, 0);
+  play(c, 0.003);
+  const tStart = c.web_test_arp(8);
+  clk(26);
+  m0 = c.web_test_mout_n();
+  mask = (1 << K(60)) | (1 << K(64));           // (both at once: no audio between the clocks)
+  c.web_keys(mask);
+  clk(40);
+  letgo();
+  const tempo = c.web_test_arp(5) / 100, follow = c.web_test_arp(6), on5 = sent(m0, 1);
+  const p5 = on5.map((x) => (x[2] - tStart) / P);
+  c.web_midi(0xFC, 0, 0);
+  play(c, 0.05);
+  const stopped = c.web_test_arp(0), green = (c.web_lit_buttons() >> 14) & 1;
+  check(`.. CLOCK IN MIDI: the tempo ${tempo} (95.7 sent, following: ${follow}); the steps on clocks ${p5.map((x) => x.toFixed(2)).join(" ")} after the start (6 a step); stop: running ${stopped}, PLAY's green ${green}`,
+        Math.abs(tempo - 95.7) < 1.0 && follow === 1 && on5.length >= 5 &&
+        p5.every((x) => Math.abs(x - Math.round(x)) < 0.05 && Math.round(x) % 6 === 0) && stopped === 0 && green === 0);
+  set(21, 0);
+
+  set(17, 75);                                  // the settings kept: GROOVE's, CLOCK IN, a step's, through a power cycle
+  set(18, 60);
+  set(20, 5);
+  set(19, 1);
+  set(21, 1);
+  st(2, 0, 1); st(2, 1, 40); st(2, 2, 4); st(2, 3, 2); st(2, 4, 55); st(2, 5, 1);
+  set(4, 0);
+  play(c, 8.0);
+  const nor = new Uint8Array(c.memory.buffer, c.web_nor(), c.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const c2 = instance.exports;
+  if (c2._initialize) c2._initialize();
+  new Uint8Array(c2.memory.buffer, c2.web_nor(), c2.web_nor_size()).set(nor);
+  c2.web_master(700);
+  c2.web_boot();
+  play(c2, 0.3);
+  const kept = [17, 18, 20, 19, 21].map((f) => c2.web_test_chd(f, -1)), kept2 = [0, 1, 2, 3, 4, 5].map((f) => c2.web_test_step(2, f, -1));
+  check(`.. after a power cycle: GATE, SWING, LENGTH, LATCH, CLOCK IN ${kept.join(" ")}; step 3 ${kept2.join(" ")}`,
+        kept.join() === "75,60,5,1,1" && kept2.join() === "1,40,4,2,55,1");
+}
+{                                               // V0.75: ARP's buttons and pages
+  const u = await boot(), name = () => cstr(u, u.web_test_page_name());
+  play(u, 0.3);
+  u.web_buttons(1 << B.ARP);                    // ARP held: its pages (no toggle)
+  play(u, 0.8);
+  u.web_buttons(0);
+  play(u, 0.4);
+  const opened = [u.web_test_page_section(), name(), u.web_test_chd(4, -1)];
+  tap(u, B.ARP);                                // a tap: PERFORM on, lit
+  const lit = (u.web_lit_buttons() >> B.ARP) & 1, on = u.web_test_chd(4, -1);
+  u.web_enc(E.ALGO, 1); play(u, 0.1);           // STEPS: KNOB 1 the step, 2 its kind, 3 its level, 4 its octave
+  const p1 = name();
+  u.web_enc(E.K1, 3); play(u, 0.05);
+  u.web_enc(E.K2, 1); play(u, 0.05);
+  u.web_enc(E.K3, -2); play(u, 0.05);
+  u.web_enc(E.K4, 1); play(u, 0.05);
+  const s1 = [u.web_test_arp(7), ...[0, 1, 2].map((f) => u.web_test_step(3, f, -1))];
+  u.web_enc(E.ALGO, 1); play(u, 0.1);           // RATCHET: 2 its hits, 3 its chance, 4 its slide
+  const p2 = name();
+  u.web_enc(E.K2, 2); play(u, 0.05);
+  u.web_enc(E.K3, -4); play(u, 0.05);
+  u.web_enc(E.K4, 1); play(u, 0.05);
+  const s2 = [3, 4, 5].map((f) => u.web_test_step(3, f, -1));
+  u.web_enc(E.ALGO, 1); play(u, 0.1);           // GROOVE: GATE, SWING, LENGTH, LATCH
+  const p3 = name();
+  u.web_enc(E.K1, 2); play(u, 0.05);
+  u.web_enc(E.K2, 5); play(u, 0.05);
+  u.web_enc(E.K3, -4); play(u, 0.05);
+  u.web_enc(E.K4, 1); play(u, 0.05);
+  const s3 = [17, 18, 20, 19].map((f) => u.web_test_chd(f, -1));
+  tap(u, B.ARP);                                // a tap there: PERFORM off, the page stays
+  check(`ARP held: ${opened[1]} (section ${opened[0]}; PERFORM ${opened[2]}); a tap: PERFORM ${on}, lit ${lit}; ${p1}: step ${s1[0] + 1} ${s1.slice(1)}; ${p2}: ${s2}; ${p3}: ${s3}; a tap: PERFORM ${u.web_test_chd(4, -1)} (${name()})`,
+        opened.join() === `${SEC.ARP},PERFORM,0` && on === 1 && lit === 1 && p1 === "STEPS" && s1.join() === "3,1,90,3" &&
+        p2 === "RATCHET" && s2.join() === "3,80,1" && p3 === "GROOVE" && s3.join() === "60,55,12,1" &&
+        u.web_test_chd(4, -1) === 0 && name() === "GROOVE");
+  const h = await boot();                       // a chord held, then ARP: it plays the chord held; ARP again: held
+  const notesH = () => [...Array(8).keys()].map((i) => h.web_test_voice_note(i)).filter((n) => n >= 0).sort((a, b) => a - b);
+  play(h, 0.3);
+  h.web_test_chd(5, 2);
+  h.web_test_chd(13, 1);
+  play(h, 0.02);
+  h.web_keys((1 << 7) | (1 << 11) | (1 << 14));
+  play(h, 0.3);
+  const before = notesH().join(" "), m0 = h.web_test_mout_n();
+  tap(h, B.ARP);
+  play(h, 0.6);
+  const outs = [];
+  for (let i = m0; i < h.web_test_mout_n(); i++) {
+    const p = h.web_test_mout(i);
+    if (((p >> 8) & 0xF0) === 0x90) outs.push((p >> 16) & 127);
+  }
+  tap(h, B.ARP);
+  play(h, 0.1);
+  const heldOn = notesH().join(" ");
+  h.web_keys(0);
+  play(h, 1.5);
+  check(`a chord held (${before}), then ARP: it arpeggiates (${outs.slice(0, 6).join(" ")}); ARP again: ${heldOn} held; let go: ${notesH().length} voices`,
+        before === "60 64 67" && outs.slice(0, 6).join() === "60,64,67,60,64,67" && heldOn === "60 64 67" &&
+        notesH().length === 0);
 }
 {                                               // V0.67: VALUES, the family's taps, the bloom
   const v = await boot(), FILTER = 4;

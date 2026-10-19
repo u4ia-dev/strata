@@ -143,11 +143,12 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_store.c"
-static uint32_t web_mout[256], web_mout_n;       /* (V0.7: the chords' USB MIDI out, kept for the tests and the page) */
-#define SY_MIDI_OUT(pkt) (web_mout[web_mout_n++ % 256u] = (pkt))
+static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chords' USB MIDI out, kept for the tests
+                                                               * and the page; V0.75: each one's time, samples) */
+#define SY_MIDI_OUT(pkt) (web_mout_t[web_mout_n % 256u] = chs.t, web_mout[web_mout_n++ % 256u] = (pkt))
 #include "../../firmware/src/sy_chord.c"
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.7"                     /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.75"                    /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -265,6 +266,8 @@ EXPORT uint32_t web_midi(uint32_t status, uint32_t d1, uint32_t d2)
 {
     if (status >= 0x80u && status < 0xF0u)
         sy_midi_in(status, d1, d2);
+    else if (status >= 0xF8u)                   /* (V0.75: clock, start, continue, stop, as they come) */
+        sy_midi_rt(status, fm1_ms);
     return 1;
 }
 
@@ -681,10 +684,11 @@ EXPORT const char *web_test_chord_name(void)
 }
 EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
 {
-    uint8_t *p[17] = {&chd.mode, &chd.type, &chd.ext, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
-                      &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype};
+    uint8_t *p[22] = {&chd.mode, &chd.type, &chd.ext, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
+                      &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype,
+                      &chd.gate, &chd.swing, &chd.latch, &chd.len, &chd.clock};
     uint8_t *q = f == 6u ? &chd.rate[chd.style % PF_N] : f == 7u ? &chd.move[chd.style % PF_N]
-                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 17u ? p[f] : 0;
+                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 22u ? p[f] : 0;
     if (!q)
         return -1;
     if (v >= 0) {
@@ -696,6 +700,28 @@ EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
 }
 EXPORT uint32_t web_test_mout_n(void) { return web_mout_n; }
 EXPORT uint32_t web_test_mout(uint32_t i) { return web_mout[i % 256u]; }
+EXPORT uint32_t web_test_mout_t(uint32_t i) { return web_mout_t[i % 256u]; }
+/* V0.75, ARP's step i: f 0 its kind (PLAY TIE REST), 1 LEVEL, 2 OCTAVE (0 .. 4: -2 .. +2), 3 RATCHET, 4 CHANCE, 5
+ * SLIDE; v >= 0 sets it; read back. The transport: f 0 running, 1 its place (thousandths of a quarter note), 2 MIDI's
+ * clocks counted, 3 the step that played + 1, 4 the beats, 5 the tempo (hundredths of a quarter note a minute), 6 the
+ * tempo from MIDI's clock, 7 the step picked (STEPS), 8 the audio side's time (samples) */
+EXPORT int32_t web_test_step(uint32_t i, uint32_t f, int32_t v)
+{
+    uint8_t *q = f == 0u ? chd.st : f == 1u ? chd.lvl : f == 2u ? chd.oct : f == 3u ? chd.rat : f == 4u ? chd.chn : chd.sld;
+    if (i >= AR_NSTEP || f > 5u)
+        return -1;
+    if (v >= 0) {
+        q[i] = (uint8_t)v;
+        ui.dirty = D_ALL;
+    }
+    return q[i];
+}
+EXPORT int32_t web_test_arp(uint32_t f)
+{
+    return f == 0u ? chs.run : f == 1u ? sy_floori(chs.tq * 1000.0f) : f == 2u ? chs.pulses : f == 3u ? chs.at
+           : f == 4u ? chs.beat : f == 5u ? sy_floori(sy_tempo * 100.0f + 0.5f) : f == 6u ? sy_app_clock()
+           : f == 7u ? ui.astep : f == 8u ? (int32_t)chs.t : -1;
+}
 EXPORT int32_t web_test_voice_note(uint32_t i)
 {
     return i < SY_NVOICE && sy_v[i].on && sy_v[i].key ? sy_v[i].note : -1;
