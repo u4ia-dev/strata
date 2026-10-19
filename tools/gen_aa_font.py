@@ -53,7 +53,7 @@ L_CHARS = " #+-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"   # (STRATA: Z and _, fo
 SM_EXTRAS = [0xB0, 0xB1, 0xB7, 0xD7, 0x2026, 0x2014, 0x2192]
 CODE[0x2014] = 0x97
 CODE[0x2192] = 0x86
-SM_BIG = "!#&'()*+,-./0123456789:?@ABCDEFGHIJKLMNOPQRSTUVWXYZ_v"   # (v: a version's, "WARM PAD v2")
+SM_BIG = "!#%&'()*+,-./0123456789:<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ_v"   # (v: a version's, "WARM PAD v2"; % < = >: values)
 
 
 def preset(name):
@@ -66,19 +66,20 @@ def preset(name):
                 ("XS", v + "@600", 10, (32, 126), EXTRAS, 0.06, PHASES),
                 ("SB", v + "@600", 12, (32, 126), EXTRAS, 0.04, PHASES)]
     if name == "space-mono":
-        # STRATA UI (strata-ui): Space Mono (SIL OFL 1.1, Google Fonts), the sizes of the design's screens, untracked
-        # (the screens set each text's letter-spacing as they draw it: sy_gfx.c lk_text), two phases each (a
-        # monospace face's advance is fractional: 4.31 px at 7 px; half a pixel keeps its rhythm). XS 7 px, XB 7
-        # bold, S 8, SB 8 bold, F 9 bold (flags, chips' tags), M 12 bold (titles, a long name on HOME): full ASCII
-        # and SM_EXTRAS; N 18 bold (a name on HOME) and L 26 bold (a short name, the tempo, a countdown, STRATA):
-        # sparse, the characters a name can have (sy_ui_save.c UI_ABC, UI_SYM), Huffman-coded (--huff N,L). 41 KB,
-        # against Inter Tight's 76 KB (the design's 10 and 14 px faces drawn in F and M)
+        # STRATA UI (V0.67): Space Mono (SIL OFL 1.1, Google Fonts), untracked (the screens set each text's
+        # letter-spacing as they draw it: sy_gfx.c lk_text), two phases each (a monospace face's advance is
+        # fractional: 5.5 px at 9 px; half a pixel keeps its rhythm). V0.67's legibility floor: nothing under 9 px.
+        # XS 9 px (labels, captions), XB 9 bold (a handle's number, a row's figure), S 10 (a module's line under its
+        # word), SB 10 bold (the top line, the zones, chips, the toast), F 12 bold (flags, values), M 14 bold (a
+        # module's word): full ASCII and SM_EXTRAS; N 18 bold (a name on HOME, VALUES' figures) and L 26 bold (a short
+        # name, the tempo, a countdown, STRATA): sparse, the characters a name or a value can have, Huffman-coded
+        # (--huff N,L). V0.66 UI's set was 7 .. 12 px (39 KB)
         r = str(FONTS.parent / "assets" / "fonts" / "SpaceMono-Regular.ttf")
         b = str(FONTS.parent / "assets" / "fonts" / "SpaceMono-Bold.ttf")
-        big = [ord(c) for c in SM_BIG]
-        return [("XS", r, 7, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("XB", b, 7, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
-                ("S", r, 8, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("SB", b, 8, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
-                ("F", b, 9, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("M", b, 12, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
+        big = [ord(c) for c in SM_BIG] + [0xB0, 0xB1, 0xB7, 0x2014]
+        return [("XS", r, 9, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("XB", b, 9, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
+                ("S", r, 10, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("SB", b, 10, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
+                ("F", b, 12, (32, 126), SM_EXTRAS, 0.0, PHASES_L), ("M", b, 14, (32, 126), SM_EXTRAS, 0.0, PHASES_L),
                 ("N", b, 18, (32, 32), big, 0.0, PHASES_L), ("L", b, 26, (32, 32), big, 0.0, PHASES_L)]
     if name == "standin":
         if os.path.exists(LOCAL_INTER):
