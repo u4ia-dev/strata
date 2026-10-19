@@ -53,7 +53,7 @@ L_CHARS = " #+-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"   # (STRATA: Z and _, fo
 SM_EXTRAS = [0xB0, 0xB1, 0xB7, 0xD7, 0x2026, 0x2014, 0x2192]
 CODE[0x2014] = 0x97
 CODE[0x2192] = 0x86
-SM_BIG = "!#%&'()*+,-./0123456789:<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ_v"   # (v: a version's, "WARM PAD v2"; % < = >: values)
+SM_BIG = "!#%&'()*+,-./0123456789:<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ_abdijmsuv"   # (v: a version's, "WARM PAD v2"; % < = >: values; a b d i j m s u: chord names, V0.7)
 
 
 def preset(name):
