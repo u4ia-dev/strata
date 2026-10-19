@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.67 HARDWARE TEST"      /* the splash and the console (the STRATA UI, V0.67); build.py
+#define STRATA_VERSION "V0.7 HARDWARE TEST"       /* the splash and the console (V0.7: SCL's chords); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
@@ -108,6 +108,8 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #include "sy_engine.c"
 #include "sy_text.c"
 #include "sy_store.c"
+#define SY_MIDI_OUT(pkt) midi_out_event(pkt)   /* the chords out over USB MIDI (usb.c's ring, the audio ISR its producer) */
+#include "sy_chord.c"
 #include "sy_sounds.h"
 
 /* --------------------------------------------------------------- UI --- */
@@ -116,6 +118,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #include "sy_ui_draw.c"
 #include "sy_ui_fx.c"
 #include "sy_ui_save.c"
+#include "sy_ui_chord.c"
 
 /* -------------------------------------------------------------- app --- */
 static volatile uint8_t sy_in_audio;             /* the audio interrupt is rendering (sy_main.c's TIMER5 nests in it) */

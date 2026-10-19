@@ -34,6 +34,11 @@ static void ui_p_ring(void);
 static void ui_p_tape(void);
 static void ui_tape_wins(void);
 static int ui_eq_modded(void);
+static void ui_p_chord(void);                       /* sy_ui_chord.c: SCL's chord pages (V0.7) */
+static void ui_p_cperf(void);
+static void ui_p_cbass(void);
+static void ui_p_cmidi(void);
+static const char *ui_chord_nv(uint32_t id, char *v);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
@@ -227,6 +232,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
             sp_fix(v, (int32_t)at + 1, 0u, 0);
         else
             sp_put(v, "THE END");
+    } else if (id >= UI_HMODE && id <= UI_CBCH) {
+        n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7) */
     } else if (id >= UI_SCUR && id <= UI_BBANK) {
         return 0;                                   /* (SAVE's, the browser's: ui_save_flag) */
     }
@@ -2013,8 +2020,11 @@ static void ui_top(void)
     if (sec == SEC_MACRO) {
         sp_put(sp_fix(r, ui.bpm, 0u, 0), " BPM");
         right = r;
-    } else if (sec == SEC_KEYS) {
-        sp_fix(sp_put(r, "OCT "), sy_app_oct(), 0u, 1);
+    } else if (sec == SEC_KEYS) {                   /* (V0.7: the chord playing, by name; else the octave) */
+        if (chd.mode != CH_OFF && chs.built && chs.n)
+            sy_chord_name(r);
+        else
+            sp_fix(sp_put(r, "OCT "), sy_app_oct(), 0u, 1);
         right = r;
     }
     n = 0;
@@ -2148,7 +2158,8 @@ static void (*const UI_PAGE[])(void) = {
     [G_MATRIX] = ui_p_matrix, [G_KEYS] = ui_p_keys, [G_PANEL] = ui_p_panel, [G_MIDI] = ui_p_midi,
     [G_BENCH] = ui_p_bench, [G_CHAIN] = ui_p_chain, [G_FLANGER] = ui_p_flanger, [G_PHASER] = ui_p_phaser,
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
-    [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values,
+    [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
+    [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
@@ -2378,6 +2389,9 @@ static void sy_ui_leds(void)
             ui_led(ui_jump_sec(k) == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
+        } else if (chd.mode == CH_FREE && k < CH_NBTN && ui_sec() != SEC_SAVE) {   /* FREE's chord buttons: the */
+            int lit = k < 4u ? k == (chd.type & 3u) : ((chd.ext >> (k - 4u)) & 1u) != 0u;   /* latched lit, the rest */
+            ui_led(lit ? fm1_led : fm1_led_dim, 14u + k);                                     /* glowing (V0.7) */
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
             int32_t n = sy_ui_key_note(k, 0);           /* mid level; a key SNAP moves or WHITE silences: dark */
             uint32_t pc = n >= 0 && (ui.fit != UI_FIT_SNAP || n == UI_KEY0 + (int32_t)k)
@@ -2395,6 +2409,8 @@ static void sy_ui_leds(void)
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
     else
         ui_led(fm1_led_dim, panel.btn[B_REC]);
+    if (chd.perf)                                   /* ARP: PERFORM on (V0.7) */
+        ui_led(fm1_led, panel.btn[B_ARP]);
     if (ui.run) {                                   /* PLAY: its green LED while running, its own each beat (a */
         uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u);   /* quarter of it lit) */
         fm1_led[UI_LED_PLAY_GREEN >> 3] |= (uint8_t)(1u << (UI_LED_PLAY_GREEN & 7u));

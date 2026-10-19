@@ -47,7 +47,10 @@ static int32_t sy_master_now = 4096;
 
 /* ------------------------------------------------------------------------------------------ events --- */
 /* a ring with one producer and the audio interrupt as its consumer: the panel's (main loop) and MIDI's */
-enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC };
+enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC,
+       SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT };     /* (V0.7, the chords' (sy_chord.c): a key down or up (a its note as
+                                                  * SCALE fits it, 0xFF none; b the key, 0x80 down), a MIDI note as a root
+                                                  * (a the note, b its velocity, 0 up), HARP's root (a the note)) */
 typedef struct { uint8_t type, a, b; } sy_ev_t;
 #define SY_EVQ 64u
 typedef struct {
@@ -99,7 +102,13 @@ static void sy_ev_drain(sy_ring_t *g)
         case SY_EV_BEND: sy_bend((int32_t)(e->a | (uint32_t)e->b << 7)); break;
         case SY_EV_CC: sy_cc(e->a, e->b); break;
         case SY_EV_AT: sy_at = e->a; break;
-        default: sy_all_sound_off(); break;
+        case SY_EV_KEY: sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7); break;
+        case SY_EV_MKEY: sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u); break;
+        case SY_EV_CROOT: sy_chord_root(e->a); break;
+        default:
+            sy_chord_reset();
+            sy_all_sound_off();
+            break;
         }
         g->r = g->r + 1u;
     }
@@ -139,6 +148,7 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             sy_ev_drain(&sy_ev_ui);
             sy_ev_drain(&sy_ev_key);
             sy_ev_drain(&sy_ev_midi);
+            sy_chord_block(&sy_ev_starts, SY_STARTS_BLK);   /* (the chords: their steps, their notes' starts) */
             sy_block(o + 2u * b);
             sy_master_blk(o + 2u * b, g0, g1, b);
             SY_BLOCK_TAP(o + 2u * b, SY_BLK);
@@ -178,6 +188,7 @@ static void sy_audio_init(void)
 /* the UI's performance: the panel's bend and a controller (GLO's PERFORM), as MIDI's would come */
 static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u, (v >> 7) & 127u); }
 static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
+static void sy_app_chord_root(uint32_t n) { sy_ev_push(&sy_ev_ui, SY_EV_CROOT, n & 127u, 0u); }   /* (HARP's, SCL + a key) */
 
 /* -------------------------------------------------------------------------------------------- MIDI --- */
 /* a channel message on the SETTINGS' channel (any): notes, bend, aftertouch and the engine's controllers into the
@@ -186,6 +197,8 @@ static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC,
  * when PROGRAM is on (the main loop loads it) */
 static volatile uint8_t sy_midi_bank;
 static volatile int32_t sy_pc_want = -1;         /* a program change's preset (sy_app_entry_load's id), -1 none */
+static uint32_t sy_midi_chd[4];                  /* V0.7: the MIDI notes that went in as chords' roots (their release
+                                                  * goes the same way) */
 static void sy_midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t t = st & 0xF0u, id;
@@ -194,8 +207,15 @@ static void sy_midi_in(uint32_t st, uint32_t d1, uint32_t d2)
     d2 &= 127u;
     if (t >= 0x80u && t < 0xF0u && !sy_ui_midi_ch(st & 15u))
         return;
-    if (t == 0x90u || t == 0x80u)
-        sy_ev_push(&sy_ev_midi, SY_EV_NOTE, d1, t == 0x90u ? d2 : 0u);
+    if (t == 0x90u || t == 0x80u) {
+        uint32_t on = t == 0x90u && d2, bit = 1u << (d1 & 31u), *w = &sy_midi_chd[d1 >> 5];
+        if (on ? chd.min && sy_chord_active() : (*w & bit) != 0u) {   /* (CHORDS IN: a root) */
+            if (sy_ev_push(&sy_ev_midi, SY_EV_MKEY, d1, on ? d2 : 0u))
+                *w = on ? *w | bit : *w & ~bit;
+        } else {
+            sy_ev_push(&sy_ev_midi, SY_EV_NOTE, d1, on ? d2 : 0u);
+        }
+    }
     else if (t == 0xE0u)
         sy_ev_push(&sy_ev_midi, SY_EV_BEND, d1, d2);
     else if (t == 0xD0u)
@@ -540,7 +560,8 @@ static void sy_flash_boot(void)
 _Static_assert(SY_KEY0 == UI_KEY0, "sy_ui.c's keys start where these do");
 static uint32_t sy_keyprev;
 static int32_t sy_key_note = -1, sy_key_vel;     /* the last note a key started, its velocity (the tests) */
-static uint8_t sy_keynote[SY_NKEY];             /* the note each key started (0xFF: none): released as it was */
+static uint8_t sy_keynote[SY_NKEY];             /* the note each key started (0xFF: none; 0xFE: a key the chords
+                                                  * took, V0.7): released as it was */
 static int32_t sy_oct;                           /* OCT- / OCT+: -3 .. +3 */
 
 static int sy_app_held(uint32_t k) { return k < SY_NKEY && sy_keynote[k] != 0xFF; }
@@ -561,13 +582,22 @@ static void sy_key_up(uint32_t k, uint32_t *now)        /* a key let go: the not
 {
     if (sy_keynote[k] == 0xFF)
         return;
-    if (sy_ev_push(&sy_ev_key, SY_EV_NOTE, sy_keynote[k], 0))
+    if (sy_keynote[k] == 0xFE ? sy_ev_push(&sy_ev_key, SY_EV_KEY, 0xFFu, k)
+                              : sy_ev_push(&sy_ev_key, SY_EV_NOTE, sy_keynote[k], 0))
         sy_keynote[k] = 0xFF;
     else
         *now |= 1u << k;                     /* (the ring full: the release again next time) */
 }
 static void sy_key_down(uint32_t k, int32_t n, uint32_t v)
 {
+    if (sy_chord_active()) {                     /* (V0.7: the chords take the key, a chord button too) */
+        if (sy_ev_push(&sy_ev_key, SY_EV_KEY, n >= 0 && n <= 127 ? (uint32_t)n : 0xFFu, k | 0x80u)) {
+            sy_keynote[k] = 0xFE;
+            sy_key_note = n;
+            sy_key_vel = (int32_t)v;
+        }
+        return;
+    }
     if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_key, SY_EV_NOTE, (uint32_t)n, v)) {
         sy_keynote[k] = (uint8_t)n;
         sy_key_note = n;
@@ -633,6 +663,7 @@ static SY_NOINLINE void sy_app_boot(void)
     sy_tables_now();
     for (k = 0; k < SY_NKEY; k++)
         sy_keynote[k] = 0xFF;
+    sy_chord_reset();
     sy_audio_init();
 }
 

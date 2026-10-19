@@ -47,6 +47,7 @@
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
 static void sy_app_octave(int32_t d);               /* .. OCT- / OCT+ */
 static int32_t sy_app_oct(void);
+static void sy_app_chord_root(uint32_t n);          /* .. HARP's chord's root (V0.7) */
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
 static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
@@ -94,7 +95,10 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL,            /* (SCL's: the keys' scale, its root, how keys fit, velocity) */
        UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC,   /* (the SETTINGS' others) */
        UI_BRUN, UI_BCLR,                              /* (BENCH's: RUN, CLEAR the peaks) */
-       UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX };       /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
+       UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX,         /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
+       UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI,          /* (V0.7, SCL's chords (sy_chord.c chd): CHORD's, PERFORM's, */
+       UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* BASS's, MIDI's) */
+       UI_BON, UI_BOCT, UI_BLVL, UI_CIN, UI_COUT, UI_COCH, UI_CBCH };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -104,7 +108,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_VALUES, G_N };                             /* (sy_ui_draw.c UI_PAGE: each one's page) */
+       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_N };   /* (sy_ui_draw.c UI_PAGE: each one's page) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -251,6 +255,10 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
+    {SEC_KEYS, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI}},   /* (V0.7: sy_ui_chord.c) */
+    {SEC_KEYS, G_PERF, "PERFORM", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},
+    {SEC_KEYS, G_BASS, "BASS", {UI_BON, UI_BOCT, UI_BLVL, -1}},
+    {SEC_KEYS, G_CMIDI, "MIDI", {UI_CIN, UI_COUT, UI_COCH, UI_CBCH}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
@@ -608,6 +616,8 @@ static const char *ui_hint(uint32_t sec)
         return "PLAY: THE LFOS ON THE BEAT";
     if (sec == SEC_MENU)
         return "HOME: BACK TO THE SOUND";
+    if (sec == SEC_KEYS)                            /* (V0.7) */
+        return "ARP: PERFORM \xB7 SCL+KEY: ROOT";
     return 0;
 }
 
@@ -1282,6 +1292,41 @@ static void ui_learn_ms(void)
 }
 
 /* the items: the MENU's; an LFO's points and GLOBAL's tempo (not in the MOD layer: nothing there to modulate) */
+/* SCL's chords (V0.7, sy_chord.c chd): a turn of CHORD's, PERFORM's (the style shown's own), BASS's or MIDI's knobs;
+ * the audio side takes them at its next block (chd.gen) */
+static void ui_chord_turn(int32_t item, int32_t s)
+{
+    uint32_t st = chd.style % PF_N;
+    int32_t lo, hi, step, nm = (int32_t)ch_moves(st);
+    switch (item) {
+    case UI_HMODE: chd.mode = (uint8_t)sy_clampi(chd.mode + s, 0, CH_NMODE - 1); break;
+    case UI_HTYPE:                                  /* (KEY's own: FREE's stays latched) */
+        if (chd.mode == CH_KEY)
+            chd.ktype = (uint8_t)((chd.ktype + (uint32_t)(s % 4 + 4)) % 4u);
+        else
+            chd.type = (uint8_t)((chd.type + (uint32_t)(s % 4 + 4)) % 4u);
+        break;
+    case UI_HEXT: chd.ext = (uint8_t)((chd.ext + (uint32_t)(s % 16 + 16)) % 16u); break;
+    case UI_HVOI: chd.voicing = (uint8_t)sy_clampi(chd.voicing + s, 0, CH_NVOIC - 1); break;
+    case UI_PSTY: chd.style = (uint8_t)((st + (uint32_t)(s % PF_N + PF_N)) % PF_N); break;
+    case UI_PRATE: chd.rate[st] = (uint8_t)sy_clampi(chd.rate[st] + s, 0, CH_NRATE - 1); break;
+    case UI_PMOVE: chd.move[st] = (uint8_t)((chd.move[st] + (uint32_t)(s % nm + nm)) % (uint32_t)nm); break;
+    case UI_PFEEL:
+        ch_feel_range(st, &lo, &hi, &step);
+        chd.feel[st] = (uint8_t)sy_clampi(chd.feel[st] + s * step, lo, hi);
+        break;
+    case UI_BON: chd.bass = s > 0; break;
+    case UI_BOCT: chd.boct = (uint8_t)sy_clampi(chd.boct + s, 1, 2); break;
+    case UI_BLVL: chd.blvl = (uint8_t)sy_clampi(chd.blvl + 5 * s, 5, 100); break;
+    case UI_CIN: chd.min = s > 0; break;
+    case UI_COUT: chd.mout = s > 0; break;
+    case UI_COCH: chd.och = (uint8_t)((chd.och + (uint32_t)(s % 16 + 16)) % 16u); break;
+    default: chd.bch = (uint8_t)((chd.bch + (uint32_t)(s % 16 + 16)) % 16u); break;
+    }
+    chd.gen++;
+    ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+}
+
 static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
 {
     if (item == UI_COLOR) {
@@ -1317,6 +1362,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         else
             ui.kvel = (uint8_t)sy_clampi(ui.kvel + ui_accel(e, s, 126), 1, 127);
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+    } else if (item >= UI_HMODE && item <= UI_CBCH) {   /* SCL's chords */
+        ui_chord_turn(item, s);
     } else if (item >= UI_BPM && item <= UI_TSN) {
         if (item == UI_BPM)
             ui.bpm = (uint16_t)sy_clampi(ui.bpm + ui_accel(e, s, 280), 20, 300);
@@ -1650,8 +1697,13 @@ static void ui_release(uint32_t b, int held)
         ui_toast(ui.run ? "PLAY" : "STOP");
         return;
     }
-    if (b == B_ARP) {
-        ui_toast("ARP: IN A LATER VERSION");
+    if (b == B_ARP) {                               /* ARP: PERFORM on and off (V0.7) */
+        char t[32];
+        chd.perf = (uint8_t)!chd.perf;
+        chd.gen++;
+        sp_put(sp_put(t, chd.perf ? "PERFORM: " : "PERFORM OFF"), chd.perf ? PF_NAME[chd.style % PF_N] : "");
+        ui_toast(t);
+        ui.dirty |= D_DISP | D_HEAD;
         return;
     }
     if (b == B_SEQ) {
@@ -1811,10 +1863,18 @@ static int sy_ui_key(uint32_t k)
         ui_go(UI_PG[ui.spage[sec]].sec == sec ? ui.spage[sec] : ui_first_page(sec));
         return 1;
     }
-    if ((ui.bt_down & (1u << B_SCL)) && !ui.mod) {  /* SCL held: a key is the root (no note; SCL's tap none) */
-        char t[16];
-        ui.root = (uint8_t)((UI_KEY0 + (int32_t)k) % 12);
+    if ((ui.bt_down & (1u << B_SCL)) && !ui.mod) {  /* SCL held: a key is the root (no note; SCL's tap none); while */
+        char t[24];                                 /* HARP plays, the harp's chord's (V0.7) */
         ui.bt_chord |= (uint16_t)(1u << B_SCL);
+        if (chd.perf && chd.style == PF_HARP && chd.mode != CH_OFF) {
+            int32_t n = sy_ui_key_note(k, sy_app_oct());
+            sy_app_chord_root((uint32_t)(n < 0 ? UI_KEY0 + (int32_t)k : n));
+            sp_put(sp_put(t, "HARP ROOT "), UI_NOTE_NAME[(uint32_t)(n < 0 ? UI_KEY0 + (int32_t)k : n) % 12u]);
+            ui_toast(t);
+            ui.dirty |= D_DISP | D_HEAD;
+            return 1;
+        }
+        ui.root = (uint8_t)((UI_KEY0 + (int32_t)k) % 12);
         sp_put(sp_put(t, "ROOT "), UI_NOTE_NAME[ui.root]);
         ui_toast(t);
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
@@ -1834,8 +1894,17 @@ static int sy_ui_key(uint32_t k)
 /* every millisecond: the buttons, the encoders */
 static void sy_ui_ms(void)
 {
+    static uint16_t seq;
     uint32_t k;
     int32_t s;
+    chd.root = ui.root;                             /* (the chords' KEY mode: SCALE's scale, its root; the keys' */
+    chd.mask = UI_SCALE_MASK[ui.scale % UI_NSCALE]; /* velocity) */
+    chd.vel = (uint8_t)sy_ui_key_vel();
+    if (chs.seq != seq) {                           /* (a chord changed: SCL's pages name it, show it) */
+        seq = chs.seq;
+        if (ui_sec() == SEC_KEYS)
+            ui.dirty |= D_DISP | D_HEAD;
+    }
     ui_buttons();
     if (ui.cd_btn != NB)
         ui_cd_tick();
@@ -1872,10 +1941,12 @@ static void settings_save(void) {}
 
 /* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
  * HOLD time; SCL's scale, root, fit and velocity; HELP, GLOW, MIDI's channel and PROGRAM; MIDI LEARN's map (a CC
- * and a parameter, 2 bytes, each). Fields are only added at the end: a shorter record (an older build's, 11 bytes at
- * least) leaves the rest as they were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not
- * these) */
-#define SS_SETTINGS_LEN (19u + 3u * ML_N)
+ * and a parameter, 2 bytes, each); V0.7, the chords' (sy_chord.c chd: CHORD 4, PERFORM 2 + 3 x 6, BASS 3, MIDI 4,
+ * KEY's type).
+ * Fields are only added at the end: a shorter record (an older build's, 11 bytes at least) leaves the rest as they
+ * were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
+#define SS_SET_ML (19u + 3u * ML_N)
+#define SS_SETTINGS_LEN (SS_SET_ML + 32u)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -1901,6 +1972,14 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             b[20u + 3u * i] = (uint8_t)ml_id[i];
             b[21u + 3u * i] = (uint8_t)(ml_id[i] >> 8);
         }
+        {
+            uint8_t *c = b + SS_SET_ML;
+            c[0] = chd.mode, c[1] = chd.type, c[2] = chd.ext, c[3] = chd.voicing, c[4] = chd.perf, c[5] = chd.style;
+            for (i = 0; i < PF_N; i++)
+                c[6u + i] = chd.rate[i], c[12u + i] = chd.move[i], c[18u + i] = chd.feel[i];
+            c[24] = chd.bass, c[25] = chd.boct, c[26] = chd.blvl;
+            c[27] = chd.min, c[28] = chd.mout, c[29] = chd.och, c[30] = chd.bch, c[31] = chd.ktype;
+        }
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -1924,7 +2003,23 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         ui.mpc = b[18] != 0;
         fm1_led_dim_level(ui.glow);
     }
-    if (n >= SS_SETTINGS_LEN) {
+    if (n >= SS_SETTINGS_LEN) {                     /* (V0.7's chords, each kept in its range) */
+        const uint8_t *c = b + SS_SET_ML;
+        uint32_t i;
+        chd.mode = (uint8_t)(c[0] % CH_NMODE), chd.type = c[1] & 3u, chd.ext = c[2] & 15u;
+        chd.voicing = (uint8_t)(c[3] % CH_NVOIC), chd.perf = c[4] != 0, chd.style = (uint8_t)(c[5] % PF_N);
+        for (i = 0; i < PF_N; i++) {
+            int32_t lo, hi, st;
+            ch_feel_range(i, &lo, &hi, &st);
+            chd.rate[i] = (uint8_t)(c[6u + i] % CH_NRATE);
+            chd.move[i] = (uint8_t)(c[12u + i] % ch_moves(i));
+            chd.feel[i] = (uint8_t)sy_clampi(c[18u + i], lo, hi);
+        }
+        chd.bass = c[24] != 0, chd.boct = (uint8_t)sy_clampi(c[25], 1, 2), chd.blvl = (uint8_t)sy_clampi(c[26], 1, 100);
+        chd.min = c[27] != 0, chd.mout = c[28] != 0, chd.och = c[29] & 15u, chd.bch = c[30] & 15u, chd.ktype = c[31] & 3u;
+        chd.gen++;
+    }
+    if (n >= SS_SET_ML) {
         uint32_t i;
         for (i = 0; i < ML_N; i++) {
             uint32_t cc = b[19u + 3u * i], id = b[20u + 3u * i] | (uint32_t)b[21u + 3u * i] << 8;
@@ -1952,6 +2047,7 @@ static void sy_ui_boot(void)
     ui.help = 1;                                    /* SETTINGS: hints on, any MIDI channel, no program changes */
     ui.ml_pick = -1;
     memset((void *)ml_cc, 0xFF, sizeof ml_cc);
+    ch_defaults();                                  /* (V0.7: the chords off) */
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;
