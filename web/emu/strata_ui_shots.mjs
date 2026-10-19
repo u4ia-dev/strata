@@ -56,8 +56,9 @@ function chunk(type, data) {
   crc.writeUInt32BE(crc32(td));
   return Buffer.concat([len, td, crc]);
 }
-function pngOf(scale) {                         // the frame buffer: RGB565, high byte first (the panel's order)
-  const fb = new Uint16Array(ex.memory.buffer, ex.web_screen(), 240 * 240), W = 240 * scale;
+function pngOf(scale, lint) {                   // the frame buffer: RGB565, high byte first (the panel's order); lint:
+  const fb = new Uint16Array(ex.memory.buffer, lint ? ex.web_lint_screen() : ex.web_screen(), 240 * 240), W = 240 * scale;   // the check's, its findings
+  const mk = lint ? new Uint8Array(ex.memory.buffer, ex.web_lint_px(), 240 * 240) : null;
   const raw = Buffer.alloc((W * 3 + 1) * W);
   for (let y = 0; y < W; y++)
     for (let x = 0; x < W; x++) {
@@ -66,6 +67,8 @@ function pngOf(scale) {                         // the frame buffer: RGB565, hig
       raw[o] = (r << 3) | (r >> 2);
       raw[o + 1] = (g << 2) | (g >> 4);
       raw[o + 2] = (b << 3) | (b >> 2);
+      const m = mk ? mk[Math.floor(y / scale) * 240 + Math.floor(x / scale)] : 0;
+      if (m) { raw[o] = 255; raw[o + 1] = m === 2 ? 0 : 255; raw[o + 2] = m === 2 ? 255 : 0; }
     }
   const hdr = Buffer.alloc(13);
   hdr.writeUInt32BE(W, 0);
@@ -75,16 +78,23 @@ function pngOf(scale) {                         // the frame buffer: RGB565, hig
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", hdr), chunk("IDAT", deflateSync(raw)),
                         chunk("IEND", Buffer.alloc(0))]);
 }
-const shots = [];
+const shots = [], lints = [];
 function shot(id) {
   run(0.05);
   writeFileSync(`${out}/${id}.png`, pngOf(1));
   writeFileSync(`${out}/${id}-2x.png`, pngOf(2));
   shots.push(id);
   console.log(`shot: ${out}/${id}.png  (${cstr(ex.web_test_toast()) || "no toast"})`);
+  const n = ex.web_lint();                      // the screen's check (strata_web.c web_lint): text on a drawing, on text
+  if (n) {
+    const rep = cstr(ex.web_lint_report());
+    lints.push(`${id}: ${n}\n${rep}`);
+    console.log(`  LINT ${n}\n${rep.replace(/^/gm, "    ")}`);
+    writeFileSync(`${out}/lint/${id}.png`, pngOf(3, true));
+  }
 }
 
-mkdirSync(out, { recursive: true });
+mkdirSync(`${out}/lint`, { recursive: true });
 run(0.6);
 ex.web_test_screen(3);
 shot("Boot");
@@ -150,6 +160,13 @@ go(SEC.FILTER, "MORE");
 ex.web_test_set(ex.web_test_page_param(0), 500);
 ex.web_test_set(ex.web_test_page_param(1), 300);
 shot("FilterMore");
+go(SEC.FILTER, "VALUES");                       // V0.67: VALUES (the first: TONE's knobs), a knob turning
+shot("FilterValues");
+turn(1, 4);
+shot("FilterValuesTurn");
+rest();
+go(SEC.OSCA, "VALUES");
+shot("OscValues");
 
 // ---- ENV, LFO (a chord held: the voices on them)
 go(SEC.ENV1, "ADSR");
@@ -326,6 +343,10 @@ run(0.05);
 ex.web_buttons(0);
 run(0.2);
 shot("Undo");
+go(SEC.FILTER, "VALUES");                       // (the cutoff modulated: its range, the source's word)
+shot("FilterValuesMod");
+go(SEC.LFO1, "VALUES");
+shot("LfoValues");
 run(1.6);
 go(SEC.MACRO, "HOME");
 tap(B.SAVE);                                    // SAVE once: a new version, in the first free slot
@@ -408,5 +429,6 @@ shot("Osc-paper");
 go(SEC.FILTER, "TONE");
 shot("Filter-paper");
 ex.web_test_palette(0);
-console.log(`shots ${shots.length}: ${out}`);
+console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
+writeFileSync(`${out}/lint.txt`, lints.join("\n"));
 writeFileSync(`${out}/shots.json`, JSON.stringify(shots));

@@ -19,6 +19,7 @@ static unsigned long long web_now_ns(void)
 }
 #define WEB_FRAME_BEGIN() (web_bench_t0 = web_now_ns())
 #define WEB_FRAME_END() (web_bench_ns += web_now_ns() - web_bench_t0, web_bench_frames++)
+#define WEB_NO_LINT 1                             /* (the screens' check left out: its text boxes cost time) */
 #include "strata_web.c"
 
 static void run(double ms)
@@ -97,5 +98,13 @@ int main(void)
         run(20);
     }
     report("every page shown once");
+    page(SEC_FILTER, "VALUES");                     /* V0.67: VALUES, KNOB 2 turning */
+    run(1500);
+    start();
+    for (i = 0; i < 50u; i++) {
+        web_enc(EN_K2, (i / 10u) & 1u ? -1 : 1);
+        run(40);
+    }
+    report("FILTER VALUES, KNOB 2 turning, 2 s");
     return 0;
 }

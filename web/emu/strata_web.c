@@ -16,6 +16,7 @@
  * Not here: USB, TRS MIDI, the console, the battery. Web MIDI's channel messages go to sy_app.c's MIDI in.
  *   web/emu/build_strata.sh  ->  build/emu_strata/{index.html, worklet.js, strata.wasm} */
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #define __attribute__(x)                         /* (no sections, no alignment pragmas on the host) */
@@ -143,7 +144,10 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_store.c"
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.66 UI"                 /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.67"                    /* (the boot screen's: the page names the build) */
+#ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
+#define LK_LINT 1
+#endif
 #include "../../firmware/src/sy_gfx.c"
 #include "../../firmware/src/sy_ui.c"
 #include "../../firmware/src/sy_ui_draw.c"
@@ -446,7 +450,7 @@ EXPORT int32_t web_test_slot_value(uint32_t s, uint32_t id)
     return n > 0 && sp_unpack(&p, pk, (uint32_t)n) && id < SP_COUNT ? p.p[id] : -32768;
 }
 /* BENCH's row i (the emulator draws none: no clock of its own; 8 .. 15: RUN not yet run) at the widest figures a unit
- * shows: its width, in pixels, less the room for it (x 186 to the margin at 236; above 0: it runs past); sy_bench as it
+ * shows: its width, in pixels, less the room for it (x 164 to the margin at 236; above 0: it runs past); sy_bench as it
  * was after */
 EXPORT int32_t web_test_bench_fit(uint32_t i)
 {
@@ -472,7 +476,7 @@ EXPORT int32_t web_test_bench_fit(uint32_t i)
     {
         float v, pk;
         ui_bench_row(i % 8u, &v, &pk, t);
-        w = sy_floori(lk_tw(T7B, t, 0) + 0.999f) - 50;
+        w = sy_floori(lk_tw(T9B, t, 0) + 0.999f) - 72;
     }
     sy_bench = was;
     sy_g.shed = shed;
@@ -497,3 +501,162 @@ EXPORT uint32_t web_test_ctype(void) { return ui.ctype; }
 EXPORT uint32_t web_test_act(void) { return ui.act_k; }
 EXPORT uint32_t web_test_ghost(void) { return ui_ghost() != 0; }
 EXPORT uint32_t web_test_scope(void) { return sy_scope.frames; }
+
+#ifdef LK_LINT
+/* ------------------------------------------------------------------------------------------ the check --- */
+/* web_lint: the screen as it is now, drawn twice into buffers of its own (nothing sent): with its text and without.
+ * Every pixel the text changed is checked against what lies under it without the text, and its neighbours: only the
+ * ground, the text's own ground (a chip's, a flag's) or a blend of the two may be there; the texts' ink boxes against
+ * each other; a text past the screen's edges (2 px); a text in MID or LINE (V0.67: labels in LAB). The handles'
+ * numbers are their own parts (not checked). web_lint_report: each finding, a line */
+typedef struct {
+    int16_t x0, y0, x1, y1;
+    uint16_t fg, bg;
+    uint8_t part, bad;
+    char s[24];
+} web_lt_t;
+static web_lt_t web_lt[400];
+static uint32_t web_lt_n, web_lt_on;
+static uint16_t web_lint_full[240 * 240], web_lint_bare[240 * 240];
+static uint8_t web_lint_mask[240 * 240];
+static char web_lint_txt[4096];
+static void lk_lint_text(const int32_t *b, uint32_t t, const char *s, uint16_t fg, uint16_t bg)
+{
+    uint32_t i;
+    web_lt_t *r;
+    (void)t;
+    if (!web_lt_on)
+        return;
+    for (i = 0; i < web_lt_n; i++)                  /* (a text across two strips: drawn twice) */
+        if (web_lt[i].x0 == b[0] && web_lt[i].y0 == b[1] && web_lt[i].x1 == b[2] && web_lt[i].y1 == b[3] &&
+            !strncmp(web_lt[i].s, s, sizeof web_lt[i].s - 1u))
+            return;
+    if (web_lt_n >= sizeof web_lt / sizeof web_lt[0])
+        return;
+    r = &web_lt[web_lt_n++];
+    r->x0 = (int16_t)b[0];
+    r->y0 = (int16_t)b[1];
+    r->x1 = (int16_t)b[2];
+    r->y1 = (int16_t)b[3];
+    r->fg = fg;
+    r->bg = bg;
+    r->part = lk_lint_part;
+    r->bad = 0;
+    strncpy(r->s, s, sizeof r->s - 1u);
+    r->s[sizeof r->s - 1u] = 0;
+}
+static void web_lint_draw(uint16_t *to)
+{
+    uint32_t s;
+    for (s = 0; s < 240u; s += 80u) {
+        lk_begin(0, (int32_t)s, 240u, 80u);
+        ui_page();
+        memcpy(to + s * 240u, cv_px, 240u * 80u * 2u);
+    }
+}
+static int web_lint_ok(uint16_t q, uint16_t g, uint16_t b)   /* q: g, b or a blend of the two (RGB565, swapped) */
+{
+    int32_t c, lo = 0, hi = 256;
+    q = swap16(q);
+    for (c = 0; c < 3; c++) {
+        int32_t sh = c == 0 ? 11 : c == 1 ? 5 : 0, m = c == 1 ? 63 : 31;
+        int32_t qv = (q >> sh) & m, gv = (g >> sh) & m, bv = (b >> sh) & m, d = bv - gv, t0, t1;
+        if (d == 0) {
+            if (qv < gv - 1 || qv > gv + 1)
+                return 0;
+            continue;
+        }
+        t0 = ((qv - gv) * 256 - 256 * (d > 0 ? 1 : -1)) / d;   /* (one step of the channel either way) */
+        t1 = ((qv - gv) * 256 + 256 * (d > 0 ? 1 : -1)) / d;
+        if (t0 > t1) {
+            int32_t x = t0;
+            t0 = t1;
+            t1 = x;
+        }
+        lo = t0 > lo ? t0 : lo;
+        hi = t1 < hi ? t1 : hi;
+    }
+    return lo <= hi + 24;
+}
+EXPORT uint32_t web_lint(void)
+{
+    uint32_t p, i, j, over = 0, tt = 0, edge = 0, mid = 0;
+    char *o = web_lint_txt;
+    web_lint_txt[0] = 0;
+    memset(web_lint_mask, 0, sizeof web_lint_mask);
+    web_lt_n = 0;
+    ui_frame_n++;
+    web_lt_on = 1;
+    web_lint_draw(web_lint_full);
+    web_lt_on = 0;
+    lk_lint_notext = 1;
+    web_lint_draw(web_lint_bare);
+    lk_lint_notext = 0;
+    for (p = 0; p < 240u * 240u; p++) {
+        int32_t x = (int32_t)(p % 240u), y = (int32_t)(p / 240u), dx, dy, k = -1, bad = 0;
+        if (web_lint_full[p] == web_lint_bare[p])
+            continue;
+        for (i = web_lt_n; i-- > 0;)                /* (the last text drawn there) */
+            if (x >= web_lt[i].x0 && x < web_lt[i].x1 && y >= web_lt[i].y0 && y < web_lt[i].y1) {
+                k = (int32_t)i;
+                break;
+            }
+        if (k < 0 || web_lt[k].part)
+            continue;
+        for (dy = -1; dy <= 1 && !bad; dy++)
+            for (dx = -1; dx <= 1 && !bad; dx++) {
+                int32_t qx = x + dx, qy = y + dy;
+                if (qx < 0 || qy < 0 || qx >= 240 || qy >= 240)
+                    continue;
+                bad = !web_lint_ok(web_lint_bare[qy * 240 + qx], sk.ground, web_lt[k].bg);
+            }
+        if (bad) {
+            web_lint_mask[p] = 1;
+            web_lt[k].bad = 1;
+            over++;
+        }
+    }
+    for (i = 0; i < web_lt_n; i++) {
+        const web_lt_t *a = &web_lt[i];
+        if (a->bad && o < web_lint_txt + sizeof web_lint_txt - 64u)
+            o += sprintf(o, "OVER  '%s' at %d,%d\n", a->s, a->x0, a->y0);
+        if (!a->part && (a->x0 < 2 || a->x1 > 238 || a->y0 < 0 || a->y1 > 240)) {
+            edge++;
+            if (o < web_lint_txt + sizeof web_lint_txt - 64u)
+                o += sprintf(o, "EDGE  '%s' %d..%d, %d..%d\n", a->s, a->x0, a->x1, a->y0, a->y1);
+        }
+        if (!a->part && (a->fg == sk.mid || a->fg == sk.line) && a->fg != sk.ink) {
+            mid++;
+            if (o < web_lint_txt + sizeof web_lint_txt - 64u)
+                o += sprintf(o, "DIM   '%s' at %d,%d\n", a->s, a->x0, a->y0);
+        }
+        for (j = i + 1u; j < web_lt_n; j++) {
+            const web_lt_t *b = &web_lt[j];
+            int32_t x0 = a->x0 > b->x0 ? a->x0 : b->x0, x1 = a->x1 < b->x1 ? a->x1 : b->x1;
+            int32_t y0 = a->y0 > b->y0 ? a->y0 : b->y0, y1 = a->y1 < b->y1 ? a->y1 : b->y1, x, y;
+            if (x0 >= x1 || y0 >= y1 || (a->part && b->part))
+                continue;
+            tt++;
+            for (y = y0; y < y1; y++)
+                for (x = x0; x < x1; x++)
+                    web_lint_mask[y * 240 + x] = 2;
+            if (o < web_lint_txt + sizeof web_lint_txt - 80u)
+                o += sprintf(o, "TEXT  '%s' x '%s' at %d,%d\n", a->s, b->s, x0, y0);
+        }
+    }
+    for (i = 0; i < 4u; i++)                        /* the handles against each other (their discs: 7 px) */
+        for (j = i + 1u; j < 4u; j++)
+            if ((pg.has >> i & 1u) && (pg.has >> j & 1u) && sy_absf(pg.hx[i] - pg.hx[j]) < 15.0f &&
+                sy_absf(pg.hy[i] - pg.hy[j]) < 15.0f) {
+                tt++;
+                if (o < web_lint_txt + sizeof web_lint_txt - 64u)
+                    o += sprintf(o, "KNOBS %u and %u at %d,%d\n", i + 1u, j + 1u, (int)pg.hx[i], (int)pg.hy[i]);
+            }
+    return over + 1000u * tt + 100000u * edge + 10000000u * mid;
+}
+EXPORT const char *web_lint_report(void) { return web_lint_txt; }
+EXPORT uint8_t *web_lint_px(void) { return web_lint_mask; }
+EXPORT uint16_t *web_lint_screen(void) { return web_lint_full; }
+#endif
+/* HOME's bloom: f 0 how open, 1 its swirl (thousandths) */
+EXPORT int32_t web_test_bloom(uint32_t f) { return sy_floori((f ? ui_twist : ui_open) * 1000.0f + 0.5f); }

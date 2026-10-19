@@ -223,18 +223,21 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   ex.web_enc(E.K1, 1);
   play(ex, 0.05);
   const p1 = ex.web_test_palette(-1), moved = screen().filter((v, i) => v !== before[i]).length;
-  ex.web_enc(E.K1, -2);
+  ex.web_enc(E.K1, -2);                         // (round: the last, V0.67's NEON)
+  play(ex, 0.05);
+  const p11 = ex.web_test_palette(-1), neon = cstr(ex, ex.web_test_palette_name());
+  ex.web_enc(E.K1, -4);
   play(ex, 0.05);
   const p7 = ex.web_test_palette(-1), mono = cstr(ex, ex.web_test_palette_name());
-  const grey = screen().filter((v, i) => {                 // (outside the window: its swatches show the others)
+  const grey = screen().filter((v, i) => {                 // (outside the swatches: they show the others)
     const s = ((v & 0xFF) << 8) | (v >> 8), r = s >> 11, g = (s >> 5) & 63, b = s & 31, y = Math.floor(i / 240);
-    return (y < 22 || y >= 136) && (Math.abs(r * 2 - g) > 2 || Math.abs(b * 2 - g) > 2);
+    return (y < 18 || y >= 162) && (Math.abs(r * 2 - g) > 2 || Math.abs(b * 2 - g) > 2);
   }).length;
-  ex.web_enc(E.K1, 1);
+  ex.web_enc(E.K1, 5);
   play(ex, 0.05);
-  check(`HOME held 5 s: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
-        sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p7 === 7 && mono === "MONO" && grey === 0 &&
-        ex.web_test_palette(-1) === 0);
+  check(`HOME held 5 s: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); round to the twelfth, ${neon} (${p11}); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
+        sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p11 === 11 && neon === "NEON" && p7 === 7 &&
+        mono === "MONO" && grey === 0 && ex.web_test_palette(-1) === 0);
   tap(ex, B.EDIT);
 }
 const name = () => cstr(ex, ex.web_test_page_name());
@@ -1140,7 +1143,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   z.web_test_set(M1, SRC.LFO1);
   z.web_test_set(M1 + 1, ID.EQ_MID);
   z.web_test_set(M1 + 2, 500);
-  const busy = [], rows = [];
+  const busy = [], rows = [], lint = [];
   let worst = 0, wname = "", pages = 0;
   for (let q = 0; q < n; q++) {
     z.web_test_go(q);
@@ -1149,6 +1152,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     hush();
     const quiet = idleDraws();
     if (quiet) busy.push(`${here()} ${quiet}`);
+    const lf = z.web_lint();                    // (V0.67: no text on a drawing, on text, past the edges, in MID)
+    if (lf) lint.push(`${here()}: ${cstr(z, z.web_lint_report()).trim().replace(/\n/g, "; ")}`);
     const p0 = z.web_screen_px();
     z.web_keys(1 << 7);
     play(z, 1.0);
@@ -1171,6 +1176,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   console.log(`emu: a note held, the SPI's time a second each page takes: ${rows.join(", ")}`);
   check(`every page (${pages}, SAVE's and the browser's): in silence nothing drawn (${busy.length ? busy.join(", ") : "none drew"})`,
         pages >= 40 && ss === SEC.SAVE && sb === SEC.BROWSE && busy.length === 0);
+  check(`every page (${pages}): its text clear of the drawing, of other text and of the edges, none in MID, no two knobs' handles on one place (${lint.length ? lint.join(" | ") : "all clear"})`,
+        pages >= 40 && lint.length === 0);
   check(`.. a note held: only the rows that change sent; the busiest, ${wname}, ${Math.round(100 * worst / SPI)} % of the SPI's time (12 MHz; under 30 %)`,
         worst / SPI < 0.3);
 }
@@ -1216,6 +1223,59 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         over[worst] + " px over" : -over[worst] + " px to spare"})`, over[worst] <= 0);
   check(`every page's name ends within its 8 characters (V0.6: RING MOD's ran on into its knobs' ids)`,
         ex.web_test_page_names_bad() === 0);
+}
+
+{                                               // V0.67: VALUES, the family's taps, the bloom
+  const v = await boot(), FILTER = 4;
+  play(v, 0.6);
+  const cut = pid(v, FILTER, "TONE", 1);
+  let vp = -1, tone = -1, more = -1;
+  for (let q = 0; q < 200; q++) {
+    v.web_test_go(q);
+    if (v.web_test_page_section() !== FILTER) continue;
+    const nm = cstr(v, v.web_test_page_name());
+    if (nm === "VALUES" && v.web_test_page_param(1) === cut && vp < 0) vp = q;
+    if (nm === "TONE") tone = q;
+    if (nm === "MORE") more = q;
+  }
+  const quick = (page) => {                     // KNOB 2: twenty detents 5 ms apart (a quick turn)
+    v.web_test_go(page);
+    play(v, 0.05);
+    v.web_test_set(cut, 400);
+    play(v, 0.3);
+    for (let i = 0; i < 20; i++) { v.web_enc(E.K2, 1); play(v, 0.005); }
+    play(v, 0.05);
+    return v.web_test_value(cut) - 400;
+  };
+  const dv = quick(vp), dt = quick(tone);
+  v.web_test_go(more);
+  play(v, 0.05);
+  v.web_buttons(1 << B.EDIT);
+  play(v, 0.05);
+  v.web_buttons(0);
+  play(v, 0.4);
+  const after = cstr(v, v.web_test_page_name());
+  check(`VALUES: FILTER's (page ${vp}, TONE's knobs): a quick turn of 20 detents moves the cutoff 20 (${dv}), on TONE ${dt}; EDIT tapped on MORE: ${after} (the VALUES pages skipped)`,
+        vp >= 0 && dv === 20 && dt > 40 && after === "TONE");
+  for (let q = 0; q < 200; q++) {               // HOME's bloom: a note swirls it and it opens; let go, it closes
+    v.web_test_go(q);
+    if (v.web_test_page_section() === SEC.MACRO) break;
+  }
+  play(v, 1.5);
+  const b0 = [v.web_test_bloom(0), v.web_test_bloom(1)];
+  v.web_keys(1 << 7);
+  play(v, 0.15);
+  const b1 = [v.web_test_bloom(0), v.web_test_bloom(1)];
+  play(v, 1.6);
+  const b2 = [v.web_test_bloom(0), v.web_test_bloom(1)];
+  v.web_keys(0);
+  play(v, 4.0);
+  const b3 = [v.web_test_bloom(0), v.web_test_bloom(1)], d0 = v.web_screen_draws();
+  play(v, 1.0);
+  const still = v.web_screen_draws() - d0;
+  check(`the bloom (open, swirl in thousandths): silence ${b0}; a note, 0.15 s: ${b1} (swirling, opening); 1.75 s: ${b2} (open, unwound); let go, 4 s: ${b3} (a bud), then ${still} blits in 1 s`,
+        b0[0] === 0 && b0[1] === 0 && b1[1] > 400 && b1[0] > 100 && b2[0] > 400 && Math.abs(b2[1]) < 150 && b3[0] < 20 &&
+        Math.abs(b3[1]) < 20 && still === 0);
 }
 
 console.log(`emu: ${checks} checks, ${failed} failed`);
