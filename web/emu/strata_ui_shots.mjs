@@ -428,6 +428,17 @@ go(SEC.OSCA, "WAVE");
 shot("Osc-paper");
 go(SEC.FILTER, "TONE");
 shot("Filter-paper");
+for (const [i, nm] of [[8, "moss"], [9, "dusk"], [10, "sand"], [11, "neon"]]) {   // V0.67's four themes
+  ex.web_test_palette(i);
+  go(SEC.MACRO, "HOME");
+  ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4));
+  run(0.6);
+  shot(`Main-${nm}`);
+  ex.web_keys(0);
+  run(0.3);
+  go(SEC.FILTER, "TONE");
+  shot(`Filter-${nm}`);
+}
 ex.web_test_palette(0);
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
 writeFileSync(`${out}/lint.txt`, lints.join("\n"));
