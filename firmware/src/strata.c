@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.7 HARDWARE TEST"       /* the splash and the console (V0.7: SCL's chords); build.py
+#define STRATA_VERSION "V0.75 HARDWARE TEST"      /* the splash and the console (V0.75: the ARP); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH

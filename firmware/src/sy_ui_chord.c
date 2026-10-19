@@ -3,8 +3,9 @@
 /* The STRATA UI's chord pages (V0.7, SCL's family after SCALE; the chords themselves: sy_chord.c):
  *   - CHORD: the chord playing named large ("Cm7/G"), MODE's, TYPE's and the extensions' chips (FREE: what the chord
  *     buttons latched), VOICING's place, the chord's notes and the bass on three octaves of keys;
- *   - PERFORM: the style, the ARP button's state, a bar of what it plays (each note a row, its time across: a strum's
- *     stagger, an arpeggio's steps, a pattern's stabs; HARP: the note each key plays), RATE, MOVE and FEEL;
+ *   - PERFORM (V0.75: ARP held, ARP's family): the style, the ARP button's state, a bar of what it plays (each note
+ *     a row, its time across: a strum's stagger, an arpeggio's steps, a pattern's stabs; HARP: the note each key
+ *     plays; the step playing marked under it), RATE, MOVE and FEEL; STEPS, RATCHET and GROOVE (V0.75, below);
  *   - BASS: on or off, its octave, the chord and the bass on four octaves of keys, its level;
  *   - MIDI: where the chords come from and go (the keys, MIDI in, the sound, USB out), the two channels.
  * Each draws from chd (the settings) and chs (the chord as the audio side last built it), read as they stand. Needs
@@ -13,7 +14,7 @@
 /* knob k's name and value on SCL's chord pages (sy_ui_draw.c ui_knob_nv) */
 static const char *ui_chord_nv(uint32_t id, char *v)
 {
-    uint32_t st = chd.style % PF_N, i;
+    uint32_t st = chd.style % PF_N, i, a = ui.astep % AR_NSTEP;
     v[0] = 0;
     switch (id) {
     case UI_HMODE: sp_put(v, CH_MODE_NAME[chd.mode % CH_NMODE]); return "MODE";
@@ -71,7 +72,23 @@ static const char *ui_chord_nv(uint32_t id, char *v)
     case UI_CIN: sp_put(v, chd.min ? "ROOTS" : "AS SENT"); return "MIDI IN";
     case UI_COUT: sp_put(v, chd.mout ? "ON" : "OFF"); return "USB OUT";
     case UI_COCH: sp_fix(v, chd.och + 1, 0u, 0); return "CHORDS CH";
-    default: sp_fix(v, chd.bch + 1, 0u, 0); return "BASS CH";
+    case UI_CBCH: sp_fix(v, chd.bch + 1, 0u, 0); return "BASS CH";
+    case UI_AGATE: sp_put(sp_fix(v, chd.gate, 0u, 0), "%"); return "GATE";
+    case UI_ASWING: sp_put(sp_fix(v, chd.swing, 0u, 0), "%"); return "SWING";
+    case UI_ALEN: sp_put(sp_fix(v, chd.len, 0u, 0), chd.len == 1u ? " STEP" : " STEPS"); return "LENGTH";
+    case UI_ALATCH: sp_put(v, chd.latch ? "ON" : "OFF"); return "LATCH";
+    case UI_SSTEP: sp_fix(sp_put(sp_fix(v, (int32_t)a + 1, 0u, 0), " OF "), chd.len, 0u, 0); return "STEP";
+    case UI_STYPE: sp_put(v, AS_NAME[chd.st[a] % AS_N]); return "KIND";
+    case UI_SLVL: sp_put(sp_fix(v, chd.lvl[a], 0u, 0), "%"); return "LEVEL";
+    case UI_SOCT:
+        if (chd.oct[a] == 2u)
+            sp_put(v, "AS PLAYED");
+        else
+            sp_put(sp_fix(v, (int32_t)chd.oct[a] - 2, 0u, 1), " OCT");
+        return "OCTAVE";
+    case UI_SRAT: sp_put(sp_fix(v, chd.rat[a], 0u, 0), chd.rat[a] == 1u ? " HIT" : " HITS"); return "RATCHET";
+    case UI_SCHN: sp_put(sp_fix(v, chd.chn[a], 0u, 0), "%"); return "CHANCE";
+    default: sp_put(v, chd.sld[a] ? "ON" : "OFF"); return "SLIDE";
     }
 }
 
@@ -190,12 +207,13 @@ static void ui_p_chord(void)
 }
 
 /* PERFORM's bar of what it plays for the chord shown: each note a row, its time across (a strum's stagger, an
- * arpeggio's steps, a pattern's stabs; SLOP's looseness from a fixed seed) */
-typedef struct { float t0, t1; uint8_t n, v; } ui_pev_t;
-static uint32_t ui_ch_events(const uint8_t *nt, uint32_t n, ui_pev_t *ev, uint32_t max, float *win)
+ * arpeggio's steps, a pattern's stabs; SLOP's looseness from a fixed seed). V0.75: ARP's and PATTERN's sixteen steps
+ * as ch_step plays them (in steps: SWING, GATE, ARP's steps, its RANDOM and CHANCE from a seed of the page's own) */
+typedef struct { float t0, t1; uint8_t n, v, hollow; } ui_pev_t;   /* (v: a level, %; hollow: CHANCE under 100 %) */
+static uint32_t ui_ch_events(const uint8_t *nt, const uint8_t *od, uint32_t n, ui_pev_t *ev, uint32_t max, float *win)
 {
     uint32_t st = chd.style % PF_N, k = 0, i, seed = 7u;
-    float rate = (float)ch_rate_smp() / SY_FS;
+    float rate = (float)ch_rate_smp() / SY_FS, g = (float)sy_clampi(chd.gate, 5, 200) / 100.0f;
     int32_t feel = chd.feel[st];
     if (st == PF_STRUM || st == PF_STRUM2 || st == PF_SLOP) {
         uint8_t l[CH_MAXN];
@@ -210,6 +228,7 @@ static uint32_t ui_ch_events(const uint8_t *nt, uint32_t n, ui_pev_t *ev, uint32
             int32_t v = 100;
             ev[k].n = l[up ? i : m - 1u - i];
             ev[k].t0 = t;
+            ev[k].hollow = 0;
             if (st == PF_SLOP) {
                 v += v * ((int32_t)(sy_rand(&seed) % 101u) - 50) * feel / 10000;
                 t += rate * (float)(100u - (uint32_t)feel * (sy_rand(&seed) % 86u) / 100u) / 100.0f;
@@ -224,21 +243,34 @@ static uint32_t ui_ch_events(const uint8_t *nt, uint32_t n, ui_pev_t *ev, uint32
             ev[i].t1 = *win;
         return k;
     }
-    *win = 16.0f * rate;
-    if (st == PF_ARP) {
-        uint32_t oct = (uint32_t)sy_clampi(feel, 1, 3), len = n * oct, mv = chd.move[st] % AR_N;
-        for (i = 0; i < 16u && k < max && len; i++) {
-            uint32_t j;
-            if (mv == AR_UPDN && len > 1u)
-                j = i % (2u * len - 2u), j = j < len ? j : 2u * len - 2u - j;
-            else if (mv == AR_RANDOM)
-                j = sy_rand(&seed) % len;
+    *win = 16.0f;                                   /* (ARP, PATTERN: sixteen steps, in steps) */
+    if (st == PF_ARP) {                             /* (as ch_step plays them: RANDOM, WALK and CHANCE from a seed) */
+        uint32_t len = (uint32_t)sy_clampi(chd.len, 1, AR_NSTEP), ni = 0, s, j, h, m, r, ties;
+        uint8_t walk = 0, out[CH_MAXN];
+        for (i = 0; i < 16u && k < max && n; i++) {
+            float t0 = (float)i + ch_swing(i), gap, last;
+            s = i % len;
+            if (chd.st[s] != AS_PLAY)
+                continue;
+            m = ar_notes(ni++, nt, od, n, out, &walk, &seed);
+            r = (uint32_t)sy_clampi(chd.rat[s], 1, 4);
+            for (j = 1, ties = 0; j < len && chd.st[(s + j) % len] == AS_TIE; j++)
+                ties++;
+            gap = 1.0f / (float)r;
+            if (chd.sld[s])
+                last = (float)(1u + ties) + ch_swing(i + 1u + ties) - ch_swing(i) - (float)(r - 1u) * gap + 0.05f;
+            else if (ties)
+                last = (float)ties + ch_swing(i + ties) - ch_swing(i) - (float)(r - 1u) * gap + g;
             else
-                j = mv == AR_DOWN ? len - 1u - i % len : i % len;
-            ev[k].n = (uint8_t)(nt[j % n] + 12u * (j / n));   /* (AS PLAYED: as built, shown as UP) */
-            ev[k].t0 = (float)i * rate;
-            ev[k].t1 = ev[k].t0 + 0.5f * rate;
-            ev[k++].v = 100;
+                last = gap * g;
+            for (h = 0; h < r; h++)
+                for (j = 0; j < m && k < max; j++) {
+                    ev[k].n = ch_fold(out[j] + 12 * ((int32_t)sy_clampi(chd.oct[s], 0, 4) - 2));
+                    ev[k].t0 = t0 + (float)h * gap;
+                    ev[k].t1 = ev[k].t0 + sy_maxf(h + 1u == r ? last : gap * g, 0.05f);
+                    ev[k].v = (uint8_t)sy_clampi(chd.lvl[s], 5, 100);
+                    ev[k++].hollow = chd.chn[s] < 100u;
+                }
         }
     } else if (st == PF_PATTERN) {
         for (i = 0; i < 16u; i++)
@@ -246,9 +278,10 @@ static uint32_t ui_ch_events(const uint8_t *nt, uint32_t n, ui_pev_t *ev, uint32
                 uint32_t j;
                 for (j = 0; j < n && k < max; j++) {
                     ev[k].n = nt[j];
-                    ev[k].t0 = (float)i * rate;
-                    ev[k].t1 = ev[k].t0 + rate * (float)sy_clampi(feel, 10, 100) / 100.0f;
-                    ev[k++].v = (uint8_t)(i % 4u ? 80 : 100);
+                    ev[k].t0 = (float)i + ch_swing(i);
+                    ev[k].t1 = ev[k].t0 + g;
+                    ev[k].hollow = 0;
+                    ev[k++].v = (uint8_t)(i % 4u ? 100 - sy_clampi(feel, 0, 100) : 100);
                 }
             }
     }
@@ -256,12 +289,14 @@ static uint32_t ui_ch_events(const uint8_t *nt, uint32_t n, ui_pev_t *ev, uint32
 }
 static void ui_p_cperf(void)
 {
-    static const char *const MV[PF_N] = {"DIRECTION", "DIRECTION", "ORDER", "PATTERN", "\x97", "DIRECTION"};
-    uint8_t nt[CH_MAXN];
+    static const char *const MV[PF_N] = {"DIRECTION", "DIRECTION", "MODE", "PATTERN", "\x97", "DIRECTION"};
+    uint8_t nt[CH_MAXN], od[CH_MAXN];
     uint32_t bass, root, n = ui_ch_now(nt, &bass, &root), st = chd.style % PF_N, i, k;
     char v[24];
     const float X0 = 14.0f, W = 212.0f, Y0 = 62.0f, H = 104.0f;
-    ui_title(PF_NAME[st], UI_TITLE_X);
+    memcpy(od, chs.built && chs.n ? chs.ord : nt, n);
+    pg.figs = 1;                                    /* (V0.75: the values in the row, the style the title: no flag) */
+    lk_text(UI_TITLE_X, 24.0f, T14B, PF_NAME[st], ui_ink(ui_hot(0)), sk.ground, 0, 17);
     lk_chip(184.0f, 24.0f, chd.perf ? "ARP ON" : "ARP OFF", chd.perf);
     lk_frame(X0, Y0, W, H, 1.0f, sk.line);
     if (st == PF_HARP) {                            /* HARP: the note each key plays, a step a key */
@@ -285,32 +320,50 @@ static void ui_p_cperf(void)
             py = cy;
         }
     } else {
-        ui_pev_t ev[24];
-        float win = 1.0f, rate = (float)ch_rate_smp() / SY_FS;
-        uint8_t rows[24];
-        uint32_t ne = ui_ch_events(nt, n, ev, 24u, &win), nr = 0;
+        ui_pev_t ev[64];
+        float win = 1.0f;
+        uint8_t rows[32];
+        uint32_t ne = ui_ch_events(nt, od, n, ev, 64u, &win), nr = 0;
+        int hot = ui_hot(1) || ui_hot(2) || ui_hot(3);
         for (i = 0; i < ne; i++) {                  /* the rows: each note once, the lowest at the bottom */
             for (k = 0; k < nr && rows[k] != ev[i].n; k++)
                 ;
-            if (k == nr && nr < 24u)
+            if (k == nr && nr < 32u)
                 rows[nr++] = ev[i].n;
         }
         ch_sort(rows, nr);
-        if (st == PF_ARP || st == PF_PATTERN)       /* (the steps: a tick each, the beats longer) */
+        if (ch_stepped(st)) {                       /* (the steps: a tick each, the beats longer; ARP's LENGTH) */
+            uint32_t len = st == PF_ARP ? (uint32_t)sy_clampi(chd.len, 1, AR_NSTEP) : 16u;
             for (i = 0; i <= 16u; i++)
                 lk_seg(X0 + W * (float)i / 16.0f, Y0 + H, X0 + W * (float)i / 16.0f, Y0 + H + (i % 4u ? 3.0f : 6.0f), 1.0f,
                        i % 4u ? sk.line : sk.mid);
+            if (len < 16u)
+                lk_seg_dash(X0 + W * (float)len / 16.0f, Y0 + 1.0f, X0 + W * (float)len / 16.0f, Y0 + H - 1.0f, sk.mid,
+                            1.0f, 2.0f);
+            if (chd.perf && chs.at && chd.style == st)   /* (the step playing: where it falls in the sixteen) */
+                for (i = (uint32_t)(chs.at - 1u) % len; i < 16u; i += len) {
+                    float cx = X0 + W * ((float)i + 0.5f) / 16.0f;
+                    lk_tri(cx - 3.5f, Y0 + H + 8.0f, cx + 3.5f, Y0 + H + 8.0f, cx, Y0 + H + 3.0f, sk.hot);
+                }
+        }
         for (i = 0; i < ne; i++) {
-            float rh = sy_minf(12.0f, (H - 8.0f) / (float)(nr ? nr : 1u)), y, xa, xb;
+            float rh = sy_minf(12.0f, (H - 8.0f) / (float)(nr ? nr : 1u)), y, xa, xb, hh;
+            uint16_t c;
+            if (ev[i].t0 >= win)
+                continue;
             for (k = 0; k < nr && rows[k] != ev[i].n; k++)
                 ;
             y = Y0 + H - 4.0f - rh * ((float)k + 0.5f);
             xa = X0 + 2.0f + (W - 4.0f) * ev[i].t0 / win;
             xb = X0 + 2.0f + (W - 4.0f) * sy_minf(ev[i].t1, win) / win;
-            lk_box(xa, y - sy_minf(2.5f, 0.3f * rh), sy_maxf(xb, xa + 2.0f), y + sy_minf(2.5f, 0.3f * rh),
-                   sy_mix565(sk.mid, ui_ink(ui_hot(1) || ui_hot(2) || ui_hot(3)), (uint32_t)ev[i].v * 2u));
+            xb = sy_maxf(xb - 1.0f, xa + 2.0f);     /* (a pixel apart from the next) */
+            hh = sy_minf(3.5f, 0.32f * rh);
+            c = sy_mix565(sk.mid, ui_ink(hot), (uint32_t)sy_clampi(ev[i].v, 0, 100) * 255u / 100u);
+            if (ev[i].hollow)
+                lk_frame(xa, y - hh - 0.5f, xb - xa, 2.0f * hh + 1.0f, 1.0f, c);
+            else
+                lk_box(xa, y - hh, xb, y + hh, c);
         }
-        (void)rate;
     }
     for (i = 0; i < 3u; i++) {                      /* RATE, MOVE, FEEL: a word over the value each */
         static const float CX[3] = {26.0f, 104.0f, 182.0f};
@@ -414,4 +467,156 @@ static void ui_p_cmidi(void)
     ui_H(1, 126.0f, 145.0f);
     ui_H(2, 8.0f, 185.0f);
     ui_H(3, 126.0f, 185.0f);
+}
+
+/* ------------------------------------------------------------------------------------------- ARP (V0.75) --- */
+/* ARP's pages (ARP held): STEPS and RATCHET, its sixteen steps a column each across 14 .. 226; GROOVE, two beats of
+ * steps where SWING puts them, as long as GATE makes them, and LENGTH's sixteen cells */
+#define UI_AX0 14.0f
+#define UI_AW (212.0f / 16.0f)
+/* the chip at the right of the title: ARP on or off (another style: its name, ARP's steps waiting for it) */
+static void ui_arp_chip(void)
+{
+    char t[32];
+    const char *s = t;
+    if (chd.style % PF_N == PF_ARP)
+        s = chd.perf ? "ARP ON" : "ARP OFF";
+    else
+        sp_put(sp_put(t, "STYLE: "), PF_NAME[chd.style % PF_N]);
+    lk_chip(230.0f - lk_tw(T10B, s, 20) - 10.0f, 24.0f, s, chd.perf && chd.style % PF_N == PF_ARP);
+}
+/* the steps: OCTAVE a tick over each (on the 0 line), LEVEL a bar (RATCHET's hits side by side; CHANCE under 100 %:
+ * hollow), TIE the note before held on across it, REST a dash at the foot, SLIDE a slope up into the next; past
+ * LENGTH in LINE; the step picked framed, the one playing marked over it, the beats ticked under. rat: RATCHET's page
+ * (the hits, CHANCE's meter under each and SLIDE in INK; the levels and octaves in MID) */
+static void ui_steps_lanes(int rat)
+{
+    const float YO = 66.0f, YB = 154.0f, HB = 66.0f, Y0 = 54.0f, Y1 = 164.0f;
+    uint32_t len = (uint32_t)sy_clampi(chd.len, 1, AR_NSTEP), a = ui.astep % AR_NSTEP, i, h;
+    float held = 0.0f;                              /* (the top of the note a TIE holds on; 0 none) */
+    lk_seg(UI_AX0, YO, UI_AX0 + 212.0f, YO, 1.0f, sk.line);   /* (OCTAVE 0) */
+    for (i = 0; i < AR_NSTEP; i++) {
+        float x0 = UI_AX0 + UI_AW * (float)i, bw = UI_AW - 4.0f, xl = x0 + 2.0f, xr = xl + bw;
+        float top = YB - HB * (float)sy_clampi(chd.lvl[i], 5, 100) / 100.0f, y;
+        int live = i < len, sel = i == a;
+        uint16_t ink = live ? sk.ink : sk.line, soft = live ? sk.mid : sk.line;
+        uint16_t lvc = rat ? soft : sel && ui_hot(2) ? sk.hot : ink, hitc = rat && sel && ui_hot(1) ? sk.hot : ink;
+        y = YO - 5.0f * ((float)sy_clampi(chd.oct[i], 0, 4) - 2.0f);
+        lk_box(xl + 1.0f, y - 1.5f, xr - 1.0f, y + 1.5f, rat ? soft : sel && ui_hot(3) ? sk.hot : ink);
+        if (chd.st[i] == AS_PLAY) {
+            uint32_t r = (uint32_t)sy_clampi(chd.rat[i], 1, 4);
+            float hw = (bw - (float)(r - 1u)) / (float)r;
+            for (h = 0; h < r; h++) {               /* (each hit: a bar of its own) */
+                float ha = xl + (hw + 1.0f) * (float)h;
+                if (chd.chn[i] < 100u)
+                    lk_frame(ha + 0.5f, top + 0.5f, hw - 1.0f, YB - top - 1.0f, 1.0f, rat ? hitc : lvc);
+                else
+                    lk_box(ha, top, ha + hw, YB, rat ? hitc : lvc);
+            }
+            if (chd.sld[i])                         /* (SLIDE: up into the next step) */
+                lk_seg(xr - 1.0f, top + 1.0f, xr + 5.0f, top - 5.0f, 1.5f,
+                       !rat ? soft : sel && ui_hot(3) ? sk.hot : ink);
+            held = top;
+        } else if (chd.st[i] == AS_TIE && held > 0.0f) {
+            lk_box(x0 - 2.0f, held, xr, YB, soft);  /* (the note before, on across this step) */
+        } else {
+            lk_box(xl + 1.0f, YB - 3.0f, xr - 1.0f, YB, soft);   /* (REST: a stub) */
+            held = 0.0f;
+        }
+        if (rat && chd.st[i] == AS_PLAY) {          /* RATCHET's page: CHANCE's meter under the step */
+            lk_box(xl, YB + 4.0f, xr, YB + 7.0f, sk.line);
+            lk_box(xl, YB + 4.0f, xl + bw * (float)chd.chn[i] / 100.0f, YB + 7.0f, sel && ui_hot(2) ? sk.hot : ink);
+        }
+        lk_seg(x0, Y1 + 1.0f, x0, Y1 + (i % 4u ? 3.0f : 6.0f), 1.0f, i % 4u ? sk.line : sk.mid);
+    }
+    if (len < AR_NSTEP)
+        lk_seg_dash(UI_AX0 + UI_AW * (float)len, Y0, UI_AX0 + UI_AW * (float)len, Y1, sk.mid, 1.0f, 2.0f);
+    lk_frame(UI_AX0 + UI_AW * (float)a + 0.5f, Y0 + 0.5f, UI_AW - 1.0f, Y1 - Y0 - 1.0f, 1.0f,
+             ui_hot(0) ? sk.hot : sk.ink);
+    if (chd.perf && chd.style % PF_N == PF_ARP && chs.at) {   /* (the step playing) */
+        float cx = UI_AX0 + UI_AW * ((float)((chs.at - 1u) % AR_NSTEP) + 0.5f);
+        lk_tri(cx - 3.5f, 46.0f, cx + 3.5f, 46.0f, cx, 51.0f, sk.hot);
+    }
+}
+/* a page's three knobs in a row under its graph: a word over the value each (knobs k0 .. k0 + 2) */
+static void ui_arp_row(uint32_t k0, const int32_t *ids)
+{
+    static const float CX[3] = {26.0f, 104.0f, 182.0f};
+    uint32_t i;
+    char v[24];
+    for (i = 0; i < 3u; i++) {
+        const char *nm = ui_chord_nv((uint32_t)ids[i], v);
+        lk_text(CX[i], 176.0f, T9, nm, sk.lab, sk.ground, 20, 0);
+        lk_text(CX[i], 188.0f, T10B, v, ui_ink(ui_hot(k0 + i)), sk.ground, 0, 0);
+        ui_H(k0 + i, CX[i] - 18.0f, 185.0f);
+    }
+}
+/* the title of STEPS and RATCHET: the step picked (KNOB 1's figure: HOT while it turns; the pages show every value,
+ * no flag) */
+static void ui_step_title(void)
+{
+    char t[16];
+    sp_fix(sp_put(t, "STEP "), (int32_t)(ui.astep % AR_NSTEP) + 1, 0u, 0);
+    lk_text(UI_TITLE_X, 24.0f, T14B, t, ui_ink(ui_hot(0)), sk.ground, 0, 17);
+    pg.figs = 1;
+}
+/* STEPS: the step picked (KNOB 1), its KIND, LEVEL, OCTAVE */
+static void ui_p_steps(void)
+{
+    static const int32_t IDS[3] = {UI_STYPE, UI_SLVL, UI_SOCT};
+    ui_step_title();
+    ui_arp_chip();
+    ui_steps_lanes(0);
+    ui_arp_row(1u, IDS);
+    ui_H(0, 8.0f, 27.0f);
+}
+/* RATCHET: the step picked (KNOB 1), its RATCHET, CHANCE, SLIDE */
+static void ui_p_ratch(void)
+{
+    static const int32_t IDS[3] = {UI_SRAT, UI_SCHN, UI_SSLD};
+    ui_step_title();
+    ui_arp_chip();
+    ui_steps_lanes(1);
+    ui_arp_row(1u, IDS);
+    ui_H(0, 8.0f, 27.0f);
+}
+/* GROOVE: two beats of steps (the straight places dashed, the beat solid), each note where SWING puts it (an arrow
+ * from its straight place) and as long as GATE makes it (past 100 % into the next: a gap marks where that starts);
+ * LENGTH's sixteen cells; LATCH's chip */
+static void ui_p_groove(void)
+{
+    static const int32_t IDS[3] = {UI_AGATE, UI_ASWING, UI_ALEN};
+    const float X0 = 14.0f, W = 212.0f, Y0 = 58.0f, Y1 = 132.0f, YN = 100.0f, SL = 212.0f / 8.0f;
+    float g = (float)sy_clampi(chd.gate, 5, 200) / 100.0f, cw = W / 16.0f;
+    uint32_t i, len = (uint32_t)sy_clampi(chd.len, 1, AR_NSTEP);
+    const char *ls = chd.latch ? "LATCH ON" : "LATCH OFF";
+    float lx = 230.0f - lk_tw(T10B, ls, 20) - 10.0f;
+    ui_title("GROOVE", UI_TITLE_X);
+    ui_sub(UI_TITLE_X, "ARP AND PATTERN", 0);
+    pg.figs = 1;                                    /* (the values in the row, LATCH its chip: no flag) */
+    lk_chip(lx, 24.0f, ls, chd.latch);
+    for (i = 0; i <= 8u; i++) {
+        float x = X0 + SL * (float)i;
+        if (i % 4u)
+            lk_seg_dash(x, Y0, x, Y1, sk.line, 1.0f, 3.0f);
+        else
+            lk_seg(x, Y0, x, Y1, 1.0f, sk.mid);
+    }
+    for (i = 0; i < 8u; i++) {
+        float xs = X0 + SL * (float)i, xa = xs + SL * ch_swing(i), xb = sy_minf(xa + SL * g, X0 + W);
+        lk_box(xa + 1.0f, YN - 8.0f, sy_maxf(xb - 1.0f, xa + 3.0f), YN + 8.0f, ui_ink(ui_hot(0)));
+        if (i)
+            lk_seg(xa + 0.5f, YN - 8.0f, xa + 0.5f, YN + 8.0f, 1.0f, sk.ground);   /* (where this one starts) */
+        if (xa - xs > 5.0f)
+            lk_arrow(xs + 1.0f, 74.0f, xa, 74.0f, 3.0f, 1.5f, ui_ink(ui_hot(1)));
+    }
+    for (i = 0; i < AR_NSTEP; i++) {                /* LENGTH */
+        float x = X0 + cw * (float)i;
+        if (i < len)
+            lk_box(x + 1.0f, 146.0f, x + cw - 1.0f, 158.0f, ui_ink(ui_hot(2)));
+        else
+            lk_frame(x + 1.5f, 146.5f, cw - 3.0f, 11.0f, 1.0f, sk.line);
+    }
+    ui_arp_row(0u, IDS);
+    ui_H(3, lx - 18.0f, 27.0f);
 }

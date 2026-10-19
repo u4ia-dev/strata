@@ -34,7 +34,9 @@
  *     key opens its section: the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS).
  *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
  *   - PLAY: the transport on and off (the FREE LFOs start on the beat; PLAY's green LED on, its own blinking each
- *     beat). ARP: a word (the arpeggiator comes in v1).
+ *     beat; ARP and PATTERN step on its beat). ARP: PERFORM on and off (V0.7); ARP held, its pages (V0.75: PERFORM,
+ *     ARP's STEPS and RATCHET, GROOVE: sy_ui_chord.c). CLOCK IN MIDI (GLOBAL): MIDI's clock the tempo, its start and
+ *     stop the transport.
  *   - The SETTINGS (HOME held 5 s): SCREEN (the palette, HELP: a hint at the bottom entering a section, the LEDs'
  *     GLOW), PANEL (ACCEL, the HOLD time), MIDI (its CHANNEL, LEARN, CLEAR the learned CCs, PROGRAM changes).
  *     MIDI LEARN on: the next knob turned on any page picks its parameter, the next CC is set to it (OCT- takes
@@ -48,6 +50,10 @@ static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note so
 static void sy_app_octave(int32_t d);               /* .. OCT- / OCT+ */
 static int32_t sy_app_oct(void);
 static void sy_app_chord_root(uint32_t n);          /* .. HARP's chord's root (V0.7) */
+static void sy_app_run(uint32_t on);                /* .. the transport on, off (V0.75: the audio side's beat) */
+static int sy_app_clock(void);                      /* .. the tempo from MIDI's clock now (CLOCK IN MIDI) */
+static int sy_app_clock_lost(void);                 /* .. it stopped coming (1 once: the panel's tempo again) */
+static void sy_app_keys_hand(void);                 /* .. the keys held over to the chords (they just took the keys) */
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
 static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
@@ -98,17 +104,21 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX,         /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
        UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI,          /* (V0.7, SCL's chords (sy_chord.c chd): CHORD's, PERFORM's, */
        UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* BASS's, MIDI's) */
-       UI_BON, UI_BOCT, UI_BLVL, UI_CIN, UI_COUT, UI_COCH, UI_CBCH };
+       UI_BON, UI_BOCT, UI_BLVL, UI_CIN, UI_COUT, UI_COCH, UI_CBCH,
+       UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH,       /* (V0.75, ARP's: GROOVE's; a step's (the one picked: STEPS', */
+       UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT, UI_SRAT, UI_SCHN, UI_SSLD,   /* RATCHET's); GLOBAL's CLOCK IN) */
+       UI_CLOCK };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
 #define SEC_BROWSE (SEC_COUNT + 3)
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
-#define SEC_N (SEC_COUNT + 5)                       /* every section, the UI's own too (ui.spage) */
+#define SEC_ARP (SEC_COUNT + 5)                     /* (V0.75: ARP held, PERFORM's pages) */
+#define SEC_N (SEC_COUNT + 6)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_N };   /* (sy_ui_draw.c UI_PAGE: each one's page) */
+       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_N };   /* (sy_ui_draw.c UI_PAGE) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -216,7 +226,7 @@ static const ui_page_t UI_PG[] = {
     {SEC_VOICE, G_PLAY, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
     UI_V(SEC_VOICE, SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE)
     UI_V(SEC_VOICE, SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL)
-    {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
+    {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, UI_CLOCK}},
     {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
     {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
     {SEC_CHAIN, G_CHAIN, "CHAIN", {UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX}},
@@ -256,9 +266,12 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_KEYS, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI}},   /* (V0.7: sy_ui_chord.c) */
-    {SEC_KEYS, G_PERF, "PERFORM", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},
     {SEC_KEYS, G_BASS, "BASS", {UI_BON, UI_BOCT, UI_BLVL, -1}},
     {SEC_KEYS, G_CMIDI, "MIDI", {UI_CIN, UI_COUT, UI_COCH, UI_CBCH}},
+    {SEC_ARP, G_PERF, "PERFORM", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},  /* (V0.75: ARP held) */
+    {SEC_ARP, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
+    {SEC_ARP, G_RATCH, "RATCHET", {UI_SSTEP, UI_SRAT, UI_SCHN, UI_SSLD}},
+    {SEC_ARP, G_GROOVE, "GROOVE", {UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
@@ -267,13 +280,14 @@ static const ui_page_t UI_PG[] = {
 /* the families: the sections each button shows (0xFF ends). FX: the chain view (SEC_CHAIN), then the modules in the
  * chain, in its order (ui_fam_secs; every effect section is FX's: ui_fam_of). SEQ: none yet (the sequencer comes in
  * a later version; the matrix is GLO's) */
-enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_SCL, FAM_N };
+enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_SCL, FAM_ARP, FAM_N };
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
     {SEC_LFO1, SEC_LFO2, 0xFF}, {0xFF}, {SEC_CHAIN, 0xFF}, {SEC_VOICE, SEC_MATRIX, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
-    {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF},
+    {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF}, {SEC_ARP, 0xFF},
 };
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL};
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL, NB};   /* (ARP: */
+                                                                                    /* its tap PERFORM, held its pages) */
 static int ui_is_fx(uint32_t sec) { return sec >= SEC_DRIVE && sec < SEC_CHAIN; }   /* an effect module's section */
 /* the effects' costs on one core, % (TESTING.md §4: the cost model at the measured ~150 instructions a us; the new
  * modules' estimated), by type: the chain view's sum */
@@ -395,8 +409,10 @@ static struct {
     uint8_t learn;                                  /* .. MIDI LEARN on (the next knob picks, the next CC goes to it) */
     int16_t ml_pick;                                /* .. the parameter picked, -1 none */
     uint32_t clr_t;                                 /* .. CLEAR turned once: a second turn within 2 s clears; 0 none */
-    uint8_t run;                                    /* PLAY: the transport running, since run_t */
-    uint32_t run_t;
+    uint8_t run;                                    /* PLAY: the transport running, since run_t (its beat: the audio */
+    uint32_t run_t;                                 /* side's, chs.tq) */
+    uint8_t astep;                                  /* ARP's STEPS, RATCHET: the step picked (0 .. 15) */
+    uint32_t abeat_t;                               /* .. a beat of ARP's or PATTERN's (the ARP LED dark a moment) */
     uint8_t scale, root, fit, kvel;                 /* SCL: the keys' scale, its root (0 C .. 11 B), how a key fits */
                                                     /* it (UI_FIT_*), the keys' velocity (1 .. 127) */
     uint8_t cd_btn, cd_s;                           /* a long hold counting down (NB: none); its seconds shown */
@@ -465,13 +481,25 @@ static int sy_ui_learn_cc(uint32_t cc)
 }
 static int sy_ui_midi_ch(uint32_t ch) { return !ui.mch || ch + 1u == ui.mch; }
 static int sy_ui_pc_on(void) { return ui.mpc; }
+/* MIDI's start (top: from the top), continue, stop with CLOCK IN MIDI (sy_app.c): PLAY's state (its LEDs, GLOBAL's
+ * metronome; the audio side has its own event) */
+static void sy_ui_run(int on, int top)
+{
+    if (on && (top || !ui.run)) {
+        ui.run_t = fm1_ms;
+        if (top)
+            sy_lfo_sync = 1;
+    }
+    ui.run = (uint8_t)(on != 0);
+    ui.dirty |= D_DISP | D_HEAD;
+}
 
 /* ------------------------------------------------------------------------------------------ helpers --- */
 static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
 static const char *ui_sec_name(uint32_t s)
 {
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
-           : s == SEC_KEYS ? "KEYS" : "PRESETS";
+           : s == SEC_KEYS ? "KEYS" : s == SEC_ARP ? "ARP" : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
 static void ui_save_over(void);
@@ -617,7 +645,9 @@ static const char *ui_hint(uint32_t sec)
     if (sec == SEC_MENU)
         return "HOME: BACK TO THE SOUND";
     if (sec == SEC_KEYS)                            /* (V0.7) */
-        return "ARP: PERFORM \xB7 SCL+KEY: ROOT";
+        return "SCL+KEY: ROOT \xB7 ARP HELD: ARP";
+    if (sec == SEC_ARP)                             /* (V0.75) */
+        return "ARP: ON, OFF \xB7 PLAY: ON THE BEAT";
     return 0;
 }
 
@@ -1293,11 +1323,40 @@ static void ui_learn_ms(void)
 
 /* the items: the MENU's; an LFO's points and GLOBAL's tempo (not in the MOD layer: nothing there to modulate) */
 /* SCL's chords (V0.7, sy_chord.c chd): a turn of CHORD's, PERFORM's (the style shown's own), BASS's or MIDI's knobs;
- * the audio side takes them at its next block (chd.gen) */
+ * the audio side takes them at its next block (chd.gen: the chord made again). V0.75, ARP's: PERFORM's RATE, MOVE
+ * and FEEL, GROOVE's, a step's (the one picked) taken as they stand, from the next step (the arpeggio goes on) */
 static void ui_chord_turn(int32_t item, int32_t s)
 {
-    uint32_t st = chd.style % PF_N;
+    uint32_t st = chd.style % PF_N, a = ui.astep % AR_NSTEP;
     int32_t lo, hi, step, nm = (int32_t)ch_moves(st);
+    int was = sy_chord_active();
+    if ((item >= UI_PRATE && item <= UI_PFEEL) || item >= UI_AGATE) {
+        switch (item) {
+        case UI_PRATE: chd.rate[st] = (uint8_t)sy_clampi(chd.rate[st] + s, 0, CH_NRATE - 1); break;
+        case UI_PMOVE: chd.move[st] = (uint8_t)((chd.move[st] + (uint32_t)(s % nm + nm)) % (uint32_t)nm); break;
+        case UI_PFEEL:
+            ch_feel_range(st, &lo, &hi, &step);
+            chd.feel[st] = (uint8_t)sy_clampi(chd.feel[st] + s * step, lo, hi);
+            break;
+        case UI_AGATE: chd.gate = (uint8_t)sy_clampi(chd.gate + 5 * s, 5, 200); break;
+        case UI_ASWING: chd.swing = (uint8_t)sy_clampi(chd.swing + s, 50, 75); break;
+        case UI_ALEN: chd.len = (uint8_t)sy_clampi(chd.len + s, 1, AR_NSTEP); break;
+        case UI_ALATCH:
+            chd.latch = s > 0;
+            if (!was && sy_chord_active())
+                sy_app_keys_hand();             /* (the keys held: latched from now) */
+            break;
+        case UI_SSTEP: ui.astep = (uint8_t)((a + (uint32_t)(s % 16 + 16)) % AR_NSTEP); break;
+        case UI_STYPE: chd.st[a] = (uint8_t)((chd.st[a] + (uint32_t)(s % 3 + 3)) % AS_N); break;
+        case UI_SLVL: chd.lvl[a] = (uint8_t)sy_clampi(chd.lvl[a] + 5 * s, 5, 100); break;
+        case UI_SOCT: chd.oct[a] = (uint8_t)sy_clampi(chd.oct[a] + s, 0, 4); break;
+        case UI_SRAT: chd.rat[a] = (uint8_t)sy_clampi(chd.rat[a] + s, 1, 4); break;
+        case UI_SCHN: chd.chn[a] = (uint8_t)sy_clampi(chd.chn[a] + 5 * s, 0, 100); break;
+        default: chd.sld[a] = s > 0; break;
+        }
+        ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+        return;
+    }
     switch (item) {
     case UI_HMODE: chd.mode = (uint8_t)sy_clampi(chd.mode + s, 0, CH_NMODE - 1); break;
     case UI_HTYPE:                                  /* (KEY's own: FREE's stays latched) */
@@ -1309,12 +1368,6 @@ static void ui_chord_turn(int32_t item, int32_t s)
     case UI_HEXT: chd.ext = (uint8_t)((chd.ext + (uint32_t)(s % 16 + 16)) % 16u); break;
     case UI_HVOI: chd.voicing = (uint8_t)sy_clampi(chd.voicing + s, 0, CH_NVOIC - 1); break;
     case UI_PSTY: chd.style = (uint8_t)((st + (uint32_t)(s % PF_N + PF_N)) % PF_N); break;
-    case UI_PRATE: chd.rate[st] = (uint8_t)sy_clampi(chd.rate[st] + s, 0, CH_NRATE - 1); break;
-    case UI_PMOVE: chd.move[st] = (uint8_t)((chd.move[st] + (uint32_t)(s % nm + nm)) % (uint32_t)nm); break;
-    case UI_PFEEL:
-        ch_feel_range(st, &lo, &hi, &step);
-        chd.feel[st] = (uint8_t)sy_clampi(chd.feel[st] + s * step, lo, hi);
-        break;
     case UI_BON: chd.bass = s > 0; break;
     case UI_BOCT: chd.boct = (uint8_t)sy_clampi(chd.boct + s, 1, 2); break;
     case UI_BLVL: chd.blvl = (uint8_t)sy_clampi(chd.blvl + 5 * s, 5, 100); break;
@@ -1323,6 +1376,8 @@ static void ui_chord_turn(int32_t item, int32_t s)
     case UI_COCH: chd.och = (uint8_t)((chd.och + (uint32_t)(s % 16 + 16)) % 16u); break;
     default: chd.bch = (uint8_t)((chd.bch + (uint32_t)(s % 16 + 16)) % 16u); break;
     }
+    if (!was && sy_chord_active())
+        sy_app_keys_hand();                         /* (V0.75: the keys held go over to the chords) */
     chd.gen++;
     ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
 }
@@ -1362,16 +1417,26 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         else
             ui.kvel = (uint8_t)sy_clampi(ui.kvel + ui_accel(e, s, 126), 1, 127);
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
-    } else if (item >= UI_HMODE && item <= UI_CBCH) {   /* SCL's chords */
+    } else if (item >= UI_HMODE && item <= UI_SSLD) {   /* SCL's chords, ARP's */
         ui_chord_turn(item, s);
+    } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
+        chd.clock = s > 0;
+        ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
     } else if (item >= UI_BPM && item <= UI_TSN) {
+        if (item == UI_BPM && sy_app_clock()) {
+            ui_toast("THE TEMPO IS MIDI'S CLOCK");
+            return;
+        }
         if (item == UI_BPM)
             ui.bpm = (uint16_t)sy_clampi(ui.bpm + ui_accel(e, s, 280), 20, 300);
         else if (item == UI_TSB)
             ui.tsb = (uint8_t)sy_clampi(ui.tsb + s, 1, 16);
         else
             ui.tsn = (uint8_t)sy_clampi(ui.tsn + s, 0, 4);
-        sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+        if (sy_app_clock())                         /* (MIDI's tempo stays; the bar as the signature says) */
+            sy_bar_q = (float)ui.tsb * 4.0f / (float)UI_TSN_VAL[ui.tsn];
+        else
+            sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
         ui.dirty |= D_KNOBS | D_DISP;
     } else {
         ui_lfo_turn(item, s, e);
@@ -1655,6 +1720,10 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
         ui_lay_open(LAY_JUMP, b);
     else if (b == B_SAVE && !ui.mod)
         ui_save_hold();                             /* (5 s: over its own slot) */
+    else if (b == B_ARP && !ui.mod) {               /* ARP held: its pages, where they were left (V0.75) */
+        ui.prev_page = ui.page;
+        ui_go(ui_in_fam(ui.fpage[FAM_ARP], FAM_ARP) ? ui.fpage[FAM_ARP] : ui_first_page(SEC_ARP));
+    }
     else if (b == B_SCL && !ui.mod)
         ui_toast("SCL HELD: A KEY IS THE ROOT");
 }
@@ -1694,12 +1763,16 @@ static void ui_release(uint32_t b, int held)
         ui.run_t = fm1_ms;
         if (ui.run)
             sy_lfo_sync = 1;
+        sy_app_run(ui.run);                         /* (the beat: from here, the audio side's) */
         ui_toast(ui.run ? "PLAY" : "STOP");
         return;
     }
     if (b == B_ARP) {                               /* ARP: PERFORM on and off (V0.7) */
         char t[32];
+        int was = sy_chord_active();
         chd.perf = (uint8_t)!chd.perf;
+        if (!was)                                   /* (V0.75: a chord held, then ARP: it plays) */
+            sy_app_keys_hand();
         chd.gen++;
         sp_put(sp_put(t, chd.perf ? "PERFORM: " : "PERFORM OFF"), chd.perf ? PF_NAME[chd.style % PF_N] : "");
         ui_toast(t);
@@ -1894,7 +1967,8 @@ static int sy_ui_key(uint32_t k)
 /* every millisecond: the buttons, the encoders */
 static void sy_ui_ms(void)
 {
-    static uint16_t seq;
+    static uint16_t seq, beat, atseq;
+    static uint32_t at_t;
     uint32_t k;
     int32_t s;
     chd.root = ui.root;                             /* (the chords' KEY mode: SCALE's scale, its root; the keys' */
@@ -1902,8 +1976,21 @@ static void sy_ui_ms(void)
     chd.vel = (uint8_t)sy_ui_key_vel();
     if (chs.seq != seq) {                           /* (a chord changed: SCL's pages name it, show it) */
         seq = chs.seq;
-        if (ui_sec() == SEC_KEYS)
+        if (ui_sec() == SEC_KEYS || ui_sec() == SEC_ARP)
             ui.dirty |= D_DISP | D_HEAD;
+    }
+    if (chs.beat != beat) {                         /* (ARP's, PATTERN's beat: the ARP LED dark a moment) */
+        beat = chs.beat;
+        ui.abeat_t = fm1_ms | 1u;
+    }
+    if (chs.atseq != atseq && ui_sec() == SEC_ARP && fm1_ms - at_t >= 40u) {   /* (a step played: ARP's pages */
+        atseq = chs.atseq;                                                     /* show where, 25 a second at most) */
+        at_t = fm1_ms;
+        ui.dirty |= D_DISP;
+    }
+    if (sy_app_clock_lost()) {                      /* (MIDI's clock gone: the panel's tempo again) */
+        sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+        ui.dirty |= D_DISP | D_HEAD;
     }
     ui_buttons();
     if (ui.cd_btn != NB)
@@ -1942,11 +2029,13 @@ static void settings_save(void) {}
 /* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
  * HOLD time; SCL's scale, root, fit and velocity; HELP, GLOW, MIDI's channel and PROGRAM; MIDI LEARN's map (a CC
  * and a parameter, 2 bytes, each); V0.7, the chords' (sy_chord.c chd: CHORD 4, PERFORM 2 + 3 x 6, BASS 3, MIDI 4,
- * KEY's type).
+ * KEY's type); V0.75, ARP's (GROOVE's GATE, SWING, LATCH, LENGTH, GLOBAL's CLOCK IN; the steps: a byte each of the
+ * kind, SLIDE, OCTAVE and RATCHET, then their LEVELs, their CHANCEs).
  * Fields are only added at the end: a shorter record (an older build's, 11 bytes at least) leaves the rest as they
  * were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
 #define SS_SET_ML (19u + 3u * ML_N)
-#define SS_SETTINGS_LEN (SS_SET_ML + 32u)
+#define SS_SET_AR (SS_SET_ML + 32u)
+#define SS_SETTINGS_LEN (SS_SET_AR + 5u + 3u * AR_NSTEP)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -1980,6 +2069,15 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             c[24] = chd.bass, c[25] = chd.boct, c[26] = chd.blvl;
             c[27] = chd.min, c[28] = chd.mout, c[29] = chd.och, c[30] = chd.bch, c[31] = chd.ktype;
         }
+        {
+            uint8_t *a = b + SS_SET_AR;
+            a[0] = chd.gate, a[1] = chd.swing, a[2] = chd.latch, a[3] = chd.len, a[4] = chd.clock;
+            for (i = 0; i < AR_NSTEP; i++) {
+                a[5u + i] = (uint8_t)(chd.st[i] | chd.sld[i] << 2 | chd.oct[i] << 3 | (chd.rat[i] - 1u) << 6);
+                a[5u + AR_NSTEP + i] = chd.lvl[i];
+                a[5u + 2u * AR_NSTEP + i] = chd.chn[i];
+            }
+        }
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -2003,7 +2101,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         ui.mpc = b[18] != 0;
         fm1_led_dim_level(ui.glow);
     }
-    if (n >= SS_SETTINGS_LEN) {                     /* (V0.7's chords, each kept in its range) */
+    if (n >= SS_SET_AR) {                           /* (V0.7's chords, each kept in its range) */
         const uint8_t *c = b + SS_SET_ML;
         uint32_t i;
         chd.mode = (uint8_t)(c[0] % CH_NMODE), chd.type = c[1] & 3u, chd.ext = c[2] & 15u;
@@ -2018,6 +2116,19 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         chd.bass = c[24] != 0, chd.boct = (uint8_t)sy_clampi(c[25], 1, 2), chd.blvl = (uint8_t)sy_clampi(c[26], 1, 100);
         chd.min = c[27] != 0, chd.mout = c[28] != 0, chd.och = c[29] & 15u, chd.bch = c[30] & 15u, chd.ktype = c[31] & 3u;
         chd.gen++;
+    }
+    if (n >= SS_SETTINGS_LEN) {                     /* (V0.75's ARP) */
+        const uint8_t *a = b + SS_SET_AR;
+        uint32_t i;
+        chd.gate = (uint8_t)sy_clampi(a[0], 5, 200), chd.swing = (uint8_t)sy_clampi(a[1], 50, 75);
+        chd.latch = a[2] != 0, chd.len = (uint8_t)sy_clampi(a[3], 1, AR_NSTEP), chd.clock = a[4] != 0;
+        for (i = 0; i < AR_NSTEP; i++) {
+            uint32_t p = a[5u + i];
+            chd.st[i] = (uint8_t)((p & 3u) % AS_N), chd.sld[i] = (p >> 2) & 1u;
+            chd.oct[i] = (uint8_t)sy_clampi((int32_t)((p >> 3) & 7u), 0, 4), chd.rat[i] = (uint8_t)((p >> 6) + 1u);
+            chd.lvl[i] = (uint8_t)sy_clampi(a[5u + AR_NSTEP + i], 5, 100);
+            chd.chn[i] = (uint8_t)sy_clampi(a[5u + 2u * AR_NSTEP + i], 0, 100);
+        }
     }
     if (n >= SS_SET_ML) {
         uint32_t i;

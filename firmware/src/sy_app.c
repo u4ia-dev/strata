@@ -48,9 +48,10 @@ static int32_t sy_master_now = 4096;
 /* ------------------------------------------------------------------------------------------ events --- */
 /* a ring with one producer and the audio interrupt as its consumer: the panel's (main loop) and MIDI's */
 enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC,
-       SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT };     /* (V0.7, the chords' (sy_chord.c): a key down or up (a its note as
+       SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT,       /* (V0.7, the chords' (sy_chord.c): a key down or up (a its note as
                                                   * SCALE fits it, 0xFF none; b the key, 0x80 down), a MIDI note as a root
                                                   * (a the note, b its velocity, 0 up), HARP's root (a the note)) */
+       SY_EV_RUN, SY_EV_CLK };                   /* (V0.75: the transport (a 1 start, 2 continue, 0 stop), MIDI's clock) */
 typedef struct { uint8_t type, a, b; } sy_ev_t;
 #define SY_EVQ 64u
 typedef struct {
@@ -105,6 +106,8 @@ static void sy_ev_drain(sy_ring_t *g)
         case SY_EV_KEY: sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7); break;
         case SY_EV_MKEY: sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u); break;
         case SY_EV_CROOT: sy_chord_root(e->a); break;
+        case SY_EV_RUN: sy_chord_run(e->a); break;
+        case SY_EV_CLK: sy_chord_clock(); break;
         default:
             sy_chord_reset();
             sy_all_sound_off();
@@ -189,6 +192,7 @@ static void sy_audio_init(void)
 static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u, (v >> 7) & 127u); }
 static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
 static void sy_app_chord_root(uint32_t n) { sy_ev_push(&sy_ev_ui, SY_EV_CROOT, n & 127u, 0u); }   /* (HARP's, SCL + a key) */
+static void sy_app_run(uint32_t on) { sy_ev_push(&sy_ev_ui, SY_EV_RUN, on ? 1u : 0u, 0u); }       /* (PLAY: V0.75) */
 
 /* -------------------------------------------------------------------------------------------- MIDI --- */
 /* a channel message on the SETTINGS' channel (any): notes, bend, aftertouch and the engine's controllers into the
@@ -242,6 +246,45 @@ static void sy_midi_in(uint32_t st, uint32_t d1, uint32_t d2)
             sy_ev_push(&sy_ev_midi, SY_EV_CC, d1, d2);
         }
     }
+}
+
+/* V0.75: MIDI's clock, start, continue and stop (realtime bytes, with the time each came: usb.c's stamp), taken with
+ * CLOCK IN MIDI (GLOBAL) alone: the tempo from the clocks' times (24 a quarter note; over the last 48, two quarter
+ * notes; a gap over 250 ms counts again), each clock to the audio side (the beat's place), start and stop the
+ * transport (PLAY's state too). sy_app_clock_lost: the clock gone a second (or CLOCK IN off), once */
+#define SY_CLK_N 49u
+static uint32_t sy_clk_ms[SY_CLK_N], sy_clk_n;   /* the last clocks' times; how many in a row */
+static uint8_t sy_clk_follow;                    /* the tempo is MIDI's clock's */
+static void sy_midi_rt(uint32_t b, uint32_t ms)
+{
+    if (!chd.clock)
+        return;
+    if (b == 0xF8u) {
+        if (sy_clk_n && ms - sy_clk_ms[(sy_clk_n - 1u) % SY_CLK_N] > 250u)
+            sy_clk_n = 0;
+        sy_clk_ms[sy_clk_n % SY_CLK_N] = ms;
+        sy_clk_n++;
+        if (sy_clk_n >= 25u) {                   /* (a quarter note's clocks at least) */
+            uint32_t m = sy_clk_n > SY_CLK_N ? SY_CLK_N - 1u : sy_clk_n - 1u;
+            uint32_t span = ms - sy_clk_ms[(sy_clk_n - 1u - m) % SY_CLK_N];
+            if (span)
+                sy_tempo = sy_clampf(2500.0f * (float)m / (float)span, 20.0f, 400.0f);   /* (quarter notes a minute) */
+            sy_clk_follow = 1;
+        }
+        sy_ev_push(&sy_ev_midi, SY_EV_CLK, 0u, 0u);
+    } else if (b == 0xFAu || b == 0xFBu || b == 0xFCu) {
+        sy_ev_push(&sy_ev_midi, SY_EV_RUN, b == 0xFAu ? 1u : b == 0xFBu ? 2u : 0u, 0u);
+        sy_ui_run(b != 0xFCu, b == 0xFAu);
+    }
+}
+static int sy_app_clock(void) { return sy_clk_follow; }
+static int sy_app_clock_lost(void)
+{
+    if (!sy_clk_follow || (chd.clock && fm1_ms - sy_clk_ms[(sy_clk_n - 1u) % SY_CLK_N] <= 1000u))
+        return 0;
+    sy_clk_follow = 0;
+    sy_clk_n = 0;
+    return 1;
 }
 
 /* --------------------------------------------------------------------------------------- the sound --- */
@@ -578,6 +621,20 @@ static void sy_app_octave(int32_t d) { sy_oct = sy_clampi(sy_oct + d, -3, 3); }
 #define SY_KEYS_ISR 0
 #endif
 static volatile uint8_t sy_keys_isr;
+/* V0.75: the chords just took the keys (PERFORM on, say, a chord held): the keys held as plain notes go over to them,
+ * by whichever reads the keys now (sy_ev_key has one producer at a time) */
+static volatile uint8_t sy_keys_hand;
+static void sy_app_keys_hand(void) { sy_keys_hand = 1; }
+static void sy_keys_handover(void)
+{
+    uint32_t k;
+    if (!sy_keys_hand)
+        return;
+    sy_keys_hand = 0;
+    for (k = 0; k < SY_NKEY; k++)
+        if (sy_keynote[k] < 0xFEu && sy_ev_push(&sy_ev_key, SY_EV_NOTE, sy_keynote[k], 0))
+            sy_keynote[k] = sy_ev_push(&sy_ev_key, SY_EV_KEY, sy_keynote[k], k | 0x80u) ? 0xFEu : 0xFFu;
+}
 static void sy_key_up(uint32_t k, uint32_t *now)        /* a key let go: the note it started ends */
 {
     if (sy_keynote[k] == 0xFF)
@@ -609,6 +666,7 @@ static void sy_keys(void)                        /* main loop */
     uint32_t now = fm1_in.notes & ((1u << SY_NKEY) - 1u), chg = now ^ sy_keyprev, k;
     if (sy_keys_isr)
         return;
+    sy_keys_handover();
     for (k = 0; k < SY_NKEY; k++) {
         if (!((chg >> k) & 1u))
             continue;
@@ -628,6 +686,7 @@ static void sy_keys_tick(void)                   /* TIMER5 (the emulator: its mi
     uint32_t now, chg, k;
     if (!sy_keys_isr)
         return;
+    sy_keys_handover();
     now = fm1_in.notes & ((1u << SY_NKEY) - 1u);
     chg = now ^ sy_keyprev;
     for (k = 0; chg && k < SY_NKEY; k++)

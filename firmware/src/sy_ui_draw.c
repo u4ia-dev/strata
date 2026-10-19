@@ -39,11 +39,22 @@ static void ui_p_cperf(void);
 static void ui_p_cbass(void);
 static void ui_p_cmidi(void);
 static const char *ui_chord_nv(uint32_t id, char *v);
+static void ui_p_steps(void);                       /* .. ARP's (V0.75) */
+static void ui_p_ratch(void);
+static void ui_p_groove(void);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
 static void ui_save_label(char *t);
 static int ui_save_renaming(void);
+
+/* V0.75: GLOBAL's BPM, or MIDI's clock's while the tempo follows it (CLOCK IN MIDI), in TS-NOTE beats a minute */
+static uint32_t ui_bpm_now(void)
+{
+    return sy_app_clock() ? (uint32_t)sy_floori(sy_tempo * (float)UI_TSN_VAL[ui.tsn % 5u] / 4.0f + 0.5f) : ui.bpm;
+}
+/* .. the transport's place in TS-NOTE beats (the audio side's: on MIDI's clock too) */
+static float ui_beats(void) { return chs.tq * (float)UI_TSN_VAL[ui.tsn % 5u] / 4.0f; }
 
 /* sound playing: a voice on, or the output still over -70 dBFS (a delay's or a reverb's tail). The live parts move
  * only while it does; otherwise they stand still and nothing is redrawn */
@@ -101,6 +112,7 @@ static int ui_mod_word(uint32_t id, char *t)
 static struct {
     float hx[4], hy[4];
     uint8_t has, mom;
+    uint8_t figs;                                   /* the page shows each knob's value as a figure (no flag: V0.75) */
     const sy_patch_t *gh;
     float live_lo, live_hi;                         /* the rows its live parts take (voices, levels): ui_live */
 } pg;
@@ -173,7 +185,10 @@ static const char *ui_knob_nv(uint32_t k, char *v)
                           id != UI_LX), "%");
     } else if (id == UI_BPM) {
         n = "BPM";
-        sp_fix(v, ui.bpm, 0u, 0);
+        sp_fix(v, (int32_t)ui_bpm_now(), 0u, 0);
+    } else if (id == UI_CLOCK) {
+        n = "CLOCK IN";
+        sp_put(v, chd.clock ? "MIDI" : "INTERNAL");
     } else if (id == UI_TSB || id == UI_TSN) {
         n = "TIME SIG";
         sp_fix(sp_put(sp_fix(v, ui.tsb, 0u, 0), "/"), UI_TSN_VAL[ui.tsn], 0u, 0);
@@ -232,8 +247,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
             sp_fix(v, (int32_t)at + 1, 0u, 0);
         else
             sp_put(v, "THE END");
-    } else if (id >= UI_HMODE && id <= UI_CBCH) {
-        n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7) */
+    } else if (id >= UI_HMODE && id <= UI_SSLD) {
+        n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
     } else if (id >= UI_SCUR && id <= UI_BBANK) {
         return 0;                                   /* (SAVE's, the browser's: ui_save_flag) */
     }
@@ -357,8 +372,8 @@ static void ui_bloom(void)
  * eighths); still otherwise (silence: nothing redrawn) */
 static uint32_t ui_pulse_lv(void)
 {
-    uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u), t = ui.run ? fm1_ms - ui.run_t : fm1_ms;
-    float ph = (float)(t % beat) / (float)beat;
+    uint32_t beat = 60000u / (ui_bpm_now() ? ui_bpm_now() : 120u);
+    float ph = ui.run ? ui_beats() - (float)sy_floori(ui_beats()) : (float)(fm1_ms % beat) / (float)beat;
     if (!ui.run && !ui_sounding())
         return 8u;
     return (uint32_t)sy_floori(8.0f * (1.0f - 0.7f * (0.5f - 0.5f * sy_cos2pi(ph))) + 0.5f);
@@ -366,7 +381,7 @@ static uint32_t ui_pulse_lv(void)
 static float ui_pulse_x(void)
 {
     char t[16];
-    sp_put(sp_fix(t, ui.bpm, 0u, 0), " BPM");
+    sp_put(sp_fix(t, (int32_t)ui_bpm_now(), 0u, 0), " BPM");
     return 232.0f - lk_tw(T10B, t, 30) - 7.0f;
 }
 static void ui_pulse(void) { lk_disc(ui_pulse_x(), 9.0f, 2.0f, sy_mix565(sk.ground, sk.hot, ui_pulse_lv() * 32u)); }
@@ -1399,20 +1414,20 @@ static void ui_p_matrix(void)
  * up for a slow tempo */
 static float ui_swing(void)
 {
-    uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u);
+    float b = ui_beats();
     if (!ui.run)
         return 0.0f;
-    return 0.0611f * sy_cos2pi(0.5f * (float)((fm1_ms - ui.run_t) % (2u * beat)) / (float)beat);
+    return 0.0611f * sy_cos2pi(0.5f * (b - 2.0f * (float)sy_floori(0.5f * b)));
 }
-static uint32_t ui_beat_now(void)
+static uint32_t ui_beat_now(void)                   /* (V0.75: the audio side's beat, MIDI's clock's too) */
 {
-    uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u);
-    return ui.run ? (fm1_ms - ui.run_t) / beat % (ui.tsb ? ui.tsb : 4u) : 0u;
+    return ui.run ? (uint32_t)sy_floori(ui_beats()) % (ui.tsb ? ui.tsb : 4u) : 0u;
 }
 static void ui_p_tempo(void)
 {
     uint32_t i, n = ui.tsb ? ui.tsb : 4u, now = ui_beat_now();
-    float a = ui_swing() - 0.25f, dx = sy_cos2pi(a), dy = sy_sin2pi(a), wy = 46.0f + (float)(300u - ui.bpm) * (80.0f / 280.0f);
+    uint32_t bpm = (uint32_t)sy_clampi((int32_t)ui_bpm_now(), 20, 300);
+    float a = ui_swing() - 0.25f, dx = sy_cos2pi(a), dy = sy_sin2pi(a), wy = 46.0f + (float)(300u - bpm) * (80.0f / 280.0f);
     float gap = n > 1u ? sy_minf(24.0f, 80.0f / (float)(n - 1u)) : 0.0f, r = sy_minf(6.0f, 0.4f * gap + 1.5f);
     float body[10] = {40, 190, 56, 50, 84, 50, 100, 190, 40, 190};
     char t[16];
@@ -1437,9 +1452,15 @@ static void ui_p_tempo(void)
     }
     ui_H(1, 128.0f, 47.0f);
     ui_H(2, 146.0f + lk_tw(T14B, t, 0) + 8.0f, 47.0f);
-    sp_fix(t, ui.bpm, 0u, 0);
+    sp_fix(t, (int32_t)ui_bpm_now(), 0u, 0);
     lk_text(144.0f, 104.0f, T26B, t, ui_ink(ui_hot(0)), sk.ground, -20, 28);
-    lk_label(146.0f, 140.0f, "BPM", 40);
+    lk_label(146.0f, 140.0f, sy_app_clock() ? "BPM: MIDI" : "BPM", 40);
+    {                                               /* CLOCK IN (V0.75): the panel's tempo, or MIDI's clock */
+        float x = lk_chip(146.0f, 172.0f, "INT", !chd.clock);
+        lk_label(146.0f, 158.0f, "CLOCK IN", 20);
+        lk_chip(x, 172.0f, "MIDI", chd.clock);
+        ui_H(3, 128.0f, 175.0f);
+    }
 }
 
 /* KEYS: the scale on the 27 keys (dots: in the scale; ringed: the root; chevrons: where SNAP moves a key), its name,
@@ -2018,9 +2039,9 @@ static void ui_top(void)
         ui_save_label(t);
     }
     if (sec == SEC_MACRO) {
-        sp_put(sp_fix(r, ui.bpm, 0u, 0), " BPM");
+        sp_put(sp_fix(r, (int32_t)ui_bpm_now(), 0u, 0), " BPM");
         right = r;
-    } else if (sec == SEC_KEYS) {                   /* (V0.7: the chord playing, by name; else the octave) */
+    } else if (sec == SEC_KEYS || sec == SEC_ARP) { /* (V0.7: the chord playing, by name; else the octave) */
         if (chd.mode != CH_OFF && chs.built && chs.n)
             sy_chord_name(r);
         else
@@ -2159,7 +2180,8 @@ static void (*const UI_PAGE[])(void) = {
     [G_BENCH] = ui_p_bench, [G_CHAIN] = ui_p_chain, [G_FLANGER] = ui_p_flanger, [G_PHASER] = ui_p_phaser,
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
-    [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi,
+    [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
+    [G_GROOVE] = ui_p_groove,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
@@ -2205,6 +2227,7 @@ static void ui_page(void)
 {
     uint32_t v = ui_view(), g = UI_PG[ui.page].graph, k;
     pg.has = 0;
+    pg.figs = 0;
     pg.live_lo = 1e9f;
     pg.live_hi = -1e9f;
     pg.mom = 0;
@@ -2249,7 +2272,7 @@ static void ui_page(void)
                       (v == V_MOD && ui.mod_last >= 0 && id == ui.mod_last);
             lk_handle(pg.hx[k], pg.hy[k], k + 1u, hot);
         }
-    if (v == V_PAGE && g != G_VALUES && ui_turning() >= 0 && (pg.has >> ui.act_k & 1u)) {
+    if (v == V_PAGE && g != G_VALUES && !pg.figs && ui_turning() >= 0 && (pg.has >> ui.act_k & 1u)) {
         char t[48];
         ui_flag_text(ui.act_k, t);
         if (t[0])
@@ -2409,12 +2432,12 @@ static void sy_ui_leds(void)
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
     else
         ui_led(fm1_led_dim, panel.btn[B_REC]);
-    if (chd.perf)                                   /* ARP: PERFORM on (V0.7) */
-        ui_led(fm1_led, panel.btn[B_ARP]);
+    if (chd.perf && !(chs.pf && ui.abeat_t && fm1_ms - ui.abeat_t < 70u))   /* ARP: PERFORM on (V0.7); ARP's and */
+        ui_led(fm1_led, panel.btn[B_ARP]);                                    /* PATTERN's beats dark a moment */
     if (ui.run) {                                   /* PLAY: its green LED while running, its own each beat (a */
-        uint32_t beat = 60000u / (ui.bpm ? ui.bpm : 120u);   /* quarter of it lit) */
+        float b = ui_beats();                       /* quarter of it lit; V0.75: the audio side's beat) */
         fm1_led[UI_LED_PLAY_GREEN >> 3] |= (uint8_t)(1u << (UI_LED_PLAY_GREEN & 7u));
-        if ((fm1_ms - ui.run_t) % beat < beat / 4u)
+        if (b - (float)sy_floori(b) < 0.25f)
             ui_led(fm1_led, panel.btn[B_PLAY]);
     }
     if (ui.mod == 2u)                               /* a latched MOD layer's button, a hold layer's: breathing */

@@ -182,19 +182,22 @@ static void sy_master_boot(void)
 
 /* ---------------------------------------------------------------------------------------------- MIDI --- */
 /* USB's and TRS's events (usb.c's ring, 4-byte USB-MIDI packets) to sy_app.c, a millisecond at a time. A ring that
- * overflowed (a TRS stream broken) stops every sound, as Felucca releases its notes. Clock, start and stop wait for
- * the rest of integration (Phase 6) */
+ * overflowed (a TRS stream broken) stops every sound, as Felucca releases its notes. V0.75: clock, start, continue
+ * and stop (a single byte, CIN 15) with the time each came (CLOCK IN MIDI: sy_app.c sy_midi_rt) */
 static void sy_midi_take(void)
 {
     while (mi_r != mi_w) {
-        uint32_t pkt, cin;
+        uint32_t pkt, cin, ms;
         RING_PUBLISH();
         pkt = midi_in_q[mi_r % MQ];
+        ms = midi_in_ms[mi_r % MQ];
         RING_PUBLISH();
         mi_r++;
         cin = pkt & 15u;
         if (cin >= 8u && cin <= 14u)
             sy_midi_in((pkt >> 8) & 0xFFu, (pkt >> 16) & 0x7Fu, (pkt >> 24) & 0x7Fu);
+        else if (cin == 15u && ((pkt >> 8) & 0xFFu) >= 0xF8u)
+            sy_midi_rt((pkt >> 8) & 0xFFu, ms);
     }
     if (midi_in_overflow) {
         midi_in_overflow = 0;
