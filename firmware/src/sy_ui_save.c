@@ -419,42 +419,43 @@ static void ui_p_save(void)
         char c[2] = {i < ui.sv_len ? ui.sv_name[i] : i == ui.sv_len ? '+' : 0, 0};
         int cur = i == ui.sv_cur;
         if (cur)
-            lk_box(bx, 33.0f, bx + 11.0f, 54.0f, ui_ink(ui_hot(0) || ui_hot(1)));
-        lk_seg(bx + 1.0f, 57.0f, bx + 10.0f, 57.0f, cur ? 3.0f : 1.0f, cur ? ui_ink(ui_hot(0)) : sk.line);
+            lk_box(bx, 33.0f, bx + 11.0f, 55.0f, ui_ink(ui_hot(0) || ui_hot(1)));
+        lk_seg(bx + 1.0f, 58.0f, bx + 10.0f, 58.0f, cur ? 3.0f : 1.0f, cur ? ui_ink(ui_hot(0)) : sk.line);
         if (c[0] && c[0] != ' ')
-            lk_text_c(bx + 5.5f, 36.0f, T12B, c, cur ? sk.ground : c[0] == '+' && i == ui.sv_len ? sk.mid : sk.ink,
+            lk_text_c(bx + 5.5f, 36.0f, T14B, c, cur ? sk.ground : c[0] == '+' && i == ui.sv_len ? sk.lab : sk.ink,
                       cur ? ui_ink(ui_hot(0) || ui_hot(1)) : sk.ground, 0, 16);
     }
-    w = lk_tw(T7B, CAT_NAMES[ui.sv_cat % CAT_COUNT], 40) + 10.0f;   /* the category, the slot */
-    lk_frame(24.5f, 80.5f, w - 1.0f, 12.0f, 1.0f, ui_ink(ui_hot(2)));
-    lk_text(29.0f, 82.0f, T7B, CAT_NAMES[ui.sv_cat % CAT_COUNT], ui_ink(ui_hot(2)), sk.ground, 40, 9);
+    w = lk_tw(T10B, CAT_NAMES[ui.sv_cat % CAT_COUNT], 20) + 12.0f;   /* the category, the slot */
+    lk_frame(26.5f, 80.5f, w - 1.0f, 17.0f, 1.0f, ui_ink(ui_hot(2)));
+    lk_text(32.5f, 82.0f, T10B, CAT_NAMES[ui.sv_cat % CAT_COUNT], ui_ink(ui_hot(2)), sk.ground, 20, 13);
+    x = 26.0f + w;
     {
         char *e = sp_put(sp_fix(sp_put(t, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0), " \xB7 ");
         sp_put(e, ui_save_renaming() ? "RENAME" : occ ? (ui_streq(occ, ui.sv_name) ? "SAVES OVER" : "REPLACES") : "EMPTY");
-        lk_fit(f, sizeof f, t, T7B, 40, 82.0f);
-        w = lk_tw(T7B, f, 40) + 10.0f;
-        lk_frame(92.5f, 80.5f, w - 1.0f, 12.0f, 1.0f, ui_ink(ui_hot(3)));
-        lk_text(97.0f, 82.0f, T7B, f, ui_ink(ui_hot(3)), sk.ground, 40, 9);
+        lk_fit(f, sizeof f, t, T10B, 20, 226.0f - (x + 26.0f));
+        ui_H(3, x + 4.0f, 84.0f);
+        w = lk_tw(T10B, f, 20) + 12.0f;
+        lk_frame(x + 20.5f, 80.5f, w - 1.0f, 17.0f, 1.0f, ui_ink(ui_hot(3)));
+        lk_text(x + 26.5f, 82.0f, T10B, f, ui_ink(ui_hot(3)), sk.ground, 20, 13);
     }
-    x = lk_chip(184.0f, 80.0f, "ABC", !ui.sv_sym);
-    lk_chip(x, 80.0f, "123", ui.sv_sym);
-    lk_kb(&kb, 8.0f, 118.0f, 224.0f, 78.0f);
-    for (k = 0; k < 27u; k++) {
+    x = lk_chip(26.0f, 104.0f, "ABC", !ui.sv_sym);
+    lk_chip(x, 104.0f, "123", ui.sv_sym);
+    lk_label(x + 42.0f, 107.0f, "OCT+", 20);
+    lk_kb(&kb, 8.0f, 138.0f, 224.0f, 52.0f);
+    for (k = 0; k < 27u; k++) {                     /* what each key types: a black key's over it, a white key's under */
         char s[3] = {ch[k], 0, 0};
         int on = k == ui.sv_key;
         float kx = lk_kb_cx(&kb, k);
         if (ch[k] == ' ')
             s[0] = 'S', s[1] = 'P';
         if (LK_BLACK[k % 12u])
-            lk_text_c(kx, 104.0f, on ? T7B : T7, s, on ? sk.ink : sk.mid, sk.ground, 0, 0);
+            lk_text_c(kx, 124.0f, on ? T9B : T9, s, on ? sk.ink : sk.lab, sk.ground, 0, 0);
         else
-            lk_text_c(kx, 180.0f, on ? T7B : T7, s, on ? sk.ink : sk.mid, sk.ground, 0, 0);
+            lk_text_c(kx, 193.0f, on ? T9B : T9, s, on ? sk.ink : sk.lab, sk.ground, 0, 0);
     }
-    lk_text(8.0f, 206.0f, T7, "SAVE WRITES IT \xB7 HOME: BACK \xB7 OCT- DELETES", sk.mid, sk.ground, 20, 0);
-    ui_H(0, cx + 0.5f, 61.0f);
-    ui_H(1, cx + 0.5f, 20.0f);
-    ui_H(2, 10.0f, 80.0f);
-    ui_H(3, 78.0f, 80.0f);
+    ui_H(0, cx + 0.5f, 63.0f);
+    ui_H(1, cx + 0.5f, 18.0f);
+    ui_H(2, 8.0f, 84.0f);
 }
 
 /* the browser: the categories with their counts (the one picked bold), the presets of it (the one playing outlined,
@@ -462,30 +463,24 @@ static void ui_p_save(void)
 static void ui_p_browse(void)
 {
     static const char *const BANK[3] = {"ALL", "STARTER", "USER"};
-    uint16_t ids[SY_NFACT + SS_NUSER], all[SY_NFACT + SS_NUSER];
-    uint32_t at, n = ui_browse_list(ids, &at), c, k, first, na = sy_app_list(ui.br_bank, 0, all);
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t at, n = ui_browse_list(ids, &at), k, first;
     char t[24];
-    float x, sy = 42.0f;
-    for (c = 0; c < 9u; c++) {                      /* ALL, then each category */
-        uint32_t cnt = 0;
-        float y = 42.0f + (float)(c * 13u);
-        int on = c == ui.br_cat;
-        uint8_t cat;
-        for (k = 0; k < na; k++)
-            cnt += !c || (sy_app_entry(all[k], &cat) && cat + 1u == c);
-        lk_text(20.0f, y, on ? T7B : T7, c ? CAT_NAMES[c - 1u] : "ALL", on ? ui_ink(ui_hot(0)) : sk.mid, sk.ground, 40, 0);
-        sp_fix(t, (int32_t)cnt, 0u, 0);
-        lk_text(62.0f, y, T7, t, on ? sk.ink : sk.line, sk.ground, 0, 0);
-    }
-    lk_seg(80.0f, 40.0f, 80.0f, 156.0f, 1.0f, sk.line);
+    float x, sy = 70.0f;
+    x = 26.0f;
+    for (k = 0; k < 3u; k++)
+        x = lk_chip(x, 22.0f, BANK[k], k == ui.br_bank % 3u);
+    x = lk_text(26.0f, 44.0f, T14B, ui.br_cat ? CAT_NAMES[ui.br_cat - 1u] : "ALL", ui_ink(ui_hot(0)), sk.ground, 0, 17);
+    sp_put(sp_fix(t, (int32_t)n, 0u, 0), n == 1u ? " PRESET" : " PRESETS");
+    lk_text(x + 8.0f, 47.0f, T10, t, sk.lab, sk.ground, 20, 0);
     if (!n) {
-        lk_text(96.0f, 42.0f, T8, "NONE HERE YET", sk.mid, sk.ground, 20, 0);
+        lk_text(26.0f, 74.0f, T10, "NONE HERE YET", sk.lab, sk.ground, 20, 0);
     } else {
-        first = at < n && at > 2u ? at - 2u : 0u;   /* six rows, the one playing third when it can be */
-        if (n > 6u && first > n - 6u)
-            first = n - 6u;
-        for (k = first; k < n && k < first + 6u; k++) {
-            float y = 42.0f + (float)((k - first) * 16u);
+        first = at < n && at > 2u ? at - 2u : 0u;   /* five rows, the one playing third when it can be */
+        if (n > 5u && first > n - 5u)
+            first = n - 5u;
+        for (k = first; k < n && k < first + 5u; k++) {
+            float y = 70.0f + (float)((k - first) * 28u);
             int on = k == at;
             uint8_t cat;
             const char *nm = sy_app_entry(ids[k], &cat);
@@ -494,22 +489,21 @@ static void ui_p_browse(void)
             for (j = 0; nm && nm[j] && j < 16u; j++)    /* (the starter sounds' names are lowercase in their table; */
                 up[j] = ids[k] < SY_USER && nm[j] >= 'a' && nm[j] <= 'z' ? (char)(nm[j] - 32) : nm[j];   /* a user's v2 stays) */
             up[j] = 0;
-            lk_text(96.0f, y, on ? T8B : T8, lk_fit(t, sizeof t, nm ? up : "?", on ? T8B : T8, 20, 86.0f),
-                    on ? sk.ink : sk.mid, sk.ground, 20, 0);
+            lk_text(30.0f, y, T12B, lk_fit(t, sizeof t, nm ? up : "?", T12B, 0, 150.0f), on ? sk.ink : sk.lab, sk.ground, 0, 15);
             if (ids[k] >= SY_USER)
                 sp_fix(sp_put(t, "U"), (int32_t)(ids[k] - SY_USER) + 1, 0u, 0);
             else
                 sp_put(t, ids[k] + 1u < SY_NFACT ? "ST" : "");
-            lk_text(186.0f, y + 1.0f, T7, t, ids[k] >= SY_USER ? sk.mid : sk.line, sk.ground, 0, 0);
+            lk_text_r(208.0f, y + 2.0f, T9, t, sk.lab, sk.ground, 0, 0);
             if (on)
                 sy = y;
         }
         if (at < n) {                               /* the one playing: outlined, its small bloom */
             uint32_t i;
             float vx = 0.0f, vy = -1.0f, cs = sy_cos2pi(1.0f / 60.0f), sn = sy_sin2pi(1.0f / 60.0f), px = 0.0f, py = 0.0f;
-            lk_frame(90.5f, sy - 3.5f, 141.0f, 16.0f, 1.0f, ui_ink(ui_hot(1)));
+            lk_frame(22.5f, sy - 5.5f, 210.0f, 25.0f, 1.0f, ui_ink(ui_hot(1)));
             for (i = 0; i <= 60u; i++) {
-                float r = 4.0f + 2.0f * ui_boot_f((float)i / 60.0f, 1), bx = 221.0f + r * vx, by = sy + 4.5f + r * vy, nx;
+                float r = 5.0f + 2.0f * ui_boot_f((float)i / 60.0f, 1), bx = 221.0f + r * vx, by = sy + 7.0f + r * vy, nx;
                 if (i)
                     lk_wu(px, py, bx, by, 1.0f, sk.ink);
                 px = bx;
@@ -520,12 +514,7 @@ static void ui_p_browse(void)
             }
         }
     }
-    x = 96.0f;
-    for (k = 0; k < 3u; k++)
-        x = lk_chip(x, 20.0f, BANK[k], k == ui.br_bank % 3u);
-    lk_text(8.0f, 196.0f, T7, "SAVE: NAME IT \xB7 SAVE TWICE OR HOME: BACK", sk.mid, sk.ground, 20, 0);
-    lk_text(8.0f, 206.0f, T7, "OCT- HELD 3 S: DELETE THE USER PRESET PLAYING", sk.mid, sk.ground, 20, 0);
-    ui_H(0, 6.0f, 42.0f + 13.0f * (float)(ui.br_cat % 9u) - 1.0f);
-    ui_H(1, 83.0f, sy - 1.0f);
-    ui_H(2, 82.0f, 21.0f);
+    ui_H(0, 8.0f, 49.0f);
+    ui_H(1, 8.0f, sy + 2.0f);
+    ui_H(2, 8.0f, 24.0f);
 }

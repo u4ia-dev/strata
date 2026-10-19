@@ -29,7 +29,7 @@
 #define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
 #define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.66 UI HARDWARE TEST"   /* the splash and the console (the strata-ui build); build.py
+#define STRATA_VERSION "V0.67 HARDWARE TEST"      /* the splash and the console (the STRATA UI, V0.67); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH

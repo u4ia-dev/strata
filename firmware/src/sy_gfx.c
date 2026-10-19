@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 brandonmbarone */
 /* The STRATA UI's drawing kit (the strata-ui build; the design: the "Strata UI Overhaul" gallery, docs/UI.md):
- *   - the palettes (SETTINGS > SCREEN): five colours each, by role: GROUND, INK (the drawing and the text), MID
- *     (labels, the lesser lines), LINE (tracks, the faint), HOT (the one accent: what is live: a knob turning, the
- *     voices, a countdown); the stipple's tint from them; gfx.c's tokens follow (its text ramps);
+ *   - the palettes (SETTINGS > SCREEN, twelve since V0.67): six colours each, by role: GROUND, INK (the drawing and
+ *     the values), LAB (the labels' text, V0.67), MID (the lesser lines), LINE (tracks, the faint), HOT (the one
+ *     accent: what is live: a knob turning, the voices, a countdown); the stipple's tint from them; gfx.c's tokens
+ *     follow (its text ramps);
  *   - the canvas as a window onto the screen: lk_begin places gfx.c's canvas there (a strip of the screen, or a live
  *     part's box) and every shape takes the screen's coordinates, drawing what of it falls inside; a shape wholly
  *     outside costs its test only (sy_ui_draw.c draws a page once per strip);
@@ -22,21 +23,26 @@
  * Needs gfx.c and sy_core.h. */
 
 /* -------------------------------------------------------------------------------------- palettes --- */
-#define SY_NPAL 8u
-enum { PR_GROUND, PR_INK, PR_MID, PR_LINE, PR_HOT, PR_N };
-static const struct { char name[8]; uint32_t c[PR_N]; } SY_PAL[SY_NPAL] = {   /* RGB888 as designed: MID and LINE
-                                                                                 * INK over GROUND at ~47 % and ~14 % */
-    {"STRATA", {0x0B0B0B, 0xF4F1EA, 0x7A766E, 0x2C2A27, 0xFF4D2E}},
-    {"CLASSIC", {0x101820, 0xE8E8E8, 0x767A7E, 0x2E353C, 0xF2A900}},
-    {"ICE", {0x0A1420, 0xDDF1FF, 0x6D7C89, 0x27333F, 0x5CC8FF}},
-    {"VIOLET", {0x140C1E, 0xEDE3FF, 0x7A7188, 0x322A3D, 0xB57CFF}},
-    {"PAPER", {0xEFEBE3, 0x151515, 0x857F75, 0xD3CDC2, 0xE2401F}},
-    {"NIGHT", {0x000000, 0x8A8A8A, 0x414141, 0x1C1C1C, 0xC2410C}},   /* (dim: LINE at 20 %) */
-    {"HI-CON", {0x000000, 0xFFFFFF, 0x999999, 0x404040, 0xFFD400}},  /* (MID 60 %, LINE 25 %) */
-    {"MONO", {0x000000, 0xFFFFFF, 0x787878, 0x242424, 0xFFFFFF}},    /* (the accent is the ink) */
+#define SY_NPAL 12u
+enum { PR_GROUND, PR_INK, PR_LAB, PR_MID, PR_LINE, PR_HOT, PR_N };
+static const struct { char name[8]; uint32_t c[PR_N]; } SY_PAL[SY_NPAL] = {   /* RGB888: LAB (the labels' text), MID
+                                                                                 * and LINE INK over GROUND at ~76 %,
+                                                                                 * ~47 % and ~14 % */
+    {"STRATA", {0x0B0B0B, 0xF4F1EA, 0xBAB7B1, 0x7A766E, 0x2C2A27, 0xFF4D2E}},
+    {"CLASSIC", {0x101820, 0xE8E8E8, 0xB4B6B8, 0x767A7E, 0x2E353C, 0xF2A900}},
+    {"ICE", {0x0A1420, 0xDDF1FF, 0xAABCCB, 0x6D7C89, 0x27333F, 0x5CC8FF}},
+    {"VIOLET", {0x140C1E, 0xEDE3FF, 0xB7ADC6, 0x7A7188, 0x322A3D, 0xB57CFF}},
+    {"PAPER", {0xEFEBE3, 0x151515, 0x4B4A47, 0x857F75, 0xD3CDC2, 0xE2401F}},
+    {"NIGHT", {0x000000, 0x8A8A8A, 0x7A7A7A, 0x414141, 0x1C1C1C, 0xC2410C}},   /* (dim: LAB 88 %, LINE 20 %) */
+    {"HI-CON", {0x000000, 0xFFFFFF, 0xD0D0D0, 0x999999, 0x404040, 0xFFD400}},  /* (LAB 82 %, MID 60 %, LINE 25 %) */
+    {"MONO", {0x000000, 0xFFFFFF, 0xC2C2C2, 0x787878, 0x242424, 0xFFFFFF}},    /* (the accent is the ink) */
+    {"MOSS", {0x0C110C, 0xE4EDD8, 0xB0B8A7, 0x72786C, 0x2A3029, 0xB8E04A}},    /* (V0.67's four) */
+    {"DUSK", {0x1A1020, 0xF6E4E8, 0xC1B1B8, 0x81747E, 0x392E3C, 0xFF6F91}},
+    {"SAND", {0xE9DFC9, 0x2A2118, 0x584F42, 0x8F8676, 0xCEC4B0, 0x0A6E70}},    /* (the second light one) */
+    {"NEON", {0x06070B, 0xC9FFF1, 0x9AC3BA, 0x617B77, 0x20292A, 0xFF3FD2}},
 };
 static struct {
-    uint16_t ground, ink, mid, line, hot;           /* stored */
+    uint16_t ground, ink, lab, mid, line, hot;      /* stored */
     uint16_t stip;                                  /* derived: the stipple (MID at 55 % over GROUND) */
     uint8_t idx;
 } sk;
@@ -64,6 +70,7 @@ static void sy_palette(uint32_t i)
     sk.idx = (uint8_t)i;
     sk.ground = sy_rgb(c[PR_GROUND]);
     sk.ink = sy_rgb(c[PR_INK]);
+    sk.lab = sy_rgb(c[PR_LAB]);
     sk.mid = sy_rgb(c[PR_MID]);
     sk.line = sy_rgb(c[PR_LINE]);
     sk.hot = sy_rgb(c[PR_HOT]);
@@ -73,8 +80,8 @@ static void sy_palette(uint32_t i)
     ux.text = sk.ink;
     ux.theme = sk.ink;
     ux.accent = sk.hot;
-    ux.mid = sk.mid;
-    ux.dim = sk.mid;
+    ux.mid = sk.lab;
+    ux.dim = sk.lab;
     ux.line = sk.line;
     ux.sel = sk.line;
     ux.tint = sk.line;
@@ -246,23 +253,29 @@ static void lk_frame_dash(float x, float y, float w, float h, float on, float of
     }
 }
 
-/* a filled disc */
+/* a filled disc: each pixel by (ro^2 - d^2) / 2 ro, its edge's distance to first order (no root a pixel; under 0.02
+ * off at the edge of a handle's ring); each row's span by a reciprocal root, clipped to the window once (its pixels
+ * stored straight) */
 static void lk_disc(float cx, float cy, float r, uint16_t c)
 {
     int32_t x, y, xa, xb, ya, yb;
-    float ro = r + 0.5f;
+    float ro = r + 0.5f, ro2 = ro * ro, iro = 0.5f / ro;
+    uint16_t sc = swap16(c);
     if (!lk_vis(cx - ro, cy - ro, cx + ro, cy + ro))
         return;
     lk_rows(cy - ro, cy + ro, &ya, &yb);
     for (y = ya; y < yb; y++) {
-        float dy = (float)y + 0.5f - cy, xs;
-        if (sy_absf(dy) >= ro)
+        float dy = (float)y + 0.5f - cy, e = ro2 - dy * dy, xs;
+        uint16_t *p;
+        if (e <= 0.0f)
             continue;
-        xs = sy_sqrtf(ro * ro - dy * dy);
+        xs = ro < 2.5f ? ro : e * lk_rsqrt(e);    /* (a small one: its box; the pixels past it come to nothing) */
         lk_cols(cx - xs, cx + xs, &xa, &xb);
-        for (x = xa; x < xb; x++) {
-            float dx = (float)x + 0.5f - cx;
-            lk_cover(x, y, c, ro - sy_sqrtf(dx * dx + dy * dy));
+        p = &cv_px[(uint32_t)(y - lk_y0) * cv_w + (uint32_t)(xa - lk_x0)];
+        for (x = xa; x < xb; x++, p++) {
+            float dx = (float)x + 0.5f - cx, cov = (e - dx * dx) * iro;
+            if (cov > 0.004f)
+                *p = cov >= 1.0f ? sc : swap16(sy_mix565(swap16(*p), c, (uint32_t)(cov * 256.0f)));
         }
     }
 }
@@ -642,10 +655,19 @@ static void lk_capsule(float x, float y, float w, float h, uint16_t c)
 }
 
 /* ------------------------------------------------------------------------------------------ text --- */
-/* the faces by the design's size and weight (gen_aa_font.py space-mono; its 10 px drawn at 9, 14 at 12) */
-enum { T7, T7B, T8, T8B, T9B, T12B, T18B, T26B, T_N };
+/* the faces by size and weight (gen_aa_font.py space-mono; V0.67: nothing under 9 px): T9 labels and captions, T9B
+ * a handle's number and a row's figure, T10 a module's line, T10B the top line, the zones, chips and the toast, T12B
+ * flags and values, T14B a module's word, T18B and T26B (sparse: a name's, a value's characters) */
+enum { T9, T9B, T10, T10B, T12B, T14B, T18B, T26B, T_N };
 static const aafont_t *const LK_FONT[T_N] = {&AF_XS, &AF_XB, &AF_S, &AF_SB, &AF_F, &AF_M, &AF_N, &AF_L};
-static const uint8_t LK_FS[T_N] = {7, 7, 8, 8, 9, 12, 18, 26};
+static const uint8_t LK_FS[T_N] = {9, 9, 10, 10, 12, 14, 18, 26};
+
+/* the emulator's check of the screens (web/emu/strata_web.c web_lint): each text drawn, and a mode that leaves the
+ * text out (what is left: the drawing it must not touch) */
+#ifdef LK_LINT
+static void lk_lint_text(const int32_t *box, uint32_t t, const char *s, uint16_t fg, uint16_t bg);
+static uint8_t lk_lint_notext, lk_lint_part;
+#endif
 
 /* s's width in face t with letter-spacing ls (thousandths of an em, after every character, the last's too: CSS's),
  * in 1/16 px */
@@ -678,6 +700,12 @@ static float lk_text(float x, float y, uint32_t t, const char *s, uint16_t fg, u
         lh = (fs * 5 + 2) / 4;
     base = sy_floori((y + 0.5f * (float)lh + 0.3795f * (float)fs) + 0.5f);   /* (the baseline's row) */
     top = base - f->asc;
+#ifdef LK_LINT
+    const char *s0 = s;
+    int32_t lb[4] = {9999, 9999, -9999, -9999};     /* (its ink's box on the screen) */
+    if (lk_lint_notext)
+        return x + (float)lk_tw16(t, s, ls) * (1.0f / 16.0f);
+#endif
     if (top >= lk_y1 || top + f->h <= lk_y0 || x >= (float)lk_x1)
         return x + (float)lk_tw16(t, s, ls) * (1.0f / 16.0f);
     rv = ramp(fg, bg);
@@ -698,6 +726,12 @@ static float lk_text(float x, float y, uint32_t t, const char *s, uint16_t fg, u
         err = pos - pen;
         if (g->bw) {
             int32_t gx = (pos >> 4) + g->bx, gy = top + g->by;
+#ifdef LK_LINT
+            lb[0] = gx < lb[0] ? gx : lb[0];
+            lb[1] = gy < lb[1] ? gy : lb[1];
+            lb[2] = gx + g->bw > lb[2] ? gx + g->bw : lb[2];
+            lb[3] = gy + g->bh > lb[3] ? gy + g->bh : lb[3];
+#endif
             if (gx + g->bw > lk_x0 && gx < lk_x1 && gy + g->bh > lk_y0 && gy < lk_y1) {
                 if (f->hc)
                     cv_alpha_hc(gx - lk_x0, gy, g->bw, g->bh, f->data + g->off, f->hc, rv);
@@ -707,6 +741,10 @@ static float lk_text(float x, float y, uint32_t t, const char *s, uint16_t fg, u
         }
         pen += g->adv + tr;
     }
+#ifdef LK_LINT
+    if (lb[2] > lb[0])
+        lk_lint_text(lb, t, s0, fg, bg);
+#endif
     return (float)pen * (1.0f / 16.0f);
 }
 /* .. its box ending at xr (right-aligned), or centred on xc */
@@ -735,71 +773,98 @@ static const char *lk_fit(char *d, uint32_t n, const char *s, uint32_t t, int32_
 }
 
 /* ----------------------------------------------------------------------------------------- parts --- */
-/* KNOB n's handle, its box's corner (x, y): a ring of 5 around (x + 5, y + 5), the number in it; hot (turning) filled */
+/* KNOB n's handle, its box's corner (x, y): a ring of 7 around (x + 5, y + 5) (V0.66 UI's of 5, grown about its
+ * middle), the number in it, 9 px bold; hot (turning) filled */
+#define LK_HR 7.0f
 static void lk_handle(float x, float y, uint32_t n, int hot)
 {
     char t[2] = {(char)('0' + n), 0};
-    lk_disc(x + 5.0f, y + 5.0f, 5.0f, hot ? sk.hot : sk.ink);
+    lk_disc(x + 5.0f, y + 5.0f, LK_HR, hot ? sk.hot : sk.ink);
     if (!hot)
-        lk_disc(x + 5.0f, y + 5.0f, 4.0f, sk.ground);
-    lk_text_c(x + 5.0f, y, T7B, t, hot ? sk.ground : sk.ink, hot ? sk.hot : sk.ground, 0, 10);
+        lk_disc(x + 5.0f, y + 5.0f, LK_HR - 1.2f, sk.ground);
+#ifdef LK_LINT
+    lk_lint_part = 1;
+#endif
+    lk_text_c(x + 5.5f, y - 1.0f, T9B, t, hot ? sk.ground : sk.ink, hot ? sk.hot : sk.ground, 0, 12);
+#ifdef LK_LINT
+    lk_lint_part = 0;
+#endif
 }
 /* a value's flag beside the handle at (hx, hy): HOT, its text in GROUND, its point at the handle (to its right, or to
  * its left where there is no room) */
 static void lk_flag(float hx, float hy, const char *s)
 {
-    float w = lk_tw(T9B, s, 0) + 10.0f, x = hx + 16.0f, y = sy_clampf(hy - 2.5f, 18.0f, 204.0f);
+    float w = lk_tw(T12B, s, 0) + 10.0f, x = hx + 19.0f, y = sy_clampf(hy - 4.5f, 18.0f, 201.0f);
     if (x + w > 238.0f) {                           /* (the left: its point the other way) */
-        x = hx - 6.0f - w;
-        lk_tri(x + w, y + 3.0f, x + w + 5.0f, y + 7.5f, x + w, y + 12.0f, sk.hot);
+        x = hx - 9.0f - w;
+        if (x < 2.0f)                               /* (no room either side: over the handle's row, its point down) */
+            x = 2.0f;
+        lk_tri(x + w, y + 4.5f, x + w + 5.0f, y + 9.5f, x + w, y + 14.5f, sk.hot);
     } else {
-        lk_tri(x, y + 3.0f, x - 5.0f, y + 7.5f, x, y + 12.0f, sk.hot);
+        lk_tri(x, y + 4.5f, x - 5.0f, y + 9.5f, x, y + 14.5f, sk.hot);
     }
-    lk_box(x, y, x + w, y + 15.0f, sk.hot);
-    lk_text(x + 5.0f, y + 2.0f, T9B, s, sk.ground, sk.hot, 0, 11);
+    lk_box(x, y, x + w, y + 19.0f, sk.hot);
+    lk_text(x + 5.0f, y + 3.0f, T12B, s, sk.ground, sk.hot, 0, 13);
 }
-/* a chip at (x, y), 7 px bold in a box (1 px padding, 4 at the sides, a border): cur inverted. Returns the next one's x */
+/* a chip at (x, y), 10 px bold in a box 16 high (5 px at the sides, a border): cur inverted. Returns the next one's x */
+#define LK_CHIP_H 16.0f
 static float lk_chip(float x, float y, const char *s, int cur)
 {
-    float tw = lk_tw(T7B, s, 40), w = tw + 10.0f;
-    if (lk_vis(x, y, x + w, y + 13.0f)) {
+    float tw = lk_tw(T10B, s, 20), w = tw + 10.0f;
+    if (lk_vis(x, y, x + w, y + LK_CHIP_H)) {
         if (cur)
-            lk_box(x, y, x + w, y + 13.0f, sk.ink);
+            lk_box(x, y, x + w, y + LK_CHIP_H, sk.ink);
         else
-            lk_frame(x + 0.5f, y + 0.5f, w - 1.0f, 12.0f, 1.0f, sk.line);
-        lk_text(x + 5.0f, y + 2.0f, T7B, s, cur ? sk.ground : sk.mid, cur ? sk.ink : sk.ground, 40, 9);
+            lk_frame(x + 0.5f, y + 0.5f, w - 1.0f, LK_CHIP_H - 1.0f, 1.0f, sk.mid);
+        lk_text(x + 5.0f, y + 2.0f, T10B, s, cur ? sk.ground : sk.lab, cur ? sk.ink : sk.ground, 20, 12);
     }
-    return x + tw + 14.0f;
+    return x + w + 4.0f;
 }
-/* a word (7 px, MID) after a row of chips, as the design sets it (the last chip's box and 4 px) */
-static void lk_label7(float x, float y, const char *s, int32_t ls) { lk_text(x, y, T7, s, sk.mid, sk.ground, ls, 0); }
+/* a label: 9 px in LAB (V0.66 UI's 7 px in MID) */
+static void lk_label(float x, float y, const char *s, int32_t ls) { lk_text(x, y, T9, s, sk.lab, sk.ground, ls, 0); }
 
-/* the zones' row at the bottom: each zone's name, the one shown inverted; five or more spread across 224 px */
+/* the zones' row at the bottom (rows 223 .. 238): each zone's name, 10 px bold, the one shown inverted; where they do
+ * not fit across 224 px, the others by their first three letters (then their first); five or more spread across */
+#define LK_ZY 223.0f
 static void lk_zones(const char *const *z, uint32_t n, uint32_t cur)
 {
     float w[8], sum = 0.0f, gap, x = 8.0f;
-    uint32_t i;
-    if (!lk_vis(0.0f, 222.0f, 240.0f, 234.0f))
+    uint32_t i, cut = 0, k;
+    char ab[8][4];
+    if (!lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
         return;
-    for (i = 0; i < n && i < 8u; i++)
-        sum += w[i] = lk_tw(T8B, z[i], 60) + 8.0f;
+    for (k = 0; k < 3u; k++) {                      /* (k: whole names, three letters, one) */
+        sum = 0.0f;
+        cut = k == 0u ? 0u : k == 1u ? 3u : 1u;
+        for (i = 0; i < n && i < 8u; i++) {
+            uint32_t j;
+            for (j = 0; j < 3u && z[i][j]; j++)
+                ab[i][j] = z[i][j];
+            ab[i][cut < j ? cut : j] = 0;
+            sum += w[i] = lk_tw(T10B, i == cur || !cut ? z[i] : ab[i], 20) + 8.0f;
+        }
+        if (sum + 6.0f * (float)(n - 1u) <= 224.0f)
+            break;
+    }
     gap = n >= 5u ? (224.0f - sum) / (float)(n - 1u) : 8.0f;
     for (i = 0; i < n && i < 8u; i++) {
         if (i == cur)
-            lk_box(x, 222.0f, x + w[i], 234.0f, sk.ink);
-        lk_text(x + 4.0f, 223.0f, T8B, z[i], i == cur ? sk.ground : sk.mid, i == cur ? sk.ink : sk.ground, 60, 10);
+            lk_box(x, LK_ZY, x + w[i], LK_ZY + 15.0f, sk.ink);
+        lk_text(x + 4.0f, LK_ZY + 1.5f, T10B, i == cur || !cut ? z[i] : ab[i], i == cur ? sk.ground : sk.lab,
+                i == cur ? sk.ink : sk.ground, 20, 12);
         x += w[i] + gap;
     }
 }
-/* a word for a moment in the zones' place: a HOT dot, then the word */
+/* a word for a moment in the zones' place: a HOT dot, then the word (10 px bold) */
 static void lk_toast(const char *s)
 {
-    if (!lk_vis(0.0f, 222.0f, 240.0f, 234.0f))
+    char t[48];
+    if (!lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
         return;
-    lk_disc(11.0f, 227.5f, 2.5f, sk.hot);
-    lk_text(18.0f, 223.0f, T8B, s, sk.ink, sk.ground, 40, 10);
+    lk_disc(11.0f, LK_ZY + 7.5f, 3.0f, sk.hot);
+    lk_text(19.0f, LK_ZY + 1.5f, T10B, lk_fit(t, sizeof t, s, T10B, 0, 216.0f), sk.ink, sk.ground, 0, 12);
 }
-/* the top line: the label (on: -1 no dot, 0 off, 1 on: its dot before it), MID, 8 px tracked; at the right n module
+/* the top line: the label (on: -1 no dot, 0 off, 1 on: its dot before it), LAB, 10 px bold; at the right n module
  * dots (cur filled) or nothing; a right-aligned word */
 static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const char *right)
 {
@@ -807,20 +872,20 @@ static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const ch
     if (!lk_vis(0.0f, 0.0f, 240.0f, 16.0f))
         return;
     if (on > 0)
-        lk_disc(10.5f, 9.0f, 2.5f, sk.ink);
+        lk_disc(10.5f, 9.0f, 3.0f, sk.ink);
     else if (!on)
-        lk_ring(10.5f, 9.0f, 2.0f, 1.0f, sk.mid);
+        lk_ring(10.5f, 9.0f, 2.5f, 1.0f, sk.lab);
     if (label)
-        lk_text(on >= 0 ? 17.0f : 8.0f, 4.0f, T8, label, sk.mid, sk.ground, 80, 0);
+        lk_text(on >= 0 ? 18.0f : 8.0f, 2.0f, T10B, label, sk.lab, sk.ground, 30, 13);
     for (i = 0; i < n; i++) {
         float x = 236.0f - (float)(n * 8u) + (float)(i * 8u) + 2.5f;
         if (i == cur)
-            lk_disc(x, 8.5f, 2.5f, sk.ink);
+            lk_disc(x, 9.0f, 3.0f, sk.ink);
         else
-            lk_ring(x, 8.5f, 2.0f, 1.0f, sk.mid);
+            lk_ring(x, 9.0f, 2.5f, 1.0f, sk.lab);
     }
     if (right)
-        lk_text_r(232.0f, 4.0f, T8, right, sk.mid, sk.ground, 80, 0);
+        lk_text_r(232.0f, 2.0f, T10B, right, sk.lab, sk.ground, 30, 13);
 }
 /* the chain's eight squares at the top right: the module shown filled, the others in the chain outlined (bypassed:
  * dashed), the places after LINE */
@@ -832,7 +897,7 @@ static void lk_chain_sq(uint32_t n, int32_t cur, uint32_t bypassed)
         if ((int32_t)i == cur)
             lk_box(x, 6.0f, x + 5.0f, 11.0f, sk.ink);
         else if (i < n && (bypassed >> i & 1u))
-            lk_frame_dash(x + 0.5f, 6.5f, 4.0f, 4.0f, 2.0f, 2.0f, sk.mid);
+            lk_frame_dash(x + 0.5f, 6.5f, 4.0f, 4.0f, 2.0f, 2.0f, sk.lab);
         else
             lk_frame(x + 0.5f, 6.5f, 4.0f, 4.0f, 1.0f, i < n ? sk.ink : sk.line);
     }
@@ -842,10 +907,10 @@ static void lk_banner(const char *a, const char *b)
 {
     if (!lk_vis(0.0f, 0.0f, 240.0f, 16.0f))
         return;
-    lk_fill(0, 0, 240, 16, sk.ink);
-    lk_text(8.0f, 3.0f, T8B, a, sk.ground, sk.ink, 80, 10);
+    lk_fill(0, 0, 240, 17, sk.ink);
+    lk_text(8.0f, 2.0f, T10B, a, sk.ground, sk.ink, 30, 13);
     if (b)
-        lk_text_r(232.0f, 4.0f, T7, b, sk.ground, sk.ink, 60, 0);
+        lk_text_r(232.0f, 2.5f, T9, b, sk.ground, sk.ink, 0, 13);
 }
 /* the mix row every effect shares: MIX at the left, the bar from 32 to 228 at y 200 (v 0..1); returns the knob's x */
 static float lk_mix(float v)
@@ -855,7 +920,7 @@ static float lk_mix(float v)
     if (x > 32.5f)
         lk_seg(32.0f, 200.0f, x, 200.0f, 3.0f, sk.ink);
     lk_box(x - 2.5f, 197.5f, x + 2.5f, 202.5f, sk.ink);
-    lk_label7(8.0f, 196.0f, "MIX", 60);
+    lk_label(4.0f, 194.5f, "MIX", 0);
     return x;
 }
 /* a fader at x from y0 (top) to y1, at v (0..1): its track, the fill below, a hollow cap; returns the cap's y */

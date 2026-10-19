@@ -104,7 +104,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_N };                                       /* (sy_ui_draw.c UI_PAGE: each one's page) */
+       G_VALUES, G_N };                             /* (sy_ui_draw.c UI_PAGE: each one's page) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -112,63 +112,106 @@ typedef struct {
                                                      * MOD" without its end, the header ran on into id[]) */
     int16_t id[4];                                  /* KNOB 1-4: parameters (or UI_* items), -1 none */
 } ui_page_t;
+/* V0.67: VALUES, a module's last zone: its pages' knobs again, a page each in their order, as figures (sy_ui_draw.c
+ * ui_p_values), turned in the finest unit (ui_knob); the zones' row names them as one zone, "VALUES 2/5" */
+#define UI_V(S, A, B, C, D) {S, G_VALUES, "VALUES", {A, B, C, D}},
 #define UI_OSC(O, S)                                                                                      \
     {S, G_WAVE, "WAVE", {SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT}},                     \
     {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH}},                \
     {S, G_SPREAD, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},           \
     {S, G_PITCH, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                 \
-    {S, G_OUT, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},
+    {S, G_OUT, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},                             \
+    UI_V(S, SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT)                                    \
+    UI_V(S, SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH)                                 \
+    UI_V(S, SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND)                                \
+    UI_V(S, SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE)                                   \
+    UI_V(S, SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1)
 #define UI_ENV(E, S)                                                                                      \
     {S, G_ENV, "ADSR", {SP_##E##_ATK, SP_##E##_DEC, SP_##E##_SUS, SP_##E##_REL}},                          \
-    {S, G_ENV, "SHAPE", {SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV}},
+    {S, G_ENV, "SHAPE", {SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV}},                     \
+    UI_V(S, SP_##E##_ATK, SP_##E##_DEC, SP_##E##_SUS, SP_##E##_REL)                                        \
+    UI_V(S, SP_##E##_HOLD, SP_##E##_ACRV, SP_##E##_DCRV, SP_##E##_RCRV)
 #define UI_LFO(L, S)                                                                                      \
     {S, G_LFO, "POINTS", {UI_LPT, UI_LX, UI_LY, UI_LC}},                                                   \
     {S, G_LFO, "SHAPE", {SP_##L##_SHAPE, SP_##L##_SYNC, SP_##L##_RATE, SP_##L##_MODE}},                    \
-    {S, G_LFO, "TIME", {SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH}},
+    {S, G_LFO, "TIME", {SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH}},                  \
+    UI_V(S, UI_LPT, UI_LX, UI_LY, UI_LC)                                                                   \
+    UI_V(S, SP_##L##_SHAPE, SP_##L##_SYNC, SP_##L##_RATE, SP_##L##_MODE)                                   \
+    UI_V(S, SP_##L##_DELAY, SP_##L##_RISE, SP_##L##_PHASE, SP_##L##_SMOOTH)
 /* the effect modules' pages, of an instance whose ids are its type's first's moved by O (sy_param.c FXI_OFF); no ON:
  * the FX-held keys bypass a module */
-#define UI_DRVP(S, O) {S, G_DRIVE, "DRIVE", {SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O}},
+#define UI_DRVP(S, O)                                                                                     \
+    {S, G_DRIVE, "DRIVE", {SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O}},                \
+    UI_V(S, SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O)
 #define UI_CHOP(S, O)                                                                                     \
     {S, G_CHORUS, "CHORUS", {SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O}},           \
-    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, -1, -1, -1}},
+    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, -1, -1, -1}},                                                  \
+    UI_V(S, SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O)                              \
+    UI_V(S, SP_CH_FDBK + O, -1, -1, -1)
 #define UI_OTTP(S, O)                                                                                     \
     {S, G_OTT, "OTT", {SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O}},                   \
-    {S, G_OTT, "BANDS", {SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1}},
+    {S, G_OTT, "BANDS", {SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1}},                              \
+    UI_V(S, SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O)                                \
+    UI_V(S, SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1)
 #define UI_EQP(S, O)                                                                                      \
     {S, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},                                               \
-    {S, G_EQ, "GAINS", {SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1}},
+    {S, G_EQ, "GAINS", {SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1}},                               \
+    UI_V(S, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ)                                                              \
+    UI_V(S, SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1)
 #define UI_FLGP(S, O)                                                                                     \
     {S, G_FLANGER, "FLANGER", {SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_DELAY + O, SP_FL_MIX + O}},         \
-    {S, G_FLANGER, "MORE", {SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1}},
+    {S, G_FLANGER, "MORE", {SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1}},                       \
+    UI_V(S, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_DELAY + O, SP_FL_MIX + O)                              \
+    UI_V(S, SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1)
 #define UI_PHSP(S, O)                                                                                     \
     {S, G_PHASER, "PHASER", {SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_CENTER + O, SP_PH_MIX + O}},          \
-    {S, G_PHASER, "MORE", {SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O}},
+    {S, G_PHASER, "MORE", {SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O}},          \
+    UI_V(S, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_CENTER + O, SP_PH_MIX + O)                             \
+    UI_V(S, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O)
 #define UI_FFXP(S, O)                                                                                     \
     {S, G_FFILT, "FILTER", {SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O}},                \
-    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, -1, -1, -1}},
-#define UI_CRUP(S, O) {S, G_CRUSH, "CRUSH", {SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1}},
+    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, -1, -1, -1}},                                                  \
+    UI_V(S, SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O)                                  \
+    UI_V(S, SP_FF_DRIVE + O, -1, -1, -1)
+#define UI_CRUP(S, O)                                                                                     \
+    {S, G_CRUSH, "CRUSH", {SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1}},                           \
+    UI_V(S, SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1)
 #define UI_TRMP(S, O)                                                                                     \
     {S, G_TREM, "TREMOLO", {SP_TR_MODE + O, SP_TR_SHAPE + O, SP_TR_RATE + O, SP_TR_DEPTH + O}},           \
-    {S, G_TREM, "MORE", {SP_TR_SYNC + O, -1, -1, -1}},
-#define UI_RNGP(S, O) {S, G_RING, "RING MOD", {SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O}},
+    {S, G_TREM, "MORE", {SP_TR_SYNC + O, -1, -1, -1}},                                                    \
+    UI_V(S, SP_TR_MODE + O, SP_TR_SHAPE + O, SP_TR_RATE + O, SP_TR_DEPTH + O)                             \
+    UI_V(S, SP_TR_SYNC + O, -1, -1, -1)
+#define UI_RNGP(S, O)                                                                                     \
+    {S, G_RING, "RING MOD", {SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O}},          \
+    UI_V(S, SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O)
 #define UI_TAPP(S, O)                                                                                     \
     {S, G_TAPE, "TAPE", {SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O}},                   \
-    {S, G_TAPE, "TONE", {SP_TP_TONE + O, -1, -1, -1}},
+    {S, G_TAPE, "TONE", {SP_TP_TONE + O, -1, -1, -1}},                                                    \
+    UI_V(S, SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O)                                  \
+    UI_V(S, SP_TP_TONE + O, -1, -1, -1)
 static const ui_page_t UI_PG[] = {
     UI_OSC(A, SEC_OSCA)
     UI_OSC(B, SEC_OSCB)
     {SEC_SUB, G_SUB, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW}},
     {SEC_SUB, G_OUT, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, -1, -1}},
+    UI_V(SEC_SUB, SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW)
+    UI_V(SEC_SUB, SP_SUB_PAN, SP_SUB_ROUTE, -1, -1)
     {SEC_NOISE, G_NOISE, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
     {SEC_NOISE, G_OUT, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, -1, -1}},
+    UI_V(SEC_NOISE, SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL)
+    UI_V(SEC_NOISE, SP_NZ_PAN, SP_NZ_ROUTE, -1, -1)
     {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
     {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
+    UI_V(SEC_FILTER, SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE)
+    UI_V(SEC_FILTER, SP_F_KEY, SP_F_VAR, SP_F_MIX, -1)
     UI_ENV(E1, SEC_ENV1)
     UI_ENV(E2, SEC_ENV2)
     UI_LFO(L1, SEC_LFO1)
     UI_LFO(L2, SEC_LFO2)
     {SEC_VOICE, G_VOICE, "VOICE", {SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE}},
     {SEC_VOICE, G_PLAY, "PLAY", {SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL}},
+    UI_V(SEC_VOICE, SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE)
+    UI_V(SEC_VOICE, SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL)
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, -1}},
     {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
     {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
@@ -177,8 +220,12 @@ static const ui_page_t UI_PG[] = {
     UI_CHOP(SEC_CHORUS, 0)
     {SEC_DELAY, G_DELAY, "DELAY", {SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK}},
     {SEC_DELAY, G_DELAY, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, -1}},
+    UI_V(SEC_DELAY, SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK)
+    UI_V(SEC_DELAY, SP_DL_LP, SP_DL_HP, SP_DL_MIX, -1)
     {SEC_REVERB, G_REVERB, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX}},
     {SEC_REVERB, G_REVERB, "TONE", {SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT}},
+    UI_V(SEC_REVERB, SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX)
+    UI_V(SEC_REVERB, SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT)
     UI_OTTP(SEC_OTT, 0)
     UI_EQP(SEC_EQ, 0)
     UI_DRVP(SEC_DRIVE2, SP_DR2_ON - SP_DR_ON)
@@ -599,8 +646,9 @@ static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
 }
 
 /* s pages on, round: the family's (SELECT, a family button's tap: its sections in their order, each one's pages),
- * the section's (sec: EDIT's tap, OCT- / OCT+ with a family button held) */
-static void ui_step_pages(int32_t s, int sec)
+ * the section's (sec: EDIT's tap, OCT- / OCT+ with a family button held); graphs: the drawings only (a family
+ * button's tap: ALGORITHM and OCT reach the VALUES pages) */
+static void ui_step_pages(int32_t s, int sec, int graphs)
 {
     uint16_t pg[UI_NPG];
     uint8_t secs[8];
@@ -611,7 +659,7 @@ static void ui_step_pages(int32_t s, int sec)
         ns = ui_fam_secs(ui.fam, secs);
     for (k = 0; k < ns; k++)
         for (i = 0; i < UI_NPG; i++)
-            if (UI_PG[i].sec == secs[k]) {
+            if (UI_PG[i].sec == secs[k] && (!graphs || UI_PG[i].graph != G_VALUES || i == ui.page)) {
                 if (i == ui.page)
                     cur = n;
                 pg[n++] = (uint16_t)i;
@@ -636,7 +684,7 @@ static void ui_family_tap(uint32_t f)
               : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)
                                                                   : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
     else if (ui_sec() != SEC_CHAIN)
-        ui_step_pages(1, f == FAM_EDIT || f == FAM_FX);
+        ui_step_pages(1, f == FAM_EDIT || f == FAM_FX, 1);
 }
 
 /* SELECT: the family's sections in their order (each on the page it showed last) */
@@ -1436,8 +1484,9 @@ static void ui_knob(uint32_t k, int32_t s)
             v = w;
         }
         s = v - sy_patch.p[id];
-    } else if (!ui_list((uint32_t)id)) {
-        s = ui_accel(EN_K1 + k, s, d->hi - d->lo);
+    } else if (!ui_list((uint32_t)id)) {            /* (VALUES: the finest unit a detent, at any speed) */
+        s = UI_PG[ui.page].graph == G_VALUES ? s * (d->hi - d->lo >= 2000 ? (d->hi - d->lo) / 1000 : 1)
+                                             : ui_accel(EN_K1 + k, s, d->hi - d->lo);
     }
     if (ui.lay == LAY_MOM) {                        /* (MOMENTARY: kept to put back; no undo of its own) */
         if (!ui_mom_keep((uint32_t)id))
@@ -1506,7 +1555,7 @@ static void ui_press(uint32_t b)
                 ui_toast(t);
                 ui.dirty |= D_HEAD | D_DISP;
             } else {
-                ui_step_pages(b == B_OCTUP ? 1 : -1, 1);
+                ui_step_pages(b == B_OCTUP ? 1 : -1, 1, 0);
             }
             return;
         }
@@ -1805,7 +1854,7 @@ static void sy_ui_ms(void)
         if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
             ui_chain_turn(UI_CTYPE, s);
         else
-            ui_step_pages(s, 1);
+            ui_step_pages(s, 1, 0);
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);

@@ -27,10 +27,10 @@ static float ui_fx_f(float x, float x0, float w) { return 20.0f * sy_exp2f((x - 
 /* the frequency's names under a response: 20, 200, 2K, 20K at row y */
 static void ui_fx_freqs(float x0, float w, float y)
 {
-    lk_text(x0 - 4.0f, y, T7, "20", sk.mid, sk.ground, 0, 0);
-    lk_text_c(ui_fx_x(200.0f, x0, w), y, T7, "200", sk.mid, sk.ground, 0, 0);
-    lk_text_c(ui_fx_x(2000.0f, x0, w), y, T7, "2K", sk.mid, sk.ground, 0, 0);
-    lk_text_c(sy_minf(ui_fx_x(20000.0f, x0, w), 226.0f), y, T7, "20K", sk.mid, sk.ground, 0, 0);
+    lk_text(x0 - 4.0f, y, T9, "20", sk.lab, sk.ground, 0, 0);
+    lk_text_c(ui_fx_x(200.0f, x0, w), y, T9, "200", sk.lab, sk.ground, 0, 0);
+    lk_text_c(ui_fx_x(2000.0f, x0, w), y, T9, "2K", sk.lab, sk.ground, 0, 0);
+    lk_text_c(sy_minf(ui_fx_x(20000.0f, x0, w), 226.0f), y, T9, "20K", sk.lab, sk.ground, 0, 0);
 }
 
 /* a complex number, for the responses */
@@ -131,7 +131,7 @@ static void ui_drive_meter(float v, int hot)
     if (v > 0.004f)
         lk_seg(222.0f, 120.0f - 60.0f * v, 222.0f, 120.0f, 3.0f, ui_ink(hot));
     lk_ring(222.0f, 130.0f, 7.0f, 1.5f, ui_ink(hot));
-    lk_text(209.0f, 142.0f, T7, "DRIVE", sk.mid, sk.ground, 40, 0);
+    lk_text_r(236.0f, 142.0f, T9, "DRIVE", sk.lab, sk.ground, 20, 0);
 }
 
 /* FILTER TONE: the hill the sound passes over (VAR: the right side's thin), stippled under; the cutoff's post, the
@@ -221,7 +221,7 @@ static void ui_p_filter(void)
     ui_title(FT_NAMES[t], UI_TITLE_X);
     if (!ui_mod_word(SP_F_CUT, w))
         sp_put(w, SLOPE[t]);
-    lk_text(UI_TITLE_X, 42.0f, T8, w, sk.mid, sk.ground, 80, 0);
+    lk_text(UI_TITLE_X, 42.0f, T10, w, sk.lab, sk.ground, 20, 0);
     ui_fx_freqs(12.0f, 196.0f, 204.0f);
     ui_H(0, 8.0f, 27.0f);
     ui_H(1, xc - 5.0f, 172.0f);
@@ -278,8 +278,8 @@ static void ui_p_drive(void)
     lk_hollow(171.0f, 152.0f, 2.5f);
     ui_mix_row(p, SP_DR_MIX, 3);
     ui_title(DRV_NAMES[type], UI_TITLE_X);
-    lk_text(52.0f, 137.0f, T7, "IN", sk.mid, sk.ground, 60, 0);
-    lk_text(116.0f, 164.0f, T7, "TONE", sk.mid, sk.ground, 60, 0);
+    lk_text(52.0f, 137.0f, T9, "IN", sk.lab, sk.ground, 60, 0);
+    lk_text(116.0f, 164.0f, T9, "TONE", sk.lab, sk.ground, 60, 0);
     ui_H(0, 8.0f, 27.0f);
     ui_H(1, 104.0f, 48.0f);
     ui_H(2, 212.0f, 128.0f);
@@ -389,7 +389,7 @@ static void ui_p_delay(void)
         sp_put(w, NOTE_NAMES[p[SP_DL_NOTE] < (int16_t)SY_NNOTE ? p[SP_DL_NOTE] : 0]);
     else
         sp_real(w, secs * 1000.0f, 0u, " MS");
-    lk_text(UI_TITLE_X, 42.0f, T8, w, sk.mid, sk.ground, 80, 0);
+    lk_text(UI_TITLE_X, 42.0f, T10, w, sk.lab, sk.ground, 20, 0);
     if (tone) {
         ui_H(0, xl + 6.0f, 150.0f);
         ui_H(1, xh - 16.0f, 150.0f);
@@ -487,7 +487,7 @@ static void ui_p_ott(void)
         lk_box(cx - 4.0f, 170.0f - 120.0f * lv, cx + 4.0f, 170.0f, bands && ui_hot(b) ? sk.hot : sk.ink);
         lk_arrow(cx - 11.0f, 56.0f, cx - 11.0f, 58.0f + 18.0f * dn, 3.0f, 1.5f, ui_ink(!bands && ui_hot(3)));
         lk_arrow(cx + 11.0f, 164.0f, cx + 11.0f, 162.0f - 18.0f * up, 3.0f, 1.5f, ui_ink(!bands && ui_hot(2)));
-        lk_text_c(cx, 174.0f, T7, NAME[b], sk.mid, sk.ground, 60, 0);
+        lk_text_c(cx, 174.0f, T9, NAME[b], sk.lab, sk.ground, 60, 0);
         if (bands)
             ui_H(b, cx - 5.0f, 36.0f);
     }
@@ -497,7 +497,7 @@ static void ui_p_ott(void)
         lk_poly(tp, 3u, 1.5f, ui_ink(!bands && ui_hot(1)));
     }
     if (!bands) {
-        ui_H(0, 196.0f, y - 5.0f);
+        ui_H(0, 192.0f, y - 5.0f);
         ui_H(1, 172.0f, 26.0f);
         ui_H(2, 22.0f, 136.0f);
         ui_H(3, 22.0f, 72.0f);
@@ -602,50 +602,50 @@ static const char *const UI_CHAIN_NAME[FXT_N] = {"DRIVE", "CHORUS", "DELAY", "RE
                                                   "PHASER", "FILTER", "CRUSH", "TREMOLO", "RING", "TAPE"};   /* (a box's) */
 static void ui_p_chain(void)
 {
-    static const float POS[NFXC][2] = {{14, 44}, {68, 44}, {122, 44}, {176, 44}, {176, 104}, {122, 104}, {68, 104},
-                                       {14, 104}};
+    static const float POS[NFXC][2] = {{14, 48}, {68, 48}, {122, 48}, {176, 48}, {176, 116}, {122, 116}, {68, 116},
+                                       {14, 116}};
     uint32_t nc = sp_chain_n(sy_patch.p), at = ui_cslot(), k, used = 0;
-    char t[24];
+    char t[32];
     float tw, x;
     for (k = 0; k < nc + (nc < NFXC) && k < NFXC; k++) {
         float bx = POS[k][0], by = POS[k][1];
         int32_t in = sp_chain_at(sy_patch.p, k), mx = in >= 0 ? ui_cmix_of(in) : -1;
         int pick = k == at, on = in >= 0 && sy_patch.p[FXI_ON[in]];
-        uint16_t fg = pick ? sk.ground : in < 0 ? sk.mid : sk.ink;
+        uint16_t bgc = pick ? (ui_hot(1) || ui_hot(2) ? sk.hot : sk.ink) : sk.ground, fg = pick ? sk.ground : sk.ink;
         if (pick)
-            lk_box(bx, by, bx + 46.0f, by + 34.0f, ui_hot(1) || ui_hot(2) ? sk.hot : sk.ink);
+            lk_box(bx, by, bx + 46.0f, by + 40.0f, bgc);
         else if (in < 0 || !on)
-            lk_frame_dash(bx + 0.5f, by + 0.5f, 45.0f, 33.0f, 2.0f, 2.0f, sk.mid);
+            lk_frame_dash(bx + 0.5f, by + 0.5f, 45.0f, 39.0f, 2.0f, 2.0f, sk.mid);
         else
-            lk_frame(bx + 0.5f, by + 0.5f, 45.0f, 33.0f, 1.2f, sk.ink);
+            lk_frame(bx + 0.5f, by + 0.5f, 45.0f, 39.0f, 1.2f, sk.ink);
         sp_fix(t, (int32_t)k + 1, 0u, 0);
-        lk_text(bx + 4.0f, by + 3.0f, T7, t, pick ? sk.ground : sk.mid, pick ? (ui_hot(1) || ui_hot(2) ? sk.hot : sk.ink)
-                                                                                  : sk.ground, 0, 0);
+        lk_text(bx + 5.0f, by + 2.0f, T9, t, pick ? sk.ground : sk.lab, bgc, 0, 0);
         if (in < 0) {
-            lk_text(bx + 4.0f, by + 12.0f, T9B, "+ HERE", fg, pick ? sk.ink : sk.ground, 0, 11);
+            lk_text(bx + 5.0f, by + 16.0f, T9B, "+ HERE", pick ? sk.ground : sk.lab, bgc, 0, 0);
             continue;
         }
-        lk_text(bx + 4.0f, by + 12.0f, T9B, lk_fit(t, sizeof t, UI_CHAIN_NAME[FXI_TYPE[in]], T9B, 0, 40.0f), fg,
-                pick ? (ui_hot(1) || ui_hot(2) ? sk.hot : sk.ink) : sk.ground, 0, 11);
-        lk_icon(FXI_TYPE[in], bx + 33.0f, by + 4.0f, pick ? sk.ground : on ? sk.ink : sk.mid);
+        lk_text(bx + 5.0f, by + 16.0f, T9B, lk_fit(t, sizeof t, UI_CHAIN_NAME[FXI_TYPE[in]], T9B, 0, 40.0f),
+                pick ? sk.ground : on ? sk.ink : sk.lab, bgc, 0, 0);
+        lk_icon(FXI_TYPE[in], bx + 32.0f, by + 5.0f, pick ? sk.ground : on ? sk.ink : sk.mid);
         if (mx >= 0) {
             float m = ui_v(sy_patch.p, (uint32_t)mx);
-            lk_seg(bx + 4.0f, by + 28.0f, bx + 40.0f, by + 28.0f, 1.0f, pick ? sk.mid : sk.line);
+            lk_seg(bx + 5.0f, by + 33.0f, bx + 41.0f, by + 33.0f, 1.0f, pick ? sk.mid : sk.line);
             if (m > 0.01f)
-                lk_seg(bx + 4.0f, by + 28.0f, bx + 4.0f + sy_maxf(1.0f, m * 36.0f), by + 28.0f, 3.0f,
+                lk_seg(bx + 5.0f, by + 33.0f, bx + 5.0f + sy_maxf(1.0f, m * 36.0f), by + 33.0f, 3.0f,
                        pick ? sk.ground : on ? (ui_hot(3) && pick ? sk.hot : sk.ink) : sk.mid);
         }
+        (void)fg;
     }
     {                                               /* the cable between them, the sound's way */
-        static const float J[NFXC - 1u][4] = {{60, 61, 68, 61}, {114, 61, 122, 61}, {168, 61, 176, 61}, {0, 0, 0, 0},
-                                              {176, 121, 168, 121}, {122, 121, 114, 121}, {68, 121, 60, 121}};
+        static const float J[NFXC - 1u][4] = {{60, 68, 68, 68}, {114, 68, 122, 68}, {168, 68, 176, 68}, {0, 0, 0, 0},
+                                              {176, 136, 168, 136}, {122, 136, 114, 136}, {68, 136, 60, 136}};
         uint32_t last = nc + (nc < NFXC) - 1u;
-        lk_seg(4.0f, 61.0f, 14.0f, 61.0f, 1.0f, sk.mid);
+        lk_seg(4.0f, 68.0f, 14.0f, 68.0f, 1.0f, sk.mid);
         for (k = 0; k < last && k < NFXC - 1u; k++) {
             if (k == 3u) {                          /* (the turn at the right) */
-                float c[12] = {222, 61, 226, 61, 229.5f, 63, 230, 65, 230, 117, 222, 121};
+                float c[12] = {222, 68, 226, 68, 229.5f, 70, 230, 72, 230, 132, 222, 136};
                 lk_poly(c, 6u, 1.0f, sk.mid);
-                lk_disc(230.0f, 90.0f, 2.0f, sk.hot);
+                lk_disc(230.0f, 102.0f, 2.0f, sk.hot);
                 continue;
             }
             lk_seg(J[k][0], J[k][1], J[k][2], J[k][3], 1.0f, sk.mid);
@@ -655,26 +655,28 @@ static void ui_p_chain(void)
     }
     for (k = 0; k < 2u; k++)                        /* the type to add: its instances in the chain */
         used += FXT_INST[ui.ctype][k] != 0xFF && sp_chain_find(sy_patch.p, FXT_INST[ui.ctype][k]) >= 0;
-    lk_text(8.0f, 21.0f, T8, "ADD", sk.mid, sk.ground, 80, 0);
-    tw = lk_tw(T9B, FXT_NAMES[ui.ctype % FXT_N], 0) + 12.0f;
-    lk_frame(30.5f, 18.5f, tw - 1.0f, 13.0f, 1.0f, ui_ink(ui_hot(0)));
-    lk_text(36.0f, 19.0f, T9B, FXT_NAMES[ui.ctype % FXT_N], ui_ink(ui_hot(0)), sk.ground, 0, 12);
+    lk_text(8.0f, 22.0f, T10, "ADD", sk.lab, sk.ground, 20, 0);
+    tw = lk_tw(T12B, FXT_NAMES[ui.ctype % FXT_N], 0) + 12.0f;
+    lk_frame(34.5f, 19.5f, tw - 1.0f, 20.0f, 1.0f, ui_ink(ui_hot(0)));
+    lk_text(40.5f, 22.0f, T12B, FXT_NAMES[ui.ctype % FXT_N], ui_ink(ui_hot(0)), sk.ground, 0, 15);
     sp_put(sp_fix(sp_put(sp_fix(t, (int32_t)used, 0u, 0), " OF "), FXT_INST[ui.ctype][1] == 0xFF ? 1 : 2, 0u, 0), " IN");
-    x = lk_text(36.0f + tw, 21.0f, T7, t, sk.mid, sk.ground, 40, 0);
-    {
-        static const char *const H[6] = {"FX+OCT+ ", "ADD", " \xB7 FX+OCT- ", "TAKE OUT", " \xB7 FX TWICE ", "OPEN"};
-        float hx = 8.0f;
-        for (k = 0; k < 6u; k++)
-            hx = lk_text(hx, 192.0f, T7, H[k], k & 1u ? sk.ink : sk.mid, sk.ground, 40, 0);
+    x = lk_text(40.0f + tw, 24.0f, T9, t, sk.lab, sk.ground, 20, 0);
+    {                                               /* the module picked, in words */
+        int32_t in = at < nc ? sp_chain_at(sy_patch.p, at) : -1;
+        char *e = sp_put(sp_fix(t, (int32_t)(at < NFXC ? at : 0u) + 1, 0u, 0), "  ");
+        if (in < 0)
+            sp_put(e, "EMPTY: FX+OCT+ ADDS HERE");
+        else
+            sp_put(sp_put(e, FXT_NAMES[FXI_TYPE[in]]), sy_patch.p[FXI_ON[in]] ? "" : " \xB7 BYPASSED");
+        lk_text(8.0f, 186.0f, T10B, t, sk.ink, sk.ground, 0, 0);
     }
-    lk_text(8.0f, 204.0f, T7, "DASHED: BYPASSED (FX HELD + ITS KEY)", sk.mid, sk.ground, 40, 0);
     {
         float bx = POS[at < NFXC ? at : 0][0], by = POS[at < NFXC ? at : 0][1];
-        ui_H(0, x + 6.0f, 19.0f);
-        ui_H(1, bx - 12.0f, by - 8.0f);
+        ui_H(0, x + 7.0f, 23.0f);
+        ui_H(1, bx - 12.0f, by - 6.0f);
         if (at < nc) {
-            ui_H(2, bx - 4.0f, by + 38.0f);
-            ui_H(3, bx + 28.0f, by + 38.0f);
+            ui_H(2, bx - 2.0f, by + 47.0f);
+            ui_H(3, bx + 30.0f, by + 47.0f);
         }
     }
 }
@@ -806,7 +808,7 @@ static void ui_p_phaser(void)
     lk_seg(x1, 164.0f, x1, 172.0f, 1.0f, sk.mid);
     ui_mix_row(p, SP_PH_MIX, 3);
     sp_put(w, NOTE_NAMES[p[SP_PH_NOTE] < (int16_t)SY_NNOTE ? p[SP_PH_NOTE] : 0]);
-    lk_chip(lk_chip(20.0f, 48.0f, "FREE", !p[SP_PH_SYNC]), 48.0f, w, p[SP_PH_SYNC] != 0);
+    lk_chip(lk_chip(26.0f, 48.0f, "FREE", !p[SP_PH_SYNC]), 48.0f, w, p[SP_PH_SYNC] != 0);
     if (more) {
         uint32_t t = ui_peak(ys, 217u);
         pg.has &= (uint8_t)~8u;
@@ -973,8 +975,8 @@ static void ui_p_trem(void)
         lk_curve(20, e2, 207u, 1.0f, sk.mid, LK_DASH(2, 2));
         lk_curve(20, ys, 207u, 1.5f, ui_ink(ui_hot(3)), 0);
     }
-    lk_text(8.0f, 80.0f, T7, "L", sk.mid, sk.ground, 0, 0);
-    lk_text(8.0f, 146.0f, T7, "R", sk.mid, sk.ground, 0, 0);
+    lk_text(8.0f, 80.0f, T9, "L", sk.lab, sk.ground, 0, 0);
+    lk_text(8.0f, 146.0f, T9, "R", sk.lab, sk.ground, 0, 0);
     {
         float x1 = 20.0f + 206.0f / cyc;
         lk_seg(20.0f, 113.0f, 20.0f, 121.0f, 1.0f, sk.mid);
@@ -1016,8 +1018,8 @@ static void ui_p_ring(void)
         ys[i] = 150.0f - 26.0f * ui_cho_wave(3.0f * (float)i / 184.0f) * UI_CAR((float)i / 184.0f, 0.0f);
     lk_curve(26, ys, 185u, 2.2f, sk.ink, 0);
 #undef UI_CAR
-    lk_text(11.0f, 94.0f, T9B, "\xD7", sk.mid, sk.ground, 0, 0);
-    lk_text(11.0f, 144.0f, T9B, "=", sk.mid, sk.ground, 0, 0);
+    lk_text(11.0f, 94.0f, T12B, "\xD7", sk.lab, sk.ground, 0, 0);
+    lk_text(11.0f, 144.0f, T12B, "=", sk.lab, sk.ground, 0, 0);
     ui_mix_row(p, SP_RG_MIX, 3);
     ui_H(0, 214.0f, 95.0f);
     ui_H(1, 100.0f, 73.0f);
