@@ -135,6 +135,15 @@ The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
 
+## 9. V0.7 (the chords)
+
+From the build (`tools/build.py --strata`): the image 358,264 B (V0.67 339,112: +19,152, of it the chords' code ~16.4 KB,
+`sy_chord.c` and its pages in `sy_ui_chord.c`, both built for size except what the audio interrupt runs, and the
+chord names' letters in the large faces, 2.1 KB); `.data` + `.bss` 47,656 B (+528: the chords' state 242 B, Felucca's
+USB MIDI out queue 256 B, now that something sends); the pool, the spare SRAM and the stacks as V0.67's. Left: 223,300 B
+of the app slot, 26,072 B of `.data` + `.bss` (22.0 KB over the build's margin), the pool's 38,556 B and the spare
+SRAM's 23,296 B.
+
 ## 8. V0.67 (the STRATA UI made legible) and the room left
 
 From the build (`tools/build.py --strata`, 2026-10-18):

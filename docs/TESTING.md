@@ -356,7 +356,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 93 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 100 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -506,6 +506,14 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   tapped on MORE steps to TONE (the VALUES pages skipped); the bloom: a bud in silence (open 0, swirl 0), 0.15 s into a
   note swirling and opening (0.65, 0.83), at 1.75 s open and unwound (0.90, 0.06), 4 s after the release a bud again
   (0.01) and nothing sent in the next second. The palette's check: round from STRATA to the twelfth, NEON.
+- **V0.7, the chords** (`strata_emu_test.mjs`, seven checks; `web_test_chord`, `web_test_chd`, the USB MIDI sent
+  kept by the emulator): with the chords off a key plays its note; FREE: MIN tapped, then E4: 64 67 71 "Em", let go
+  nothing left; MIN and m7 together: 64 67 71 74 "Em7"; 9 alone keeps MIN; MAJ, VOICING +1, C5: 76 79 84 "C/E"; KEY
+  in C major: D4 62 65 69 "Dm"; C4 then F4 with AUTO: 60 65 69 "F/C"; the in-key 7th on B4: "Bm7b5"; BASS and USB OUT:
+  48 60 64 67, the chord's note-ons on channel 1 and the bass's on 2, and their offs; PERFORM: STRUM one note at 12 ms,
+  three at 112 ms (30 ms apart); ARP up at 1/16 (125 ms): 60, 64, 67, 60, 64; PATTERN 1: a stab each quarter; HARP:
+  five keys from C#4 to G5, one note each, rising, each of C major; MIDI IN as roots: D4 in, "D", its off ends it; the
+  settings through a power cycle. The shots script adds the chord pages (`Chord*`, `Perf*`, `Bass`, `ChordMidi`).
 - **The bloom over time** (`strata_bloom_study.mjs`): 17 frames of it (a note's swirl, a second note above, the
   release, a chord) on one sheet; read by eye.
 - **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on

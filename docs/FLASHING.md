@@ -1,7 +1,7 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.67 HARDWARE TEST`: V0.66 with the STRATA UI,
-made legible: [UI.md](UI.md)) on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.7 HARDWARE TEST`: the STRATA UI of V0.67 and
+SCL's chords: [CONTROLS.md](CONTROLS.md) "Chords") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -50,6 +50,12 @@ firmwares run); the keys played from the scan's timer while they only play, so d
 up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB under the pad); BENCH counts late halves
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
+
+**New in V0.7** (the chords, after the Orchid's ideas; [CONTROLS.md](CONTROLS.md) "Chords"): SCL's pages CHORD
+(KEY: a key plays its in-key chord; FREE: F3–C4 eight latching chord buttons, C#4–G5 the roots; VOICING with AUTO voice
+leading), PERFORM on the ARP button (STRUM, STRUM 2 OCT, ARP, PATTERN, HARP, SLOP, from GLOBAL's tempo), BASS (the root
+under the chord) and MIDI (MIDI notes in as roots; the chords out over USB MIDI, channels 1 and 2). All off by default:
+the keys play as before until you turn them on. Package `build/strata.fwsc`, 610,090 bytes, sha256 `6d0fab73c47304e9fc6164c37ec028a95ba37847fd97925ab588743c9e9e4550`.
 
 **New in V0.67** (from the UI build's install, "some of the text is too small"; [UI.md](UI.md)): nothing on the screen
 under 9 px (the labels 7 → 9, the top line and the zones 8 → 10, the flags 9 → 12, a module's word 12 → 14), the
@@ -335,6 +341,14 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.7**: built and checked by the build: the image 358,264 bytes, RAM 47,656 of 73,728 bytes (+528: the chords'
+  state and Felucca's USB MIDI out queue, now used), the pool and the spare SRAM as V0.67's, the interrupt stack ~2.5 KB,
+  the main stack ~4.6 KB, register access in `hal/` only. **Verified on host**: the engine's 94 checks (and as
+  WebAssembly). **Verified in the emulator**: 100 checks (the chords' seven among them), 100 screens rendered and
+  checked, the emulator's page in a browser. **Needs a hardware test**: the chords by ear (the strum's and the arpeggio's
+  timing, AUTO's voicing), USB MIDI out into a computer (a DAW or a MIDI monitor: channels 1 and 2), MIDI in as roots,
+  the chord buttons' LEDs (the test page's "Listen and look": the V0.7 rows).
 
 - **V0.67**: built and checked by the build: the image 339,112 bytes, RAM 47,128 of 73,728 bytes, the pool 342,372 of
   380,928, the spare SRAM 21,900 bytes used and 23,296 left, the interrupt stack ~2.5 KB, the main stack ~4.6 KB (8 KiB

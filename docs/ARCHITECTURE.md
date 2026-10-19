@@ -55,6 +55,17 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
+**V0.7, the chords** (2026-10-18; the V0.6 questionnaire's part D): SCL's pages CHORD, PERFORM, BASS and MIDI
+(CONTROLS.md "Chords"). `sy_chord.c` runs in the audio interrupt, a block at a time before the engine: the keys (from
+the main loop or TIMER5) and MIDI send key events into the rings (`sy_app.c`: SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT) when
+the chords are on, and it builds the chord (KEY: stacked thirds of SCALE's scale; FREE: eight latching buttons on
+F3–C4), voices it (inversions, or AUTO: the least movement from the chord before), plays PERFORM's styles from the
+tempo (the step's time in samples), adds the bass, and sends what it plays out over USB MIDI (Felucca's `usb.c` queue)
+when asked; its note-ons share the block's starts with the panel's and MIDI's (SY_STARTS_BLK). With the chords off the
+keys take V0.66's path, unchanged. The settings are the UI's (`chd`, kept with the settings record, appended); the
+chord as built (`chs`) is read back by the UI to name and draw it. **Verified in emulator** (100 checks); V0.7
+**needs a hardware test** (USB MIDI out on the device, the timing by ear).
+
 **V0.67, the STRATA UI** (2026-10-18, after the UI build's install): the screen of [UI.md](UI.md) made legible
 (nothing under 9 px, the labels in a colour of their own, larger handles, flags and zones, the how-to lines off the
 screens), a VALUES zone on every module (its values large, a knob there stepping the finest unit), twelve themes, and

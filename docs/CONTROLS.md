@@ -21,7 +21,7 @@ hardware test asked for (the FX chain, the new effects, SELECT and ALGORITHM, th
 | SAVE | save, the browser, undo and redo |
 | REC | held: the MOD layer |
 | PLAY | the transport |
-| ARP | the arpeggiator, in a later version |
+| ARP | PERFORM on and off: the chords strummed, arpeggiated, patterned (V0.7, below) |
 
 The screen (the STRATA UI: [UI.md](UI.md)) is one picture a module: a top line (the module's name and its dot, the
 family's module dots or the chain's squares, a word at the right), the body (what the module does, with the four
@@ -56,7 +56,7 @@ family.
 | GLO | VOICE | VOICE: MODE · VOICES · GLIDE · GL MODE; PLAY: BEND UP · BEND DN · VEL AMP · VOLUME |
 | | MATRIX | SLOTS: SLOT · SOURCE · DEST · AMOUNT |
 | | GLOBAL | TEMPO: BPM · TS-BEAT · TS-NOTE |
-| SCL | KEYS | SCALE: SCALE · ROOT · FIT · VELOCITY |
+| SCL | KEYS | SCALE: SCALE · ROOT · FIT · VELOCITY; CHORD: MODE · TYPE · EXTENSION · VOICING; PERFORM: STYLE · RATE · MOVE · FEEL; BASS: BASS · OCTAVE · LEVEL; MIDI: MIDI IN · USB OUT · CHORDS CH · BASS CH (V0.7: Chords, below) |
 | HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
@@ -128,11 +128,11 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 | SEQ | "SEQUENCER: IN A LATER VERSION" | | | | |
 | FX | its pages (the chain view: none) | the chain view <-> the module picked | MACROS | | the chain view: + OCT+ a module added, + OCT− the one picked taken out; a module's pages: + OCT the pages |
 | GLO | its pages | | PERFORM | | + OCT: the section's pages |
-| SCL | the KEYS page | | a word | | + a key: that note is the root |
+| SCL | the KEYS pages | | a word | | + a key: that note is the root (HARP playing: the harp's chord's root) |
 | REC | | the MOD layer, latched (a tap lets it go) | the MOD layer | | + OCT: the section's pages |
 | SAVE | a new version, saved at once | the browser (in it: back) | | saved over its own slot (a countdown from the hold) | + OCT−: undo; + OCT+: redo |
 | PLAY | the transport on, off | | | | |
-| ARP | "in a later version" | | | | |
+| ARP | PERFORM on, off (V0.7) | | | | |
 | OCT− / OCT+ | the keys' octave (the browser: OCT−'s at its release) | | the browser: OCT− 3 s deletes the user preset playing | | with a family button or REC held: that section's pages; on NAME IT: OCT+ letters / symbols, OCT− deletes; while MIDI LEARN listens: OCT− takes the picked parameter's CC away, OCT+ ends LEARN; **both held 5 s: UBOOT**, the chip's USB boot (a countdown in the footer from 2 s; letting go stops it; [FLASHING.md](FLASHING.md)) |
 
 ## The layers
@@ -182,7 +182,43 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   scale plays the scale's note below it), WHITE (the white keys walk the scale from the root at C4; the black keys are
   silent). SCL held + a key: that key's note is the root. MIDI notes are not fitted.
 - What else the keys do: in REC's MOD layer they pick sources, in MACROS they bypass modules, in JUMP they open sections,
-  on NAME IT they type, with SCL held they set the root.
+  on NAME IT they type, with SCL held they set the root; with the chords on they play chords (below).
+
+## Chords (V0.7)
+
+SCL's pages after SCALE make the keys a chord instrument, after the Orchid's ideas (our own design and code). With
+MODE OFF, PERFORM off and BASS off the keys play as before.
+
+- **CHORD**: MODE (OFF, KEY, FREE) · TYPE · EXTENSION · VOICING.
+  - **KEY**: every key plays its in-key chord: the scale and root SCALE sets, stacked in thirds (a key off the scale
+    moves down onto it). TYPE: IN KEY (the scale's own triad), SUS2, SUS4, POWER (the root, its fifth, the octave);
+    EXTENSION: the in-key 6th, 7th, 9th, any of them.
+  - **FREE**: the keys F3 to C4 are eight chord buttons, F3 MAJ, F#3 MIN, G3 SUS, G#3 DIM, A3 6, A#3 m7, B3 M7, C4 9;
+    C#4 to G5 play roots. A tap latches the chord; buttons tapped together combine (MIN + m7: a minor seventh); a tap of
+    extensions alone keeps the triad (MIN, then 9: Cm add9). The buttons glow, the latched ones lit. The knobs set the
+    same (FREE's type and KEY's are kept apart).
+  - **VOICING**: AUTO (each chord in the inversion nearest the one before: smooth voice leading), or −3 to +6
+    (inversions up, the top notes down).
+  - The chord playing is named on SCL's pages ("Cm7/G": the note after the slash is the lowest), its notes and the bass
+    shown on keys. One chord at a time: the last root pressed plays; let go of it, the one held before plays again.
+- **PERFORM** (the ARP button switches it on and off; lit while on): STYLE · RATE · MOVE · FEEL, each style with its own
+  three.
+  - **STRUM**: the notes one after another, RATE apart (5 to 120 ms or a note value); MOVE UP, DOWN, ALTERNATE; FEEL the
+    taper (the last note softer). **STRUM 2 OCT**: the chord and an octave up. **SLOP**: a strum with loose timing and
+    levels; FEEL how loose.
+  - **ARP**: a note a step at RATE (a note value of GLOBAL's tempo, or ms), half a step long; MOVE UP, DOWN, UP-DOWN,
+    RANDOM, AS PLAYED; FEEL 1 to 3 octaves.
+  - **PATTERN**: the chord as stabs on one of 16 rhythms of 16 steps (MOVE), the beats louder; FEEL how long a stab is.
+  - **HARP**: the keys (FREE: C#4 to G5) are strings over four octaves: each plays the last chord's note at or under its
+    place, so a finger run along the keys plays the chord rising. FREE's buttons change the chord; SCL held + a key sets
+    its root. With MODE OFF the strings are the scale's notes.
+  - With MODE OFF, PERFORM plays what is held: an arpeggiator over the keys.
+- **BASS**: the chord's root one or two octaves under its lowest note, on the same sound (one of the 8 voices), at LEVEL
+  (% of the chord's velocity).
+- **MIDI**: MIDI IN AS SENT (default) or ROOTS (incoming notes play chords, as root keys); USB OUT OFF (default) or ON:
+  what the chords play goes out over USB MIDI, the chords on CHORDS CH (1), the bass on BASS CH (2).
+- Kept with the settings, whatever sound is loaded. A change of MODE, of PERFORM's style or PERFORM on or off stops what
+  plays (press again).
 
 ## LEDs
 
@@ -193,6 +229,8 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
 | REC | in its layer | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |
 | PLAY | a quarter of each beat while the transport runs | | its green LED: lit while it runs |
+| ARP | PERFORM on (V0.7) | | |
+| F3 to C4 (chords FREE) | the latched chord's buttons | the other chord buttons | |
 
 SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 
