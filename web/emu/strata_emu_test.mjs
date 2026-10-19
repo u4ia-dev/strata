@@ -799,11 +799,16 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   rtap(B.PLAY);
   play(r, 0.1);
   const off = [r.web_test_run(), (r.web_lit_buttons() >> 14) & 1, rt()];
+  rtap(B.ARP);                                  // (V0.7: ARP switches PERFORM, lit while on)
+  play(r, 0.05);
+  const arp = [rt(), (r.web_lit_buttons() >> B.ARP) & 1, r.web_test_chd(4, -1)];
   rtap(B.ARP);
   play(r, 0.05);
-  check(`PLAY: the transport on (${run}, "${word}"), LFO 1 from its start (phase ${ph0} -> ${ph1} of 65536), the green LED (${green}), PLAY lit a quarter of each beat (${on} of 100 at 120 BPM); again, off (${off[0]}, green ${off[1]}, "${off[2]}"); ARP: "${rt()}"`,
+  const arp2 = [rt(), (r.web_lit_buttons() >> B.ARP) & 1, r.web_test_chd(4, -1)];
+  check(`PLAY: the transport on (${run}, "${word}"), LFO 1 from its start (phase ${ph0} -> ${ph1} of 65536), the green LED (${green}), PLAY lit a quarter of each beat (${on} of 100 at 120 BPM); again, off (${off[0]}, green ${off[1]}, "${off[2]}"); ARP: "${arp[0]}" (lit ${arp[1]}, PERFORM ${arp[2]}), again "${arp2[0]}" (${arp2[1]}, ${arp2[2]})`,
         run === 1 && word === "PLAY" && ph0 > 8000 && ph1 < 4000 && green === 1 && on >= 18 && on <= 32 &&
-        off[0] === 0 && off[1] === 0 && off[2] === "STOP" && rt() === "ARP: IN A LATER VERSION");
+        off[0] === 0 && off[1] === 0 && off[2] === "STOP" && arp[0] === "PERFORM: STRUM" && arp[1] === 1 && arp[2] === 1 &&
+        arp2[0] === "PERFORM OFF" && arp2[1] === 0 && arp2[2] === 0);
 }
 {                                               // the SETTINGS: SCREEN, PANEL, MIDI (its channel, program changes,
   const g = await boot(), gt = () => cstr(g, g.web_test_toast()), gn = () => cstr(g, g.web_test_page_name());   // LEARN)
@@ -1225,6 +1230,134 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         ex.web_test_page_names_bad() === 0);
 }
 
+{                                               // V0.7: SCL's chords (sy_chord.c)
+  const c = await boot();
+  let mask = 0;
+  const notes = () => [...Array(8).keys()].map((i) => c.web_test_voice_note(i)).filter((n) => n >= 0).sort((a, b) => a - b);
+  const press = (k) => { mask |= 1 << k; c.web_keys(mask); play(c, 0.04); };
+  const release = (k) => { mask &= ~(1 << k); c.web_keys(mask); play(c, 0.06); };
+  const tapk = (k) => { press(k); release(k); };
+  const nm = () => cstr(c, c.web_test_chord_name());
+  const set = (f, v) => { c.web_test_chd(f, v); play(c, 0.01); };
+  const K = (n) => n - 53;                      // a key by its note (F3 the first)
+  play(c, 0.3);
+  const plain = (press(K(64)), notes());        // (the chords off: a key, its note, as before)
+  release(K(64));
+  set(0, 2);                                    // FREE, its voicing as built (no AUTO)
+  set(3, 4);
+  tapk(1);                                      // MIN, then E4
+  press(K(64));
+  const em = [notes().join(" "), nm()];
+  release(K(64));
+  const gone = notes().length;
+  press(1); press(5); release(5); release(1);   // MIN and m7 together: a minor seventh
+  press(K(64));
+  const em7 = [notes().join(" "), nm()];
+  release(K(64));
+  tapk(7);                                      // 9 alone: the triad kept, the extensions now 9
+  const keep = [c.web_test_chd(1, -1), c.web_test_chd(2, -1)];
+  tapk(0);                                      // MAJ alone: a major triad, no extension
+  set(3, 5);                                    // VOICING +1: the first inversion
+  press(K(60 + 12));                            // (C5: C4 is a chord button in FREE)
+  const inv = [notes().join(" "), nm()];
+  release(K(72));
+  check(`chords, FREE: off, a key plays ${plain}; MIN then E4: ${em[0]} "${em[1]}", let go ${gone} left; MIN + m7 together: ${em7[0]} "${em7[1]}"; 9 alone keeps MIN (${keep}); MAJ, VOICING +1, C5: ${inv[0]} "${inv[1]}"`,
+        plain.join() === "64" && em[0] === "64 67 71" && em[1] === "Em" && gone === 0 && em7[0] === "64 67 71 74" &&
+        em7[1] === "Em7" && keep[0] === 1 && keep[1] === 8 && inv[0] === "76 79 84" && inv[1] === "C/E");
+  set(0, 1);                                    // KEY in C major (SCALE: MAJOR), root position
+  set(3, 4);
+  goPage(c, SEC.KEYS, "SCALE");
+  c.web_enc(E.K1, 1);
+  play(c, 0.1);
+  press(K(62));                                 // D4: D minor in C major
+  const dm = [notes().join(" "), nm()];
+  release(K(62));
+  set(3, 0);                                    // AUTO from here
+  press(K(60));                                 // C4, then F4: AUTO keeps F near C (F/C)
+  release(K(60));
+  press(K(65));
+  const fauto = [notes().join(" "), nm()];
+  release(K(65));
+  set(2, 2);                                    // the in-key 7th: B4 a half-diminished seventh
+  set(3, 4);
+  press(K(71));
+  const b7 = [notes().join(" "), nm()];
+  release(K(71));
+  set(2, 0);
+  check(`chords, KEY in C major: D4 ${dm[0]} "${dm[1]}"; C4 then F4 with AUTO: ${fauto[0]} "${fauto[1]}"; the 7th on B4: ${b7[0]} "${b7[1]}"`,
+        dm[0] === "62 65 69" && dm[1] === "Dm" && fauto[0] === "60 65 69" && fauto[1] === "F/C" && b7[0] === "71 74 77 81" &&
+        b7[1] === "Bm7b5");
+  set(9, 1);                                    // BASS: the root an octave under
+  const m0 = c.web_test_mout_n();
+  set(13, 1);                                   // USB OUT: the chords on channel 1, the bass on 2
+  press(K(60));
+  const withBass = notes().join(" ");
+  release(K(60));
+  const sent = [];
+  for (let i = m0; i < c.web_test_mout_n(); i++) {
+    const p = c.web_test_mout(i);
+    sent.push(`${(p >> 8) & 0xF0 ? ((p >> 8) & 0xF0).toString(16) : "?"}:${(p >> 8) & 15}:${(p >> 16) & 127}`);
+  }
+  const ons = sent.filter((s) => s.startsWith("90")), offs = sent.filter((s) => s.startsWith("80"));
+  check(`chords, BASS and USB OUT: C4 with its bass ${withBass}; sent ${sent.join(" ")}`,
+        withBass === "48 60 64 67" && ons.length === 4 && offs.length === 4 && ons.includes("90:1:48") && ons.includes("90:0:60") &&
+        offs.includes("80:1:48") && offs.includes("80:0:67"));
+  set(9, 0);
+  set(13, 0);
+  set(4, 1);                                    // PERFORM: STRUM, 30 ms apart
+  set(5, 0);
+  c.web_keys(mask |= 1 << K(60));
+  play(c, 0.012);
+  const s1 = notes().length;
+  play(c, 0.1);
+  const s3 = notes().join(" ");
+  release(K(60));
+  set(5, 2);                                    // ARP: up, 1/16 at 120 BPM (125 ms a step, half of it sounding)
+  c.web_keys(mask |= 1 << K(60));
+  const seqn = [];
+  for (let i = 0; i < 5; i++) { play(c, 0.03); seqn.push(notes().join(" ") || "-"); play(c, 0.095); }
+  release(K(60));
+  set(5, 3);                                    // PATTERN 1: a stab each quarter (500 ms)
+  c.web_keys(mask |= 1 << K(60));
+  const stab = [];
+  for (let i = 0; i < 4; i++) { play(c, 0.05); stab.push(notes().length); play(c, 0.2); }
+  release(K(60));
+  check(`chords, PERFORM: STRUM ${s1} at 12 ms, ${s3} at 112 ms; ARP ${seqn.join(", ")}; PATTERN 1, every 250 ms: ${stab.join(" ")}`,
+        s1 === 1 && s3 === "60 64 67" && seqn.join() === "60,64,67,60,64" && stab.join() === "3,0,3,0");
+  set(5, 4);                                    // HARP: the keys are the chord's notes over four octaves
+  set(0, 2);                                    // (FREE: C#4 .. G5 the strings)
+  tapk(0);
+  const hn = [];
+  for (const k of [8, 12, 16, 20, 26]) { press(k); hn.push(notes().join(" ")); release(k); }
+  set(4, 0);
+  set(0, 0);
+  check(`chords, HARP on the last chord (C major), C#4 .. G5 rising: ${hn.join(" | ")}`,
+        hn.every((x) => x.split(" ").length === 1) && hn.map(Number).every((x, i, a) => !i || x > a[i - 1]) &&
+        hn.map(Number).every((x) => [0, 4, 7].includes(x % 12)));
+  set(0, 2);                                    // MIDI IN as roots: a note makes a chord, its off ends it
+  set(12, 1);
+  c.web_midi(0x90, 62, 90);
+  play(c, 0.05);
+  const mi = [notes().join(" "), nm()];
+  c.web_midi(0x80, 62, 0);
+  play(c, 0.1);
+  const mo = notes().length;
+  check(`chords, MIDI IN as roots (FREE, MAJ): D4 in, ${mi[0]} "${mi[1]}"; its off, ${mo} left`,
+        mi[0] === "62 66 69" && mi[1] === "D" && mo === 0);
+  c.web_test_chd(5, 2);                         // the settings kept: FREE, ARP, the bass, through a power cycle
+  c.web_test_chd(9, 1);
+  play(c, 8.0);                                 // (3 s of quiet after the reverb's tail: the settings written)
+  const nor = new Uint8Array(c.memory.buffer, c.web_nor(), c.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const c2 = instance.exports;
+  if (c2._initialize) c2._initialize();
+  new Uint8Array(c2.memory.buffer, c2.web_nor(), c2.web_nor_size()).set(nor);
+  c2.web_master(700);
+  c2.web_boot();
+  play(c2, 0.3);
+  check(`chords: after a power cycle FREE ${c2.web_test_chd(0, -1)}, the style ${c2.web_test_chd(5, -1)} (ARP), BASS ${c2.web_test_chd(9, -1)}, MIDI IN ${c2.web_test_chd(12, -1)}`,
+        c2.web_test_chd(0, -1) === 2 && c2.web_test_chd(5, -1) === 2 && c2.web_test_chd(9, -1) === 1 && c2.web_test_chd(12, -1) === 1);
+}
 {                                               // V0.67: VALUES, the family's taps, the bloom
   const v = await boot(), FILTER = 4;
   play(v, 0.6);

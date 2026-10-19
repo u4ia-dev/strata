@@ -268,6 +268,64 @@ go(SEC.KEYS, "SCALE");
 turn(0, 2);                                     // MINOR
 rest();
 shot("Keys");
+turn(0, -2);                                    // (back to CHROMATIC for the chords)
+rest();
+
+// ---- V0.7: SCL's chords (FREE: MIN + m7 latched, E4 held; KEY in C major; PERFORM's styles; BASS; MIDI)
+go(SEC.KEYS, "CHORD");
+shot("ChordOff");
+ex.web_test_chd(0, 2);                          // FREE, root position
+ex.web_test_chd(3, 4);
+const held = (k, s) => { ex.web_keys(1 << k); run(s); };
+held(1, 0.05);
+ex.web_keys((1 << 1) | (1 << 5));               // MIN + m7 together
+run(0.05);
+ex.web_keys(0);
+run(0.1);
+held(11, 0.15);                                 // E4
+shot("Chord");
+turn(3, -4);                                    // VOICING to AUTO, turning
+shot("ChordTurn");
+rest();
+ex.web_keys(0);
+run(0.2);
+ex.web_test_chd(0, 1);                          // KEY in C major: A4 (A minor), its in-key 7th
+go(SEC.KEYS, "SCALE");
+turn(0, 1);
+rest();
+go(SEC.KEYS, "CHORD");
+ex.web_test_chd(2, 2);
+ex.web_test_chd(9, 1);                          // (the bass on)
+held(16, 0.15);
+shot("ChordKey");
+ex.web_keys(0);
+run(0.3);
+go(SEC.KEYS, "PERFORM");
+ex.web_test_chd(4, 1);                          // PERFORM on
+for (const [st, id, move, feel] of [[0, "PerfStrum", 0, 40], [1, "PerfStrum2", 1, 0], [2, "PerfArp", 2, 2],
+                                     [3, "PerfPattern", 4, 60], [4, "PerfHarp", 0, 0], [5, "PerfSlop", 0, 80]]) {
+  ex.web_test_chd(5, st);
+  ex.web_test_chd(7, move);
+  if (st !== 4) ex.web_test_chd(8, feel);
+  run(0.05);
+  shot(id);
+}
+ex.web_test_chd(5, 0);
+ex.web_test_chd(4, 0);
+go(SEC.KEYS, "BASS");
+held(14, 0.1);                                  // G4: G major (C major's), the bass under it
+shot("Bass");
+ex.web_keys(0);
+run(0.3);
+go(SEC.KEYS, "MIDI");
+ex.web_test_chd(12, 1);
+ex.web_test_chd(13, 1);
+run(0.05);
+shot("ChordMidi");
+for (const [f, v] of [[0, 0], [2, 0], [9, 0], [12, 0], [13, 0]]) ex.web_test_chd(f, v);   // (the chords off again)
+go(SEC.KEYS, "SCALE");
+turn(0, -1);
+rest();
 
 // ---- the SETTINGS (HOME held 5 s: its countdown first)
 go(SEC.MACRO, "HOME");

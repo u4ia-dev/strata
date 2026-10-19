@@ -143,8 +143,11 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_store.c"
+static uint32_t web_mout[256], web_mout_n;       /* (V0.7: the chords' USB MIDI out, kept for the tests and the page) */
+#define SY_MIDI_OUT(pkt) (web_mout[web_mout_n++ % 256u] = (pkt))
+#include "../../firmware/src/sy_chord.c"
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.67"                    /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.7"                     /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -153,6 +156,7 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_ui_draw.c"
 #include "../../firmware/src/sy_ui_fx.c"
 #include "../../firmware/src/sy_ui_save.c"
+#include "../../firmware/src/sy_ui_chord.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
@@ -660,3 +664,39 @@ EXPORT uint16_t *web_lint_screen(void) { return web_lint_full; }
 #endif
 /* HOME's bloom: f 0 how open, 1 its swirl (thousandths) */
 EXPORT int32_t web_test_bloom(uint32_t f) { return sy_floori((f ? ui_twist : ui_open) * 1000.0f + 0.5f); }
+/* V0.7, the chords: f 0 its count of notes, 1 its root, 2 the bass (255 none), 3 HARP's / the latched chord built, 10 + i
+ * note i; the chord's name; a setting set (sy_chord.c chd, in its order: 0 mode, 1 type, 2 ext, 3 voicing, 4 perf,
+ * 5 style, 6 the style's rate, 7 its move, 8 its feel, 9 bass, 10 its octaves, 11 its level, 12 MIDI in, 13 out, 14
+ * the chords' channel, 15 the bass's, 16 KEY's type) and read back; the USB MIDI sent (its count, packet i); voice i's note (-1 off
+ * or released) */
+EXPORT int32_t web_test_chord(uint32_t f)
+{
+    return f == 0u ? chs.n : f == 1u ? chs.root : f == 2u ? chs.bass : f == 3u ? chs.built
+           : f >= 10u && f < 10u + CH_MAXN ? chs.note[f - 10u] : -1;
+}
+EXPORT const char *web_test_chord_name(void)
+{
+    static char t[24];
+    return sy_chord_name(t);
+}
+EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
+{
+    uint8_t *p[17] = {&chd.mode, &chd.type, &chd.ext, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
+                      &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype};
+    uint8_t *q = f == 6u ? &chd.rate[chd.style % PF_N] : f == 7u ? &chd.move[chd.style % PF_N]
+                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 17u ? p[f] : 0;
+    if (!q)
+        return -1;
+    if (v >= 0) {
+        *q = (uint8_t)v;
+        chd.gen++;
+        ui.dirty = D_ALL;
+    }
+    return *q;
+}
+EXPORT uint32_t web_test_mout_n(void) { return web_mout_n; }
+EXPORT uint32_t web_test_mout(uint32_t i) { return web_mout[i % 256u]; }
+EXPORT int32_t web_test_voice_note(uint32_t i)
+{
+    return i < SY_NVOICE && sy_v[i].on && sy_v[i].key ? sy_v[i].note : -1;
+}
