@@ -6,8 +6,9 @@ built as the alternate "V0.66 UI" on the `strata-ui` branch, then made legible i
 words on the screens, a **VALUES** zone on every module for exact values, four more themes, and a new animation on
 HOME, the bloom as a sunflower. The sound engine, the panel's controls, the flash, the package and the update path
 are V0.66's. [CONTROLS.md](CONTROLS.md) is the reference for the panel; this file is the reference for the screen.
+V0.7 added SCL's chord screens, V0.75 the ARP's (ARP held: PERFORM, STEPS, RATCHET, GROOVE) and GLOBAL's CLOCK IN (§4).
 
-Status: verified in the emulator (93 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
+Status: verified in the emulator (110 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
 overlaps, `web/emu/strata_ui_shots.mjs`; the bloom's motion, `web/emu/strata_bloom_study.mjs`). **Needs a hardware
 test**: legibility at the panel's size and distance, the drawing's time on the FM-1 (BENCH's SCREEN row), the new
 themes on the panel, the bloom's motion.
@@ -110,8 +111,9 @@ sample is the one HOT seed.
 | ENV | ENV 1, ENV 2: ADSR, SHAPE, VALUES |
 | LFO | LFO 1, LFO 2: POINTS, SHAPE, TIME, VALUES; a dial turning at the LFO's phase |
 | FX | the chain view (eight boxes with 9 px bold names, the module picked named at the bottom, the type to add as a 12 px tag); each module its pages and VALUES |
-| GLO | VOICE: VOICE, PLAY, VALUES · MATRIX: SLOTS (four slots at a time, the four of the one picked: source → destination at 10 px, the amount's bar and figure; the picked one's source and destination at 12 px with its dial) · GLOBAL: TEMPO |
-| SCL | KEYS: SCALE (the scale on the 27 keys, FIT's chips, VELOCITY's bar and figure), CHORD (V0.7: the chord named at 26 px, MODE's, TYPE's and the extensions' chips, VOICING's AUTO chip and ruler, the notes and the bass on three octaves of keys), PERFORM (the style, ARP's state, a bar of what it plays: a row a note, its time across; HARP: the note each key plays), BASS (on, the octave, the chord and the bass on four octaves, an arrow from the root, LEVEL), MIDI (the keys and MIDI in into the chords, into the sound and out over USB, the channels); the top line names the chord playing |
+| GLO | VOICE: VOICE, PLAY, VALUES · MATRIX: SLOTS (four slots at a time, the four of the one picked: source → destination at 10 px, the amount's bar and figure; the picked one's source and destination at 12 px with its dial) · GLOBAL: TEMPO (V0.75: CLOCK IN's chips, INT and MIDI; "BPM: MIDI" and MIDI's tempo while it follows the clock) |
+| SCL | KEYS: SCALE (the scale on the 27 keys, FIT's chips, VELOCITY's bar and figure), CHORD (V0.7: the chord named at 26 px, MODE's, TYPE's and the extensions' chips, VOICING's AUTO chip and ruler, the notes and the bass on three octaves of keys), BASS (on, the octave, the chord and the bass on four octaves, an arrow from the root, LEVEL), MIDI (the keys and MIDI in into the chords, into the sound and out over USB, the channels); the top line names the chord playing |
+| ARP held | ARP (V0.75): PERFORM (the style at 14 px, ARP's state, a bar of sixteen steps of what it plays: a row a note, its time across, ties long, ratchets split, the level as brightness, a CHANCE under 100 % hollow, SWING's steps late, LENGTH's end dotted, the step playing marked under it; HARP: the note each key plays), STEPS and RATCHET (the step picked as the title; sixteen columns: OCTAVE a tick over the 0 line, LEVEL a bar, RATCHET's hits side by side, TIE carried across, REST a stub, SLIDE a slope, the steps past LENGTH dim, the one picked framed, the one playing marked over it; RATCHET's: each step's CHANCE a meter under it), GROOVE (two beats of notes where SWING puts them, an arrow from each late one's straight place, as long as GATE makes them; LENGTH's sixteen cells; LATCH's chip). Their values are figures in a row under the drawing (KNOB 1's the title), HOT while they turn: no flags on these pages |
 | SETTINGS | SCREEN (the twelve themes, HELP, GLOW), PANEL, MIDI (the channel grid, LEARN, the CCs learned, PROGRAM, the CCs every sound answers as a table), BENCH (eight rows, wider figures) |
 | SAVE | NAME IT (sixteen cells, the category and the slot, ABC / 123, each key's letter over or under it), the browser (the bank's chips, the category at 14 px with its count, five presets at 12 px, the one playing outlined with a small bloom) |
 | Layers | MOD (the page's four parameters with the source's depth, each white key's source under it), PERFORM, MACROS, MOMENTARY, JUMP (the keys' sections over and under them, the section shown named at 14 px) |
@@ -154,7 +156,7 @@ HOME in silence: 5 µs more over 2 s (0.04 µs a frame; nothing drawn or sent in
 ## 6. Building and checking
 
 - `./build.sh --strata` builds the UI (its fonts: `gen_aa_font.py --preset space-mono`).
-- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (93 checks) and
+- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (110 checks) and
   `node web/emu/strata_ui_shots.mjs` (every screen as PNG, named after the design's boards, in
   `build/emu_strata/ui_shots`; each checked as it is taken).
 - **The screens' check** (`web_lint`, `web/emu/strata_web.c`): the screen drawn twice into buffers of its own, with

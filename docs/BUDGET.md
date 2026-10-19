@@ -135,6 +135,22 @@ The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
 
+## 10. V0.75 (the ARP)
+
+From the build (`tools/build.py --strata`): the image 368,620 B (V0.7 358,264: +10,356: the step arpeggiator in
+`sy_chord.c`, its three pages in `sy_ui_chord.c`, MIDI's clock in `sy_app.c`); `.data` + `.bss` 48,340 B (+684: the
+chords' settings and state 140 + 344 B, +242 for the steps, GROOVE and the transport; MIDI's clock, its last 49 times
+196 B; the rest counters and alignment); the pool and the spare SRAM as V0.7's; the main stack ~4,684 B (+60), the
+interrupt stack ~2,524 B (+48) of 4,096 allowed. The fonts are V0.7's (50.7 KB): the new pages use no new letters.
+Left: **212,944 B** of the app slot, **25,388 B** of `.data` + `.bss` (21.4 KB over the build's margin), the pool's
+38,556 B and the spare SRAM's 23,296 B.
+
+The drawing's time on the host (`web/emu/strata_bench.c`, three runs): HOME in silence 33–41 µs over 2 s and with a
+chord 1,365–1,466 µs (V0.67's 35 and 1,462: the same); ARP's PERFORM page while the arpeggio plays 661–698 µs over 2 s
+and STEPS 862–938 µs (ENV 1 with a chord held: 670–750), each sending only the rows where the step playing is marked
+(22,080 pixels in 2 s). The audio side's cost is a step's few hundred instructions at most, a block's few tens between
+steps: under 0.1 % of a core.
+
 ## 9. V0.7 (the chords)
 
 From the build (`tools/build.py --strata`): the image 358,264 B (V0.67 339,112: +19,152, of it the chords' code ~16.4 KB,

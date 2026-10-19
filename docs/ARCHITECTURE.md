@@ -55,6 +55,21 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
+**V0.75, the ARP** (2026-10-19): PERFORM's ARP style a step arpeggiator (CONTROLS.md "The ARP"): thirteen MODEs over
+the chord or the keys held across 1-4 OCTAVES, RATE's note values with the dotted and triplet ones, sixteen steps
+(LENGTH of them) each PLAY, TIE or REST with its LEVEL, OCTAVE, RATCHET (1-4 hits), CHANCE and SLIDE, GROOVE's GATE
+(5-200 %) and SWING (ARP's and PATTERN's), LATCH; its pages under ARP held (PERFORM moved there from SCL). The
+transport has a place now, kept by the audio side (`chs.tq`, quarter notes): PLAY or MIDI's start runs it, ARP and
+PATTERN step on its beat, the PLAY LED and GLOBAL's metronome read it. GLOBAL's CLOCK IN MIDI: the realtime bytes
+(`usb.c` and `midi_uart.c` queue them with their time) set the tempo (`sy_app.c`, the last 48 clocks' times) and each
+clock moves the transport's place on (SY_EV_CLK; between clocks no further than the next), MIDI's start, continue and
+stop run it (SY_EV_RUN). In `sy_chord.c` the stepped styles keep their place in steps (`chs.ph`: free, from the key;
+on the beat, the transport's), fire each step as its time (SWING's) comes, and hold their notes' ends themselves
+(`chs.an_*`, sixteen); a step's settings are read as they stand, so editing them does not restart the arpeggio. PERFORM
+on or off, or its style, now plays what is held the new way (`sy_app.c` hands the keys held as plain notes over to the
+chords' side: SY_EV_NOTE off, SY_EV_KEY on, by whichever reads the keys). **Verified in emulator** (110 checks); V0.75
+**needs a hardware test** (the timing by ear, MIDI clock from a DAW over minutes, the LEDs).
+
 **V0.7, the chords** (2026-10-18; the V0.6 questionnaire's part D): SCL's pages CHORD, PERFORM, BASS and MIDI
 (CONTROLS.md "Chords"). `sy_chord.c` runs in the audio interrupt, a block at a time before the engine: the keys (from
 the main loop or TIMER5) and MIDI send key events into the rings (`sy_app.c`: SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT) when
@@ -626,7 +641,8 @@ footer counts down ("HOLD: DELETE POINT 3 IN 4"); letting go, a knob, another bu
 TEMPO (BPM, TS-BEAT, TS-NOTE; its graph the tempo, the time signature, a bar's beats, a beat's and a bar's length;
 §10). SYNC is FREE or FIXED for the LFOs and the delay: in FIXED, KNOB 3 (RATE, TIME) shows and steps the note value,
 one a detent (in the MOD layer it stays RATE or TIME, whose modulation steps the note). SAVE + OCT− / OCT+: undo and
-redo (§16). ARP and a step sequencer wait for v1; until then SEQ shows the matrix.
+redo (§16). ARP and a step sequencer wait for v1; until then SEQ shows the matrix. (V0.7: ARP switches PERFORM, the
+chords' styles; V0.75: the ARP, a step arpeggiator, under ARP held. The sequencer still waits.)
 
 **After the mockups' approval** (the user's changes to them, and the EQ; verified in emulator): the filter's and the
 effects' pages draw what they do, from the values as the DSP reads them (`sy_ui_fx.c`): the filter's response (each
@@ -723,8 +739,8 @@ changed, in strips, so the 12 MHz display keeps up.
 | GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built) | **PERFORM**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume (built) |
 | SCL | KEYS: scale, root, fit, the keys' velocity; the scale on the LEDs (built) | + a key: the root (built) |
 | SAVE | once: the sound saved as a new preset at once (its next version, "NAME v2"); twice: the preset browser, where SAVE opens NAME IT (built) | 5 s: over its own slot, a countdown first (built); SAVE + OCT− undo, SAVE + OCT+ redo (built) |
-| ARP | (v1: the arpeggiator; built: a word saying so) | — |
-| PLAY | starts and stops the internal transport (built: the FREE LFOs start on the beat; MIDI clock at integration; the arp in v1) | — |
+| ARP | PERFORM on, off (built, V0.7: the chords' styles; V0.75: the step arpeggiator among them) | its pages: PERFORM, STEPS, RATCHET, GROOVE (built, V0.75) |
+| PLAY | starts and stops the transport (built: the FREE LFOs start on the beat; V0.75: ARP and PATTERN step on its beat; MIDI's clock, start and stop with CLOCK IN MIDI) | — |
 | OCT− / OCT+ | octave; with a family button or REC held, the section's pages (built); on NAME IT letters / symbols and delete; while MIDI LEARN listens, its CC away / done (built) | both 5 s: UBOOT (built: the hardware test build) |
 
 PRESETS turns through presets from every page (built). SELECT steps the family's pages (built).

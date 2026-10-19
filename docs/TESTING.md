@@ -514,6 +514,26 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   three at 112 ms (30 ms apart); ARP up at 1/16 (125 ms): 60, 64, 67, 60, 64; PATTERN 1: a stab each quarter; HARP:
   five keys from C#4 to G5, one note each, rising, each of C major; MIDI IN as roots: D4 in, "D", its off ends it; the
   settings through a power cycle. The shots script adds the chord pages (`Chord*`, `Perf*`, `Bass`, `ChordMidi`).
+- **V0.75, the ARP** (`strata_emu_test.mjs`, ten checks; `web_test_step`, `web_test_arp`, the USB MIDI sent with the
+  time of each): MODE over C E G: UP 60 64 67 60 .., DOWN 67 64 60, UP-DOWN 60 64 67 64, DOWN-UP 67 64 60 64, UP & DOWN
+  60 64 67 67 64 60, OUTSIDE IN 60 67 64, INSIDE OUT 64 67 60, PINKY 60 67 64 67, THUMB 60 64 60 67, two octaves up 60
+  64 67 72 76 79, AS PLAYED (G C E pressed) 67 60 64, CHORD over two octaves 60 64 67 then 72 76 79; the steps (LENGTH
+  4: PLAY, TIE, REST, three hits an octave up at 50 %): 60 at 0, 76 three times at 3, 3.33 and 3.67 steps at velocity
+  50, 67 at 4, 72 at 7, 64 at 8, C4 held through the TIE until 1.5 steps; GATE 25 % and SWING 75 %: the steps at 0,
+  1.5, 2, 3.5, 4, each a quarter of a step long, CHANCE 0 % on step 6 leaving it out and its note's place gone; SLIDE:
+  C4 ends two blocks after E4 begins; LATCH: let go it plays on, D4 pressed and let go replaces it, LATCH off: silence;
+  PLAY on: the steps on its beat to within a block, a key's first note at the next step; CLOCK IN MIDI: 30 clocks, a
+  start, clocks every 1,152 samples (95.7 quarter notes a minute): the tempo 95.7, the arpeggio's notes on every sixth
+  clock from the start, a stop ends the transport and PLAY's green LED; the ARP's settings and a step's through a power
+  cycle; ARP held opens its pages without switching, a tap switches, the STEPS, RATCHET and GROOVE knobs; a chord held
+  then ARP: arpeggiated at once (60 64 67 60 64 67), ARP again: the chord held, let go: silence. The shots add `Arp*`
+  and `TempoClock`; the drawing's bench the ARP's pages while it plays (UI.md, BUDGET.md §10). Found on the way and
+  fixed: a block comment left open on a line's end swallowed the next line's `chs.k = 0` (every arpeggio after the
+  first began mid-pattern; the changed files scanned for the pattern since: no other); the first step played the
+  chord's first key alone (MODE OFF waits 15 ms for the rest); the value flags fell on the rows of figures (the ARP's
+  pages show figures and no flag); keys held when PERFORM switched were forgotten (now handed over and played on).
+  **Needs a hardware test**: the timing by ear (RATCHET at 1/32, SWING, SLIDE with GLIDE), MIDI clock from a DAW over
+  minutes (USB and TRS), the ARP LED's beat.
 - **The bloom over time** (`strata_bloom_study.mjs`): 17 frames of it (a note's swirl, a second note above, the
   release, a chord) on one sheet; read by eye.
 - **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on

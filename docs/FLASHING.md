@@ -1,7 +1,7 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.7 HARDWARE TEST`: the STRATA UI of V0.67 and
-SCL's chords: [CONTROLS.md](CONTROLS.md) "Chords") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.75 HARDWARE TEST`: the STRATA UI of V0.67,
+SCL's chords and the ARP: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -51,6 +51,13 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
+**New in V0.75** (the ARP; [CONTROLS.md](CONTROLS.md) "The ARP"): PERFORM's ARP style is a step arpeggiator: ARP held
+opens its pages (PERFORM, STEPS, RATCHET, GROOVE; PERFORM moved there from SCL); thirteen MODEs, 1-4 OCTAVES, dotted
+and triplet RATEs; sixteen steps, each PLAY, TIE or REST with its LEVEL, OCTAVE, RATCHET, CHANCE and SLIDE; GATE,
+SWING (PATTERN's too) and LATCH; ARP and PATTERN on PLAY's beat; GLOBAL's CLOCK IN MIDI (MIDI's clock the tempo, its
+start and stop PLAY). A chord held and then ARP arpeggiates it at once. All off by default, as V0.7's. Package
+`build/strata.fwsc`, 610,090 bytes, sha256 `525c6508537cfd6889788f38d3d4080af42e26580237ea59bdc4e11b27c537a3`.
+
 **New in V0.7** (the chords, after the Orchid's ideas; [CONTROLS.md](CONTROLS.md) "Chords"): SCL's pages CHORD
 (KEY: a key plays its in-key chord; FREE: F3–C4 eight latching chord buttons, C#4–G5 the roots; VOICING with AUTO voice
 leading), PERFORM on the ARP button (STRUM, STRUM 2 OCT, ARP, PATTERN, HARP, SLOP, from GLOBAL's tempo), BASS (the root
@@ -72,8 +79,8 @@ black with one vermilion accent, HOME's bloom in place of the scope, the long ho
 the panel's controls, the presets and settings, the package, its identity and the flash it writes are V0.66's. Its
 package: `build/strata.fwsc`, 610,090 bytes, sha256 `5638a66636d7d14e6e80270c62ade1467ba93c17abe685c8bcae3a028fdef2a8`.
 
-Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), MIDI clock, start and
-stop, MIDI out, ARP, the chords on SCL (V0.7), the second core.
+Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), the rest of MIDI out (V0.7
+sends the chords, V0.75 takes MIDI's clock), the sequencer, the second core.
 
 ## 2. Before anything: a full backup
 
@@ -341,6 +348,15 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.75**: built and checked by the build: the image 368,620 bytes, RAM 48,340 of 73,728 bytes (+684: the
+  arpeggiator's steps and state, MIDI's clock times), the pool and the spare SRAM as V0.7's, the interrupt stack ~2.5 KB,
+  the main stack ~4.7 KB, register access in `hal/` only. **Verified on host**: the engine's 94 checks (and as
+  WebAssembly). **Verified in the emulator**: 110 checks (the ARP's ten among them), 109 screens rendered and checked,
+  the emulator's page in a browser; the flasher's 26 and the test page's 21. **Needs a hardware test**: the ARP by ear
+  (its timing, RATCHET, SWING, SLIDE with GLIDE), PLAY's beat, MIDI clock from a DAW (over USB and the TRS jack: the
+  tempo, start and stop, staying on the beat over minutes), the ARP LED's beat (the test page's "Listen and look": the
+  V0.75 rows).
 
 - **V0.7**: built and checked by the build: the image 358,264 bytes, RAM 47,656 of 73,728 bytes (+528: the chords'
   state and Felucca's USB MIDI out queue, now used), the pool and the spare SRAM as V0.67's, the interrupt stack ~2.5 KB,
