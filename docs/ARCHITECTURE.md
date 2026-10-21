@@ -67,8 +67,14 @@ stop run it (SY_EV_RUN). In `sy_chord.c` the stepped styles keep their place in 
 on the beat, the transport's), fire each step as its time (SWING's) comes, and hold their notes' ends themselves
 (`chs.an_*`, sixteen); a step's settings are read as they stand, so editing them does not restart the arpeggio. PERFORM
 on or off, or its style, now plays what is held the new way (`sy_app.c` hands the keys held as plain notes over to the
-chords' side: SY_EV_NOTE off, SY_EV_KEY on, by whichever reads the keys). **Verified in emulator** (110 checks); V0.75
-**needs a hardware test** (the timing by ear, MIDI clock from a DAW over minutes, the LEDs).
+chords' side: SY_EV_NOTE off, SY_EV_KEY on, by whichever reads the keys). The revision after it (the user's six
+changes): the menu buttons one grammar (a tap the menu, again its next page, twice its next section, + OCT+ / OCT− on
+and off, held 5 s a reset; `sy_ui.c` ui_combo, ui_reset), the ARP button its menu's (ARP + OCT+ / OCT− on, off); the
+chords by the knobs only (FREE: a TYPE of 23 for every key; KEY: a SHAPE of 8; SPREAD) and STRUM, the chords' and
+PATTERN's starts put off by their gap, HUMAN's and TAPER's (`ch_strum`, `chs.dq`); the ARP's styles ARP, PATTERN,
+HARP; a knob's value lit where the page shows it, else in the bottom row; HOME's bloom a quarter of its seeds.
+**Verified in emulator** (117 checks; every knob on every page turned and checked); V0.75 **needs a hardware test**
+(the timing by ear, MIDI clock from a DAW over minutes, the buttons, the LEDs).
 
 **V0.7, the chords** (2026-10-18; the V0.6 questionnaire's part D): SCL's pages CHORD, PERFORM, BASS and MIDI
 (CONTROLS.md "Chords"). `sy_chord.c` runs in the audio interrupt, a block at a time before the engine: the keys (from

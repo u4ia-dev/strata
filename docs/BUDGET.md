@@ -137,16 +137,16 @@ shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, *
 
 ## 10. V0.75 (the ARP)
 
-From the build (`tools/build.py --strata`): the image 368,620 B (V0.7 358,264: +10,356: the step arpeggiator in
-`sy_chord.c`, its three pages in `sy_ui_chord.c`, MIDI's clock in `sy_app.c`); `.data` + `.bss` 48,340 B (+684: the
-chords' settings and state 140 + 344 B, +242 for the steps, GROOVE and the transport; MIDI's clock, its last 49 times
-196 B; the rest counters and alignment); the pool and the spare SRAM as V0.7's; the main stack ~4,684 B (+60), the
-interrupt stack ~2,524 B (+48) of 4,096 allowed. The fonts are V0.7's (50.7 KB): the new pages use no new letters.
-Left: **212,944 B** of the app slot, **25,388 B** of `.data` + `.bss` (21.4 KB over the build's margin), the pool's
-38,556 B and the spare SRAM's 23,296 B.
+From the build (`tools/build.py --strata`): the image 371,420 B (V0.7 358,264: +13,156: the step arpeggiator in
+`sy_chord.c`, the chords' TYPEs and SHAPEs, SPREAD and STRUM, the pages in `sy_ui_chord.c`, the buttons' grammar,
+MIDI's clock in `sy_app.c`); `.data` + `.bss` 48,544 B (+888: the chords' settings and state, the steps, GROOVE, the
+transport, STRUM's starts put off (16 x 12 B); MIDI's clock, its last 49 times 196 B); the pool and the spare SRAM as
+V0.7's; the main stack ~4,872 B (+248), the interrupt stack ~2,520 B (+44) of 4,096 allowed. The fonts are V0.7's (50.7
+KB). Left: **210,144 B** of the app slot, **25,184 B** of `.data` + `.bss` (21.2 KB over the build's margin), the
+pool's 38,556 B and the spare SRAM's 23,296 B.
 
-The drawing's time on the host (`web/emu/strata_bench.c`, three runs): HOME in silence 33–41 µs over 2 s and with a
-chord 1,365–1,466 µs (V0.67's 35 and 1,462: the same); ARP's PERFORM page while the arpeggio plays 661–698 µs over 2 s
+The drawing's time on the host (`web/emu/strata_bench.c`, three runs): HOME in silence 35–37 µs over 2 s and with a
+chord 769–823 µs (V0.67's 35 and 1,462: the bloom's 106 seeds now, a quarter of its 424; its state as before, 8 B); ARP's PERFORM page while the arpeggio plays 661–698 µs over 2 s
 and STEPS 862–938 µs (ENV 1 with a chord held: 670–750), each sending only the rows where the step playing is marked
 (22,080 pixels in 2 s). The audio side's cost is a step's few hundred instructions at most, a block's few tens between
 steps: under 0.1 % of a core.

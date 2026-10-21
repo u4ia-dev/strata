@@ -51,12 +51,16 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
-**New in V0.75** (the ARP; [CONTROLS.md](CONTROLS.md) "The ARP"): PERFORM's ARP style is a step arpeggiator: ARP held
-opens its pages (PERFORM, STEPS, RATCHET, GROOVE; PERFORM moved there from SCL); thirteen MODEs, 1-4 OCTAVES, dotted
-and triplet RATEs; sixteen steps, each PLAY, TIE or REST with its LEVEL, OCTAVE, RATCHET, CHANCE and SLIDE; GATE,
-SWING (PATTERN's too) and LATCH; ARP and PATTERN on PLAY's beat; GLOBAL's CLOCK IN MIDI (MIDI's clock the tempo, its
-start and stop PLAY). A chord held and then ARP arpeggiates it at once. All off by default, as V0.7's. Package
-`build/strata.fwsc`, 610,090 bytes, sha256 `525c6508537cfd6889788f38d3d4080af42e26580237ea59bdc4e11b27c537a3`.
+**New in V0.75** (the ARP and one grammar for the menus; [CONTROLS.md](CONTROLS.md) "Buttons", "Chords", "The ARP"):
+the ARP button opens the ARP's menu (STYLE, GROOVE; STEPS, RATCHET), ARP + OCT+ turns it on and ARP + OCT− off from
+any page; ARP is a step arpeggiator (thirteen MODEs, 1-4 OCTAVES, dotted and triplet RATEs; sixteen steps, each PLAY,
+TIE or REST with its LEVEL, OCTAVE, RATCHET, CHANCE and SLIDE; GATE, SWING and LATCH; on PLAY's beat; GLOBAL's CLOCK
+IN MIDI). Every menu button: a tap its menu, again its next page, twice its next section, + OCT+ / OCT− on / off,
+held 5 s what it shows reset; SELECT the section, ALGORITHM the page everywhere. The chords by knobs only (FREE: 23
+TYPEs, KEY: 8 SHAPEs, SPREAD) with STRUM (gap, DIRECTION, HUMAN, TAPER); the ARP's styles ARP, PATTERN, HARP. A knob's
+value: where the page shows it, vermilion there; else in the bottom row (no flag over the page). HOME's bloom plainer
+(106 seeds). All off by default, as V0.7's. Package `build/strata.fwsc`, 610,090 bytes, sha256
+`60b77f007564799466398cfbcda8b0cce1ae10512b262afebac06291ce990103`.
 
 **New in V0.7** (the chords, after the Orchid's ideas; [CONTROLS.md](CONTROLS.md) "Chords"): SCL's pages CHORD
 (KEY: a key plays its in-key chord; FREE: F3–C4 eight latching chord buttons, C#4–G5 the roots; VOICING with AUTO voice
@@ -349,14 +353,15 @@ marked.
 
 ## 8. What was checked, and where
 
-- **V0.75**: built and checked by the build: the image 368,620 bytes, RAM 48,340 of 73,728 bytes (+684: the
-  arpeggiator's steps and state, MIDI's clock times), the pool and the spare SRAM as V0.7's, the interrupt stack ~2.5 KB,
-  the main stack ~4.7 KB, register access in `hal/` only. **Verified on host**: the engine's 94 checks (and as
-  WebAssembly). **Verified in the emulator**: 110 checks (the ARP's ten among them), 109 screens rendered and checked,
-  the emulator's page in a browser; the flasher's 26 and the test page's 21. **Needs a hardware test**: the ARP by ear
-  (its timing, RATCHET, SWING, SLIDE with GLIDE), PLAY's beat, MIDI clock from a DAW (over USB and the TRS jack: the
-  tempo, start and stop, staying on the beat over minutes), the ARP LED's beat (the test page's "Listen and look": the
-  V0.75 rows).
+- **V0.75**: built and checked by the build: the image 371,420 bytes, RAM 48,544 of 73,728 bytes (+888 on V0.7: the
+  arpeggiator's steps and state, STRUM's starts, MIDI's clock times), the pool and the spare SRAM as V0.7's, the
+  interrupt stack ~2.5 KB, the main stack ~4.9 KB, register access in `hal/` only. **Verified on host**: the engine's 94
+  checks (and as WebAssembly). **Verified in the emulator**: 117 checks (the ARP's, the chords' and the buttons'
+  grammar among them), 109 screens rendered and checked, every knob on every page turned and checked (546 turns), the
+  emulator's page in a browser; the flasher's 26 and the test page's 21. **Needs a hardware test**: the ARP and STRUM
+  by ear (the timing, RATCHET, SWING, SLIDE with GLIDE, HUMAN), PLAY's beat, MIDI clock from a DAW (over USB and the TRS
+  jack: the tempo, start and stop, staying on the beat over minutes), the buttons' grammar on the panel (the double
+  taps, the 5 s holds), the ARP LED's beat (the test page's "Listen and look": the V0.75 rows).
 
 - **V0.7**: built and checked by the build: the image 358,264 bytes, RAM 47,656 of 73,728 bytes (+528: the chords'
   state and Felucca's USB MIDI out queue, now used), the pool and the spare SRAM as V0.67's, the interrupt stack ~2.5 KB,

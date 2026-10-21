@@ -534,6 +534,20 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   pages show figures and no flag); keys held when PERFORM switched were forgotten (now handed over and played on).
   **Needs a hardware test**: the timing by ear (RATCHET at 1/32, SWING, SLIDE with GLIDE), MIDI clock from a DAW over
   minutes (USB and TRS), the ARP LED's beat.
+- **V0.75, the revision** (the user's six changes): the chords' checks rewritten for the knobs (FREE's TYPEs: MIN on E4
+  64 67 71 "Em", MIN7, MAJ with VOICING +1 on C4 64 67 72 "C/E", MIN11 on D4 "Dm11", 13 on G3 "G13"; SPREAD 2 OCT 60 64 67
+  72 76 79, OPEN 52 60 67 "C/E", WIDE 48 64 79; KEY's SHAPE 7TH on B4 "Bm7b5"; STRUM 30 ms: one note at 12 ms, three at
+  112 ms, 30 ms apart; DOWN with TAPER 100 %: 67/100 64/75 60/50; HARP on every key; the settings through a power
+  cycle). The buttons' grammar: a tap opens ENV, again its next page, on into ENV 2, twice the next section; HOME + OCT+
+  the next sound, OCT− back, twice the presets; EDIT held 5 s resets OSC A (WT POS 400 -> 0) and SAVE + OCT− undoes it;
+  SCL + OCT+ / OCT− the chords; GLO + OCT+ PERFORM latched, a GLO tap lets it go; FX + OCT− / OCT+ on CHORUS's page
+  bypasses it and puts it back; SELECT on SETTINGS steps its pages; ENV + OCT+ latches ENV 2's MOD layer; LFO + OCT+
+  adds a point (from EDIT too: its POINTS shown), LFO + OCT− deletes the picked one, LFO held 5 s resets LFO 1 (a knob
+  turned stops the countdown; undone and redone); ARP: a tap its menu, again GROOVE, twice STEPS, + OCT+ / OCT− on and
+  off from any page. `strata_knob_sweep.mjs` (new): every knob on every page turned once (546 turns) and the screen
+  checked as it shows the turn: 75 findings before (the old flags over titles, figures, handles), none after (a value
+  the page shows is lit in place; else it is in the bottom row). Found on the way: the top line's chord name under its
+  section dots (moved left of them); `memmove` missing from the device's build (a loop).
 - **The bloom over time** (`strata_bloom_study.mjs`): 17 frames of it (a note's swirl, a second note above, the
   release, a chord) on one sheet; read by eye.
 - **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on
