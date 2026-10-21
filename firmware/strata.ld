@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
- * Copyright (C) 2026 brandonmbarone (Strata's changes) */
+ * Copyright (C) 2026 u4ia (Strata's changes) */
 /* STRATA's memory map (tools/build.py --strata links with it): Felucca's app.ld, the same regions, sections and
  * symbols, with three changes (V0.65, the memory audit; V0.66):
  *  - the main stack 12 KiB (Felucca's 24 KiB): Strata's deepest main-loop path is ~6.6 KiB from the listing (V0.6

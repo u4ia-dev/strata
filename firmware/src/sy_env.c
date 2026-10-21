@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA envelopes (docs/ARCHITECTURE.md §10): ATTACK HOLD DECAY SUSTAIN RELEASE, 1 ms .. 30 s, and a curve for
  * each of attack, decay and release. Evaluated once a block (the voice ramps the amp linearly across it). A
  * stage's linear position t (0..1) is shaped by f(t) = t / (t + (1 - t) K), K = 2^(4 c) for its curve c (-1..1):

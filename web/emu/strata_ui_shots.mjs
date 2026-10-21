@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 brandonmbarone
+// Copyright (C) 2026 u4ia
 // The STRATA UI (the strata-ui build) on the simulated FM-1, screen by screen, as PNG files named after the design's
 // boards (its gallery: render/out/<Id>-black-1x.png), to set beside them: each screen reached as the panel reaches it
 // (a page by its section, a knob turned for a turning shot, a button held for a layer or a countdown, SAVE tapped),

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA engine (docs/ARCHITECTURE.md §3, §13): notes to voices, the block, the CPU guard, the tables.
  * Audio side (the ALNK0 interrupt): sy_note_on / sy_note_off / sy_cc / sy_bend / .. at a block's start (the panel's
  * keys and MIDI alike), then sy_block renders 32 frames: the parameters' smoothing, the matrix's global part, the

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 """The workbench as one HTML file: the page (web/strata/index.html, its content: a title, styles, the markup and the
 script) with the WebAssembly module (base64) and the AudioWorklet's source (a string the page turns into a module) in
 its two placeholders. Written twice: OUT.html a document of its own (to open locally), OUT_content.html the content

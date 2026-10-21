@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 """Count the instructions in each loop of each function of a JieLi clang assembly listing (-S, pi32v2).
 
 The compiler's own listing is used rather than objdump's: objdump does not decode the FPU (-mfprev1)

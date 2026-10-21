@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA wavetable oscillators (docs/ARCHITECTURE.md §7): the kernels, the warps, unison.
  * A unison voice reads two adjacent frames of its table at one mip level, interpolates each linearly by the
  * phase, crossfades them by the position's fraction, and adds itself into the oscillator's left and right

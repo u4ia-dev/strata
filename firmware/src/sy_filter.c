@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA filter (docs/ARCHITECTURE.md §9), one a voice, stereo, float.
  * LP / HP / BP 12 and 24 dB, NOTCH, PEAK: the trapezoidal state-variable filter (zero-delay feedback, after
  * Zavalishin's and Simper's derivations): tuned to Nyquist, stable under any modulation; 24 dB is two in series,

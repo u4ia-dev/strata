@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA's SAVE and preset browser (the STRATA UI design's SAVE AND PRESETS boards; ARCHITECTURE.md
  * §16), on sy_ui.c's pages, drawn with sy_gfx.c's kit:
  *   - SAVE tapped once (no second tap within UI_DTAP_MS): the sound saved at once as a new preset, its next version

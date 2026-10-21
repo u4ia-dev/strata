@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone
+ * Copyright (C) 2026 u4ia
  * The simulated FM-1 below follows Felucca's web/emu/felucca_web.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic),
  * Hügelton Instruments, GPL-3.0), itself after X0X's browser build (charlesvestal/fm1-x0x, GPL-3.0). */
 /* STRATA in the browser on a simulated FM-1: the app (firmware/src/sy_app.c, the sy_* engine, gfx.c, panel.c)

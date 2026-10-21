@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA voice (docs/ARCHITECTURE.md §4, §8): OSC A, OSC B, SUB and NOISE, each to the FILTER or DIRECT, then the
  * amp (ENV 1 x velocity) into the mix. Once a block: the matrix's offsets (from the last block's sources), the
  * envelopes, the LFOs, the pitch (glide, bend), each source's settings. Then the audio: the oscillators into an

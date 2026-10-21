@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # STRATA's host tests built as WebAssembly (Emscripten) and run under Node: the DSP the browser runs (the workbench,
 # the emulator) checked as the host's is, golden renders included. All passing says the WebAssembly engine plays the
 # test sounds bit for bit as the host build ("verified in emulator" for the DSP).

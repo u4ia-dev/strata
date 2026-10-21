@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* The STRATA UI's filter, effects and chain pages (the design's EDIT FILTER and FX boards): each draws what it does from
  * the values as the DSP reads them (the responses: each filter type's analog prototype at the SVF's warped frequency,
  * the EQ's bands as fx_eq plays them, the comb's and the phaser's at their sweep's middle), as one drawing whose parts

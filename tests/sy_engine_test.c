@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* The whole engine (src/sy_engine.c and everything under it) through sy_block, as the audio ISR will run it:
  *   build/host/sy_engine_test tests/sy_golden.txt [DEMODIR]       GOLDEN_UPDATE=1 rewrites the golden file
  * 1. parameters: every row's range, default and name; the lists' names match their ranges; MIDI CCs unique;

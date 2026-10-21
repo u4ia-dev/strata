@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone
+ * Copyright (C) 2026 u4ia
  * After Felucca's tests/storage_test.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments). */
 /* firmware/src/sy_store.c, Strata's flash, against a simulated NOR (erase: 0xFF; a program only clears bits; a page
  * write must not wrap) whose hooks refuse anything outside the firmware's allow-list (hal/fm1_flash_map.h FL_STORE_OK),

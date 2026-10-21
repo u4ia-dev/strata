@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA parameters: one table defines every patch parameter (docs/ARCHITECTURE.md §12). A row: the id
  * (SP_*, its place in the table: append-only, presets store values in this order with a count), the name
  * (8 characters), the section, the range and default as 16-bit integers, the unit (how the UI shows it and the

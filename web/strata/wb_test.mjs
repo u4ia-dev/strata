@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 brandonmbarone
+// Copyright (C) 2026 u4ia
 // The workbench's module (build/strata/strata.wasm, web/strata/strata_web.c) through the exports the page and the
 // worklet use: no imports (the worklet instantiates it with none); every test sound plays the engine test's phrase
 // to the hash recorded in tests/sy_golden.txt (bit for bit the host's DSP); a patch's code round trip; a patch load

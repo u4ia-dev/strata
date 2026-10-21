@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* The UI's drawing cost on the host: web/emu/strata_web.c built natively (cc, as the host tests), each frame's work
  * (sy_ui_frame: what it draws and sends) timed, in five sessions of the panel: HOME in silence, HOME with a chord
  * (the scope, the bloom), the filter's TONE page with KNOB 2 turning (a detent every 40 ms), ENV 1 with a chord held

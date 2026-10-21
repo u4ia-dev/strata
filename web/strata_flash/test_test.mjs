@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 brandonmbarone
+// Copyright (C) 2026 u4ia
 // STRATA's hardware test page (build/flasher/test.html, make_flasher.py) in a real browser, before any FM-1 runs it:
 // served on 127.0.0.1, headless Chrome with a throwaway profile over the DevTools protocol (a pipe, as flash_test.mjs),
 // the page opened with ?fast (its waits a tenth). Before the page runs, a simulated FM-1 takes Web MIDI's and Web

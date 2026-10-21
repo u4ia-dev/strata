@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 brandonmbarone
+// Copyright (C) 2026 u4ia
 // The simulated FM-1 below follows Felucca's web/test_web.mjs FakeFM1 (Copyright (C) 2026 Leo Kuroshita
 // (@kurogedelic), Hügelton Instruments, GPL-3.0).
 // STRATA's flasher in a real browser, before any FM-1 sees it: build/flasher (make_flasher.py) served on 127.0.0.1,

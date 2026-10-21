@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # After Felucca's web/make_site.py (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0).
 """Make STRATA's flasher: a folder to serve on this computer (Web MIDI's SysEx needs a secure context: localhost).
 

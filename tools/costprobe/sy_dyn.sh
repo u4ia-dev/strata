@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # The target cost model: the JieLi clang listing with each instruction's source line (sy_probe.c, -O2 -g, and
 # -fno-unroll-loops: an unrolled loop's copies would each be weighed by all of its passes), the
 # engine on the host with coverage playing each scenario of tools/costprobe/sy_profile.c, and sy_dyncount.py

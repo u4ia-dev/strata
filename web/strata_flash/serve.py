@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 """Serve the Strata flasher to this computer only, at http://127.0.0.1:8000/, and make the flash backup it asks for
 before any write. Web MIDI's SysEx needs a secure context, and a loopback address is one. Open that address in Chrome
 or Edge; Ctrl+C stops the server.

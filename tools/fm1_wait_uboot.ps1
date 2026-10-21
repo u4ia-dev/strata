@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # Wait for the FM-1's backup mode (the chip's USB boot: a USB disk "WL82 UBOOT1.00"), then start MvaveFM1Unbricker
 # at once. Entered from a running firmware (OCT- + OCT+ held 5 s, the SysEx key, the console's "uboot yes"), backup
 # mode lasts only ~13 s unless a tool connects; started by hand, the unbricker's one scan usually misses it.
 # Nothing here opens or writes the disk; the unbricker does what its arguments say (default: a read-only backup).
 #
 #   In an administrator PowerShell:
-#   powershell -ExecutionPolicy Bypass -File %USERPROFILE%\fm1-dev\strata\tools\fm1_wait_uboot.ps1
+#   powershell -ExecutionPolicy Bypass -File $env:USERPROFILE\fm1-dev\strata\tools\fm1_wait_uboot.ps1
 #   ... then hold OCT- + OCT+ for 5 s (Cancel Windows' offer to format the disk).
 #   Other unbricker commands: add them at the end, e.g.  ... fm1_wait_uboot.ps1 info
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string]$Unbricker = "%USERPROFILE%\fm1-dev\ref\MvaveFM1Unbricker",
+    [string]$Unbricker = "$env:USERPROFILE\fm1-dev\ref\MvaveFM1Unbricker",
     [double]$Minutes = 3,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$ToolArgs
 )
-if (-not $ToolArgs) { $ToolArgs = @("backup", "%USERPROFILE%\fm1-backup") }
+if (-not $ToolArgs) { $ToolArgs = @("backup", "$env:USERPROFILE\fm1-backup") }
 if (-not (Test-Path (Join-Path $Unbricker "fm1_unbrick.py"))) {
     Write-Host "No fm1_unbrick.py in $Unbricker"
     exit 1

@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # Windows' own USB trace (the USBXHCI, UCX and USBHUB3 providers, keyword Default: transfer and enumeration
 # events with their status codes, no data payloads), to see how the FM-1's transfers end: completed, refused,
 # broken on the wire, or never answered. Nothing is sent to the FM-1. Needs an administrator PowerShell.
 #
-#   powershell -ExecutionPolicy Bypass -File %USERPROFILE%\fm1-dev\strata\tools\fm1_usb_trace.ps1 start
+#   powershell -ExecutionPolicy Bypass -File $env:USERPROFILE\fm1-dev\strata\tools\fm1_usb_trace.ps1 start
 #   ... reproduce (the USB check page's steps 2 and 4, then OCT- + OCT+ held 5 s) ...
-#   powershell -ExecutionPolicy Bypass -File %USERPROFILE%\fm1-dev\strata\tools\fm1_usb_trace.ps1 stop
+#   powershell -ExecutionPolicy Bypass -File $env:USERPROFILE\fm1-dev\strata\tools\fm1_usb_trace.ps1 stop
 #
-# The trace: %USERPROFILE%\fm1-usbtrace\fm1usb.etl
+# The trace: $env:USERPROFILE\fm1-usbtrace\fm1usb.etl
 param(
     [ValidateSet("start", "stop")][string]$Action = "start",
-    [string]$Out = "%USERPROFILE%\fm1-usbtrace"
+    [string]$Out = "$env:USERPROFILE\fm1-usbtrace"
 )
 $name = "fm1usb"
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(

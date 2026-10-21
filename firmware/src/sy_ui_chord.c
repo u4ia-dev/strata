@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* The STRATA UI's chord pages (V0.7, SCL's family after SCALE; the chords themselves: sy_chord.c):
  *   - CHORD: the chord playing named large ("Cm7/G"), MODE's, TYPE's and the extensions' chips (FREE: what the chord
  *     buttons latched), VOICING's place, the chord's notes and the bass on three octaves of keys;

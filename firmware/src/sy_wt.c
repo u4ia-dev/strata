@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA wavetables: the frame layout, the pool, the level an increment plays, and the swap of a table under
  * the oscillators (docs/ARCHITECTURE.md §6).
  * A frame is one single cycle as nine band-limited mip levels: level L keeps harmonics 1 .. 256 >> L in WT_N(L)

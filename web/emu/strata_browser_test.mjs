@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 brandonmbarone
+// Copyright (C) 2026 u4ia
 // STRATA's emulator page in a real browser: headless Chrome with a throwaway profile and its audio muted, driven over
 // the DevTools protocol on a pipe (no packages). A local server serves build/emu_strata under content security
 // policies like those a publishing host may set:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 """The target's instruction count for a run of the engine: the JieLi clang listing (-S -g: each instruction's
 source line) weighed by how often the host ran that line (gcov, tools/costprobe/sy_profile.c). An estimate of the
 work, not a measurement of the device's time (the BENCH page will be that):

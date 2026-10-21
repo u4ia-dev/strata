@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 brandonmbarone
+# Copyright (C) 2026 u4ia
 # STRATA host tests: the synth's DSP (firmware/src/sy_*) compiled with the host compiler, no HAL, no hardware.
 # Run from the repo root (Linux / WSL2; python3 with numpy):
 #   tests/sy_tests.sh

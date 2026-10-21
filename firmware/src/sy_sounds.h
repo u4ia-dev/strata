@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA's eight starter sounds: parameter, value pairs over the defaults. The engine test plays a phrase on each for
  * its golden renders (tests/sy_engine_test.c); the app (sy_app.c, until Phase 5's factory presets) and the browser
  * workbench (web/strata) offer them. Needs sy_param.c, sy_osc.c, sy_filter.c, sy_mod.c, sy_fx.c. */

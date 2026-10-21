@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA's user interface on the FM-1, Phase 4 (docs/ARCHITECTURE.md §17; its look: the STRATA UI, docs/UI.md).
  *   - Pages: a section's parameters four to a page, KNOB 1-4 left to right as on the panel, and what the display
  *     draws. A family button shows its sections' pages: a tap, the next page (EDIT: of the section ALGORITHM

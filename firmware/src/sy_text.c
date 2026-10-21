@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 brandonmbarone */
+ * Copyright (C) 2026 u4ia */
 /* STRATA's values as text: a list parameter's names (sp_list), a section's name (SEC_NAMES, SEC_SHORT) and a value
  * as its unit shows it (sp_text), for the UI's knob cards and the browser workbench. At most SP_TEXT_N - 1
  * characters, Latin-1 (the degree sign is 0xB0, as the firmware's fonts have it). No printf: the firmware has none. */
