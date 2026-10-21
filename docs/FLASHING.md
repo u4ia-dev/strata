@@ -1,7 +1,7 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.75 HARDWARE TEST`: the STRATA UI of V0.67,
-SCL's chords and the ARP: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.8 HARDWARE TEST`: the STRATA UI of V0.67,
+SCL's chords, the ARP and the sequencer: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP", "The sequencer") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -16,7 +16,7 @@ FM-1. Section 8 lists what was checked where.
 | --- | --- |
 | Package | `build/strata.fwsc`, identity `FM-1_900` (Felucca's development identity, kept), 610,090 bytes |
 | Writes | the app area `0x4000`–`0x92FFF` only, by Felucca's update loader (unchanged); never the boot head `0x0000`–`0x3FFF` |
-| Strata itself writes | its presets `0x97000`–`0xCAFFF`, the sound playing `0xE5000`–`0xE6FFF`, its settings `0xFC000`–`0xFDFFF` (and, during an update, the loader's staging `0xE0000`–`0xE4FFF`): Felucca's own storage ranges, nothing else |
+| Strata itself writes | its presets `0x97000`–`0xCAFFF`, the sequencer's patterns `0xCB000`–`0xD2FFF` (V0.8), the sound playing `0xE5000`–`0xE6FFF`, its settings `0xFC000`–`0xFDFFF` (and, during an update, the loader's staging `0xE0000`–`0xE4FFF`): Felucca's own storage ranges, nothing else |
 | Shows itself on USB as | "Felucca" (Felucca's descriptors, unchanged: both installers find the FM-1 by that name) |
 
 ## 1. What this build is
@@ -51,6 +51,18 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
+**New in V0.8** (the sequencer; [CONTROLS.md](CONTROLS.md) "The sequencer"): the SEQ button's menu (SEQ: NOTES, FEEL,
+MOTION; PATTERN: PATTERN, PLAY+REC; CHAIN). Sixteen patterns of up to 64 steps, up to four notes a step, each step's
+VELOCITY, LENGTH, CHANCE and NUDGE; a pattern's LENGTH, RATE, SWING, DIRECTION and TRANSPOSE; two MOTION lanes a
+pattern (a parameter held at a step's value; the sound itself untouched); CHAIN of up to sixteen slots. PLAY plays the
+pattern shown, on GLOBAL's tempo or MIDI's clock. REC's tap arms recording: live while PLAY runs (the keys and MIDI
+in, a knob's turns into a lane), by step when stopped on SEQ's steps. SEQ + OCT+ / OCT− the next pattern, the one
+before; SEQ held, PATTERNS (a white key picks one, F#3 COPY, G#3 PASTE, A#3 CLEAR). REC twice no longer latches the
+MOD layer (REC + OCT+ does). The patterns are kept in the flash at `0xCB000`–`0xD2FFF` (four sector pairs of the user
+store's free part, allow-listed as the presets are), written once 3 s pass without sound with the transport stopped.
+Nothing plays until you write a pattern and press PLAY. Package `build/strata.fwsc`, 610,090 bytes, sha256
+`571c920be293e0667831d2fa9367f5512669896236cdb580c65a328ca22144fa`.
+
 **New in V0.75** (the ARP and one grammar for the menus; [CONTROLS.md](CONTROLS.md) "Buttons", "Chords", "The ARP"):
 the ARP button opens the ARP's menu (STYLE, GROOVE; STEPS, RATCHET), ARP + OCT+ turns it on and ARP + OCT− off from
 any page; ARP is a step arpeggiator (thirteen MODEs, 1-4 OCTAVES, dotted and triplet RATEs; sixteen steps, each PLAY,
@@ -84,7 +96,7 @@ the panel's controls, the presets and settings, the package, its identity and th
 package: `build/strata.fwsc`, 610,090 bytes, sha256 `5638a66636d7d14e6e80270c62ade1467ba93c17abe685c8bcae3a028fdef2a8`.
 
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), the rest of MIDI out (V0.7
-sends the chords, V0.75 takes MIDI's clock), the sequencer, the second core.
+sends the chords and V0.8 the sequencer's notes through them, V0.75 takes MIDI's clock), the second core.
 
 ## 2. Before anything: a full backup
 
@@ -247,7 +259,7 @@ New in V0.6:
     AUTOPAN, RING MOD, TAPE; two of a type (DRIVE and DRIVE 2). Note the CPU % with a full chain of eight (the header
     estimates it; HOME's header measures it).
 13. **The panel's changes.** SELECT the section, ALGORITHM the page, in every family; EDIT + OCT− turns the section
-    shown off, EDIT + OCT+ on; GLO's third section is the MATRIX; SEQ says "in a later version".
+    shown off, EDIT + OCT+ on; GLO's third section is the MATRIX (V0.8: SEQ opens the sequencer).
 14. **Deleting a preset.** In the browser, on a user preset: OCT− held 3 s (a countdown), then SAVE + OCT− at once:
     it comes back. A preset saved by V0.5: loads, its effects as the chain.
 15. **The fixes.** BENCH's KEYS row after flicking through pages while playing (under ~20 ms, against V0.5's 91 ms);
@@ -284,6 +296,21 @@ New in V0.66:
 25. **The event log.** After the test, the flasher's device report (or `bench` in a terminal) ends with the event
     log: paste it with the report. With the USB audio recorded (a DAW, or the test page's audio), `uac_missed` and
     `uac_underruns` entries say when its gaps were, next to what else happened then.
+
+New in V0.8 (the test page's "Listen and look" has them as rows; [CONTROLS.md](CONTROLS.md) "The sequencer"):
+
+26. **A pattern by step.** REC (its LED lit), SEQ (NOTES, "REC: THE KEYS FILL STEP 1"): play a few notes and a chord
+    (keys held together), each moves the step on; KNOB 1 skips a step. PLAY: it plays in time, on its steps; NOTE,
+    VELOCITY, LENGTH, then FEEL's CHANCE and NUDGE, PATTERN's SWING and RATE, by ear. PLAY again: no stuck notes.
+27. **Recording live.** REC armed, PLAY: play along on the keys, then from a MIDI keyboard (USB, then the TRS jack):
+    the notes land where you played them, no doubled notes; QUANTIZE ON; REPLACE clears what the playhead passes.
+    With SCL's chords on, then the ARP on, the pattern plays through them. On a DAW's clock (GLOBAL > CLOCK IN MIDI):
+    starts with it and stays on its beat over a few minutes.
+28. **Patterns and motion.** SEQ + OCT+ / OCT− while playing: the next pattern starts at the end of the one playing;
+    SEQ held: PATTERNS (a white key picks; F#3 COPY, G#3 PASTE, A#3 CLEAR); CHAIN with two or three slots. MOTION:
+    REC armed and playing, turn FILTER's CUTOFF for a bar; the next pass plays it back; stopped, the knob's own value.
+29. **Kept.** After writing patterns, stop, wait 5 s in silence (the patterns' write), switch off and on: they and the
+    chain come back. The device report's event log shows the writes (one sector pair each).
 
 ## 5. The report
 
@@ -352,6 +379,17 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.8**: built and checked by the build: the image 392,004 bytes, RAM 48,992 of 73,728 bytes (+448 on V0.75: the
+  sequencer's settings and state), the pool 356,720 of 380,928 bytes (+14,348: the sixteen patterns and their copy),
+  the interrupt stack ~2.5 KB, the main stack ~4.9 KB, register access in `hal/` only; the patterns' four flash objects
+  asserted inside the allow-listed store and below the update's staging. **Verified on host**: the engine's 94 checks
+  (and as WebAssembly). **Verified in the emulator**: 130 checks (the sequencer's thirteen: playback, its feel, live
+  and step recording, REPLACE, the patterns, CHAIN, MOTION, PATTERNS, the grammar, a power cycle), 120 screens rendered
+  and checked, every knob on every page turned and checked (570 turns), the emulator's page in a browser; the
+  flasher's 26 and the test page's 21. **Needs a hardware test**: the steps' timing by ear and on a DAW's clock over
+  minutes, recording from the keys and from MIDI (USB and TRS), the patterns' writes after 3 s of quiet and their
+  return after a power cycle, the REC LED (the test page's "Listen and look": the V0.8 rows).
 
 - **V0.75**: built and checked by the build: the image 371,420 bytes, RAM 48,544 of 73,728 bytes (+888 on V0.7: the
   arpeggiator's steps and state, STRUM's starts, MIDI's clock times), the pool and the spare SRAM as V0.7's, the

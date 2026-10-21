@@ -55,6 +55,24 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
+**V0.8, the sequencer** (2026-10-21; CONTROLS.md "The sequencer"): the SEQ button's menu (SEQ: NOTES, FEEL, MOTION;
+PATTERN: PATTERN, PLAY+REC; CHAIN) and the PATTERNS layer (SEQ held). `sy_seq.c` runs in the audio interrupt, a block
+at a time before the chords' (`sy_seq_block`, then `sy_chord_block`): sixteen patterns of up to 64 steps (each up to
+four notes with their velocities, LENGTH in quarter steps, CHANCE, NUDGE; two MOTION lanes a pattern), played on the
+transport's place (`chs.tq`) at the pattern's RATE with its SWING and each step's NUDGE, in its DIRECTION, TRANSPOSEd,
+then the next pattern picked or CHAIN's next slot. Its notes go into the chords' side as keys do (`sy_chord_key`, ids
+64 .. 79), so SCALE's chords, the ARP, STRUM, BASS and USB OUT act on them, and share the block's starts
+(SY_STARTS_BLK). Recording: `sy_ev_drain` gives every note in (the panel's keys, MIDI) to `sy_seq_input`; with REC
+armed and the transport running it goes into the step nearest (a note just ahead of the playhead: not played again as
+it comes), its length measured at its release; stopped, with SEQ's steps shown, the keys fill the step picked. MOTION
+holds a lane's parameter through a two-slot override in the parameter follower (`sy_param.c` `sp_ovr_*`,
+`sp_target`): the engine follows the lane's value, the patch keeps the knob's (SAVE, undo and the autosave never see
+a lane's value); a knob turned recording armed writes its lane at the steps it passes (`sy_seq_knob`). The patterns
+(13.2 KB) live in the pool and in the flash: four objects of four patterns at `0xCB000`, the free part of the user
+store (§16), saved with the settings' rule while the transport is stopped. **Verified in emulator** (130 checks; 120
+screens and every knob on every page checked); V0.8 **needs a hardware test** (the timing by ear and against a DAW's
+clock, recording from the keys and MIDI, the patterns through a power cycle).
+
 **V0.75, the ARP** (2026-10-19): PERFORM's ARP style a step arpeggiator (CONTROLS.md "The ARP"): thirteen MODEs over
 the chord or the keys held across 1-4 OCTAVES, RATE's note values with the dotted and triplet ones, sixteen steps
 (LENGTH of them) each PLAY, TIE or REST with its LEVEL, OCTAVE, RATCHET (1-4 hits), CHANCE and SLIDE, GROOVE's GATE
@@ -162,7 +180,8 @@ host harness (gcc, `tests/`), the browser emulator (emcc, `web/emu`) and the wor
 ```
 TIMER5 IRQ (prio 4, 10 kHz)   key/encoder/LED scan, ms clock, USB and TRS polls (2 kHz)
 ALNK0 IRQ  (prio 3, 345 Hz)   one half = 4 blocks of 32 samples:
-                               per block: panel keys + MIDI in -> events -> voices
+                               per block: panel keys + MIDI in -> events -> voices (V0.8: the sequencer's steps,
+                                          then the chords', as keys into them)
                                           control rate: envelopes, LFOs, matrix, parameters
                                           audio rate: voices -> mix -> FX -> master -> Q15 stereo
                                end of half: load meter, CPU guard
@@ -595,8 +614,15 @@ the chain, in FX ORDER's order (verified on host).
   user's).
 - **Settings** (built): Strata's own record (`SET1`, 115 bytes: the palette, the knobs' acceleration, BPM, the time
   signature, the buttons' hold time; SCL's scale, root, fit and velocity; HELP, GLOW, the MIDI channel, PROGRAM; MIDI
-  LEARN's 32 entries) in Felucca's settings pair `0xFC000/0xFD000`, written as the edit buffer is: after 3 s without
-  sound, when changed. Fields are only added at its end; a shorter record (an older build's) loads what it has.
+  LEARN's 32 entries; V0.7 and V0.75 the chords' and the ARP's, 85 bytes; V0.8 the sequencer's, 36: the pattern
+  shown, CHAIN, RECORD, QUANTIZE, the chain's slots) in Felucca's settings pair `0xFC000/0xFD000`, written as the edit
+  buffer is: after 3 s without sound, when changed. Fields are only added at its end; a shorter record (an older
+  build's) loads what it has.
+- **Patterns** (V0.8, built): the sequencer's sixteen, four to an object (`"SQ"`, a version, the count, then four
+  844-byte patterns: 3,380 bytes of a sector's 3,840) in four A/B pairs from `0xCB000` to `0xD2FFF` (asserted inside
+  the allow-listed store and below the update's staging), the same commit-record rule as every object. Written from
+  the main loop once 3 s pass without sound and the transport is stopped, one object a check (500 ms apart) and only
+  when its CRC changed; read at power-on (each field kept in its range). Never written: the patterns as they start.
 - **Flash safety**: only `sy_store.c` writes, through the hooks: `st_erase` / `st_prog` (`storage_hw.c` on the FM-1,
   the emulator's in `strata_web.c`) check `FL_STORE_OK` against the allow-list, and the RAM-resident driver checks
   `FL_RANGE_OK` again. The allow-list is one header, `hal/fm1_flash_map.h`, that the firmware, the host tests and the
@@ -648,7 +674,7 @@ TEMPO (BPM, TS-BEAT, TS-NOTE; its graph the tempo, the time signature, a bar's b
 §10). SYNC is FREE or FIXED for the LFOs and the delay: in FIXED, KNOB 3 (RATE, TIME) shows and steps the note value,
 one a detent (in the MOD layer it stays RATE or TIME, whose modulation steps the note). SAVE + OCT− / OCT+: undo and
 redo (§16). ARP and a step sequencer wait for v1; until then SEQ shows the matrix. (V0.7: ARP switches PERFORM, the
-chords' styles; V0.75: the ARP, a step arpeggiator, under ARP held. The sequencer still waits.)
+chords' styles; V0.75: the ARP, a step arpeggiator, under ARP held; V0.8: the sequencer, SEQ's menu.)
 
 **After the mockups' approval** (the user's changes to them, and the EQ; verified in emulator): the filter's and the
 effects' pages draw what they do, from the values as the DSP reads them (`sy_ui_fx.c`): the filter's response (each
@@ -739,8 +765,8 @@ changed, in strips, so the 12 MHz display keeps up.
 | EDIT | the sound sources; ALGORITHM picks OSC A, OSC B, SUB, NOISE, FILTER; taps cycle that section's pages | **JUMP**: a key opens its section, the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS (built) |
 | ENV | ENV 1 ADSR, SHAPE; ENV 2 the same | **assign ENV 2**: turn a knob to set its amount (built: the MOD layer for ENV 2) |
 | LFO | LFO 1 POINTS, SHAPE, TIME; LFO 2 the same (built); twice on POINTS: a point (built) | **MOMENTARY** (Felucca): a knob's change lasts while LFO is held (built; on POINTS: the point's delete) |
-| SEQ | MATRIX (KNOB 1 slot, 2 source, 3 destination, 4 amount; built); v1: the step sequencer (the matrix moves) | — |
-| REC | — | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount (built) |
+| SEQ | the sequencer (built, V0.8): SEQ (NOTES, FEEL, MOTION), PATTERN (PATTERN, PLAY+REC), CHAIN; SEQ + OCT+ / OCT− the next pattern, the one before (the matrix went to GLO in V0.7) | **PATTERNS**: a white key picks a pattern, F#3 COPY, G#3 PASTE, A#3 CLEAR (built, V0.8) |
+| REC | the sequencer armed, or not (built, V0.8) | **MOD layer**: the white keys are the sources (lit: in use on this page), pick one, turn a knob: its amount (built) |
 | FX | DRIVE, CHORUS, DELAY, REVERB, OTT, EQ in the patch's order (built: two or three pages each, ALGORITHM picks the effect) | + ALGORITHM: moves the effect shown along the chain (built); **macros**: KNOB 1–4 = MACRO 1–4, keys toggle the modules |
 | GLO | VOICE (mode, poly, glide, glide mode), PLAY (bend range, velocity, volume), GLOBAL's TEMPO (BPM, TS-BEAT, TS-NOTE; built) | **PERFORM**: KNOB 1 pitch bend (springs back), 2 mod wheel, 3 glide, 4 volume (built) |
 | SCL | KEYS: scale, root, fit, the keys' velocity; the scale on the LEDs (built) | + a key: the root (built) |

@@ -356,7 +356,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 100 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 130 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -548,6 +548,26 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   checked as it shows the turn: 75 findings before (the old flags over titles, figures, handles), none after (a value
   the page shows is lit in place; else it is in the bottom row). Found on the way: the top line's chord name under its
   section dots (moved left of them); `memmove` missing from the device's build (a loop).
+- **V0.8, the sequencer** (130 checks; 120 screens and 570 knob turns, all clear): pattern 1 on PLAY, C4 E4 G4 C5 a
+  step in four, at 0 4 8 12 16 steps, each half a step long (LENGTH 1/2), read from what USB OUT sends; SWING 75 %,
+  NUDGE −25 %, CHANCE 0 % and TRANSPOSE +12 (72@0 74@1.5 76@1.75, step 4 left out, 72@4); DIRECTION BACKWARD (65 64
+  62 60) and PING-PONG (60 62 64 65 64 62 60 62); live recording: REC's tap arms it ("REC ARMED"), C4 played at step
+  2.1 goes into step 3 with NUDGE +11 % and LENGTH 6 quarter steps (held 0.2 s), E4 at 4.8 into step 6 with −20 %,
+  not played again as the playhead came, played on the next pass; QUANTIZE: G4 near step 8 on it; REPLACE clears a
+  pattern's four notes in an armed pass; by step: SEQ's NOTES, REC armed, C4 + E4 together into step 1 and step 2
+  picked, then G4 into step 2; SEQ + OCT+ / OCT− the patterns, playing: "NEXT: PATTERN 5", switched at the pattern's
+  end; CHAIN of pattern 1 twice then 2: 1 1 2 1 1 2; MOTION: a lane on the cutoff holds it at 1000 at step 1 (the
+  engine follows 1000, the patch keeps its own), lets go at step 2, 0 at step 3, the patch's again when stopped; the
+  cutoff's knob turned while recording takes a lane and writes 8 steps, the knob heard as it turns; PATTERNS: SEQ
+  held, A3 picks pattern 3, F#3 copies, A#3 clears ("PATTERN 3 CLEARED: PASTE UNDOES"), G#3 pastes, held past 5 s with
+  a key used: no reset; SEQ's taps (NOTES, FEEL, twice PATTERN) and SEQ held 5 s on SEQ (the steps cleared); the
+  patterns, the pattern shown, CHAIN, RECORD and the chain's slots through a power cycle. The REC check now: a tap
+  arms, again not, REC + OCT+ latches the MOD layer (REC twice no longer does); SEQ's: its menu. Found on the way: the
+  patterns and their copy (14.3 KB) did not fit the spare SRAM's `.spare_bss` (7.9 KB free there: the "23,296 B
+  left" counts the NOINIT area too) and went to the pool; the step pages' line under the title empty (the helper
+  returned its end) and over the playhead's marker (its box 12 px, the columns 4 px lower). **Needs a hardware test**:
+  the steps' timing by ear and on a DAW's clock over minutes, recording from the panel's keys and from MIDI (USB and
+  TRS), a pattern's flash write after 3 s of quiet (the hush), the patterns through a power cycle on the unit.
 - **The bloom over time** (`strata_bloom_study.mjs`): 17 frames of it (a note's swirl, a second note above, the
   release, a chord) on one sheet; read by eye.
 - **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on
@@ -567,6 +587,8 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   keys' latency while the screen redraws. The UI draws only what changed and sends only the rows that changed (the
   busiest live page 24 % of the SPI's time, §6.3), but the keys are read in the main loop, so a key can wait for a
   frame's drawing: the BENCH page times a frame; if it is long the keys move to the TIMER5 tick.
+- The sequencer (V0.8): its timing by ear and against a DAW's clock, recording from the keys and MIDI, the patterns'
+  writes (four objects at `0xCB000`, one a check) and their return at power-on.
 - The flash on the device: an erase's and a page's IRQ-off time against the hush (the ring silent before any write);
   a SAVE's write and the background writes after 3 s of silence; that nothing outside the allow-list is ever touched
   (the RAM driver's second guard). Before any of it: a full flash dump (the brief's `docs/02-update-and-recovery.md`

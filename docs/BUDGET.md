@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,29 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 11. V0.8 (the sequencer)
+
+From the build (`tools/build.py --strata`, 2026-10-21): the image 392,004 B (V0.75 371,420: +20,584: the sequencer in
+`sy_seq.c`, its pages in `sy_ui_seq.c`, the buttons' and the settings' parts in `sy_ui.c`); `.data` + `.bss` 48,992 B
+(+448: the sequencer's settings and its audio side's state: the notes sounding, the notes held while recording, the
+steps recorded ahead of the playhead); the pool 356,720 B of 380,928 (+14,348: the sixteen patterns, 844 B each,
+13,504 B, and PATTERNS' copy, 844 B; set at power-on, as the pool is not cleared); the spare SRAM as V0.75's; the main
+stack ~4,924 B (+52), the interrupt stack ~2,520 B (as V0.75's) of 4,096 allowed. The flash: the patterns in four
+sector pairs at `0xCB000`–`0xD2FFF`, of the user store's free 84 KiB: **52 KiB** left there (`0xD3000`–`0xDFFFF`).
+Left: **189,560 B** of the app slot, **24,736 B** of `.data` + `.bss`, **24,208 B** of the pool (4 KiB of it the
+build's margin).
+
+Found on the way: the patterns first went to `.spare_bss` and did not link (RAMTEXT over by 6,404 B). The "23,296 B
+left" of the spare SRAM counts both of its areas; `.spare_bss` itself (RAMTEXT, after the RAM code and the 21,900 B
+in it) has ~7.9 KB free, the rest is NOINIT's area after `.noinit` (~15 KB), painted and watched but not linked into.
+
+The drawing's time on the host (`web/emu/strata_bench.c`, three runs): SEQ's NOTES while a pattern plays 716–725 µs
+over 2 s, 75,600 pixels sent (the playhead's marker and the steps' boxes, each step); HOME 744–755 µs with a chord
+and 36–38 µs in silence (V0.75: 769–823 and 35–37: HOME is untouched); ARP's STYLE 652–656 µs and STEPS 848–879 µs
+while the arpeggio plays (the bench now finds them: it looked for PERFORM, STYLE's old name, and for STEPS in the ARP's
+section, and set HARP). The audio side: a block without a step checks sixteen notes' ends; a step is its notes' keys
+into the chords' side, a few hundred instructions at most: under 0.1 % of a core.
 
 ## 10. V0.75 (the ARP)
 

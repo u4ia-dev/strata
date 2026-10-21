@@ -1,9 +1,9 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.75, the ARP and one
-grammar for every menu button (below), on V0.7's chords (reworked in V0.75: knobs only, STRUM), V0.67's legible
-screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on
-2026-10-17, V0.6 and V0.65 since, V0.7 and V0.75 **need a hardware test**. How it is built:
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.8, the sequencer (below),
+on V0.75's ARP and one grammar for every menu button, V0.7's chords (reworked in V0.75: knobs only, STRUM), V0.67's
+legible screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on 2026-10-17, V0.6 and V0.65
+since, V0.7, V0.75 and V0.8 **need a hardware test**. How it is built:
 [ARCHITECTURE.md](ARCHITECTURE.md) §14, §17. How it is tested: [TESTING.md](TESTING.md) §6.3.
 
 ## The panel
@@ -18,10 +18,10 @@ screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on
 | PRESETS | the next or previous preset: the starter sounds, INIT, then the user's |
 | MASTER | the output level |
 | HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP | the menus: one grammar for all (Buttons, below) |
-| SEQ | the sequencer, in a later version (the matrix is GLO's) |
+| SEQ | the sequencer's menu (V0.8, below); SEQ + OCT+ / OCT− the next pattern, the one before; held: PATTERNS |
 | SAVE | save, the browser, undo and redo |
-| REC | held: the MOD layer |
-| PLAY | the transport (V0.75: ARP and PATTERN step on its beat) |
+| REC | a tap: the sequencer armed to record, or not (V0.8); held: the MOD layer |
+| PLAY | the transport: the sequencer plays (V0.8); ARP and PATTERN step on its beat (V0.75) |
 | ARP | the ARP's menu; ARP + OCT+ the ARP on, ARP + OCT− off, from any page (V0.75, below) |
 
 The screen (the STRATA UI: [UI.md](UI.md)) is one picture a module: a top line (the module's name and its dot, the
@@ -63,6 +63,9 @@ every menu.
 | | MIDI | MIDI: MIDI IN · USB OUT · CHORDS CH · BASS CH |
 | ARP | ARP | STYLE: STYLE · RATE · MOVE · FEEL; GROOVE: GATE · SWING · LENGTH · LATCH (The ARP, below) |
 | | STEPS | STEPS: STEP · KIND · LEVEL · OCTAVE; RATCHET: STEP · RATCHET · CHANCE · SLIDE |
+| SEQ | SEQ | NOTES: STEP · NOTE · VELOCITY · LENGTH; FEEL: STEP · CHANCE · NUDGE · OCTAVE; MOTION: STEP · LANE · VALUE · PARAMETER (The sequencer, below) |
+| | PATTERN | PATTERN: PATTERN · LENGTH · RATE · SWING; PLAY+REC: TRANSPOSE · DIRECTION · RECORD · QUANTIZE |
+| | CHAIN | CHAIN: SLOT · PATTERN · REPEATS · CHAIN |
 | HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
@@ -126,7 +129,8 @@ figure, a title), there, vermilion; else in the bottom row, its name and value. 
 
 A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default); a double tap is two taps within 300 ms.
 
-**One grammar for the menu buttons** (V0.75: HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP; SAVE keeps its own, SEQ none):
+**One grammar for the menu buttons** (V0.75: HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP; V0.8, SEQ: its taps, its hold
+and its 5 s the same, its + OCT+ / + OCT− the patterns; SAVE keeps its own):
 
 - **Tap**: open the menu where it was left; tap again: its next page, on through its sections.
 - **Twice**: its next section (FX: the chain view <-> the module picked; HOME: the presets).
@@ -147,9 +151,9 @@ A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default);
 | SCL | its pages | the next section | a key is the scale's root | SCALE, the chords or their MIDI reset | the chords on (MODE as it was: KEY at first) | off |
 | ARP | its pages | ARP <-> STEPS | | its settings or its steps reset | the ARP on | off |
 | SAVE | a new version, saved at once | the browser (in it: back) | | saved over its own slot (a countdown from the hold) | redo | undo |
-| SEQ | "SEQUENCER: IN A LATER VERSION" | | | | | |
-| REC | | the MOD layer, latched (a tap lets it go) | the MOD layer | | the MOD layer latched | let go |
-| PLAY | the transport on, off (the arpeggio on its beat) | | | | | |
+| SEQ | its pages | the next section | PATTERNS | the section shown reset (SEQ: the pattern's steps cleared, PASTE puts them back; PATTERN: its settings; CHAIN: cleared) | the next pattern (playing: at the end of this one) | the pattern before |
+| REC | the sequencer armed, or not (a latched MOD layer: let go) | | the MOD layer | | the MOD layer latched | let go |
+| PLAY | the transport on, off (the sequencer from its start; the arpeggio on its beat) | | | | | |
 | OCT− / OCT+ | the keys' octave (the browser: OCT−'s at its release) | | the browser: OCT− 3 s deletes the user preset playing | | | |
 
 Also: HOME held at power-on: the last sound is not brought back (after a crash neither: SAFE START). On NAME IT,
@@ -159,9 +163,9 @@ stops it; [FLASHING.md](FLASHING.md)).
 
 ## The layers
 
-A layer lasts while its button is held (REC's and ENV's MOD layer and GLO's PERFORM can be latched: the button + OCT+,
-REC twice; a tap or the button + OCT− lets it go). A banner names it and says how it ends, and its button breathes (a
-held MOD layer's is lit).
+A layer lasts while its button is held (REC's and ENV's MOD layer and GLO's PERFORM can be latched: the button + OCT+;
+a tap or the button + OCT− lets it go; V0.8: REC twice no longer latches, a REC tap arms the sequencer). A banner
+names it and says how it ends, and its button breathes (a held MOD layer's is lit).
 
 | Layer | Its button | The knobs | The keys | Let go |
 | --- | --- | --- | --- | --- |
@@ -169,6 +173,7 @@ held MOD layer's is lit).
 | PERFORM | GLO | 1 pitch bend (16 detents from the middle to an end), 2 mod wheel, 3 GLIDE, 4 VOLUME | play | the bend goes back to the middle; the wheel stays |
 | MACROS | FX | MACRO 1–4 | F3 to F4 (the white keys): the chain's modules 1 to 8 bypassed or back in (lit when in, glowing when bypassed) | it closes |
 | MOMENTARY | LFO | change the page's values for now (16 at most) | play | every value it changed goes back |
+| PATTERNS | SEQ (V0.8) | nothing | a white key picks pattern 1 to 16 (playing: next, at the end of the one playing); F#3 COPY, G#3 PASTE, A#3 CLEAR (the pattern shown; CLEAR copies it first, so PASTE undoes it) | it closes (a key used: no reset at 5 s) |
 | JUMP | EDIT | nothing | a key opens its section: the white keys OSC A, OSC B, SUB, NOISE, FILTER, ENV 1, ENV 2, LFO 1, LFO 2, MATRIX, then the chain's modules 1 to 6; F#3 HOME, G#3 VOICE, A#3 GLOBAL, C#4 SCALE, D#4 SETTINGS, A#4 the FX chain view | the page it opened |
 
 The MOD layer's sources on the white keys: F3 ENV 1, G3 ENV 2, A3 LFO 1, B3 LFO 2, C4 to F4 MACRO 1 to 4, G4 VELOCITY,
@@ -295,13 +300,57 @@ it plays.
 - The ARP LED: lit while the ARP is on (dark a moment on each beat while ARP or PATTERN plays), glowing while off.
 - Kept with the settings, whatever sound is loaded.
 
+## The sequencer (V0.8)
+
+The SEQ button's menu: SEQ (its steps: NOTES, FEEL, MOTION), PATTERN (PATTERN, PLAY+REC), CHAIN. Sixteen patterns of
+up to 64 steps, each step up to four notes. PLAY plays the pattern shown from its start, on the transport's beat (MIDI's
+clock with CLOCK IN MIDI); PLAY again stops it. Its notes play as the keys' do: SCALE's chords, the ARP, STRUM, BASS and
+USB OUT act on them (a step's note is a root with CHORD on; with the ARP on, the ARP plays what the steps hold).
+
+- **The steps** (SEQ): KNOB 1 picks a step (its number the title); the pages show sixteen at a time, the ones holding
+  the step picked (four boxes at the top right: which sixteen, the step playing under them).
+  - **NOTES**: NOTE moves the step's notes together (an empty step: one, as the step before's; turned below C-1:
+    the step emptied); VELOCITY (all its notes); LENGTH, 1/4 step to 64 steps (past the next step: held on, legato).
+    The page is a piano roll: each note a bar from where NUDGE puts it, as long as LENGTH, as bright as its velocity;
+    the Cs named at the left; LENGTH's end dashed.
+  - **FEEL**: CHANCE, 0 to 100 % (the step plays, or not); NUDGE, −50 to +50 % of a step (early, late); OCTAVE, the
+    step's notes an octave at a time. NUDGE's ticks round each step's middle, CHANCE's meters under them.
+  - **MOTION**: two lanes a pattern, each a parameter of the sound (one that can be modulated: CUTOFF, WT POS, an
+    effect's MIX ..). LANE picks one; PARAMETER its parameter; VALUE its value at the step picked (turned below the
+    lowest: none there). At a step with a value the parameter is there; at one without, the knob's own. The sound
+    itself is untouched: its knob, SAVE and undo keep its own value.
+- **PATTERN**: PATTERN (1 to 16: picked while one plays, it waits for that one's end, "P1>3" at the top right);
+  LENGTH, 1 to 64 steps; RATE, a step's note value (1/32 .. 1 BAR, 1/16 by default); SWING, 50 % (straight) to 75 %:
+  the odd steps late, by half a step at 75 %. The page: the sixteen (the one shown filled, the one next red, those
+  holding notes framed), LENGTH's cells (a step with notes bright), a bar of steps at RATE with SWING's.
+- **PLAY+REC**: TRANSPOSE, −24 to +24 semitones; DIRECTION, FWD, BACK, PING (there and back, the ends once), RANDOM;
+  RECORD, OVERDUB (notes added) or REPLACE (each step cleared as the playhead first passes it, while armed); QUANTIZE,
+  OFF (NUDGE keeps where a note came) or ON (notes on the steps).
+- **CHAIN**: up to sixteen slots, each a pattern (SLOT picks one, PATTERN sets it; END: the chain ends before it) and
+  its REPEATS (1 to 16); CHAIN on: PLAY plays slot 1's pattern, its repeats, then slot 2's .., round again. A pattern
+  picked while the chain plays comes next, once; the chain then goes on.
+- **Recording** (REC arms it: its LED lit, "REC" at the top right):
+  - **Live**: PLAY with REC armed: what the keys play (as SCALE fits them; MIDI notes in too) goes into the step
+    nearest, as long as it was held; a note just before a step goes into it and is not played again as the playhead
+    comes. A knob turned meanwhile (a parameter that can be modulated) takes a MOTION lane (the first free; both in
+    use: "MOTION: BOTH LANES IN USE") and writes it at each step it passes while it turns; it is heard as turned.
+  - **By step**: stopped, REC armed, SEQ's steps shown ("REC: THE KEYS FILL STEP 5"): the keys pressed together are
+    the step picked's notes (what it held before goes), and the next step is picked when all are let go. KNOB 1 skips
+    steps (a rest).
+- **The patterns' grammar**: SEQ + OCT+ / OCT− the next pattern, the one before (playing: at the end of the one
+  playing); SEQ held: PATTERNS (The layers, above); SEQ held 5 s on SEQ: the pattern's steps cleared (PASTE in
+  PATTERNS puts them back).
+- **Kept**: the patterns in the flash (four sector pairs at 0xCB000, free space of the main store, written while
+  stopped once 3 s pass without sound); the pattern shown, CHAIN, RECORD, QUANTIZE and the chain's slots with the
+  settings.
+
 ## LEDs
 
 | LED | Lit | Glowing | Mid / breathing |
 | --- | --- | --- | --- |
-| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP) | mid: the scale's root |
+| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; PATTERNS: the pattern shown | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); PATTERNS: the one next, those holding notes, COPY PASTE CLEAR | mid: the scale's root |
 | A family button | the family shown | the others | |
-| REC | in its layer | otherwise | |
+| REC | in its layer; the sequencer armed (recording: dark the last quarter of each beat) | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |
 | PLAY | a quarter of each beat while the transport runs | | its green LED: lit while it runs |
 | ARP | the ARP on (dark a moment each beat while ARP or PATTERN plays) | the ARP off | |

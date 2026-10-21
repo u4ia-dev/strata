@@ -7,9 +7,10 @@ words on the screens, a **VALUES** zone on every module for exact values, four m
 HOME, the bloom as a sunflower. The sound engine, the panel's controls, the flash, the package and the update path
 are V0.66's. [CONTROLS.md](CONTROLS.md) is the reference for the panel; this file is the reference for the screen.
 V0.7 added SCL's chord screens, V0.75 the ARP's (STYLE, GROOVE, STEPS, RATCHET), CHORD's rework and STRUM, GLOBAL's
-CLOCK IN (§4), the knob turning's value in place or in the bottom row in the flag's stead, and a plainer bloom.
+CLOCK IN (§4), the knob turning's value in place or in the bottom row in the flag's stead, and a plainer bloom. V0.8
+added the sequencer's (NOTES, FEEL, MOTION, PATTERN, PLAY+REC, CHAIN) and the PATTERNS layer (§4).
 
-Status: verified in the emulator (117 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
+Status: verified in the emulator (130 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
 overlaps, `web/emu/strata_ui_shots.mjs`; every knob on every page turned and checked, `web/emu/strata_knob_sweep.mjs`;
 the bloom's motion, `web/emu/strata_bloom_study.mjs`). **Needs a hardware
 test**: legibility at the panel's size and distance, the drawing's time on the FM-1 (BENCH's SCREEN row), the new
@@ -117,9 +118,10 @@ sample is the one HOT seed.
 | GLO | VOICE: VOICE, PLAY, VALUES · MATRIX: SLOTS (four slots at a time, the four of the one picked: source → destination at 10 px, the amount's bar and figure; the picked one's source and destination at 12 px with its dial) · GLOBAL: TEMPO (V0.75: CLOCK IN's chips, INT and MIDI; "BPM: MIDI" and MIDI's tempo while it follows the clock) |
 | SCL | SCALE (the scale on the 27 keys, FIT's chips, VELOCITY's bar and figure) · CHORD: CHORD (V0.75: the chord named at 26 px, a row a knob: MODE's chips, TYPE's (KEY: SHAPE's) strip from the one before the current with its place in the list, VOICING's AUTO chip and ruler, SPREAD's chips; the notes and the bass on three octaves of keys), STRUM (V0.75: the chord as it strums, a row a note from its start, as bright as its level; DIRECTION, HUMAN, TAPER in a row), BASS (on, the octave, the chord and the bass on four octaves, an arrow from the root, LEVEL) · MIDI (the keys and MIDI in into the chords, into the sound and out over USB, the channels); the top line names the chord playing |
 | ARP | ARP (V0.75): STYLE (the style at 14 px, ARP's state, a bar of sixteen steps of what it plays: a row a note, its time across, ties long, ratchets split, the level as brightness, a CHANCE under 100 % hollow, SWING's steps late, LENGTH's end dotted, the step playing marked under it; HARP: the note each key plays) · STEPS: STEPS and RATCHET (the step picked as the title; sixteen columns: OCTAVE a tick over the 0 line, LEVEL a bar, RATCHET's hits side by side, TIE carried across, REST a stub, SLIDE a slope, the steps past LENGTH dim, the one picked framed, the one playing marked over it; RATCHET's: each step's CHANCE a meter under it), GROOVE (two beats of notes where SWING puts them, an arrow from each late one's straight place, as long as GATE makes them; LENGTH's sixteen cells; LATCH's chip). Their values are figures in a row under the drawing (KNOB 1's the title), HOT while they turn |
+| SEQ | SEQ (V0.8): NOTES, FEEL and MOTION share a frame: the step picked as the title (HOT while KNOB 1 turns; while step recording, framed HOT with "REC: THE KEYS FILL STEP 5" under the title), a line under it (the pattern's steps and RATE; MOTION: the lane and its parameter), four boxes at the top right (which sixteen steps are shown, the one playing marked under them), sixteen columns across 34 .. 226 with the beats ticked under, LENGTH's end dashed, the step playing marked over its column. NOTES: a piano roll (each note a bar from where NUDGE puts it, as long as LENGTH, as bright as its velocity; the range the notes span, an octave at least; the Cs dotted and named at the left). FEEL: NUDGE's ticks round each step's middle over CHANCE's meters (an arrow and a % at the left). MOTION: the lane's values as bars, a stub where none · PATTERN: PATTERN (the title; the sixteen as a 4 × 4 grid, the one shown filled, the one next HOT, those holding notes framed; a chip PLAYING, STOPPED or NEXT UP; LENGTH's 64 cells, a step with notes bright; a bar of steps at RATE, SWING moving the odd ones), PLAY+REC (TRANSPOSE as the title over a ruler of four octaves; DIRECTION's, RECORD's and QUANTIZE's chips) · CHAIN (the sixteen slots in two rows, each its pattern and its repeats, END after the last, the slot picked framed, the one playing marked; what the chain plays in words; CHAIN's chip). Their values are figures in a row under the drawing or in place, HOT while they turn; the top line: the pattern, the one next, REC ("P1>3 REC") |
 | SETTINGS | SCREEN (the twelve themes, HELP, GLOW), PANEL, MIDI (the channel grid, LEARN, the CCs learned, PROGRAM, the CCs every sound answers as a table), BENCH (eight rows, wider figures) |
 | SAVE | NAME IT (sixteen cells, the category and the slot, ABC / 123, each key's letter over or under it), the browser (the bank's chips, the category at 14 px with its count, five presets at 12 px, the one playing outlined with a small bloom) |
-| Layers | MOD (the page's four parameters with the source's depth, each white key's source under it), PERFORM, MACROS, MOMENTARY, JUMP (the keys' sections over and under them, the section shown named at 14 px) |
+| Layers | MOD (the page's four parameters with the source's depth, each white key's source under it), PERFORM, MACROS, MOMENTARY, JUMP (the keys' sections over and under them, the section shown named at 14 px), PATTERNS (V0.8: the keys, 1 to 16 under the white ones, the pattern shown a disc, the one next a HOT ring, those holding notes a ring; CP, PA, CL over F#3, G#3, A#3; the pattern shown named at 14 px) |
 | System | the countdowns, SAFE START, MIDI LEARN's banner, power-on |
 
 **VALUES** (V0.67): every module's last zone (OSC A and B, SUB, NOISE, FILTER, ENV 1 and 2, LFO 1 and 2, VOICE, each
@@ -159,14 +161,15 @@ HOME in silence: 5 µs more over 2 s (0.04 µs a frame; nothing drawn or sent in
 ## 6. Building and checking
 
 - `./build.sh --strata` builds the UI (its fonts: `gen_aa_font.py --preset space-mono`).
-- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (110 checks) and
+- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (130 checks) and
   `node web/emu/strata_ui_shots.mjs` (every screen as PNG, named after the design's boards, in
   `build/emu_strata/ui_shots`; each checked as it is taken).
 - **The screens' check** (`web_lint`, `web/emu/strata_web.c`): the screen drawn twice into buffers of its own, with
   its text and without; every pixel the text changed is checked against what lies under it and its neighbours (only
   the ground, the text's own ground or a blend of the two may be there), the texts' ink boxes against each other, a
   text past the screen's edges, a text in MID or LINE, and two knobs' handles on one place. The emulator's tests run
-  it on all 149 pages; the shots script on its 80 screens (findings in `lint.txt`, marked PNGs in `lint/`).
+  it on all 163 pages; the shots script on its 120 screens (findings in `lint.txt`, marked PNGs in `lint/`);
+  `node web/emu/strata_knob_sweep.mjs` on every knob of every page as it turns (570 turns).
 - `node web/emu/strata_bloom_study.mjs`: the bloom over time (a note's swirl, a second note, the release, a chord) as
   one sheet, `build/emu_strata/bloom_study.png`.
 - `cc -O2 -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_bench web/emu/strata_bench.c -lm`, then
