@@ -55,23 +55,40 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
-**V0.8, the sequencer** (2026-10-21; CONTROLS.md "The sequencer"): the SEQ button's menu (SEQ: NOTES, FEEL, MOTION;
-PATTERN: PATTERN, PLAY+REC; CHAIN) and the PATTERNS layer (SEQ held). `sy_seq.c` runs in the audio interrupt, a block
-at a time before the chords' (`sy_seq_block`, then `sy_chord_block`): sixteen patterns of up to 64 steps (each up to
-four notes with their velocities, LENGTH in quarter steps, CHANCE, NUDGE; two MOTION lanes a pattern), played on the
-transport's place (`chs.tq`) at the pattern's RATE with its SWING and each step's NUDGE, in its DIRECTION, TRANSPOSEd,
-then the next pattern picked or CHAIN's next slot. Its notes go into the chords' side as keys do (`sy_chord_key`, ids
-64 .. 79), so SCALE's chords, the ARP, STRUM, BASS and USB OUT act on them, and share the block's starts
-(SY_STARTS_BLK). Recording: `sy_ev_drain` gives every note in (the panel's keys, MIDI) to `sy_seq_input`; with REC
-armed and the transport running it goes into the step nearest (a note just ahead of the playhead: not played again as
-it comes), its length measured at its release; stopped, with SEQ's steps shown, the keys fill the step picked. MOTION
-holds a lane's parameter through a two-slot override in the parameter follower (`sy_param.c` `sp_ovr_*`,
-`sp_target`): the engine follows the lane's value, the patch keeps the knob's (SAVE, undo and the autosave never see
-a lane's value); a knob turned recording armed writes its lane at the steps it passes (`sy_seq_knob`). The patterns
-(13.2 KB) live in the pool and in the flash: four objects of four patterns at `0xCB000`, the free part of the user
-store (§16), saved with the settings' rule while the transport is stopped. **Verified in emulator** (130 checks; 120
-screens and every knob on every page checked); V0.8 **needs a hardware test** (the timing by ear and against a DAW's
-clock, recording from the keys and MIDI, the patterns through a power cycle).
+**V0.8, the looper** (2026-10-21, after the user's call for an 8-track looper; LOOPER.md, CONTROLS.md "The looper";
+it replaced V0.8's sequencer, never installed): eight tracks, eight scenes, a clip each, SONG, four projects.
+- `sy_loop.c` runs in the audio interrupt, a block at a time before the chords' (`sy_loop_block`, then
+  `sy_chord_block`). A clip is a list of events in one pool of 2,048 (8 bytes: a tick at 96 a quarter note, a note's
+  length or a move's parameter, the note and velocity or the move's value, the next), sorted by time; a track plays
+  its clip from where it was launched (`lps[].start`, the transport's place), walking the ticks up to and with the one
+  now each block, round again at the clip's length. Launches, scenes, STOP ALL and SONG take effect on the bar (or the
+  beat, or at once: LAUNCH). A note goes into the track's chords as a key (`sy_chord_key_t`, ids 64 .. 79), a move
+  holds its parameter (`sy_param.c` `sp_ovr_set`: a table of the parameters held and by which track, the patch
+  untouched; `sp_block` looks at the ones changed).
+- **The chords a track** (`sy_chord.c`): eight sides (`ch_d`, `ch_s`), `chd` and `chs` the one in use (`ch_use`): the
+  UI's is the selected track's, the interrupt's each track in turn, put back before it returns (so the main loop never
+  sees another). The transport (`cht`) and CLOCK IN are one for all. Every key and MIDI note goes through a track's side
+  now (mode OFF plays them as they are), and out through `lp_out_on / off`: a synth track's to the voices, a MIDI
+  track's (or SYNTH+MIDI's) over USB on its channel; a muted track starts nothing.
+- **The voices a track** (`sy_voice.c`, `sy_engine.c`): a voice keeps the track it plays for (`trk`, from `sy_ntrk`
+  at its note-on); the same note of another track is another voice, a note-off ends its own track's; its output is
+  ramped through its track's gains (`sy_tgain`: VOLUME's square law and PAN's balance, 0 muted or another soloed).
+- **Recording**: `sy_ev_drain` gives every note in to `sy_loop_key`, which picks its track (a panel key: the selected
+  one, its release the same; a MIDI note: the track whose MIDI IN is its channel, else the selected) and records it
+  if that track records. A first take's notes go in at their ticks from its bar; REC ends it rounded to whole bars and
+  its events wrap into it; an overdub's notes go in at the clip's tick now (a note ahead of the playhead marked so it
+  is not played twice), and each pass's events are listed for UNDO PASS (taken out of the clip, kept until the next
+  recording, so a second UNDO puts them back). A knob turned (`lp_knob`) lets its parameter go while it turns and, a
+  synth track recording, writes moves (one each 1/64 at most), removing the old ones the playhead passes.
+- **The click**: a decaying sine of 30 ms on each beat (1,760 Hz the downbeat, 1,175 Hz the others) added to the
+  output before MASTER; COUNT-IN runs a bar of it on its own clock, then starts the transport.
+- **A project** (the tracks, their chords and ARP, the clips, SONG: ~1.5 KB and 6 bytes an event, 13.8 KB at most) is
+  a stream over four objects of the store (§16), written from the main loop when stopped and quiet, one object a check
+  when its CRC changed; LOAD saves the one loaded and reads the next while the audio is hushed. **Verified in emulator**
+  (132 checks, the looper's 13: playing and launching, the mix, a MIDI track, STOP ALL, a first take with its
+  count-in, overdub and UNDO PASS, QUANTIZE and knob moves, SONG, chords a track and MIDI IN, the click, NOTES, the
+  tracks' grammar, projects through a power cycle); **needs a hardware test** (the timing by ear and against a DAW's
+  clock, recording from the keys and MIDI, the projects' writes, the click's level).
 
 **V0.75, the ARP** (2026-10-19): PERFORM's ARP style a step arpeggiator (CONTROLS.md "The ARP"): thirteen MODEs over
 the chord or the keys held across 1-4 OCTAVES, RATE's note values with the dotted and triplet ones, sixteen steps
@@ -580,10 +597,10 @@ the chain, in FX ORDER's order (verified on host).
   a slot's 766). Format 1 (Phase 4 to V0.5: every value, the six effects among them) still loads (§14).
 - **Factory presets** (64 at first, up to 128) are constants in the image, written by `tools/gen_presets.py` from
   readable definitions.
-- **User presets** (built, `sy_store.c`, after Felucca's `storage.c`): 128 slots as A/B sector objects (a save goes
-  to the other copy: erase, the payload, the commit record last, read back before it counts; the newest valid copy
-  loads, so a torn write leaves the one before). Five slots of 768 B to a pair, 26 pairs from `0x97000` (208 KiB of
-  the user store `0x97000–0xDFFFF`). Strata's records carry their own magic (`STRA`): Felucca's projects and samples,
+- **User presets** (built, `sy_store.c`, after Felucca's `storage.c`): 64 slots (V0.8; 128 before) as A/B sector
+  objects (a save goes to the other copy: erase, the payload, the commit record last, read back before it counts; the
+  newest valid copy loads, so a torn write leaves the one before). Five slots of 768 B to a pair, 13 pairs from
+  `0x97000` to `0xB0FFF` (of the user store `0x97000–0xDFFFF`). Strata's records carry their own magic (`STRA`): Felucca's projects and samples,
   which live in the same area, read as empty to Strata, and Strata's as none to Felucca. **Installing Strata gives this
   area to its presets**: a Felucca project there is overwritten where a preset is saved over it, so back it up first
   (Felucca's web backup, its archive of projects and presets; or a full flash dump, PHASE0.md §7). The index of the
@@ -614,15 +631,20 @@ the chain, in FX ORDER's order (verified on host).
   user's).
 - **Settings** (built): Strata's own record (`SET1`, 115 bytes: the palette, the knobs' acceleration, BPM, the time
   signature, the buttons' hold time; SCL's scale, root, fit and velocity; HELP, GLOW, the MIDI channel, PROGRAM; MIDI
-  LEARN's 32 entries; V0.7 and V0.75 the chords' and the ARP's, 85 bytes; V0.8 the sequencer's, 36: the pattern
-  shown, CHAIN, RECORD, QUANTIZE, the chain's slots) in Felucca's settings pair `0xFC000/0xFD000`, written as the edit
+  LEARN's 32 entries; V0.7 and V0.75 the chords' and the ARP's, 85 bytes (the selected track's: the project keeps all
+  eight); V0.8 the looper's, 8: QUANTIZE, COUNT-IN, CLICK, its LEVEL, LAUNCH, the project; CORE 2's, 4) in Felucca's
+  settings pair `0xFC000/0xFD000`, written as the edit
   buffer is: after 3 s without sound, when changed. Fields are only added at its end; a shorter record (an older
   build's) loads what it has.
-- **Patterns** (V0.8, built): the sequencer's sixteen, four to an object (`"SQ"`, a version, the count, then four
-  844-byte patterns: 3,380 bytes of a sector's 3,840) in four A/B pairs from `0xCB000` to `0xD2FFF` (asserted inside
-  the allow-listed store and below the update's staging), the same commit-record rule as every object. Written from
-  the main loop once 3 s pass without sound and the transport is stopped, one object a check (500 ms apart) and only
-  when its CRC changed; read at power-on (each field kept in its range). Never written: the patterns as they start.
+- **Projects** (V0.8, built): the looper's four, each a stream over four objects (`sy_loop.c` `lp_pack` / `lp_load`:
+  "LP", a version, the stream's length, the selected track and scene, SONG; each track and its chords; each clip's
+  length and count; the events, 6 bytes each), a sector pair each. Projects 1 and 2 from `0xCB000` to `0xDAFFF` (where
+  the 128 presets ended); 3 and 4 from `0xB1000` to `0xC0FFF` (presets 65 .. 104 before): a project there is not
+  written while its sectors hold an older Strata record (`ss_foreign`: presets an older build saved), so nothing
+  kept is written over. All asserted inside the allow-listed store and below the update's staging. Written from the
+  main loop once 3 s pass without sound and the transport is stopped, one object a check (500 ms apart) and only when
+  its CRC changed; an object past the stream's end is never read (the stream's length is in its head); read at
+  power-on (each field kept in its range; a stream that does not hold together: a new project).
 - **Flash safety**: only `sy_store.c` writes, through the hooks: `st_erase` / `st_prog` (`storage_hw.c` on the FM-1,
   the emulator's in `strata_web.c`) check `FL_STORE_OK` against the allow-list, and the RAM-resident driver checks
   `FL_RANGE_OK` again. The allow-list is one header, `hal/fm1_flash_map.h`, that the firmware, the host tests and the

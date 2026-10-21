@@ -17,7 +17,7 @@ each stage gets its own section in CONTROLS.md, BUDGET.md and FLASHING.md when i
 | Arrangement | Clips and scenes (a clip launcher), plus SONG: a chain of scenes with repeats |
 | Keys | They play the selected track. SEQ held: a launch pad (below) |
 | Chords and ARP | Per track: each synth or MIDI track its own SCALE, chords and ARP, applied as it plays |
-| MIDI | Each track has a channel: notes in on it play and record that track; the panel keys (and notes on no track's channel) play the selected track. MIDI tracks send on their channel over **USB only** (the FM-1 has no TRS MIDI out, ARCHITECTURE.md §15; one question's option said "USB and TRS": that was wrong) |
+| MIDI | Each track has a channel: notes in on it play and record that track; the panel keys (and notes on no track's channel) play the selected track. MIDI tracks send on their channel over **USB only** (the FM-1 has no TRS MIDI out, ARCHITECTURE.md §15; one question's option said "USB and TRS": that was wrong). Built (V0.8) as two settings a track: CHANNEL (out) and MIDI IN (SELECTED, the default, or a channel): with one channel for both, a keyboard on channel 1 would always play track 1 whichever was selected (a default: change it at the renders) |
 | Mix and FX | Each track: VOLUME, PAN, MUTE, SOLO, a cheap insert of its own (FILTER, DRIVE or EQ) and a SEND into the shared FX rack |
 | Drums | A new Strata drum synth, 8 lanes: KICK, SNARE, CLAP, HAT CL, HAT OP, CYM as dedicated models; WT 1, WT 2 a flexible voice on Strata's wavetables |
 | A hit | Velocity and ACCENT; CHANCE and RATCHET (2..4 fast repeats) |
@@ -55,6 +55,12 @@ the bench build no longer measures flash reads.
   flash driver's runtime guard as now; nothing is written outside it.
 - CPU: eight voices with every effect fill one core; several sounds at once need the second core, which some FM-1s
   cannot run (fm1-x0x#10). On those the guard trims (unison, effect quality, voices) as it does now.
+
+## Status
+
+- **Stage 0, V0.8 BENCH**: built 2026-10-21 (commit "V0.8 BENCH"), not installed.
+- **Stage 1, V0.8 LOOPER**: built 2026-10-21, not installed; CONTROLS.md "The looper", FLASHING.md steps 26-29.
+  Every synth track plays the one sound (a sound a track: V0.9). The defaults above are as built.
 
 ## Stages
 

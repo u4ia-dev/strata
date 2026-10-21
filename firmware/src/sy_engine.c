@@ -187,13 +187,14 @@ static void sy_note_on(uint32_t note, uint32_t vel)
                 v->pitch = v->target;
             v->note = (uint8_t)note;
             v->key = 1;
+            v->trk = (uint8_t)(sy_ntrk % (SY_NOTRK + 1u));
             return;
         }
         voice_start(v, note, vel, v->on ? v->pitch : sy_last_pitch, sy_glide_on(held));
         return;
     }
-    for (i = 0; i < np; i++)                         /* the same note: that voice again */
-        if (sy_v[i].on && sy_v[i].note == note && !sy_v[i].steal) {
+    for (i = 0; i < np; i++)                         /* the same note (of the same track): that voice again */
+        if (sy_v[i].on && sy_v[i].note == note && sy_v[i].trk == sy_ntrk && !sy_v[i].steal) {
             v = &sy_v[i];
             break;
         }
@@ -213,6 +214,7 @@ static void sy_note_on(uint32_t note, uint32_t vel)
                 if (sy_v[i].steal) {
                     sy_v[i].next_note = (uint8_t)note;
                     sy_v[i].next_vel = (uint8_t)vel;
+                    sy_v[i].next_trk = sy_ntrk;
                     return;
                 }
             return;
@@ -220,6 +222,7 @@ static void sy_note_on(uint32_t note, uint32_t vel)
         v->steal = VOICE_STEAL_BLKS;
         v->next_note = (uint8_t)note;
         v->next_vel = (uint8_t)vel;
+        v->next_trk = sy_ntrk;
         return;
     }
     {                                                /* GL MODE LEGATO: only while another note is held */
@@ -258,9 +261,9 @@ static void sy_note_off(uint32_t note)
     }
     for (i = 0; i < SY_NVOICE; i++) {
         sy_voice_t *v = &sy_v[i];
-        if (v->steal && v->next_vel && v->next_note == note)
+        if (v->steal && v->next_vel && v->next_note == note && v->next_trk == sy_ntrk)
             v->next_vel = 0;                         /* released before it began: nothing to start */
-        if (v->on && v->note == note && v->key && !v->steal) {
+        if (v->on && v->note == note && v->trk == sy_ntrk && v->key && !v->steal) {
             v->key = 0;
             if (!sy_sustain)
                 voice_release(v);
@@ -549,9 +552,11 @@ static void sy_block(int32_t *out)
         nv++;
         voice_block(v, sy_mix_l, sy_mix_r);
         if (!v->on && v->next_vel) {                 /* a steal's fade is over: the new note */
-            uint32_t n = v->next_note, vel = v->next_vel;
+            uint32_t n = v->next_note, vel = v->next_vel, was = sy_ntrk;
             v->next_vel = 0;
+            sy_ntrk = v->next_trk;
             voice_start(v, n, vel, sy_last_pitch, sy_glide_on(0));
+            sy_ntrk = (uint8_t)was;
         }
     }
     tv = SY_TICKS() - tv;
@@ -659,6 +664,7 @@ static void sy_set_tempo(uint32_t bpm, uint32_t beat, uint32_t note)
 {
     sy_tempo = (float)bpm * 4.0f / (float)note;
     sy_bar_q = (float)beat * 4.0f / (float)note;
+    sy_beat_q = 4.0f / (float)note;
 }
 
 static void sy_init(void)

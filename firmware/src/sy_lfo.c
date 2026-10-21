@@ -41,6 +41,7 @@ typedef struct {                 /* an LFO's settings for a block */
 
 static float sy_tempo = 120.0f;  /* quarter notes a minute: GLOBAL's BPM and TS-NOTE, or the MIDI clock */
 static float sy_bar_q = 4.0f;    /* a bar in quarter notes: GLOBAL's TS-BEAT and TS-NOTE (sy_set_tempo) */
+static float sy_beat_q = 1.0f;   /* a beat (TS-NOTE) in quarter notes (V0.8: the looper's click, its positions) */
 
 /* note value i's length in quarter notes (the bars by the time signature) */
 static float sy_note_q(uint32_t i)

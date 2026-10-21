@@ -24,8 +24,8 @@
  * rings (sy_app.c); everything below runs there, a block at a time before the engine's, so only the interrupt
  * touches the voices. The settings (chd) are the UI's, a byte each, read here as they stand (the arpeggio's live,
  * from step to step). chs.seq tells the UI the chord changed, chs.at the step that played. Needs the engine
- * (sy_note_on / off, sy_tempo, sy_note_q, NOTE_NAMES) and SY_MIDI_OUT (the platform's USB MIDI out; none: nothing
- * sent). */
+ * (sy_tempo, sy_note_q, NOTE_NAMES) and sy_loop.c (lp_out_on / off: the notes to the voices or USB MIDI, by track).
+ * V0.8, the looper: a side a track (ch_use), the transport one for all. */
 
 #ifndef SY_MIDI_OUT
 #define SY_MIDI_OUT(pkt) ((void)(pkt))
@@ -45,7 +45,7 @@ enum { AR_UP, AR_DOWN, AR_UPDN, AR_DNUP, AR_UPDN2, AR_PLAYED, AR_RANDOM, AR_WALK
        AR_THUMB, AR_CHORD, AR_N };
 enum { AS_PLAY, AS_TIE, AS_REST, AS_N };         /* a step: its note; the note before held on through it; silence */
 enum { KT_TRIAD, KT_7TH, KT_9TH, KT_SUS2, KT_SUS4, KT_6TH, KT_ADD9, KT_POWER, CH_KT_N };
-static struct {
+typedef struct {
     uint8_t mode, ftype, ktype, voicing, spread; /* CHORD: CH_*, FREE's TYPE (CH_FT), KEY's SHAPE (KT_*), 0 AUTO /
                                                   * 1 .. 10, SPREAD */
     uint8_t strum, sdir, human, taper;           /* STRUM: its gap (CH_STRUM_MS's), DIRECTION, HUMAN and TAPER (%) */
@@ -54,16 +54,25 @@ static struct {
     uint8_t bass, boct, blvl;                    /* BASS: on, octaves under (1, 2), level (% of the chord's) */
     uint8_t min, mout, och, bch;                 /* MIDI: roots from MIDI in, out over USB, the chords' and the bass's
                                                   * channels (0 .. 15) */
-    uint8_t gate, swing, latch, len, clock;      /* GROOVE: ARP's and PATTERN's note (% of a step, 5 .. 200), SWING (50
+    uint8_t gate, swing, latch, len;             /* GROOVE: ARP's and PATTERN's note (% of a step, 5 .. 200), SWING (50
                                                   * straight .. 75: the odd steps half a step late), LATCH, ARP's
-                                                  * LENGTH (1 .. 16); CLOCK IN (GLOBAL's: 0 the panel's tempo, 1 MIDI's) */
+                                                  * LENGTH (1 .. 16) */
     uint8_t st[AR_NSTEP], lvl[AR_NSTEP], oct[AR_NSTEP];   /* ARP's steps: AS_*, LEVEL (%), OCTAVE (0 .. 4: -2 .. +2) */
     uint8_t rat[AR_NSTEP], chn[AR_NSTEP], sld[AR_NSTEP];  /* .. RATCHET (1 .. 4), CHANCE (%), SLIDE */
     uint8_t root, vel;                           /* SCALE's root (0 C .. 11 B), the keys' velocity */
     uint16_t mask;                               /* SCALE's scale: a bit a semitone from its root */
     volatile uint8_t gen;                        /* bumped by the UI when it changed what makes the chord (the mode,
                                                   * its type, voicing, the ARP, its style, BASS, MIDI) */
-} chd;
+} ch_d_t;
+/* V0.8 (the looper, docs/LOOPER.md): a chords' side a track, each its own settings (ch_d) and state (ch_s, below);
+ * chd and chs are the one in use (ch_use): the UI's the selected track's, the audio interrupt's each track's in turn
+ * (it puts the UI's back before it returns, so the main loop never sees another). The transport (cht) and CLOCK IN
+ * are one for all */
+#define CH_NTRK 8u
+static ch_d_t ch_d[CH_NTRK];
+static ch_d_t *ch_dp = &ch_d[0];
+#define chd (*ch_dp)
+static uint8_t ch_clock;                         /* CLOCK IN (GLOBAL's): 0 the panel's tempo, 1 MIDI's */
 static const char *const CH_MODE_NAME[CH_NMODE] = {"OFF", "KEY", "FREE"};
 /* FREE's TYPEs: a name, the notes (semitones over the root) */
 typedef struct { const char *name; uint8_t n, iv[6]; } ch_ft_t;
@@ -167,7 +176,7 @@ static void ch_defaults(void)
     ch_arp_defaults();
     ch_midi_defaults();
     ch_steps_clear();
-    chd.clock = 0;
+    ch_clock = 0;
     chd.vel = 100;
     chd.mask = 0xFFF;
     chd.gen++;
@@ -181,7 +190,7 @@ typedef struct { uint8_t note, vel, part; uint32_t t, off; } ch_dq_t;   /* a sta
                                                                         /* (0: held, as the key that played it) */
 #define CH_NAN 16u                               /* the stepped styles' notes sounding at most */
 #define CH_NDQ 16u                               /* the starts put off at most */
-static struct {
+typedef struct {
     ch_held_t held[CH_MAXN];                     /* roots held, in the order pressed (the last one plays); id: a key
                                                   * 0 .. 26, a MIDI note 128 + it; down: held now (LATCH keeps the
                                                   * ones let go) */
@@ -198,7 +207,6 @@ static struct {
     uint8_t gen, mode, perf, style, latch;       /* chd's as last seen */
     uint8_t hseen;                               /* .. SCALE's root as HARP last built on it (+1; 0 none) */
     uint8_t pf;                                  /* the ARP: under way */
-    uint32_t t;                                  /* samples since power-on (a block a step) */
     uint32_t seed;
     /* ARP and PATTERN: the steps */
     float ph;                                    /* the place in steps (free: since the start; on the beat: the
@@ -212,22 +220,46 @@ static struct {
     uint8_t an_note[CH_NAN], nan;                /* the notes the steps have sounding, */
     uint32_t an_off[CH_NAN];                     /* .. when each ends */
     float qb;                                    /* quarter notes counted (the beats) */
-    /* the transport */
+    volatile uint8_t at;                         /* the step that played last + 1 (0 none: the UI's) */
+    volatile uint16_t atseq, beat;               /* steps played, beats passed (the UI's redraw, the ARP LED) */
+    volatile uint16_t seq;                       /* the chord changed: the UI's redraw */
+} ch_s_t;
+static ch_s_t ch_s[CH_NTRK];
+static ch_s_t *ch_sp = &ch_s[0];
+#define chs (*ch_sp)
+static uint8_t ch_ti;                            /* the track whose side is in use */
+static struct {                                  /* the transport */
     uint8_t run, clk_seen;                       /* running (PLAY, MIDI's start); a MIDI clock came */
     int32_t pulses;                              /* MIDI's clocks since its start (-1: the next is the downbeat) */
     uint32_t clk_t;                              /* the last clock's time */
     volatile float tq;                           /* quarter notes since the start (the UI's beat too) */
-    volatile uint8_t at;                         /* the step that played last + 1 (0 none: the UI's) */
-    volatile uint16_t atseq, beat;               /* steps played, beats passed (the UI's redraw, the ARP LED) */
-    volatile uint16_t seq;                       /* the chord changed: the UI's redraw */
-} chs = {.bass = 0xFF, .seed = 0x9E3779B9u};
-
-static void ch_midi(int on, uint32_t note, uint32_t vel, uint32_t part)
+    uint32_t t;                                  /* samples since power-on (a block a step) */
+} cht;
+static void ch_use(uint32_t t)                   /* track t's side in use (chd, chs) */
 {
-    uint32_t c = (part ? chd.bch : chd.och) & 15u;
-    if (chd.mout)
-        SY_MIDI_OUT((on ? 0x09u | (0x90u | c) << 8 : 0x08u | (0x80u | c) << 8) | note << 16 | (on ? vel : 0u) << 24);
+    t %= CH_NTRK;
+    ch_dp = &ch_d[t];
+    ch_sp = &ch_s[t];
+    ch_ti = (uint8_t)t;
 }
+/* every track's side as it starts (power-on: before the settings, then the project, set them) */
+static void ch_boot(void)
+{
+    uint32_t k;
+    for (k = 0; k < CH_NTRK; k++) {
+        ch_use(k);
+        memset(&chs, 0, sizeof chs);
+        chs.bass = 0xFF;
+        chs.seed = 0x9E3779B9u + 0x61C88647u * k;
+        ch_defaults();
+    }
+    ch_use(0);
+}
+/* the track's notes go out: a synth track's to the voices (tagged with it, sy_engine.c), a MIDI track's to USB MIDI
+ * on its channel (sy_loop.c lp_out_*: also mute, and a synth track's MIDI OUT) */
+static void lp_out_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t part);
+static void lp_out_off(uint32_t t, uint32_t note, uint32_t part);
+
 static void ch_on(uint32_t note, uint32_t vel, uint32_t part)   /* queued for the next starts */
 {
     if (note > 127u || chs.nq >= 16u)
@@ -260,8 +292,7 @@ static void ch_off(uint32_t note)                /* now (a queued start of it dr
             i++;
     for (i = 0; i < chs.non; i++)
         if (chs.on[i][0] == note) {
-            sy_note_off(note);
-            ch_midi(0, note, 0u, chs.on[i][1]);
+            lp_out_off(ch_ti, note, chs.on[i][1]);
             chs.on[i][0] = chs.on[chs.non - 1u][0];
             chs.on[i][1] = chs.on[chs.non - 1u][1];
             chs.non--;
@@ -295,6 +326,17 @@ static int ch_is_on(uint32_t note)
             return 1;
     return 0;
 }
+static int ch_is_due(uint32_t note)             /* on, or a start of it queued (STRUM's too) */
+{
+    uint32_t i;
+    for (i = 0; i < chs.nq; i++)
+        if (chs.q[i][0] == note)
+            return 1;
+    for (i = 0; i < chs.ndq; i++)
+        if (chs.dq[i].note == note)
+            return 1;
+    return ch_is_on(note);
+}
 /* the queued note-ons, as many as this block's starts allow (shared with the panel's and MIDI's) */
 static void ch_starts(uint32_t *starts, uint32_t max)
 {
@@ -309,8 +351,7 @@ static void ch_starts(uint32_t *starts, uint32_t max)
             chs.on[chs.non][1] = (uint8_t)p;
             chs.non++;
         }
-        sy_note_on(n, v);                        /* (a note already on: its voice again) */
-        ch_midi(1, n, v, p);
+        lp_out_on(ch_ti, n, v, p);               /* (a note already on: its voice again) */
     }
 }
 
@@ -462,7 +503,7 @@ static void ch_dq_tick(void)
 {
     uint32_t i;
     for (i = 0; i < chs.ndq;)
-        if ((int32_t)(chs.t - chs.dq[i].t) >= 0) {
+        if ((int32_t)(cht.t - chs.dq[i].t) >= 0) {
             ch_dq_t d = chs.dq[i];
             ch_dq_drop(i);
             if (d.off)
@@ -480,7 +521,7 @@ static void ch_strum(const uint8_t *nt, uint32_t n, uint32_t vel, uint32_t len)
 {
     uint8_t l[CH_MAXN];
     uint32_t i, gap = (uint32_t)CH_STRUM_MS[chd.strum % CH_NSTRUM] * (uint32_t)(SY_FS / 1000.0f), dir = chd.sdir % CH_NSDIR;
-    uint32_t hu = (uint32_t)sy_clampi(chd.human, 0, 100), tp = (uint32_t)sy_clampi(chd.taper, 0, 100), t = chs.t;
+    uint32_t hu = (uint32_t)sy_clampi(chd.human, 0, 100), tp = (uint32_t)sy_clampi(chd.taper, 0, 100), t = cht.t;
     memcpy(l, nt, n);
     if (dir == 2u)                               /* (ALTERNATE: the other way each chord) */
         dir = chs.sdir ^= 1u;
@@ -508,9 +549,9 @@ static void ch_strum(const uint8_t *nt, uint32_t n, uint32_t vel, uint32_t len)
             v += v * ((int32_t)(sy_rand(&chs.seed) % 101u) - 50) * (int32_t)hu / 20000;
         }
         v = sy_clampi(v, 1, 127);
-        if (at == chs.t || chs.ndq >= CH_NDQ) {  /* (now: at once) */
+        if (at == cht.t || chs.ndq >= CH_NDQ) {  /* (now: at once) */
             if (len)
-                ch_an_on(l[i], (uint32_t)v, chs.t + len);
+                ch_an_on(l[i], (uint32_t)v, cht.t + len);
             else
                 ch_on(l[i], (uint32_t)v, 0u);
         } else {
@@ -629,7 +670,7 @@ static void ch_an_tick(void)                     /* the steps' notes due to end 
 {
     uint32_t i;
     for (i = 0; i < chs.nan;)
-        if ((int32_t)(chs.t - chs.an_off[i]) >= 0) {
+        if ((int32_t)(cht.t - chs.an_off[i]) >= 0) {
             ch_off(chs.an_note[i]);
             chs.an_note[i] = chs.an_note[chs.nan - 1u];
             chs.an_off[i] = chs.an_off[chs.nan - 1u];
@@ -640,10 +681,10 @@ static void ch_an_tick(void)                     /* the steps' notes due to end 
 }
 static void ch_hits(void)                        /* the step under way: its hits due (RATCHET's after the first) */
 {
-    while (chs.h_left && (int32_t)(chs.t - chs.h_next) >= 0) {
+    while (chs.h_left && (int32_t)(cht.t - chs.h_next) >= 0) {
         uint32_t len = chs.h_left == 1u ? chs.h_last : chs.h_len, j;
         for (j = 0; j < chs.h_n; j++)
-            ch_an_on(chs.h_note[j], chs.h_vel, chs.t + (len < SY_BLK ? SY_BLK : len));
+            ch_an_on(chs.h_note[j], chs.h_vel, cht.t + (len < SY_BLK ? SY_BLK : len));
         chs.h_left--;
         chs.h_next += chs.h_gap;
     }
@@ -691,7 +732,7 @@ static void ch_step(uint32_t k, uint32_t smp)
             chs.h_last = chs.h_len;
         }
     }
-    chs.h_next = chs.t;
+    chs.h_next = cht.t;
     ch_hits();
 }
 /* ARP and PATTERN start: from the next step on the beat (the transport running, a note value: the pattern's place as
@@ -703,8 +744,8 @@ static void ch_step_start(void)
     chs.ni = 0;
     chs.walk = 0;
     chs.h_left = 0;
-    if (chs.run && q > 0.0f) {
-        float ph = chs.pulses < 0 ? 0.0f : chs.tq / q;
+    if (cht.run && q > 0.0f) {
+        float ph = cht.pulses < 0 ? 0.0f : cht.tq / q;
         uint32_t k = (uint32_t)ph;
         chs.k = ph - (float)k - ch_swing(k) < 0.1f ? k : k + 1u;   /* (still to come, or just gone: now) */
         chs.ph = ph;
@@ -720,11 +761,11 @@ static void ch_steps(void)
 {
     float q = ch_rate_q(), qn;
     uint32_t smp = ch_rate_smp();
-    int beat = chs.run && q > 0.0f;
-    if (beat && chs.pulses < 0)
+    int beat = cht.run && q > 0.0f;
+    if (beat && cht.pulses < 0)
         return;                                  /* (MIDI's start: waiting for its first clock) */
     if (beat)
-        chs.ph = chs.tq / q;
+        chs.ph = cht.tq / q;
     if (chs.ph >= 0.0f && (chs.ph + 2.0f < (float)chs.k || chs.ph > (float)chs.k + 2.0f)) {   /* (the rate, the */
         uint32_t wrap = chd.style == PF_ARP ? (uint32_t)sy_clampi(chd.len, 1, AR_NSTEP) : 16u, k0 = (uint32_t)chs.ph;
         chs.k = chs.ph < (float)k0 + ch_swing(k0) ? k0 : k0 + 1u;   /* transport moved: from the next step to come) */
@@ -735,7 +776,7 @@ static void ch_steps(void)
         ch_step(chs.k, smp);
         chs.k++;
     }
-    qn = beat ? chs.tq : q > 0.0f ? chs.ph * q : chs.ph * 0.25f;   /* (the beats: a quarter; ms: four steps) */
+    qn = beat ? cht.tq : q > 0.0f ? chs.ph * q : chs.ph * 0.25f;   /* (the beats: a quarter; ms: four steps) */
     if ((int32_t)qn != (int32_t)chs.qb)
         chs.beat++;
     chs.qb = qn;
@@ -829,8 +870,8 @@ static void ch_play(int restart)
         if (restart || !chs.pf)
             ch_perf_start();
     } else {
-        for (i = 0; i < n; i++)                  /* (the chord, STRUMmed; OFF: a note held anew joins) */
-            if (restart || !ch_is_on(nt[i]))
+        for (i = 0; i < n; i++)                  /* (the chord, STRUMmed; OFF: a note held anew joins: V0.8, not */
+            if (restart || !ch_is_due(nt[i]))    /* one already queued, eight at once over MIDI) */
                 st[ns++] = nt[i];
         ch_strum(st, ns, chs.vel, 0u);
     }
@@ -949,7 +990,17 @@ static void sy_chord_key(uint32_t id, uint32_t note, uint32_t vel, int down)
     chs.nheld++;
     ch_play(chd.mode != CH_OFF || chs.nheld == 1u);
 }
-/* everything this side plays ends; nothing held (a panic, a sound's load) */
+/* a key into track t's side (the side in use put back after) */
+static void sy_chord_key_t(uint32_t t, uint32_t id, uint32_t note, uint32_t vel, int down)
+{
+    ch_d_t *d = ch_dp;
+    ch_s_t *s = ch_sp;
+    uint32_t ti = ch_ti;
+    ch_use(t);
+    sy_chord_key(id, note, vel, down);
+    ch_dp = d, ch_sp = s, ch_ti = (uint8_t)ti;
+}
+/* everything the side in use plays ends; nothing held */
 static void sy_chord_reset(void)
 {
     uint32_t i;
@@ -962,59 +1013,78 @@ static void sy_chord_reset(void)
         chs.harp[i] = 0xFF;
     chs.seq++;
 }
+/* .. every track's (a panic, a sound's load) */
+static void sy_chord_reset_all(void)
+{
+    ch_d_t *d = ch_dp;
+    ch_s_t *s = ch_sp;
+    uint32_t ti = ch_ti, k;
+    for (k = 0; k < CH_NTRK; k++) {
+        ch_use(k);
+        sy_chord_reset();
+    }
+    ch_dp = d, ch_sp = s, ch_ti = (uint8_t)ti;
+}
 /* the transport: a 1 start (from the top: MIDI's clock following, at its next clock), 2 continue, 0 stop. ARP and
  * PATTERN under way go on: from the start, on its beat from the top; stopped, on their own from where they are */
 static void sy_chord_run(uint32_t a)
 {
     if (a == 1u) {
-        chs.tq = 0.0f;
-        chs.pulses = chd.clock && chs.clk_seen && chs.t - chs.clk_t < (uint32_t)(SY_FS * 0.5f) ? -1 : 0;
-        chs.run = 1;
-        if (chs.pf && ch_stepped(chd.style % PF_N)) {
-            chs.k = 0;
-            chs.s = 0;
-            chs.ph = 0.0f;
+        ch_d_t *d = ch_dp;
+        ch_s_t *s = ch_sp;
+        uint32_t ti = ch_ti, k;
+        cht.tq = 0.0f;
+        cht.pulses = ch_clock && cht.clk_seen && cht.t - cht.clk_t < (uint32_t)(SY_FS * 0.5f) ? -1 : 0;
+        cht.run = 1;
+        for (k = 0; k < CH_NTRK; k++) {
+            ch_use(k);
+            if (chs.pf && ch_stepped(chd.style % PF_N)) {
+                chs.k = 0;
+                chs.s = 0;
+                chs.ph = 0.0f;
+            }
         }
+        ch_dp = d, ch_sp = s, ch_ti = (uint8_t)ti;
     } else if (a == 2u) {
-        if (chs.pulses < 0)
-            chs.pulses = 0;
-        chs.run = 1;
+        if (cht.pulses < 0)
+            cht.pulses = 0;
+        cht.run = 1;
     } else {
-        chs.run = 0;
+        cht.run = 0;
     }
 }
 /* MIDI's clock (CLOCK IN MIDI, 24 a quarter note): the transport's place on it */
 static void sy_chord_clock(void)
 {
-    if (!(chs.clk_seen && chs.t - chs.clk_t < (uint32_t)(SY_FS * 0.5f)) && chs.run && chs.pulses >= 0)
-        chs.pulses = (int32_t)(chs.tq * 24.0f); /* (the first clock in a while: counted from where the transport is) */
-    chs.clk_t = chs.t;
-    chs.clk_seen = 1;
-    if (!chs.run)
+    if (!(cht.clk_seen && cht.t - cht.clk_t < (uint32_t)(SY_FS * 0.5f)) && cht.run && cht.pulses >= 0)
+        cht.pulses = (int32_t)(cht.tq * 24.0f); /* (the first clock in a while: counted from where the transport is) */
+    cht.clk_t = cht.t;
+    cht.clk_seen = 1;
+    if (!cht.run)
         return;
-    chs.pulses++;
-    if (chs.pulses >= 0 && chs.tq < (float)chs.pulses / 24.0f)
-        chs.tq = (float)chs.pulses / 24.0f;
+    cht.pulses++;
+    if (cht.pulses >= 0 && cht.tq < (float)cht.pulses / 24.0f)
+        cht.tq = (float)cht.pulses / 24.0f;
 }
 /* a block of the transport: its place on (between MIDI's clocks no further than the next one) */
 static void ch_transport(void)
 {
-    if (!chs.run || chs.pulses < 0)
+    if (!cht.run || cht.pulses < 0)
         return;
-    chs.tq += (float)SY_BLK * sy_tempo / (60.0f * SY_FS);
-    if (chd.clock && chs.clk_seen && chs.t - chs.clk_t < (uint32_t)(SY_FS * 0.5f)) {
-        float cap = ((float)chs.pulses + 1.0f) / 24.0f - 0.0001f;
-        if (chs.tq > cap)
-            chs.tq = cap;
+    cht.tq += (float)SY_BLK * sy_tempo / (60.0f * SY_FS);
+    if (ch_clock && cht.clk_seen && cht.t - cht.clk_t < (uint32_t)(SY_FS * 0.5f)) {
+        float cap = ((float)cht.pulses + 1.0f) / 24.0f - 0.0001f;
+        if (cht.tq > cap)
+            cht.tq = cap;
     }
-    if (chs.tq >= 3840.0f) {                     /* (960 bars of 4/4: back by them, the beat's places kept) */
-        chs.tq -= 3840.0f;
-        chs.pulses = chs.pulses >= 3840 * 24 ? chs.pulses - 3840 * 24 : 0;
+    if (cht.tq >= 3840.0f) {                     /* (960 bars of 4/4: back by them, the beat's places kept) */
+        cht.tq -= 3840.0f;
+        cht.pulses = cht.pulses >= 3840 * 24 ? cht.pulses - 3840 * 24 : 0;
     }
 }
-/* a block: the settings' changes, the ARP's steps, STRUM's starts, the note-ons queued (starts: this block's so far,
- * max of them) */
-static void sy_chord_block(uint32_t *starts, uint32_t max)
+/* a block of the side in use: the settings' changes, the ARP's steps, STRUM's starts, the note-ons queued (starts:
+ * this block's so far, max of them) */
+static void ch_block1(uint32_t *starts, uint32_t max)
 {
     if (chd.gen != chs.gen) {                    /* (the mode, HARP: everything again, the keys too (press them */
         int all = chd.mode != chs.mode || (chd.perf && chd.style == PF_HARP && (chd.perf != chs.perf ||   /* again); */
@@ -1051,8 +1121,23 @@ static void sy_chord_block(uint32_t *starts, uint32_t max)
         ch_perform();
     ch_dq_tick();
     ch_starts(starts, max);
+}
+/* a block: each track's side (from a track further on each block: none always first for the starts), then the
+ * transport */
+static void sy_chord_block(uint32_t *starts, uint32_t max)
+{
+    static uint8_t first;
+    ch_d_t *d = ch_dp;
+    ch_s_t *s = ch_sp;
+    uint32_t ti = ch_ti, k;
+    for (k = 0; k < CH_NTRK; k++) {
+        ch_use((first + k) % CH_NTRK);
+        ch_block1(starts, max);
+    }
+    first = (uint8_t)((first + 1u) % CH_NTRK);
+    ch_dp = d, ch_sp = s, ch_ti = (uint8_t)ti;
     ch_transport();
-    chs.t += SY_BLK;
+    cht.t += SY_BLK;
 }
 
 /* ---------------------------------------------------------------------------------------- the name --- */

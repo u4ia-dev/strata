@@ -1,6 +1,6 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.8, the sequencer (below),
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.8, the looper (below),
 on V0.75's ARP and one grammar for every menu button, V0.7's chords (reworked in V0.75: knobs only, STRUM), V0.67's
 legible screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on 2026-10-17, V0.6 and V0.65
 since, V0.7, V0.75 and V0.8 **need a hardware test**. How it is built:
@@ -18,10 +18,10 @@ since, V0.7, V0.75 and V0.8 **need a hardware test**. How it is built:
 | PRESETS | the next or previous preset: the starter sounds, INIT, then the user's |
 | MASTER | the output level |
 | HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP | the menus: one grammar for all (Buttons, below) |
-| SEQ | the sequencer's menu (V0.8, below); SEQ + OCT+ / OCT− the next pattern, the one before; held: PATTERNS |
+| SEQ | the looper's menu (V0.8, below); SEQ + OCT+ / OCT− the next track, the one before; held: the launch pad |
 | SAVE | save, the browser, undo and redo |
-| REC | a tap: the sequencer armed to record, or not (V0.8); held: the MOD layer |
-| PLAY | the transport: the sequencer plays (V0.8); ARP and PATTERN step on its beat (V0.75) |
+| REC | a tap: the looper records on the selected track, in the scene picked, or stops recording (V0.8); held: the MOD layer |
+| PLAY | the transport: the clips that are on play from their start (V0.8); ARP and PATTERN step on its beat (V0.75) |
 | ARP | the ARP's menu; ARP + OCT+ the ARP on, ARP + OCT− off, from any page (V0.75, below) |
 
 The screen (the STRATA UI: [UI.md](UI.md)) is one picture a module: a top line (the module's name and its dot, the
@@ -59,13 +59,13 @@ every menu.
 | | MATRIX | SLOTS: SLOT · SOURCE · DEST · AMOUNT |
 | | GLOBAL | TEMPO: BPM · TS-BEAT · TS-NOTE · CLOCK IN (V0.75) |
 | SCL | SCALE | SCALE: SCALE · ROOT · FIT · VELOCITY |
-| | CHORD | CHORD: MODE · TYPE (KEY: SHAPE) · VOICING · SPREAD; STRUM: STRUM · DIRECTION · HUMAN · TAPER; BASS: BASS · OCTAVE · LEVEL (Chords, below) |
-| | MIDI | MIDI: MIDI IN · USB OUT · CHORDS CH · BASS CH |
+| | CHORD | CHORD: MODE · TYPE (KEY: SHAPE) · VOICING · SPREAD; STRUM: STRUM · DIRECTION · HUMAN · TAPER; BASS: BASS · OCTAVE · LEVEL (Chords, below; the selected track's) |
 | ARP | ARP | STYLE: STYLE · RATE · MOVE · FEEL; GROOVE: GATE · SWING · LENGTH · LATCH (The ARP, below) |
 | | STEPS | STEPS: STEP · KIND · LEVEL · OCTAVE; RATCHET: STEP · RATCHET · CHANCE · SLIDE |
-| SEQ | SEQ | NOTES: STEP · NOTE · VELOCITY · LENGTH; FEEL: STEP · CHANCE · NUDGE · OCTAVE; MOTION: STEP · LANE · VALUE · PARAMETER (The sequencer, below) |
-| | PATTERN | PATTERN: PATTERN · LENGTH · RATE · SWING; PLAY+REC: TRANSPOSE · DIRECTION · RECORD · QUANTIZE |
-| | CHAIN | CHAIN: SLOT · PATTERN · REPEATS · CHAIN |
+| SEQ | LOOP | CLIPS: TRACK · SCENE · CLIP (launch, stop) · SCENE (launch; left: all stop); MIXER: TRACK · VOLUME · PAN · MUTE/SOLO (The looper, below) |
+| | TRACK | TRACK: TRACK · TYPE · CHANNEL · MIDI IN; RECORD: QUANTIZE · COUNT-IN · LAUNCH; CLICK: CLICK · LEVEL |
+| | CLIP | NOTES: NOTE · PITCH · START · LENGTH; EDIT: NOTE · VELOCITY · GRID · DELETE; CLIP: LENGTH · QUANTIZE · MOTION · CLEAR IT |
+| | SONG | SONG: SLOT · SCENE · REPEATS · SONG; PROJECT: PROJECT · LOAD · NEW |
 | HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS; CORE 2: ON · TEST · LOAD |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
@@ -130,7 +130,7 @@ figure, a title), there, vermilion; else in the bottom row, its name and value. 
 A hold is a button held for the HOLD time (SETTINGS > PANEL, 400 ms by default); a double tap is two taps within 300 ms.
 
 **One grammar for the menu buttons** (V0.75: HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP; V0.8, SEQ: its taps, its hold
-and its 5 s the same, its + OCT+ / + OCT− the patterns; SAVE keeps its own):
+and its 5 s the same, its + OCT+ / + OCT− the tracks; SAVE keeps its own):
 
 - **Tap**: open the menu where it was left; tap again: its next page, on through its sections.
 - **Twice**: its next section (FX: the chain view <-> the module picked; HOME: the presets).
@@ -148,12 +148,12 @@ and its 5 s the same, its + OCT+ / + OCT− the patterns; SAVE keeps its own):
 | LFO | its pages | LFO 1 <-> LFO 2 | MOMENTARY | the LFO shown reset (its points too) | a point added (left of the one picked; halfway) | the point picked deleted (not the ends) |
 | FX | its pages (the chain view: none) | the chain view <-> the module picked | MACROS | the module shown reset (the chain view: the chain as INIT's) | the chain view: a module added; a module's page: it in | taken out; bypassed |
 | GLO | its pages | the next section | PERFORM | VOICE, the MATRIX (cleared) or GLOBAL (120 BPM, 4/4, INTERNAL) reset | PERFORM latched (a GLO tap lets it go) | let go |
-| SCL | its pages | the next section | a key is the scale's root | SCALE, the chords or their MIDI reset | the chords on (MODE as it was: KEY at first) | off |
+| SCL | its pages | the next section | a key is the scale's root | SCALE or the chords reset (the selected track's) | the chords on (MODE as it was: KEY at first) | off |
 | ARP | its pages | ARP <-> STEPS | | its settings or its steps reset | the ARP on | off |
 | SAVE | a new version, saved at once | the browser (in it: back) | | saved over its own slot (a countdown from the hold) | redo | undo |
-| SEQ | its pages | the next section | PATTERNS | the section shown reset (SEQ: the pattern's steps cleared, PASTE puts them back; PATTERN: its settings; CHAIN: cleared) | the next pattern (playing: at the end of this one) | the pattern before |
-| REC | the sequencer armed, or not (a latched MOD layer: let go) | | the MOD layer | | the MOD layer latched | let go |
-| PLAY | the transport on, off (the sequencer from its start; the arpeggio on its beat) | | | | | |
+| SEQ | its pages | the next section | the launch pad | the section shown reset (LOOP, CLIP: the clip shown cleared; TRACK: the track's settings; SONG: cleared) | the next track | the track before |
+| REC | the looper records (an empty clip: a take; a clip: overdub), again: stops (a latched MOD layer: let go) | | the MOD layer | | the MOD layer latched | let go |
+| PLAY | the transport on, off (the clips on from their start; the arpeggio on its beat) | | | | | |
 | OCT− / OCT+ | the keys' octave (the browser: OCT−'s at its release) | | the browser: OCT− 3 s deletes the user preset playing | | | |
 
 Also: HOME held at power-on: the last sound is not brought back (after a crash neither: SAFE START). On NAME IT,
@@ -164,7 +164,7 @@ stops it; [FLASHING.md](FLASHING.md)).
 ## The layers
 
 A layer lasts while its button is held (REC's and ENV's MOD layer and GLO's PERFORM can be latched: the button + OCT+;
-a tap or the button + OCT− lets it go; V0.8: REC twice no longer latches, a REC tap arms the sequencer). A banner
+a tap or the button + OCT− lets it go; V0.8: REC twice no longer latches, a REC tap records). A banner
 names it and says how it ends, and its button breathes (a held MOD layer's is lit).
 
 | Layer | Its button | The knobs | The keys | Let go |
@@ -173,7 +173,7 @@ names it and says how it ends, and its button breathes (a held MOD layer's is li
 | PERFORM | GLO | 1 pitch bend (16 detents from the middle to an end), 2 mod wheel, 3 GLIDE, 4 VOLUME | play | the bend goes back to the middle; the wheel stays |
 | MACROS | FX | MACRO 1–4 | F3 to F4 (the white keys): the chain's modules 1 to 8 bypassed or back in (lit when in, glowing when bypassed) | it closes |
 | MOMENTARY | LFO | change the page's values for now (16 at most) | play | every value it changed goes back |
-| PATTERNS | SEQ (V0.8) | nothing | a white key picks pattern 1 to 16 (playing: next, at the end of the one playing); F#3 COPY, G#3 PASTE, A#3 CLEAR (the pattern shown; CLEAR copies it first, so PASTE undoes it) | it closes (a key used: no reset at 5 s) |
+| LAUNCH PAD | SEQ (V0.8) | nothing | white keys 1-8 (F3 to F4): the tracks' clips in the scene picked (launch; the one playing: stop; an empty one: the track selected); 9-16 (G4 to G5): scenes A to H; black keys 1-8 (F#3 to A#4): MUTE tracks 1 to 8; C#5 STOP ALL, D#5 SOLO (the selected track), F#5 UNDO PASS | it closes (a key used: no reset at 5 s) |
 | JUMP | EDIT | nothing | a key opens its section: the white keys OSC A, OSC B, SUB, NOISE, FILTER, ENV 1, ENV 2, LFO 1, LFO 2, MATRIX, then the chain's modules 1 to 6; F#3 HOME, G#3 VOICE, A#3 GLOBAL, C#4 SCALE, D#4 SETTINGS, A#4 the FX chain view | the page it opened |
 
 The MOD layer's sources on the white keys: F3 ENV 1, G3 ENV 2, A3 LFO 1, B3 LFO 2, C4 to F4 MACRO 1 to 4, G4 VELOCITY,
@@ -214,7 +214,8 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
 
 ## Chords (V0.7; V0.75: knobs only, STRUM)
 
-SCL's CHORD and MIDI sections make the keys a chord instrument, after the Orchid's ideas (our own design and code).
+SCL's CHORD section makes the keys a chord instrument, after the Orchid's ideas (our own design and code). V0.8: each
+track of the looper has its own SCALE, chords and ARP; the menus edit the selected track's.
 Only the knobs set them: no key is a button. With MODE OFF, the ARP off and BASS off the keys play as before. SCL +
 OCT+ turns the chords on (MODE as it was, KEY at first), SCL + OCT− off, from any page.
 
@@ -241,10 +242,9 @@ OCT+ turns the chords on (MODE as it was, KEY at first), SCL + OCT− off, from 
   - The page draws the chord as it strums: a row a note, each from its start, as bright as its level.
 - **BASS**: the chord's root one or two octaves under its lowest note, on the same sound (one of the 8 voices), at LEVEL
   (% of the chord's velocity).
-- **MIDI**: MIDI IN AS SENT (default) or ROOTS (incoming notes play chords, as root keys; with HARP: its chord's
-  root); USB OUT OFF (default) or ON: what the chords play goes out over USB MIDI, the chords on CHORDS CH (1), the bass
-  on BASS CH (2).
-- Kept with the settings, whatever sound is loaded. A change of MODE stops what plays (press again). The ARP on or off,
+- **MIDI** (V0.8: the looper's TRACK page): notes in always play through the track's chords; what they play goes out
+  over USB on the track's CHANNEL with TYPE SYNTH+MIDI or MIDI, the bass with the chords.
+- Kept with the project (V0.8; a track each), whatever sound is loaded. A change of MODE stops what plays (press again). The ARP on or off,
   or its style changed, plays what is held the new way at once (a chord held, then ARP + OCT+: arpeggiated; ARP +
   OCT−: held as a chord); to HARP, press again.
 
@@ -300,57 +300,67 @@ it plays.
 - The ARP LED: lit while the ARP is on (dark a moment on each beat while ARP or PATTERN plays), glowing while off.
 - Kept with the settings, whatever sound is loaded.
 
-## The sequencer (V0.8)
+## The looper (V0.8)
 
-The SEQ button's menu: SEQ (its steps: NOTES, FEEL, MOTION), PATTERN (PATTERN, PLAY+REC), CHAIN. Sixteen patterns of
-up to 64 steps, each step up to four notes. PLAY plays the pattern shown from its start, on the transport's beat (MIDI's
-clock with CLOCK IN MIDI); PLAY again stops it. Its notes play as the keys' do: SCALE's chords, the ARP, STRUM, BASS and
-USB OUT act on them (a step's note is a root with CHORD on; with the ARP on, the ARP plays what the steps hold).
+The SEQ button's menu: LOOP (CLIPS, MIXER), TRACK (TRACK, RECORD, CLICK), CLIP (NOTES, EDIT, CLIP), SONG (SONG,
+PROJECT). Eight tracks, eight scenes (A to H): each track a clip in each scene, a loop of notes and knob moves at the
+times they were played, one to sixteen bars long. The design and its decisions: [LOOPER.md](LOOPER.md).
 
-- **The steps** (SEQ): KNOB 1 picks a step (its number the title); the pages show sixteen at a time, the ones holding
-  the step picked (four boxes at the top right: which sixteen, the step playing under them).
-  - **NOTES**: NOTE moves the step's notes together (an empty step: one, as the step before's; turned below C-1:
-    the step emptied); VELOCITY (all its notes); LENGTH, 1/4 step to 64 steps (past the next step: held on, legato).
-    The page is a piano roll: each note a bar from where NUDGE puts it, as long as LENGTH, as bright as its velocity;
-    the Cs named at the left; LENGTH's end dashed.
-  - **FEEL**: CHANCE, 0 to 100 % (the step plays, or not); NUDGE, −50 to +50 % of a step (early, late); OCTAVE, the
-    step's notes an octave at a time. NUDGE's ticks round each step's middle, CHANCE's meters under them.
-  - **MOTION**: two lanes a pattern, each a parameter of the sound (one that can be modulated: CUTOFF, WT POS, an
-    effect's MIX ..). LANE picks one; PARAMETER its parameter; VALUE its value at the step picked (turned below the
-    lowest: none there). At a step with a value the parameter is there; at one without, the knob's own. The sound
-    itself is untouched: its knob, SAVE and undo keep its own value.
-- **PATTERN**: PATTERN (1 to 16: picked while one plays, it waits for that one's end, "P1>3" at the top right);
-  LENGTH, 1 to 64 steps; RATE, a step's note value (1/32 .. 1 BAR, 1/16 by default); SWING, 50 % (straight) to 75 %:
-  the odd steps late, by half a step at 75 %. The page: the sixteen (the one shown filled, the one next red, those
-  holding notes framed), LENGTH's cells (a step with notes bright), a bar of steps at RATE with SWING's.
-- **PLAY+REC**: TRANSPOSE, −24 to +24 semitones; DIRECTION, FWD, BACK, PING (there and back, the ends once), RANDOM;
-  RECORD, OVERDUB (notes added) or REPLACE (each step cleared as the playhead first passes it, while armed); QUANTIZE,
-  OFF (NUDGE keeps where a note came) or ON (notes on the steps).
-- **CHAIN**: up to sixteen slots, each a pattern (SLOT picks one, PATTERN sets it; END: the chain ends before it) and
-  its REPEATS (1 to 16); CHAIN on: PLAY plays slot 1's pattern, its repeats, then slot 2's .., round again. A pattern
-  picked while the chain plays comes next, once; the chain then goes on.
-- **Recording** (REC arms it: its LED lit, "REC" at the top right):
-  - **Live**: PLAY with REC armed: what the keys play (as SCALE fits them; MIDI notes in too) goes into the step
-    nearest, as long as it was held; a note just before a step goes into it and is not played again as the playhead
-    comes. A knob turned meanwhile (a parameter that can be modulated) takes a MOTION lane (the first free; both in
-    use: "MOTION: BOTH LANES IN USE") and writes it at each step it passes while it turns; it is heard as turned.
-  - **By step**: stopped, REC armed, SEQ's steps shown ("REC: THE KEYS FILL STEP 5"): the keys pressed together are
-    the step picked's notes (what it held before goes), and the next step is picked when all are let go. KNOB 1 skips
-    steps (a rest).
-- **The patterns' grammar**: SEQ + OCT+ / OCT− the next pattern, the one before (playing: at the end of the one
-  playing); SEQ held: PATTERNS (The layers, above); SEQ held 5 s on SEQ: the pattern's steps cleared (PASTE in
-  PATTERNS puts them back).
-- **Kept**: the patterns in the flash (four sector pairs at 0xCB000, free space of the main store, written while
-  stopped once 3 s pass without sound); the pattern shown, CHAIN, RECORD, QUANTIZE and the chain's slots with the
-  settings.
+- **The track selected** plays the panel's keys and is what SCL, ARP and the chords' pages edit (each track has its own
+  SCALE, chords and ARP). SEQ + OCT+ / OCT− the next track, the one before; KNOB 1 on CLIPS, MIXER and TRACK; a white
+  key 1-8 on the launch pad. The top right of the SEQ pages: the track, the scene picked, the bar and beat while
+  running, REC or DUB.
+- **A track's TYPE**: SYNTH (the sound playing; V0.9: a sound a track), SYNTH+MIDI (the same, its notes out over USB
+  MIDI too), MIDI (out over USB only, no sound: a DAW, another synth). CHANNEL: its channel out (1-16; tracks 1 to 8
+  start on 1 to 8). MIDI IN: SELECTED (notes in play whichever track is selected) or a channel (notes on it play and
+  record this track, selected or not).
+- **CLIPS**: the grid, a column a track and a row a scene. A clip playing is filled (its place a line along it), one
+  launched waits framed in vermilion, one recording is vermilion, an empty cell a dot; the track selected's number
+  boxed, the scene picked bold, their cell framed. SCENE (KNOB 2) picks the row; CLIP (KNOB 3) right launches the
+  selected track's clip there (the one playing: stops it), left stops the track; SCENE (KNOB 4) right launches the
+  row (every track its clip there; an empty cell stops its track), left: all stop.
+- **Launching** waits for the next bar (RECORD's LAUNCH: BAR, BEAT or NOW). Stopped, a launch starts the transport
+  from the top. PLAY stops everything; PLAY again plays the clips that were on, from their start.
+- **Recording** (REC, the selected track, the scene picked):
+  - **A take** (an empty clip): stopped, a bar of COUNT-IN (its clicks) and the transport starts; running, it starts
+    at the next bar. What you play goes in at its time (QUANTIZE: onto 1/32 .. 1/4), as long as you held it. REC again
+    ends the take, rounded to whole bars (1 to 16; sixteen bars end it by themselves), and it loops at once.
+  - **Overdub** (a clip with notes): REC adds to it pass after pass (a clip not playing is launched first) until REC
+    again. A note played just before its place is not played twice. **UNDO PASS** (the launch pad's last black key)
+    takes the last pass back; again puts it back (until something new is recorded).
+  - **Knob moves**: a knob turned while a synth track records (a parameter that can be modulated: CUTOFF, WT POS, an
+    effect's MIX ..) writes its moves, replacing the ones it passes; while it turns, the knob is heard. When the clip
+    plays the parameter follows them; stopped, or the clip stopped, the knob's own value again. The sound itself is
+    untouched: SAVE and undo keep the knob's value.
+  - The notes go in as played, before the track's chords and ARP: they play through them.
+- **MIXER**: VOLUME (0-127, 100 as recorded), PAN, MUTE/SOLO (PLAYS, MUTE, SOLO) of the selected track; a strip each
+  (PAN's dot over a fader; M, S under). A muted track starts no notes; SOLO mutes the others.
+- **NOTES, EDIT**: the selected track's clip in the scene picked as a piano roll, a bar at a time round the note
+  picked (NOTE, KNOB 1, in time order): PITCH; START, by GRID (EDIT: FREE (a tick), 1/32 .. 1/4, 1/16 by default);
+  LENGTH, by GRID; VELOCITY (EDIT: a lane of them under the roll); DELETE (right: the note picked gone). The playhead
+  marked over the bar playing.
+- **CLIP**: LENGTH in bars (an empty clip: one made, of no notes, to fill by overdub); QUANTIZE (right: its notes onto
+  GRID's, 1/16 with FREE); MOTION: a parameter it moves (its moves drawn as a line), CLEAR IT (right: those moves
+  gone). SEQ held 5 s on LOOP or CLIP: the clip shown cleared (not undone).
+- **SONG**: sixteen slots, each a scene and its REPEATS; SONG ON: PLAY plays slot 1's scene its repeats (a scene as
+  long as its longest clip), then slot 2's .., round again, from the first slot without a scene.
+- **PROJECT**: four, each everything above (the tracks, their chords and ARP, the clips, SONG). The one loaded is kept
+  when stopped and 3 s pass without sound; LOAD (right) saves it, stops the transport and loads the one picked
+  (empty: a new one); NEW (right twice within 2 s): the one loaded cleared. Projects 1 and 2 live where the 128 user
+  presets used to end; 3 and 4 where presets 65 to 104 were (the user presets are 64 now): while an older build's
+  presets are still there, those two are not saved ("PROJECT 3: OLD PRESETS THERE"). 2,048 notes and moves a project.
+- **CLICK**: OFF, REC (counting in and recording: the default), ON (always while running); LEVEL 0-10; the downbeat
+  higher.
+- **Kept**: QUANTIZE, COUNT-IN, LAUNCH, CLICK, its LEVEL and the project loaded with the settings; the rest in the
+  project.
 
 ## LEDs
 
 | LED | Lit | Glowing | Mid / breathing |
 | --- | --- | --- | --- |
-| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; PATTERNS: the pattern shown | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); PATTERNS: the one next, those holding notes, COPY PASTE CLEAR | mid: the scale's root |
+| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; the launch pad: a track's clip playing, the scene picked, a track not muted, SOLO on | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); the launch pad: a clip there, a scene with clips, STOP, SOLO, UNDO | mid: the scale's root |
 | A family button | the family shown | the others | |
-| REC | in its layer; the sequencer armed (recording: dark the last quarter of each beat) | otherwise | |
+| REC | in its layer; the looper recording (dark the last quarter of each beat); counting in or waiting for the bar: blinking | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |
 | PLAY | a quarter of each beat while the transport runs | | its green LED: lit while it runs |
 | ARP | the ARP on (dark a moment each beat while ARP or PATTERN plays) | the ARP off | |
@@ -378,8 +388,10 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
   parameter's CC away, OCT+ (or LEARN OFF) ends it. 32 learned CCs at most, kept with the settings; a learned CC comes
   before a parameter's own. CLEAR (turned twice within 2 s) forgets them all. CC 0, 32, 64 and 120–127 are never
   learned.
-- V0.7: the chords out over USB MIDI (Chords, above). V0.75: MIDI clock, start, continue and stop with GLOBAL's CLOCK
-  IN MIDI (The ARP, above). Not yet: the rest of MIDI out (a knob's CC, the keys without the chords).
+- V0.8: each track's notes out over USB MIDI on its CHANNEL (TYPE MIDI, or SYNTH+MIDI), the chords and the bass with
+  them; notes in on a track's MIDI IN channel play and record that track, the rest the selected track (The looper,
+  below). V0.75: MIDI clock, start, continue and stop with GLOBAL's CLOCK IN MIDI (The ARP, above). Not yet: a knob's
+  CC out.
 
 ## SETTINGS (HOME held 5 s)
 

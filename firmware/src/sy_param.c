@@ -449,15 +449,36 @@ static int16_t sp_clamp(uint32_t id, int32_t v)
     return (int16_t)sy_clampi(v, SP[id].lo, SP[id].hi);
 }
 
-/* V0.8, the sequencer's motion (sy_seq.c): up to two parameters followed to values of its own instead of the
- * patch's (a step's lane value), the patch itself untouched (its knob, a save, undo: the sound's own); 0xFFFF none.
- * Set by the audio interrupt alone, before the block that reads them */
-#define SP_NOVR 2u
-static uint16_t sp_ovr_id[SP_NOVR] = {0xFFFFu, 0xFFFFu};
-static int16_t sp_ovr_v[SP_NOVR];
+/* V0.8 (the looper's knob moves, sy_loop.c): a parameter held at a value of a track's clip (sp_ovr_on: the track + 1,
+ * 0 none), the patch untouched; set and let go a block at a time by the audio interrupt (sp_ovr_set), each change
+ * listed for sp_block (a full list: every parameter looked at) */
+static uint8_t sp_ovr_on[SP_COUNT];
+static int16_t sp_ovr_v[SP_COUNT];
+#define SP_NOVR 32u
+static uint16_t sp_ovr_chg[SP_NOVR];
+static uint8_t sp_ovr_nchg, sp_ovr_all;
 static inline int16_t sp_target(uint32_t i)        /* the value parameter i follows */
 {
-    return i == sp_ovr_id[0] ? sp_ovr_v[0] : i == sp_ovr_id[1] ? sp_ovr_v[1] : sy_patch.p[i];
+    return sp_ovr_on[i] ? sp_ovr_v[i] : sy_patch.p[i];
+}
+static void sp_ovr_set(uint32_t i, uint32_t trk, int16_t v)   /* trk: its track, 0xFF: let go */
+{
+    uint8_t on = (uint8_t)(trk == 0xFFu ? 0u : trk + 1u);
+    if (i >= SP_COUNT || (sp_ovr_on[i] == on && (!on || sp_ovr_v[i] == v)))
+        return;
+    sp_ovr_on[i] = on;
+    sp_ovr_v[i] = v;
+    if (sp_ovr_nchg < SP_NOVR)
+        sp_ovr_chg[sp_ovr_nchg++] = (uint16_t)i;
+    else
+        sp_ovr_all = 1;
+}
+static void sp_ovr_drop(uint32_t trk)            /* every parameter a track holds let go (0xFF: every track's) */
+{
+    uint32_t i;
+    for (i = 0; i < SP_COUNT; i++)
+        if (sp_ovr_on[i] && (trk == 0xFFu || sp_ovr_on[i] == trk + 1u))
+            sp_ovr_set(i, 0xFFu, 0);
 }
 
 /* every value to its normalised one at once (a patch load: no glide from the old sound) */
@@ -495,9 +516,17 @@ static void sp_block(void)
                     sp_changed(i);
     if ((SP_COUNT & 1u) && sp_target(SP_COUNT - 1u) != sp_last.v[SP_COUNT - 1u])
         sp_changed(SP_COUNT - 1u);
-    for (k = 0; k < SP_NOVR; k++)                  /* (a value of the sequencer's own: the patch's may be the same) */
-        if (sp_ovr_id[k] < SP_COUNT && sp_ovr_v[k] != sp_last.v[sp_ovr_id[k]])
-            sp_changed(sp_ovr_id[k]);
+    if (sp_ovr_all) {                              /* (a value held or let go: the patch's may be the same) */
+        for (i = 0; i < SP_COUNT; i++)
+            if (sp_target(i) != sp_last.v[i])
+                sp_changed(i);
+    } else {
+        for (k = 0; k < sp_ovr_nchg; k++)
+            if (sp_target(sp_ovr_chg[k]) != sp_last.v[sp_ovr_chg[k]])
+                sp_changed(sp_ovr_chg[k]);
+    }
+    sp_ovr_nchg = 0;
+    sp_ovr_all = 0;
     for (k = 0; k < sp_nmv;) {
         uint32_t id = sp_mv[k];
         float t = sp_norm_of(id, sp_last.v[id]), d = t - sp_n[id];

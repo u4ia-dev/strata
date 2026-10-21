@@ -145,12 +145,14 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_store.c"
 static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chords' USB MIDI out, kept for the tests
                                                                * and the page; V0.75: each one's time, samples) */
-#define SY_MIDI_OUT(pkt) (web_mout_t[web_mout_n % 256u] = chs.t, web_mout[web_mout_n++ % 256u] = (pkt))
+#define SY_MIDI_OUT(pkt) (web_mout_t[web_mout_n % 256u] = cht.t, web_mout[web_mout_n++ % 256u] = (pkt))
 #include "../../firmware/src/sy_chord.c"
-#include "../../firmware/src/sy_seq.c"
+#define LP_LOCK() 0u                               /* (one thread here: the audio runs between the page's calls) */
+#define LP_UNLOCK(f) ((void)(f))
+#include "../../firmware/src/sy_loop.c"
 #include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.8"                     /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.8 LOOPER"                     /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -160,7 +162,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_ui_fx.c"
 #include "../../firmware/src/sy_ui_save.c"
 #include "../../firmware/src/sy_ui_chord.c"
-#include "../../firmware/src/sy_ui_seq.c"
+#include "../../firmware/src/sy_ui_loop.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
@@ -690,10 +692,12 @@ EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
 {
     uint8_t *p[26] = {&chd.mode, &chd.ftype, &chd.spread, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
                       &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype,
-                      &chd.gate, &chd.swing, &chd.latch, &chd.len, &chd.clock, &chd.strum, &chd.sdir, &chd.human,
+                      &chd.gate, &chd.swing, &chd.latch, &chd.len, &ch_clock, &chd.strum, &chd.sdir, &chd.human,
                       &chd.taper};
     uint8_t *q = f == 6u ? &chd.rate[chd.style % PF_N] : f == 7u ? &chd.move[chd.style % PF_N]
-                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 26u ? p[f] : 0;
+                 : f == 8u ? &chd.feel[chd.style % PF_N] : f == 13u ? &lpp.trk[lpp.sel % LP_NTRK].out
+                 : f == 14u ? &lpp.trk[lpp.sel % LP_NTRK].ch : f < 26u ? p[f] : 0;   /* (V0.8: USB OUT and its channel: the
+                                                                                     * selected track's) */
     if (!q)
         return -1;
     if (v >= 0) {
@@ -723,69 +727,158 @@ EXPORT int32_t web_test_step(uint32_t i, uint32_t f, int32_t v)
 }
 EXPORT int32_t web_test_arp(uint32_t f)
 {
-    return f == 0u ? chs.run : f == 1u ? sy_floori(chs.tq * 1000.0f) : f == 2u ? chs.pulses : f == 3u ? chs.at
+    return f == 0u ? cht.run : f == 1u ? sy_floori(cht.tq * 1000.0f) : f == 2u ? cht.pulses : f == 3u ? chs.at
            : f == 4u ? chs.beat : f == 5u ? sy_floori(sy_tempo * 100.0f + 0.5f) : f == 6u ? sy_app_clock()
-           : f == 7u ? ui.astep : f == 8u ? (int32_t)chs.t : -1;
+           : f == 7u ? ui.astep : f == 8u ? (int32_t)cht.t : -1;
 }
 EXPORT int32_t web_test_voice_note(uint32_t i)
 {
     return i < SY_NVOICE && sy_v[i].on && sy_v[i].key ? sy_v[i].note : -1;
 }
-/* V0.8, the sequencer (sy_seq.c): f 0 the pattern shown, 1 the one next (255 none), 2 CHAIN, 3 RECORD, 4 QUANTIZE, 5
- * REC armed, 6 the step picked, 7 the lane picked, 8 CHAIN's slot picked (v >= 0 sets them); 10 a pattern under way,
- * 11 the step played last + 1, 12 the pattern playing, 13 CHAIN's slot playing, 14 lane 1's parameter held (65535
- * none), 15 its value, 16 and 17 lane 2's, 18 step recording, 19 steps played, 20 the copy holds a pattern; read
+/* V0.8, the looper (sy_loop.c): f 0 the track selected (set: lp_select), 1 the scene picked, 2 QUANTIZE, 3 COUNT-IN,
+ * 4 CLICK, 5 its LEVEL, 6 LAUNCH, 7 the project, 8 SONG on (v >= 0 sets them); 10 recording (LR_*), 11 the track
+ * recording, 12 events free, 13 the UI's change count, 14 the click sounding (samples left), 15 the transport running,
+ * 16 the bar it is in, 17 UNDO's events kept, 18 this pass's, 19 the pass before's, 20 SONG's slot playing; read
  * back */
-EXPORT int32_t web_test_sq(uint32_t f, int32_t v)
+EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
 {
-    volatile uint8_t *p[9] = {&sqd.cur, &sqd.next, &sqd.chain, &sqd.recmode, &sqd.quant, &sqd.arm, &sqd.cursor,
-                              &sqd.lane, &ui.qslot};
-    if (f < 9u) {
+    if (v >= 0 && f <= 8u) {
+        if (f == 0u) lp_select((uint32_t)v);
+        else if (f == 1u) lpp.scn = (uint8_t)(v % LP_NSCN);
+        else if (f == 2u) lpg.quant = (uint8_t)(v % LQ_N);
+        else if (f == 3u) lpg.cin = v != 0;
+        else if (f == 4u) lpg.click = (uint8_t)(v % LC_N);
+        else if (f == 5u) lpg.clvl = (uint8_t)sy_clampi(v, 0, 10);
+        else if (f == 6u) lpg.launch = (uint8_t)(v % LL_N);
+        else if (f == 7u) lpg.prj = (uint8_t)(v % LP_NPRJ);
+        else lpp.song_on = v != 0;
+        ui.dirty = D_ALL;
+    }
+    switch (f) {
+    case 0: return lpp.sel;
+    case 1: return lpp.scn;
+    case 2: return lpg.quant;
+    case 3: return lpg.cin;
+    case 4: return lpg.click;
+    case 5: return lpg.clvl;
+    case 6: return lpg.launch;
+    case 7: return lpg.prj;
+    case 8: return lpp.song_on;
+    case 10: return lpr.st;
+    case 11: return lpr.trk;
+    case 12: return lp_nfree;
+    case 13: return lpx.seq;
+    case 14: return (int32_t)lpx.ck_n;
+    case 15: return cht.run;
+    case 16: return lpx.bar;
+    case 17: return lpr.nundo;
+    case 18: return lpr.npass;
+    case 19: return lpr.nlast;
+    case 20: return lpx.sslot;
+    default: return -1;
+    }
+}
+/* track t: f 0 TYPE, 1 CHANNEL (out), 2 IN, 3 OUT, 4 VOLUME, 5 PAN, 6 MUTE, 7 SOLO (v >= 0 sets them); 10 the scene
+ * playing (255 none), 11 the one launched (255 none, 254 stop), 12 its place in its clip (ticks), 13 passes played,
+ * 14 its gain left x 1000, 15 right; read back */
+EXPORT int32_t web_test_lp_trk(uint32_t t, uint32_t f, int32_t v)
+{
+    lp_trk_t *k = &lpp.trk[t % LP_NTRK];
+    uint8_t *b = f == 0u ? &k->type : f == 1u ? &k->ch : f == 2u ? &k->cin : f == 3u ? &k->out : f == 4u ? &k->vol
+                 : f == 5u ? &k->pan : f == 6u ? &k->mute : f == 7u ? &k->solo : 0;
+    t %= LP_NTRK;
+    if (b) {
         if (v >= 0) {
-            *p[f] = (uint8_t)v;
+            *b = (uint8_t)v;
             ui.dirty = D_ALL;
         }
-        return *p[f];
+        return *b;
     }
-    return f == 10u ? sqs.run : f == 11u ? sqs.at : f == 12u ? sqs.pat : f == 13u ? sqs.cslot
-           : f == 14u ? sp_ovr_id[0] : f == 15u ? sp_ovr_v[0] : f == 16u ? sp_ovr_id[1] : f == 17u ? sp_ovr_v[1]
-           : f == 18u ? sqd.steprec : f == 19u ? sqs.atseq : f == 20u ? sq_clip_ok : -1;
+    return f == 10u ? lps[t].play : f == 11u ? lps[t].next : f == 12u ? lps[t].pos : f == 13u ? lps[t].passes
+           : f == 14u ? (int32_t)(sy_tgain[t][0] * 1000.0f + 0.5f) : f == 15u ? (int32_t)(sy_tgain[t][1] * 1000.0f + 0.5f)
+           : -1;
 }
-/* pattern p's step s: f 0 .. 3 its notes (255 none), 4 .. 7 their velocities, 8 LENGTH (quarter steps), 9 CHANCE,
- * 10 NUDGE + 50, 11 lane 1's value (255 none), 12 lane 2's (v >= 0 sets them); read back */
-EXPORT int32_t web_test_sq_step(uint32_t p, uint32_t s, uint32_t f, int32_t v)
+/* clip t, s: f 0 its length in ticks (v >= 0 sets it), 1 its events, 2 its notes, 3 the parameters it moves; read */
+EXPORT int32_t web_test_lp_clip(uint32_t t, uint32_t s, uint32_t f, int32_t v)
 {
-    sq_pat_t *q = &sq_pat[p % SQ_NPAT];
-    uint8_t *b;
-    s %= SQ_NSTEP;
-    b = f < 4u ? &q->note[s][f] : f < 8u ? &q->vel[s][f - 4u] : f == 8u ? &q->len[s] : f == 9u ? &q->chance[s]
-        : f == 10u ? (uint8_t *)&q->nudge[s] : f == 11u ? &q->lane[0][s] : f == 12u ? &q->lane[1][s] : 0;
-    if (!b)
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint16_t ids[8];
+    if (f == 0u && v >= 0) {
+        c->len = (uint16_t)v;
+        lps[t % LP_NTRK].resync = 1;
+    }
+    return f == 0u ? c->len : f == 1u ? c->n : f == 2u ? (int32_t)lp_note_n(c) : f == 3u ? (int32_t)lp_moves_of(c, ids, 8u)
+           : -1;
+}
+/* clip t, s's note i (in time): f 0 its note, 1 velocity (its FRESH bit too: + 128), 2 tick, 3 length; -1 none */
+EXPORT int32_t web_test_lp_note(uint32_t t, uint32_t s, uint32_t i, uint32_t f)
+{
+    uint32_t k = lp_note_at(&lpp.clip[t % LP_NTRK][s % LP_NSCN], i);
+    if (k == LP_END)
         return -1;
-    if (v >= 0) {
-        *b = (uint8_t)(f == 10u ? v - 50 : v);
-        ui.dirty = D_ALL;
-    }
-    return f == 10u ? q->nudge[s] + 50 : *b;
+    return f == 0u ? lp_ev[k].a : f == 1u ? lp_ev[k].b : f == 2u ? (int32_t)lp_et(k) : f == 3u ? lp_ev[k].len : -1;
 }
-/* pattern p: f 0 LENGTH, 1 RATE, 2 SWING, 3 DIRECTION, 4 TRANSPOSE + 24, 5 lane 1's parameter (65535 none), 6 lane
- * 2's, 7 holds anything (v >= 0 sets them, but 7); read back. The value parameter id follows (the override's or the
- * patch's): web_test_follow */
-EXPORT int32_t web_test_sq_pat(uint32_t p, uint32_t f, int32_t v)
+/* clip t, s's moves of parameter id: the i-th's tick (f 0) or value (f 1); -1 none */
+EXPORT int32_t web_test_lp_move(uint32_t t, uint32_t s, uint32_t id, uint32_t i, uint32_t f)
 {
-    sq_pat_t *q = &sq_pat[p % SQ_NPAT];
+    uint32_t k;
+    for (k = lpp.clip[t % LP_NTRK][s % LP_NSCN].head; k != LP_END; k = lp_ev[k].next)
+        if ((lp_ev[k].t & LP_MOVE) && lp_ev[k].len == id && !i--)
+            return f ? (int16_t)(lp_ev[k].a | (uint16_t)lp_ev[k].b << 8) : (int32_t)lp_et(k);
+    return -1;
+}
+/* a note into clip t, s (an empty one made a bar long first): its tick, length, note, velocity; its event (-1: full) */
+EXPORT int32_t web_test_lp_put(uint32_t t, uint32_t s, uint32_t tick, uint32_t len, uint32_t note, uint32_t vel)
+{
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint32_t e = lp_alloc();
+    if (e == LP_END)
+        return -1;
+    if (!c->len)
+        c->len = (uint16_t)lp_bar_ticks();
+    lp_ev[e].t = (uint16_t)(tick & LP_MAXT);
+    lp_ev[e].len = (uint16_t)len;
+    lp_ev[e].a = (uint8_t)note;
+    lp_ev[e].b = (uint8_t)vel;
+    lp_insert(c, e);
+    lps[t % LP_NTRK].resync = 1;
+    lpx.seq++;
+    ui.dirty = D_ALL;
+    return (int32_t)e;
+}
+/* a move into clip t, s (an empty one made a bar long first): its tick, the parameter, its value; its event */
+EXPORT int32_t web_test_lp_mput(uint32_t t, uint32_t s, uint32_t tick, uint32_t id, int32_t v)
+{
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint32_t e = lp_alloc();
+    if (e == LP_END)
+        return -1;
+    if (!c->len)
+        c->len = (uint16_t)lp_bar_ticks();
+    lp_ev[e].t = (uint16_t)(LP_MOVE | (tick & LP_MAXT));
+    lp_ev[e].len = (uint16_t)id;
+    lp_ev[e].a = (uint8_t)((uint16_t)v & 0xFFu);
+    lp_ev[e].b = (uint8_t)((uint16_t)v >> 8);
+    lp_insert(c, e);
+    lps[t % LP_NTRK].resync = 1;
+    ui.dirty = D_ALL;
+    return (int32_t)e;
+}
+/* SONG's slot i: f 0 its scene (255: the song ends there), 1 its repeats (v >= 0 sets them); read back */
+EXPORT int32_t web_test_lp_song(uint32_t i, uint32_t f, int32_t v)
+{
+    uint8_t *b = f ? &lpp.srep[i % LP_NSONG] : &lpp.song[i % LP_NSONG];
     if (v >= 0) {
-        if (f == 0u) q->length = (uint8_t)v;
-        else if (f == 1u) q->rate = (uint8_t)v;
-        else if (f == 2u) q->swing = (uint8_t)v;
-        else if (f == 3u) q->dir = (uint8_t)v;
-        else if (f == 4u) q->transpose = (int8_t)(v - 24);
-        else if (f == 5u || f == 6u) q->lane_id[f - 5u] = (uint16_t)v;
+        *b = (uint8_t)v;
         ui.dirty = D_ALL;
     }
-    return f == 0u ? q->length : f == 1u ? q->rate : f == 2u ? q->swing : f == 3u ? q->dir : f == 4u ? q->transpose + 24
-           : f == 5u ? q->lane_id[0] : f == 6u ? q->lane_id[1] : f == 7u ? sq_pat_used(q) : -1;
+    return *b;
 }
+EXPORT void web_test_lp_req(uint32_t r) { lpr.req = (uint8_t)r; }   /* 1 REC tapped, 2 UNDO PASS, 3 STOP ALL */
+EXPORT void web_test_lp_launch(uint32_t t, uint32_t s) { lp_launch(t, s); }   /* s: a scene, 254 stop */
+EXPORT int32_t web_test_ovr(uint32_t id) { return id < SP_COUNT && sp_ovr_on[id] ? sp_ovr_v[id] : -32768; }
+EXPORT int32_t web_test_voice_trk(uint32_t i) { return i < SY_NVOICE && sy_v[i].on ? sy_v[i].trk : -1; }
+EXPORT void web_test_knob_touch(uint32_t id) { lp_knob(id); }   /* (sy_ui.c ui_knob's: a knob turned) */
 EXPORT int32_t web_test_follow(uint32_t id) { return id < SP_COUNT ? sp_last.v[id] : -1; }
 /* V0.8 BENCH, CORE 2 (sy_c2.c; the emulator has one core): f 0 the state, 1 ON, 2 LOAD, 3 TEST's figures as a unit
  * might show them after a test (v: core 1's microseconds a half; the rest made from it: for the page's render and its
@@ -827,14 +920,4 @@ EXPORT int32_t web_test_c2(uint32_t f, int32_t v)
         return (int32_t)sy_bench.known;
     }
     return -1;
-}
-/* CHAIN's slot i: f 0 its pattern (255: the chain ends there), 1 its repeats (v >= 0 sets them); read back */
-EXPORT int32_t web_test_sq_chain(uint32_t i, uint32_t f, int32_t v)
-{
-    uint8_t *b = f ? &sqd.crep[i % SQ_NCHAIN] : &sqd.cpat[i % SQ_NCHAIN];
-    if (v >= 0) {
-        *b = (uint8_t)v;
-        ui.dirty = D_ALL;
-    }
-    return *b;
 }

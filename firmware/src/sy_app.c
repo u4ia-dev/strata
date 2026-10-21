@@ -54,7 +54,7 @@ enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC,
                                                   * SCALE fits it, 0xFF none; b the key, 0x80 down), a MIDI note as a root
                                                   * (a the note, b its velocity, 0 up)) */
        SY_EV_RUN, SY_EV_CLK };                   /* (V0.75: the transport (a 1 start, 2 continue, 0 stop), MIDI's clock) */
-typedef struct { uint8_t type, a, b; } sy_ev_t;
+typedef struct { uint8_t type, a, b, c; } sy_ev_t;   /* (c: V0.8, a MIDI note's channel) */
 #define SY_EVQ 64u
 typedef struct {
     sy_ev_t q[SY_EVQ];
@@ -74,7 +74,7 @@ static volatile uint8_t sy_irq_held;             /* halves left that count as af
 static volatile uint32_t sy_flash_ops;           /* erases and programs so far */
 static volatile uint32_t sy_late_ms, sy_late_us; /* the last late half: when, its render */
 
-static int sy_ev_push(sy_ring_t *g, uint32_t type, uint32_t a, uint32_t b)
+static int sy_ev_push3(sy_ring_t *g, uint32_t type, uint32_t a, uint32_t b, uint32_t c)
 {
     sy_ev_t *e;
     if (g->w - g->r >= SY_EVQ)
@@ -83,41 +83,33 @@ static int sy_ev_push(sy_ring_t *g, uint32_t type, uint32_t a, uint32_t b)
     e->type = (uint8_t)type;
     e->a = (uint8_t)a;
     e->b = (uint8_t)b;
+    e->c = (uint8_t)c;
     g->w = g->w + 1u;                            /* (the event first, then the index the consumer reads) */
     return 1;
 }
+static int sy_ev_push(sy_ring_t *g, uint32_t type, uint32_t a, uint32_t b) { return sy_ev_push3(g, type, a, b, 0xFFu); }
 
 static void sy_ev_drain(sy_ring_t *g)
 {
     while (g->r != g->w) {
         const sy_ev_t *e = &g->q[g->r % SY_EVQ];
         switch (e->type) {
-        case SY_EV_NOTE:
-            if (e->b) {
-                if (sy_ev_starts >= SY_STARTS_BLK)
-                    return;                      /* (the rest next block, in order) */
-                sy_ev_starts++;
-                sy_note_on(e->a, e->b);
-            } else {
-                sy_note_off(e->a);
-            }
-            sy_seq_input(0xFFu, e->a, e->b, e->b != 0u);   /* (V0.8: REC armed, recorded) */
+        case SY_EV_NOTE:                         /* (V0.8: a note as MIDI's, to the selected track) */
+            sy_loop_key(0xFFu, e->a, e->b, e->b != 0u, 0xFFu);
             break;
         case SY_EV_BEND: sy_bend((int32_t)(e->a | (uint32_t)e->b << 7)); break;
         case SY_EV_CC: sy_cc(e->a, e->b); break;
         case SY_EV_AT: sy_at = e->a; break;
-        case SY_EV_KEY:
-            sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7);
-            sy_seq_input(e->b & 127u, e->a, chd.vel, e->b >> 7);
+        case SY_EV_KEY:                          /* (V0.8: the looper's track, its chords; recorded) */
+            sy_loop_key(e->b & 127u, e->a, 0u, e->b >> 7, 0xFFu);
             break;
         case SY_EV_MKEY:
-            sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u);
-            sy_seq_input(0xFFu, e->a, e->b, e->b != 0u);
+            sy_loop_key(0xFFu, e->a, e->b, e->b != 0u, e->c);
             break;
         case SY_EV_RUN: sy_chord_run(e->a); break;
         case SY_EV_CLK: sy_chord_clock(); break;
         default:
-            sy_chord_reset();
+            sy_chord_reset_all();
             sy_all_sound_off();
             break;
         }
@@ -160,9 +152,10 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             sy_ev_drain(&sy_ev_ui);
             sy_ev_drain(&sy_ev_key);
             sy_ev_drain(&sy_ev_midi);
-            sy_seq_block();                      /* (V0.8, the sequencer: its steps, as keys into the chords) */
+            sy_loop_block();                     /* (V0.8, the looper: its clips, as keys into the tracks' chords) */
             sy_chord_block(&sy_ev_starts, SY_STARTS_BLK);   /* (the chords: their steps, their notes' starts) */
             sy_block(o + 2u * b);
+            lp_click_block(o + 2u * b);          /* (the looper's click, before MASTER) */
             sy_master_blk(o + 2u * b, g0, g1, b);
             SY_BLOCK_TAP(o + 2u * b, SY_BLK);
         }
@@ -212,25 +205,17 @@ static void sy_app_run(uint32_t on) { sy_ev_push(&sy_ev_ui, SY_EV_RUN, on ? 1u :
  * when PROGRAM is on (the main loop loads it) */
 static volatile uint8_t sy_midi_bank;
 static volatile int32_t sy_pc_want = -1;         /* a program change's preset (sy_app_entry_load's id), -1 none */
-static uint32_t sy_midi_chd[4];                  /* V0.7: the MIDI notes that went in as chords' roots (their release
-                                                  * goes the same way) */
 static void sy_midi_in(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t t = st & 0xF0u, id;
     int32_t l;
     d1 &= 127u;
     d2 &= 127u;
-    if (t >= 0x80u && t < 0xF0u && !sy_ui_midi_ch(st & 15u))
-        return;
-    if (t == 0x90u || t == 0x80u) {
-        uint32_t on = t == 0x90u && d2, bit = 1u << (d1 & 31u), *w = &sy_midi_chd[d1 >> 5];
-        if (on ? chd.min && sy_chord_active() : (*w & bit) != 0u) {   /* (CHORDS IN: a root) */
-            if (sy_ev_push(&sy_ev_midi, SY_EV_MKEY, d1, on ? d2 : 0u))
-                *w = on ? *w | bit : *w & ~bit;
-        } else {
-            sy_ev_push(&sy_ev_midi, SY_EV_NOTE, d1, on ? d2 : 0u);
-        }
-    }
+    if (t >= 0x80u && t < 0xF0u && !sy_ui_midi_ch(st & 15u) &&
+        !((t == 0x90u || t == 0x80u) && lp_trk_in(st & 15u) != lpp.sel % LP_NTRK))
+        return;                                  /* (V0.8: a track's MIDI IN channel always comes in) */
+    if (t == 0x90u || t == 0x80u)                /* (V0.8: to the looper's track: its IN's, else the selected) */
+        sy_ev_push3(&sy_ev_midi, SY_EV_MKEY, d1, t == 0x90u ? d2 : 0u, st & 15u);
     else if (t == 0xE0u)
         sy_ev_push(&sy_ev_midi, SY_EV_BEND, d1, d2);
     else if (t == 0xD0u)
@@ -268,7 +253,7 @@ static uint32_t sy_clk_ms[SY_CLK_N], sy_clk_n;   /* the last clocks' times; how 
 static uint8_t sy_clk_follow;                    /* the tempo is MIDI's clock's */
 static void sy_midi_rt(uint32_t b, uint32_t ms)
 {
-    if (!chd.clock)
+    if (!ch_clock)
         return;
     if (b == 0xF8u) {
         if (sy_clk_n && ms - sy_clk_ms[(sy_clk_n - 1u) % SY_CLK_N] > 250u)
@@ -291,7 +276,7 @@ static void sy_midi_rt(uint32_t b, uint32_t ms)
 static int sy_app_clock(void) { return sy_clk_follow; }
 static int sy_app_clock_lost(void)
 {
-    if (!sy_clk_follow || (chd.clock && fm1_ms - sy_clk_ms[(sy_clk_n - 1u) % SY_CLK_N] <= 1000u))
+    if (!sy_clk_follow || (ch_clock && fm1_ms - sy_clk_ms[(sy_clk_n - 1u) % SY_CLK_N] <= 1000u))
         return 0;
     sy_clk_follow = 0;
     sy_clk_n = 0;
@@ -479,8 +464,11 @@ static struct {
     uint16_t slot;
     uint8_t pk[SP_PACK_MAX];                     /* the patch to write; after a delete, the one deleted (put back) */
     uint32_t len, quiet_t, check_t, edit_crc, set_crc;
-    uint32_t seq_crc[SQ_NOBJ];                   /* V0.8: the patterns as the flash has them (four an object) */
+    uint32_t prj_crc[LP_NOBJ];                   /* V0.8: the project's objects as the flash has them */
+    int8_t prj_want;                             /* .. a project to load (-1 none): the one loaded saved first */
+    uint8_t prj_told;                            /* .. its sectors hold older presets: said once */
 } sy_fl;
+static void sy_ui_project(int ok, int blocked);  /* sy_ui.c: a project loaded (or not); its place in the way */
 static void sy_ui_deleted(int rc, uint32_t s);   /* sy_ui_save.c: a delete or its putting back done */
 static void sy_ui_restored(int rc, uint32_t s);
 
@@ -538,8 +526,105 @@ static uint32_t sy_edit_pack(uint8_t *b)
     return 3u + sp_pack(&sy_patch, b + 3);
 }
 
+/* V0.8, the looper's project (sy_loop.c): its objects that changed saved (one: the first that did; else all of them),
+ * unless older presets hold its sectors (said once). 0: nothing left to save */
+static int sy_prj_save(int one)
+{
+    uint32_t o, left = 0;
+    lp_scale_keep();
+    for (o = 0; o < LP_NOBJ; o++) {
+        uint32_t n = lp_pack(o), c = n ? ss_crc32(ss_buf, n) : 0u, obj = SS_PRJ0 + lpg.prj % LP_NPRJ * SS_PRJ_OBJS + o;
+        if (c == sy_fl.prj_crc[o])
+            continue;
+        if (!n) {                                /* (past the stream's end: what is there is never read) */
+            sy_fl.prj_crc[o] = c;
+            continue;
+        }
+        if (ss_foreign(obj)) {
+            if (!sy_fl.prj_told)
+                sy_ui_project(1, 1);
+            sy_fl.prj_told = 1;
+            ui_prj_state[lpg.prj % LP_NPRJ] = 2;
+            return 0;
+        }
+        if (!ss_save(obj, ss_buf, n)) {
+            sy_fl.prj_crc[o] = c;
+            ui_prj_state[lpg.prj % LP_NPRJ] = 1;
+        } else {
+            left = 1;
+        }
+        if (one)
+            return 1;
+    }
+    return (int)left;
+}
+/* the project p as the flash keeps it loaded (none: a new one); the crcs as read (nothing written for it). 1: read */
+static int sy_prj_load(uint32_t p)
+{
+    uint32_t o;
+    int ok;
+    lpg.prj = (uint8_t)(p % LP_NPRJ);
+    lp_load_begin();
+    for (o = 0; o < LP_NOBJ; o++) {
+        int m = ss_load(SS_PRJ0 + lpg.prj * SS_PRJ_OBJS + o, ss_buf, SS_PAYLOAD_MAX);
+        if (m > 0)
+            lp_load(o, ss_buf, (uint32_t)m);
+    }
+    ok = lp_load_end();
+    for (o = 0; o < LP_NOBJ; o++) {
+        uint32_t n = lp_pack(o);
+        sy_fl.prj_crc[o] = n ? ss_crc32(ss_buf, n) : 0u;
+    }
+    sy_fl.prj_told = 0;
+    return ok;
+}
+static void sy_prj_scan(void)                    /* each project kept, empty, or where older presets are */
+{
+    uint32_t p;
+    for (p = 0; p < LP_NPRJ; p++) {
+        ss_hdr_t h;
+        uint32_t obj = SS_PRJ0 + p * SS_PRJ_OBJS;
+        ui_prj_state[p] = (uint8_t)(ss_current(obj, &h) >= 0 ? 1u : ss_foreign(obj) ? 2u : 0u);
+    }
+}
+/* PROJECT's LOAD (the UI's): the transport stopped, then (hushed) the one loaded saved and p loaded; 1: under way */
+static int sy_app_project(uint32_t p)
+{
+    if (p >= LP_NPRJ || sy_fl.busy || sy_fl.prj_want >= 0)
+        return 0;
+    if (cht.run)
+        sy_app_run(0);
+    sy_fl.prj_want = (int8_t)p;
+    return 1;
+}
+static void sy_app_project_new(void)             /* PROJECT's NEW: the one loaded cleared (its tracks, chords, clips) */
+{
+    uint32_t t;
+    if (cht.run)
+        sy_app_run(0);
+    lp_project_clear();
+    for (t = 0; t < CH_NTRK; t++) {
+        ch_use(t);
+        ch_defaults();
+    }
+    ch_use(0);
+    sy_ui_project(1, 0);
+}
+
 static void sy_flash_ms(void)
 {
+    if (sy_fl.prj_want >= 0 && !sy_fl.busy && !cht.run && lpr.st == LR_OFF) {   /* (PROJECT's LOAD: hushed, the one */
+        sy_hush_req = 1;                                                         /* loaded saved, then the next read) */
+        if (sy_hushed) {
+            int ok = !sy_prj_save(0) || ui_prj_state[lpg.prj % LP_NPRJ] == 2u;
+            if (ok)
+                sy_prj_load((uint32_t)sy_fl.prj_want);
+            sy_fl.prj_want = -1;
+            sy_hush_req = 0;
+            sy_ui_project(ok, 0);
+        }
+        return;
+    }
     if (sy_fl.busy && sy_hushed) {               /* a SAVE, a delete, its putting back: hushed, the slot written, */
         uint32_t job = sy_fl.busy;               /* back */
         int rc = ss_user_put(sy_fl.slot, sy_fl.pk, job == SY_FL_DEL ? 0u : sy_fl.len);
@@ -581,17 +666,8 @@ static void sy_flash_ms(void)
         if (c != sy_fl.edit_crc && !ss_save(SS_EDIT, b, n))
             sy_fl.edit_crc = c;
     }
-    if (!chs.run && !sqs.run) {                  /* (V0.8: a group of patterns changed, one a check: stopped, so */
-        uint32_t o;                              /* nothing records meanwhile) */
-        for (o = 0; o < SQ_NOBJ; o++) {
-            uint32_t c = sq_obj_crc(o);
-            if (c != sy_fl.seq_crc[o]) {
-                if (!ss_save(SS_SEQ0 + o, ss_buf, sq_obj_pack(o)))
-                    sy_fl.seq_crc[o] = c;
-                break;
-            }
-        }
-    }
+    if (!cht.run && lpr.st == LR_OFF)            /* (V0.8: the project's objects changed, one a check: stopped, so */
+        sy_prj_save(1);                          /* nothing records meanwhile) */
 }
 
 /* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held, or the platform
@@ -604,15 +680,12 @@ static void sy_flash_boot(void)
     sy_patch_t p;
     int n;
     memset(&sy_fl, 0, sizeof sy_fl);
+    sy_fl.prj_want = -1;
     sy_uidx_scan();
-    for (n = 0; n < (int)SQ_NOBJ; n++) {         /* (V0.8: the patterns; none kept yet: as they start, written only */
-        int m = ss_load(SS_SEQ0 + (uint32_t)n, ss_buf, SS_PAYLOAD_MAX);   /* once changed) */
-        if (m > 0)
-            sq_obj_take((uint32_t)n, ss_buf, (uint32_t)m);
-        sy_fl.seq_crc[n] = sq_obj_crc((uint32_t)n);
-    }
     if ((n = ss_load(SS_SETTINGS, b, sizeof b)) > 0 && sy_ui_settings(b, (uint32_t)n))
         sy_fl.set_crc = ss_crc32(b, (uint32_t)n);
+    sy_prj_scan();                               /* (V0.8: the project the settings name; none kept: a new one, */
+    sy_ui_project(sy_prj_load(lpg.prj) ? 1 : 2, 0);   /* written once changed, its tracks the settings' SCALE) */
     if (sy_boot_safe || (fm1_in.buttons & (1u << panel.btn[B_HOME]))) {
         sy_boot_skipped = 1;
         return;
@@ -676,16 +749,8 @@ static void sy_key_up(uint32_t k, uint32_t *now)        /* a key let go: the not
 }
 static void sy_key_down(uint32_t k, int32_t n, uint32_t v)
 {
-    if (sy_chord_active()) {                     /* (V0.7: the chords take the key, a chord button too) */
-        if (sy_ev_push(&sy_ev_key, SY_EV_KEY, n >= 0 && n <= 127 ? (uint32_t)n : 0xFFu, k | 0x80u)) {
-            sy_keynote[k] = 0xFE;
-            sy_key_note = n;
-            sy_key_vel = (int32_t)v;
-        }
-        return;
-    }
-    if (n >= 0 && n <= 127 && sy_ev_push(&sy_ev_key, SY_EV_NOTE, (uint32_t)n, v)) {
-        sy_keynote[k] = (uint8_t)n;
+    if (sy_ev_push(&sy_ev_key, SY_EV_KEY, n >= 0 && n <= 127 ? (uint32_t)n : 0xFFu, k | 0x80u)) {
+        sy_keynote[k] = 0xFE;                    /* (V0.8: every key to the selected track, through its chords) */
         sy_key_note = n;
         sy_key_vel = (int32_t)v;
     }
@@ -752,7 +817,7 @@ static SY_NOINLINE void sy_app_boot(void)
     sy_tables_now();
     for (k = 0; k < SY_NKEY; k++)
         sy_keynote[k] = 0xFF;
-    sy_chord_reset();
+    sy_chord_reset_all();
     sy_audio_init();
 }
 

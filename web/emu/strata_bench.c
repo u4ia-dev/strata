@@ -124,15 +124,25 @@ int main(void)
     web_keys(0);
     web_test_chd(4, 0);
     run(300);
-    for (i = 0; i < 16u; i++)                       /* V0.8: pattern 1, a note a step, its NOTES page as it plays */
-        web_test_sq_step(0, i, 0, 60 + (int32_t)(i % 8u) * 2);
-    page(SEC_SEQ, "NOTES");
+    for (i = 0; i < 16u; i++) {                     /* V0.8, the looper: three clips playing, CLIPS (redrawn 25 a */
+        web_test_lp_put(0, 0, 24u * i, 20u, 60u + (i % 8u) * 2u, 100u);   /* second), then NOTES */
+        web_test_lp_put(1, 0, 24u * i, 20u, 48u + (i % 4u) * 3u, 90u);
+        web_test_lp_put(2, 0, 96u * (i % 4u), 90u, 72u + (i % 3u), 80u);
+    }
+    for (i = 0; i < 3u; i++)
+        web_test_lp_launch(i, 0);
+    page(SEC_SEQ, "CLIPS");
     web_buttons(1u << B_PLAY);
     run(30);
     web_buttons(0);
     run(300);
     start();
     run(2000);
-    report("SEQ NOTES, a pattern playing, 2 s");
+    report("LOOP CLIPS, three clips playing, 2 s");
+    page(SEC_LCLIP, "NOTES");
+    run(300);
+    start();
+    run(2000);
+    report("CLIP NOTES, its clip playing, 2 s");
     return 0;
 }

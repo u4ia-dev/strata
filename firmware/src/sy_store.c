@@ -10,35 +10,45 @@
  * Flash through three hooks: st_read, st_erase, st_prog (storage_hw.c on the FM-1, erasing and programming only inside
  * FL_STORE_OK, which the RAM driver checks again as FL_RANGE_OK; the emulator's, with the same check), and every
  * object's sectors are checked against those ranges at compile time. The main loop's only.
- *   user presets   128 slots, 5 to a sector pair (768 bytes each: a length, 0 empty, and a packed patch), 26 pairs
- *                  from 0x97000 (Felucca's projects and user samples: a Strata install takes them over)
+ *   user presets   64 slots (V0.8; 128 before), 5 to a sector pair (768 bytes each: a length, 0 empty, and a packed
+ *                  patch), 13 pairs from 0x97000 (Felucca's projects and user samples: a Strata install takes them
+ *                  over)
  *   settings       0xFC000 / 0xFD000 (Felucca's settings pair)
  *   the sound      0xE5000 / 0xE6000 (Felucca's autosave pair, above the update loader's staging)
- *   patterns       V0.8, the sequencer's 16 (sy_seq.c): 4 to a sector pair, 4 pairs from 0xCB000, just above the
- *                  user presets (Felucca's main store still: free since Strata took it over)
+ *   projects       V0.8, the looper's four (sy_loop.c): four objects each, a sector pair each; projects 1 and 2 from
+ *                  0xCB000, just above where the 128 user presets ended (free since Strata took the store over), 3
+ *                  and 4 from 0xB1000, where presets 65 .. 104 were: a project there is saved only while those
+ *                  sectors hold no older Strata record (ss_foreign: presets an older build kept are never written
+ *                  over)
  * Needs the hooks, FL_IN and the FL_* ranges (hal/fm1_flash.h; the emulator's copy), sy_param.c (SP_PACK_MAX). */
 #define SS_MAGIC 0x41525453u                       /* "STRA" */
 #define SS_SECTOR 4096u
 #define SS_PAYLOAD_OFF 256u
 #define SS_PAYLOAD_MAX (SS_SECTOR - SS_PAYLOAD_OFF)
-#define SS_NUSER 128u                              /* user preset slots */
+#define SS_NUSER 64u                               /* user preset slots (V0.8: 128 before; the rest the projects') */
 #define SS_SLOTS 5u                                /* .. to a sector pair */
 #define SS_SLOT_BYTES 768u                         /* .. each: its length (2 bytes, little endian; 0: empty), the patch */
 #define SS_NPAIRS ((SS_NUSER + SS_SLOTS - 1u) / SS_SLOTS)
 #define SS_USER_BASE 0x97000u
 #define SS_SET_BASE 0xFC000u
 #define SS_EDIT_BASE 0xE5000u
-#define SS_NSEQ 4u                                 /* V0.8: the sequencer's patterns, 4 to a pair */
-#define SS_SEQ_BASE (SS_USER_BASE + SS_NPAIRS * 2u * SS_SECTOR)
-enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_SEQ0 = SS_USER0 + SS_NPAIRS, SS_NOBJ = SS_SEQ0 + SS_NSEQ };
+#define SS_NPRJ 4u                                 /* V0.8: the looper's projects */
+#define SS_PRJ_OBJS 4u                             /* .. their objects each (sy_loop.c LP_NOBJ) */
+#define SS_PRJ_BYTES (SS_PRJ_OBJS * 2u * SS_SECTOR)
+#define SS_PRJ_LO 0xCB000u                         /* .. 1 and 2 (where the 128 presets ended) */
+#define SS_PRJ_HI (SS_USER_BASE + SS_NPAIRS * 2u * SS_SECTOR)   /* .. 3 and 4 (presets 65 .. 104 before) */
+enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_PRJ0 = SS_USER0 + SS_NPAIRS, SS_NOBJ = SS_PRJ0 + SS_NPRJ * SS_PRJ_OBJS };
 _Static_assert(SS_SLOTS * SS_SLOT_BYTES <= SS_PAYLOAD_MAX, "a pair's slots fit its payload");
 _Static_assert(SP_PACK_MAX + 2u <= SS_SLOT_BYTES, "a packed patch fits a slot");
 _Static_assert(FL_IN(SS_USER_BASE, SS_NPAIRS * 2u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI), "user presets: the main store");
 _Static_assert(FL_IN(SS_SET_BASE, 2u * SS_SECTOR, FL_GLOB_LO, FL_GLOB_HI), "settings: the globals");
 _Static_assert(FL_IN(SS_EDIT_BASE, 2u * SS_SECTOR, FL_AUTO_LO, FL_AUTO_HI), "the sound playing: the autosave pair");
-_Static_assert(SS_SEQ_BASE == 0xCB000u, "the patterns: just above the user presets");
-_Static_assert(FL_IN(SS_SEQ_BASE, SS_NSEQ * 2u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI), "the patterns: the main store");
-_Static_assert(SS_SEQ_BASE + SS_NSEQ * 2u * SS_SECTOR <= FL_OTA_LO, "the patterns: below the update's staging");
+_Static_assert(SS_NPAIRS == 13u && SS_PRJ_HI == 0xB1000u, "the 64 presets: 13 pairs, 0x97000 .. 0xB0FFF");
+_Static_assert(SS_USER_BASE + 26u * 2u * SS_SECTOR == SS_PRJ_LO, "projects 1, 2: where the 128 presets ended");
+_Static_assert(FL_IN(SS_PRJ_LO, 2u * SS_PRJ_BYTES, FL_DATA_LO, FL_DATA_HI), "projects 1, 2: the main store");
+_Static_assert(SS_PRJ_LO + 2u * SS_PRJ_BYTES <= FL_OTA_LO, "projects 1, 2: below the update's staging");
+_Static_assert(FL_IN(SS_PRJ_HI, 2u * SS_PRJ_BYTES, FL_DATA_LO, FL_DATA_HI), "projects 3, 4: the main store");
+_Static_assert(SS_PRJ_HI + 2u * SS_PRJ_BYTES <= SS_PRJ_LO, "projects 3, 4: under projects 1, 2");
 
 typedef struct {
     uint32_t magic;
@@ -75,8 +85,11 @@ static uint32_t ss_sector(uint32_t obj, uint32_t copy)   /* copy A (0) or B (1) 
         return SS_SET_BASE + copy * SS_SECTOR;
     if (obj == SS_EDIT)
         return SS_EDIT_BASE + copy * SS_SECTOR;
-    if (obj >= SS_SEQ0)
-        return SS_SEQ_BASE + (obj - SS_SEQ0) * 2u * SS_SECTOR + copy * SS_SECTOR;
+    if (obj >= SS_PRJ0) {                          /* (a project's object: 1, 2 at 0xCB000; 3, 4 at 0xB1000) */
+        uint32_t pj = (obj - SS_PRJ0) / SS_PRJ_OBJS, o = (obj - SS_PRJ0) % SS_PRJ_OBJS;
+        return (pj < 2u ? SS_PRJ_LO + pj * SS_PRJ_BYTES : SS_PRJ_HI + (pj - 2u) * SS_PRJ_BYTES) + o * 2u * SS_SECTOR +
+               copy * SS_SECTOR;
+    }
     return SS_USER_BASE + (obj - SS_USER0) * 2u * SS_SECTOR + copy * SS_SECTOR;
 }
 
@@ -119,6 +132,21 @@ static int ss_current(uint32_t obj, ss_hdr_t *h)
         return 1;
     }
     return -1;
+}
+
+/* an object's sectors hold a valid Strata record of another object (an older build's: presets 65 .. 104 where projects
+ * 3 and 4 go): 1, never written over */
+static int ss_foreign(uint32_t obj)
+{
+    uint32_t copy;
+    for (copy = 0; copy < 2u; copy++) {
+        ss_hdr_t h;
+        if (obj >= SS_NOBJ || st_read(ss_sector(obj, copy), &h, sizeof h))
+            return 1;
+        if (h.magic == SS_MAGIC && h.hcrc == ss_crc32(&h, sizeof h - 4u) && h.type != obj)
+            return 1;
+    }
+    return 0;
 }
 
 /* an object into dst (max bytes): its length, -1 none (or too long) */

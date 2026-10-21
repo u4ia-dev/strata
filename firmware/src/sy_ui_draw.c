@@ -43,15 +43,19 @@ static void ui_p_steps(void);                       /* .. ARP's (V0.75), STRUM's
 static void ui_p_strum(void);
 static void ui_p_ratch(void);
 static void ui_p_groove(void);
-static void ui_p_qnotes(void);                      /* sy_ui_seq.c: the sequencer's pages (V0.8), PATTERNS */
-static void ui_p_qfeel(void);
-static void ui_p_qmotion(void);
-static void ui_p_qpat(void);
-static void ui_p_qplay(void);
-static void ui_p_qchain(void);
-static void ui_p_patterns(void);
-static const char *ui_seq_nv(uint32_t id, char *v);
-static int32_t ui_seq_key_pat(uint32_t k);
+static void ui_p_lclips(void);                      /* sy_ui_loop.c: the looper's pages (V0.8), the launch pad */
+static void ui_p_lmix(void);
+static void ui_p_ltrk(void);
+static void ui_p_lrec(void);
+static void ui_p_lclick(void);
+static void ui_p_lnotes(void);
+static void ui_p_ledit(void);
+static void ui_p_lclip(void);
+static void ui_p_lsong(void);
+static void ui_p_lprj(void);
+static void ui_p_pad(void);
+static const char *ui_loop_nv(uint32_t id, char *v);
+static int32_t ui_pad_of(uint32_t k);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
@@ -64,7 +68,7 @@ static uint32_t ui_bpm_now(void)
     return sy_app_clock() ? (uint32_t)sy_floori(sy_tempo * (float)UI_TSN_VAL[ui.tsn % 5u] / 4.0f + 0.5f) : ui.bpm;
 }
 /* .. the transport's place in TS-NOTE beats (the audio side's: on MIDI's clock too) */
-static float ui_beats(void) { return chs.tq * (float)UI_TSN_VAL[ui.tsn % 5u] / 4.0f; }
+static float ui_beats(void) { return cht.tq * (float)UI_TSN_VAL[ui.tsn % 5u] / 4.0f; }
 
 /* sound playing: a voice on, or the output still over -70 dBFS (a delay's or a reverb's tail). The live parts move
  * only while it does; otherwise they stand still and nothing is redrawn */
@@ -210,7 +214,7 @@ static const char *ui_knob_nv(uint32_t k, char *v)
         sp_fix(v, (int32_t)ui_bpm_now(), 0u, 0);
     } else if (id == UI_CLOCK) {
         n = "CLOCK IN";
-        sp_put(v, chd.clock ? "MIDI" : "INTERNAL");
+        sp_put(v, ch_clock ? "MIDI" : "INTERNAL");
     } else if (id == UI_TSB || id == UI_TSN) {
         n = "TIME SIG";
         sp_fix(sp_put(sp_fix(v, ui.tsb, 0u, 0), "/"), UI_TSN_VAL[ui.tsn], 0u, 0);
@@ -283,8 +287,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
             sp_put(v, "THE END");
     } else if (id >= UI_HMODE && id <= UI_SSLD) {
         n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
-    } else if (id >= UI_QSTEP && id <= UI_QCHAIN) {
-        n = ui_seq_nv((uint32_t)id, v);             /* (the sequencer's, V0.8) */
+    } else if (id >= UI_LTRK && id <= UI_LNEW) {
+        n = ui_loop_nv((uint32_t)id, v);            /* (the looper's, V0.8) */
     } else if (id >= UI_SCUR && id <= UI_BBANK) {
         return 0;                                   /* (SAVE's, the browser's: ui_save_flag) */
     }
@@ -1481,9 +1485,9 @@ static void ui_p_tempo(void)
     lk_text(144.0f, 104.0f, T26B, t, ui_ink(ui_hot(0)), sk.ground, -20, 28);
     lk_label(146.0f, 140.0f, sy_app_clock() ? "BPM: MIDI" : "BPM", 40);
     {                                               /* CLOCK IN (V0.75): the panel's tempo, or MIDI's clock */
-        float x = lk_chip(146.0f, 172.0f, "INT", !chd.clock);
+        float x = lk_chip(146.0f, 172.0f, "INT", !ch_clock);
         lk_label(146.0f, 158.0f, "CLOCK IN", 20);
-        lk_chip(x, 172.0f, "MIDI", chd.clock);
+        lk_chip(x, 172.0f, "MIDI", ch_clock);
         ui_H(3, 128.0f, 175.0f);
     }
 }
@@ -2152,12 +2156,13 @@ static void ui_top(void)
         else
             sp_fix(sp_put(r, "OCT "), sy_app_oct(), 0u, 1);
         right = r;
-    } else if (f == FAM_SEQ) {                      /* (V0.8: the pattern, the one picked next, REC) */
-        e = sp_fix(sp_put(r, "P"), (int32_t)sqd.cur % SQ_NPAT + 1, 0u, 0);
-        if (sqd.next < SQ_NPAT)
-            e = sp_fix(sp_put(e, ">"), (int32_t)sqd.next + 1, 0u, 0);
-        if (sqd.arm)
-            sp_put(e, " REC");
+    } else if (f == FAM_SEQ) {                      /* (V0.8: the track selected, the scene picked, the bar and beat */
+        e = sp_fix(sp_put(r, "T"), (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0);   /* while running, REC) */
+        e = sp_put(sp_put(e, " "), (char[2]){ui_l_scn(lpp.scn), 0});
+        if (cht.run && lpx.bar >= 0)
+            e = sp_fix(sp_put(sp_fix(sp_put(e, " "), lpx.bar + 1, 0u, 0), "."), (int32_t)ui_beat_now() + 1, 0u, 0);
+        if (lpr.st != LR_OFF)
+            sp_put(e, lpr.st == LR_DUB ? " DUB" : " REC");
         right = r;
     }
     n = 0;
@@ -2325,14 +2330,15 @@ static void (*const UI_PAGE[])(void) = {
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
     [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
-    [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_QNOTES] = ui_p_qnotes, [G_QFEEL] = ui_p_qfeel,
-    [G_QMOTION] = ui_p_qmotion, [G_QPAT] = ui_p_qpat, [G_QPLAY] = ui_p_qplay, [G_QCHAIN] = ui_p_qchain,
+    [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_LCLIPS] = ui_p_lclips, [G_LMIX] = ui_p_lmix,
+    [G_LTRK] = ui_p_ltrk, [G_LREC] = ui_p_lrec, [G_LCLICK] = ui_p_lclick, [G_LNOTES] = ui_p_lnotes,
+    [G_LEDIT] = ui_p_ledit, [G_LCLIP] = ui_p_lclip, [G_LSONG] = ui_p_lsong, [G_LPRJ] = ui_p_lprj,
     [G_CORE2] = ui_p_core2,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
 /* what the screen shows now: a countdown, SAFE START, a layer, or the page */
-enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP, V_PAT };
+enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP, V_PAD };
 static uint32_t ui_view(void)
 {
     if (ui.ub_t0 || (ui.cd_btn != NB && fm1_ms - ui.bt_t[ui.cd_btn] >= (ui_cd_quiet(ui.cd_btn) ? UI_CD_SHOW_MS
@@ -2343,7 +2349,7 @@ static uint32_t ui_view(void)
     if (ui.mod)
         return V_MOD;
     return ui.lay == LAY_PERF ? V_PERF : ui.lay == LAY_MAC ? V_MAC : ui.lay == LAY_JUMP ? V_JUMP
-           : ui.lay == LAY_PAT ? V_PAT : V_PAGE;
+           : ui.lay == LAY_PAD ? V_PAD : V_PAGE;
 }
 
 /* MOMENTARY (LFO held): the page, with the values it goes back to as its shape's dashes (their patch, ~0.9 KB, on
@@ -2393,7 +2399,7 @@ static void ui_page(void)
     case V_PERF: lk_banner("PERFORM", "LET GO: BEND RETURNS"); ui_p_perf(); break;
     case V_MAC: lk_banner("MACROS", "LET GO: CLOSES"); ui_p_mac(); break;
     case V_JUMP: lk_banner("JUMP", "A KEY OPENS IT"); ui_p_jump(); break;
-    case V_PAT: lk_banner("PATTERNS", ui.run ? "A KEY: NEXT" : "A KEY PICKS IT"); ui_p_patterns(); break;
+    case V_PAD: lk_banner("LAUNCH PAD", cht.run ? "A KEY: AT THE BAR" : "A KEY STARTS IT"); ui_p_pad(); break;
     default:
         if (ui.lay == LAY_MOM) {
             ui_page_mom(g);
@@ -2553,11 +2559,26 @@ static void sy_ui_leds(void)
                 ui_led(sy_patch.p[FXI_ON[in]] ? fm1_led : fm1_led_dim, 14u + k);
         } else if (ui.lay == LAY_JUMP && ui_jump_sec(k) != 0xFFu) {   /* JUMP: the keys that open a section, */
             ui_led(ui_jump_sec(k) == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
-        } else if (ui.lay == LAY_PAT) {             /* PATTERNS (V0.8): the one shown lit; the one next, those that */
-            int32_t pt = ui_seq_key_pat(k);         /* hold notes, COPY, PASTE and CLEAR glowing */
-            if (pt == (int32_t)sqd.cur)
+        } else if (ui.lay == LAY_PAD) {             /* the launch pad (V0.8): a track's clip playing lit, one there */
+            int32_t r = ui_pad_of(k);               /* glowing; the scene picked lit, a scene with clips glowing; a */
+            uint32_t sc = lpp.scn % LP_NSCN, t;     /* track playing (its MUTE key) lit; STOP, SOLO, UNDO glowing */
+            int on = 0, dim = 0;
+            if (r >= 0 && r < 8) {
+                on = cht.run && lps[r].play == sc;
+                dim = lpp.clip[r][sc].len != 0u || lps[r].next == sc;
+            } else if (r >= 8 && r < 16) {
+                on = (uint32_t)r - 8u == sc;
+                for (t = 0; t < LP_NTRK; t++)
+                    dim |= lpp.clip[t][r - 8].len != 0u;
+            } else if (r >= 16 && r < 24) {
+                on = !lpp.trk[r - 16].mute;
+            } else if (r >= 24) {
+                dim = 1;
+                on = r == 25 && lpp.trk[lpp.sel % LP_NTRK].solo;
+            }
+            if (on)
                 ui_led(fm1_led, 14u + k);
-            else if (pt == (int32_t)sqd.next || (pt >= 0 && sq_pat_used(&sq_pat[pt])) || pt <= -2)
+            else if (dim)
                 ui_led(fm1_led_dim, 14u + k);
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
@@ -2576,9 +2597,12 @@ static void sy_ui_leds(void)
             ui_led(f == ui.fam ? fm1_led : fm1_led_dim, panel.btn[FAM_BTN[f]]);
     if (ui.mod) {
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
-    } else if (sqd.arm) {                           /* REC (V0.8): lit while armed (recording: dark the last quarter */
-        float bt = ui_beats();                      /* of each beat); glowing while not */
-        if (!ui.run || bt - (float)sy_floori(bt) < 0.75f)
+    } else if (lpr.st == LR_TAKE || lpr.st == LR_DUB) {   /* REC (V0.8): lit while the looper records (dark the last */
+        float bt = ui_beats();                      /* quarter of each beat); counting in or waiting for the bar: */
+        if (bt - (float)sy_floori(bt) < 0.75f)      /* blinking with the beat; glowing while not */
+            ui_led(fm1_led, panel.btn[B_REC]);
+    } else if (lpr.st != LR_OFF) {
+        if ((fm1_ms / 125u) & 1u)
             ui_led(fm1_led, panel.btn[B_REC]);
     } else {
         ui_led(fm1_led_dim, panel.btn[B_REC]);

@@ -25,6 +25,7 @@ typedef struct {
     uint8_t key;                           /* its key is down */
     uint8_t steal;                         /* fading out for next_note: blocks left (0: not stealing) */
     uint8_t next_note, next_vel;           /* the note a steal starts (next_vel 0: none) */
+    uint8_t trk, next_trk;                 /* V0.8: the track it plays for (SY_NOTRK none), the steal's note's */
     uint8_t alt, uni_cap;                  /* note-on alternate 0/1; unison voices the budget allows */
     uint8_t ran;                           /* bit per source: it ran the last block (else it fades in) */
     uint8_t fresh;                         /* a new note: no ramps from the voice's last sound */
@@ -39,6 +40,8 @@ typedef struct {
     uint8_t kind[4];                       /* the kind each source plays: warp / shape / type, route << 7 */
     float rnd;                             /* note-on random 0..1 */
     float g[4][2];                         /* each source's level x pan at the end of the last block */
+    float tg[2];                           /* V0.8: its track's gains (VOLUME, PAN, MUTE, SOLO) at the end of the last
+                                            * block */
     env_t env[2];
     lfo_t lfo[2];
     osc_v_t osc[SY_NOSC];
@@ -52,6 +55,12 @@ typedef struct {
 } sy_voice_t;
 
 static sy_voice_t sy_v[SY_NVOICE];
+/* V0.8 (the looper, sy_loop.c): each track's gains, left and right (its VOLUME and PAN; 0 muted, or another soloed),
+ * set by the looper a block at a time; the voices of a track play at them (ramped); [SY_NOTRK]: a note of none */
+#define SY_NOTRK 8u
+static uint8_t sy_ntrk = SY_NOTRK;         /* the track the next note on or off is for (its caller's) */
+static float sy_tgain[SY_NOTRK + 1u][2] = {{1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f},
+                                            {1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f}};
 static float sy_bend_v;                    /* -1..1 */
 static float wt_g[SY_NOSC][2];             /* a table swap's fade of each oscillator: this block's start and end */
 static float sy_glfo_v[2];                 /* the FREE LFOs' values this block (sy_engine.c) */
@@ -198,6 +207,7 @@ static void voice_start(sy_voice_t *v, uint32_t note, uint32_t vel, float from_p
     v->gate = v->key = 1;
     v->steal = 0;
     v->next_vel = 0;
+    v->trk = (uint8_t)(sy_ntrk % (SY_NOTRK + 1u));
     v->age = ++sy_age;
     v->uni_cap = SY_NUNI;                  /* (the budget takes unison voices back from the oldest voices) */
     v->target = (float)note;
@@ -207,6 +217,8 @@ static void voice_start(sy_voice_t *v, uint32_t note, uint32_t vel, float from_p
     if (fresh) {
         v->amp = 0.0f;
         v->fade = 1.0f;
+        v->tg[0] = sy_tgain[v->trk][0];
+        v->tg[1] = sy_tgain[v->trk][1];
         v->fresh = 1;
         v->ran = 0;
         v->fmix = 0.0f;
@@ -507,19 +519,23 @@ static void voice_block(sy_voice_t *v, float *ml, float *mr)
         v->fmix = m1;
     }
 
-    /* the amp (envelope x velocity x steal fade), ramped */
+    /* the amp (envelope x velocity x steal fade) x its track's gains (V0.8), ramped */
     {
-        float a = amp0, da = (amp1 * fade1 - amp0) * (1.0f / (float)SY_BLK);
+        float tl = sy_tgain[v->trk][0], tr = sy_tgain[v->trk][1];
+        float al = amp0 * v->tg[0], ar = amp0 * v->tg[1];
+        float dal = (amp1 * fade1 * tl - al) * (1.0f / (float)SY_BLK), dar = (amp1 * fade1 * tr - ar) * (1.0f / (float)SY_BLK);
         if (ran && anydir)
-            for (i = 0; i < SY_BLK; i++, a += da) {
-                ml[i] += (fl[i] + dl[i]) * a;
-                mr[i] += (fr[i] + dr[i]) * a;
+            for (i = 0; i < SY_BLK; i++, al += dal, ar += dar) {
+                ml[i] += (fl[i] + dl[i]) * al;
+                mr[i] += (fr[i] + dr[i]) * ar;
             }
         else if (ran)
-            for (i = 0; i < SY_BLK; i++, a += da) {
-                ml[i] += fl[i] * a;
-                mr[i] += fr[i] * a;
+            for (i = 0; i < SY_BLK; i++, al += dal, ar += dar) {
+                ml[i] += fl[i] * al;
+                mr[i] += fr[i] * ar;
             }
+        v->tg[0] = tl;
+        v->tg[1] = tr;
     }
     v->amp = amp1;
     v->fade = fade1;

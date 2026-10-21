@@ -1,8 +1,8 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.8 BENCH`: the STRATA UI of V0.67,
-SCL's chords, the ARP, the sequencer and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Chords", "The
-ARP", "The sequencer", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.8 LOOPER`: the STRATA UI of V0.67,
+SCL's chords, the ARP, the 8-track looper and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Chords",
+"The ARP", "The looper", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -17,7 +17,7 @@ FM-1. Section 8 lists what was checked where.
 | --- | --- |
 | Package | `build/strata.fwsc`, identity `FM-1_900` (Felucca's development identity, kept), 610,090 bytes |
 | Writes | the app area `0x4000`–`0x92FFF` only, by Felucca's update loader (unchanged); never the boot head `0x0000`–`0x3FFF` |
-| Strata itself writes | its presets `0x97000`–`0xCAFFF`, the sequencer's patterns `0xCB000`–`0xD2FFF` (V0.8), the sound playing `0xE5000`–`0xE6FFF`, its settings `0xFC000`–`0xFDFFF` (and, during an update, the loader's staging `0xE0000`–`0xE4FFF`): Felucca's own storage ranges, nothing else |
+| Strata itself writes | its 64 presets `0x97000`–`0xB0FFF` (V0.8; 128 before, to `0xCAFFF`), the looper's projects 1 and 2 `0xCB000`–`0xDAFFF` and 3 and 4 `0xB1000`–`0xC0FFF` (V0.8; 3 and 4 never where older presets are), the sound playing `0xE5000`–`0xE6FFF`, its settings `0xFC000`–`0xFDFFF` (and, during an update, the loader's staging `0xE0000`–`0xE4FFF`): Felucca's own storage ranges, nothing else |
 | Shows itself on USB as | "Felucca" (Felucca's descriptors, unchanged: both installers find the FM-1 by that name) |
 
 ## 1. What this build is
@@ -52,7 +52,22 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
-**New in V0.8 BENCH** (stage 0 of the looper, [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "CORE 2"): the
+**New in V0.8 LOOPER** (stage 1 of [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "The looper"): V0.8's
+sequencer (never installed) rebuilt as an 8-track looper. SEQ opens LOOP (CLIPS, MIXER), TRACK (TRACK, RECORD,
+CLICK), CLIP (NOTES, EDIT, CLIP) and SONG (SONG, PROJECT). Eight tracks, each SYNTH (the sound playing), SYNTH+MIDI or
+MIDI (out over USB on its channel), each with its own SCALE, chords and ARP; eight scenes, a clip each track, one to
+sixteen bars of notes and knob moves at the times they were played. REC on the selected track: an empty clip, a take
+(stopped: a bar of count-in clicks) that REC ends rounded to whole bars, looping at once; a clip, overdub pass after
+pass, UNDO PASS taking the last back. Launching a clip or a scene waits for the bar; SEQ held is the launch pad (white
+keys 1-8 the tracks' clips, 9-16 the scenes; black keys MUTE, STOP ALL, SOLO, UNDO PASS); SEQ + OCT+ / OCT− the next
+track. MIXER: VOLUME, PAN, MUTE, SOLO. SONG chains scenes with repeats. Four projects, kept in the flash (written when
+stopped and quiet, only when changed). MIDI in plays the selected track, or a track whose MIDI IN is its channel.
+**The user presets are 64 now** (they were 128): a preset an older build saved in slots 65 to 128 is no longer shown,
+and stays in the flash (projects 3 and 4 are not saved over it; slots 65-104 are where they go). Package
+`build/strata.fwsc`, 610,090 bytes, sha256 `5bbbe25573755844440b2c132ac8dd40ec6d37c7af2845041a9bac5303b4f4cc`. It also has
+**CORE 2** (V0.8 BENCH, below).
+
+**V0.8 BENCH** (stage 0 of the looper, [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "CORE 2"): the
 second core, built in and **off by default**, measured on your FM-1 before the looper's V0.9 puts voices on it.
 SETTINGS > CORE 2: ON starts core 1 at the next power-on (Felucca's way: X0X's mailbox with Melodee's and Jangada's
 hardening, no supply raise); TEST runs 30 s while something plays: core 1 renders wavetable oscillators while core 0
@@ -63,7 +78,7 @@ after a boot that crashed, or with HOME held at power-on. The voices are built e
 oscillators' own kernels with state of its own). Package `build/strata.fwsc`, 610,090 bytes, sha256
 `1ece869f4da115fd79e766b4e3f062d1f5380e1f3b4baaab5b6a514e083286ed`.
 
-**New in V0.8** (the sequencer; [CONTROLS.md](CONTROLS.md) "The sequencer"): the SEQ button's menu (SEQ: NOTES, FEEL,
+**V0.8, the sequencer** (built 2026-10-21, never installed: the looper above replaced it): the SEQ button's menu (SEQ: NOTES, FEEL,
 MOTION; PATTERN: PATTERN, PLAY+REC; CHAIN). Sixteen patterns of up to 64 steps, up to four notes a step, each step's
 VELOCITY, LENGTH, CHANCE and NUDGE; a pattern's LENGTH, RATE, SWING, DIRECTION and TRANSPOSE; two MOTION lanes a
 pattern (a parameter held at a step's value; the sound itself untouched); CHAIN of up to sixteen slots. PLAY plays the
@@ -107,9 +122,9 @@ black with one vermilion accent, HOME's bloom in place of the scope, the long ho
 the panel's controls, the presets and settings, the package, its identity and the flash it writes are V0.66's. Its
 package: `build/strata.fwsc`, 610,090 bytes, sha256 `5638a66636d7d14e6e80270c62ade1467ba93c17abe685c8bcae3a028fdef2a8`.
 
-Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), the rest of MIDI out (V0.7
-sends the chords and V0.8 the sequencer's notes through them, V0.75 takes MIDI's clock), voices on the second core
-(V0.8 BENCH only measures it), the 8-track looper ([LOOPER.md](LOOPER.md)).
+Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), a knob's CC out over MIDI,
+a sound a track, inserts and sends and voices on the second core (V0.9), the drum synth and the sidechain (V0.85:
+[LOOPER.md](LOOPER.md)).
 
 ## 2. Before anything: a full backup
 
@@ -272,7 +287,7 @@ New in V0.6:
     AUTOPAN, RING MOD, TAPE; two of a type (DRIVE and DRIVE 2). Note the CPU % with a full chain of eight (the header
     estimates it; HOME's header measures it).
 13. **The panel's changes.** SELECT the section, ALGORITHM the page, in every family; EDIT + OCT− turns the section
-    shown off, EDIT + OCT+ on; GLO's third section is the MATRIX (V0.8: SEQ opens the sequencer).
+    shown off, EDIT + OCT+ on; GLO's third section is the MATRIX (V0.8: SEQ opens the looper).
 14. **Deleting a preset.** In the browser, on a user preset: OCT− held 3 s (a countdown), then SAVE + OCT− at once:
     it comes back. A preset saved by V0.5: loads, its effects as the chain.
 15. **The fixes.** BENCH's KEYS row after flicking through pages while playing (under ~20 ms, against V0.5's 91 ms);
@@ -310,22 +325,29 @@ New in V0.66:
     log: paste it with the report. With the USB audio recorded (a DAW, or the test page's audio), `uac_missed` and
     `uac_underruns` entries say when its gaps were, next to what else happened then.
 
-New in V0.8 (the test page's "Listen and look" has them as rows; [CONTROLS.md](CONTROLS.md) "The sequencer"):
+New in V0.8 LOOPER (the test page's "Listen and look" has them as rows "take", "dub", "tracks", "project";
+[CONTROLS.md](CONTROLS.md) "The looper"):
 
-26. **A pattern by step.** REC (its LED lit), SEQ (NOTES, "REC: THE KEYS FILL STEP 1"): play a few notes and a chord
-    (keys held together), each moves the step on; KNOB 1 skips a step. PLAY: it plays in time, on its steps; NOTE,
-    VELOCITY, LENGTH, then FEEL's CHANCE and NUDGE, PATTERN's SWING and RATE, by ear. PLAY again: no stuck notes.
-27. **Recording live.** REC armed, PLAY: play along on the keys, then from a MIDI keyboard (USB, then the TRS jack):
-    the notes land where you played them, no doubled notes; QUANTIZE ON; REPLACE clears what the playhead passes.
-    With SCL's chords on, then the ARP on, the pattern plays through them. On a DAW's clock (GLOBAL > CLOCK IN MIDI):
-    starts with it and stays on its beat over a few minutes.
-28. **Patterns and motion.** SEQ + OCT+ / OCT− while playing: the next pattern starts at the end of the one playing;
-    SEQ held: PATTERNS (a white key picks; F#3 COPY, G#3 PASTE, A#3 CLEAR); CHAIN with two or three slots. MOTION:
-    REC armed and playing, turn FILTER's CUTOFF for a bar; the next pass plays it back; stopped, the knob's own value.
-29. **Kept.** After writing patterns, stop, wait 5 s in silence (the patterns' write), switch off and on: they and the
-    chain come back. The device report's event log shows the writes (one sector pair each).
+26. **A take.** SEQ (CLIPS: track 1, scene A, an empty grid). REC: a bar of count-in clicks (REC's LED blinking), then
+    REC lit: play notes and chords for a bar or two, REC again: it loops at once, rounded to whole bars ("T1 A: 2
+    BARS, LOOPING"), in time, no stuck notes. CLICK's LEVEL (TRACK > CLICK) by ear. PLAY stops it; PLAY again plays it
+    from its start. With GLOBAL's CLOCK IN MIDI on a DAW's clock: starts with it and stays on its beat for a few
+    minutes.
+27. **Overdub and motion.** REC on the clip playing: add notes over a pass or two (what you add plays back from the
+    next pass, never doubled), REC ends it. SEQ held, the last black key (UN): the last pass gone; again: back. REC
+    again and turn FILTER > TONE's CUTOFF for a bar: the next pass moves it; stopped, the knob's own value. With
+    SCL's chords on, or the ARP, the clip plays through them.
+28. **Tracks.** SEQ + OCT+: track 2 ("T2 SYNTH"); record on it and on track 3 (MIDI from a keyboard over USB, then the
+    TRS jack: no doubled or lost notes); SEQ held: white keys 1-3 launch their clips at the bar, 9-11 scenes A-C,
+    black keys 1-3 MUTE; MIXER: VOLUME and PAN by ear. TRACK: one track MIDI, CHANNEL 2, to a DAW or a synth over
+    USB: its notes there, none from the FM-1; MIDI IN on a channel: that channel plays it whichever track is
+    selected.
+29. **SONG and projects.** SONG: A twice, B, C; SONG ON, PLAY: the scenes in turn. Stop, wait 5 s in silence (the
+    project's write: the device report's event log shows it), switch off and on: the clips, tracks, chords and SONG
+    come back. PROJECT: 2, LOAD: empty; 1, LOAD: all there. If you had saved more than 64 presets with an older build:
+    PROJECT 3 or 4 says "OLD PRESETS THERE" and is not saved (say so in the report).
 
-New in V0.8 BENCH (the test page's row "core2"):
+CORE 2 (V0.8 BENCH; the test page's row "core2"):
 
 30. **CORE 2.** HOME held 5 s (SETTINGS), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
     wait 5 s in silence (the settings' write), switch off and on. CORE 2 again: STATE **ANSWERING** (else NO ANSWER:
@@ -402,6 +424,19 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.8 LOOPER**: built and checked by the build: the image 418,360 bytes, RAM 61,684 of 73,728 bytes (+8,048 on
+  V0.8 BENCH: the chords' eight sides, the looper's state, the parameters held), the pool 360,764 bytes (the 2,048
+  events in place of the patterns), the interrupt stack ~2.5 KB, the main stack ~4.8 KB, register access in `hal/`
+  only; the presets' 13 pairs and the projects' objects asserted inside the allow-listed store and below the update's
+  staging. **Verified on host**: the engine's 94 checks (and as WebAssembly), the store's (64 user slots). **Verified
+  in the emulator**: 132 checks (the looper's 13: playing and launching from the pad, the mix, a MIDI track, STOP ALL,
+  a take with its count-in, overdub and UNDO PASS, QUANTIZE and knob moves, SONG, chords a track and MIDI IN, the
+  click, NOTES, the tracks' grammar, projects through a power cycle), 127 screens and 583 knob turns checked, the
+  flasher's 26 and the test page's 21. **Needs a hardware test**: the timing by ear and against a DAW's clock,
+  recording from the keys and MIDI (USB, TRS), the click's level, the projects' writes and their return, the launch
+  pad's LEDs (steps 26-29). **Unverified**: whether an older build left presets in slots 65-128 on your unit (step
+  29 shows it; nothing is written over them either way).
 
 - **V0.8 BENCH**: built and checked by the build: the image 400,636 bytes, RAM 53,636 of 73,728 bytes (+4,644 on
   V0.8: core 1's stacks 4,352 bytes, its mailbox, the test's state), the pool 357,232 bytes (+512: the test's phases

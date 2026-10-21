@@ -135,6 +135,25 @@ The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
 
+## 13. V0.8 (the looper)
+
+From the build (2026-10-21): the image 418,360 B (+17,724 on V0.8 BENCH: `sy_loop.c`, its pages in `sy_ui_loop.c`, the
+chords a track, the project's stream; V0.8's sequencer gone); `.data` + `.bss` 61,684 B (+8,048: the chords' eight
+sides, ~4.2 KB; the looper's state, ~3.3 KB (each track's place and notes sounding, the recording's pass lists for
+UNDO); the parameters held, 3 bytes each); the pool 360,764 B (+3,532: the 2,048 events, 16 KB, and the project's head
+while it is read, 1.5 KB, in place of the patterns' 14.3 KB); the main stack ~4,788 B, the interrupt stack ~2,532 B.
+The flash: the user presets 64 (13 pairs, `0x97000`–`0xB0FFF`), projects 1 and 2 at `0xCB000`–`0xDAFFF`, 3 and 4 at
+`0xB1000`–`0xC0FFF` (four objects a project; a project of 2,048 events fills 3.6 of them), free: `0xC1000`–`0xCAFFF`
+and `0xDB000`–`0xDFFFF` (60 KiB). Left: **163,204 B** of the app slot, **12,044 B** of `.data` + `.bss` (the build
+keeps 4 KiB of it), **20,164 B** of the pool (4 KiB kept).
+
+The drawing's time on the host (`web/emu/strata_bench.c`, three runs): LOOP's CLIPS with three clips playing
+1,108–1,121 µs over 2 s, CLIP's NOTES with its clip playing 1,207–1,262 µs (the page drawn again 12 times a second
+while it runs, at once when something changes: 2,015–2,300 µs at 25 a second before; V0.8's NOTES was 716–725, ARP's
+STEPS 883–921); HOME 762–779 µs with a chord and 37–41 µs in silence, unchanged. The audio side: a block walks each playing
+clip's ticks since the last (a few events), the eight chords' sides (most idle), the gains; a knob recording looks
+through its clip once a block while it turns.
+
 ## 12. V0.8 BENCH (the second core, measured)
 
 From the build (2026-10-21): the image 400,636 B (+8,632 on V0.8: `sy_c2.c`, CORE 2's page, the console's lines);

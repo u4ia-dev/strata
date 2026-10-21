@@ -158,7 +158,7 @@ of ARCHITECTURE.md §18 (−60 / −40 dBc): §3 says what is left.
 allow-list (`hal/fm1_flash_map.h`, the hooks as `storage_hw.c` has them): an empty flash loads nothing; saved and
 loaded back; saved again to the other copy, the newest winning; a write torn after any byte of the payload or the
 record leaves the copy before; a part that ignores writes is not reported saved (the read-back) and the old copy
-loads; Felucca's record (`FELU`) in the same sector reads as none; all 128 user slots round trip a packed patch, a slot
+loads; Felucca's record (`FELU`) in the same sector reads as none; all 64 user slots (V0.8; 128 before) round trip a packed patch, a slot
 written keeps its pair's other slots, a slot emptied reads empty; every object's sectors inside the allow-list (no
 erase or program refused), and the hooks refuse the loader's area and the stock firmware's backup.
 
@@ -548,6 +548,21 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   checked as it shows the turn: 75 findings before (the old flags over titles, figures, handles), none after (a value
   the page shows is lit in place; else it is in the bottom row). Found on the way: the top line's chord name under its
   section dots (moved left of them); `memmove` missing from the device's build (a loop).
+- **V0.8, the looper** (132 checks, the sequencer's 13 replaced by the looper's 13; 127 screens and 583 knob turns,
+  all clear): T1's clip from the launch pad's key 1 (the transport starting): C4 E4 G4 C5 a quarter apart, an eighth
+  each, round again at 4, its voices tagged T1; the mix (VOLUME 50: 0.25 each side; PAN left: 0.25 / 0; MUTE: 0; T2
+  SOLO: T1 0); T2 MIDI on channel 5 launched mid-bar: its first note at the bar, sent on its channel, no voice; STOP
+  ALL at the bar; a first take on T3 B: REC stopped, the count-in (a click), the take from the bar, C4 at 0.5 for an
+  eighth and E4 at 2.0 for a quarter, REC at 4.1: one bar, 60@48/48 64@192/96, playing at 4.50 and 6.00; overdub: D4
+  at 9.0 sent once that pass, at 13.00 the next, UNDO PASS takes it out and puts it back; QUANTIZE 1/16: F4 at 16.3 on
+  tick 24; the cutoff turned while recording: written, heard as turned, held by the next pass, let go when stopped;
+  SONG A once, C twice: A C C C C A; a track's own chords (T5 off while T1 KEY), MIDI on T4's IN channel and on the
+  selected track; the click on a beat, OFF none; NOTES (PITCH +2, START +1/16), EDIT's DELETE; SEQ + OCT+ the next
+  track, SEQ held 5 s on CLIP the clip cleared; through a power cycle the clips, tracks, chords, SONG and settings;
+  PROJECT 2 empty, 1 back. Found on the way: eight MIDI notes at once lost three in the chords' OFF mode (a note queued
+  but not yet started was queued again with each new one: `ch_is_due`); a clip's note one tick late (the walk now
+  includes the tick now); the project loader rejecting every project (its count); the transport's follower undoing a
+  MIDI stop.
 - **V0.8 BENCH, CORE 2** (132 checks; 122 screens and 573 knob turns, all clear): the page on the emulator's one core
   (STATE ONE CORE BUILD), TEST refused ("ONE CORE HERE"), ON ("ON AFTER A RESTART") and LOAD 16 -> 8 kept through a
   power cycle; two renders, the page as the emulator is and with a unit's figures after a test (example numbers, set by
@@ -592,8 +607,8 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   keys' latency while the screen redraws. The UI draws only what changed and sends only the rows that changed (the
   busiest live page 24 % of the SPI's time, §6.3), but the keys are read in the main loop, so a key can wait for a
   frame's drawing: the BENCH page times a frame; if it is long the keys move to the TIMER5 tick.
-- The sequencer (V0.8): its timing by ear and against a DAW's clock, recording from the keys and MIDI, the patterns'
-  writes (four objects at `0xCB000`, one a check) and their return at power-on.
+- The looper (V0.8): its timing by ear and against a DAW's clock, recording from the keys and MIDI (USB, TRS), the
+  click's level, the projects' writes (objects at `0xCB000` and `0xB1000`, one a check) and their return at power-on.
 - The second core (V0.8 BENCH): that it starts and answers on the unit, 30 s of jobs without a misread, its time for
   the oscillators' kernels against core 0's, how much core 0 slows while both run, its stack (FLASHING.md step 30).
 - The flash on the device: an erase's and a page's IRQ-off time against the hush (the ring silent before any write);
