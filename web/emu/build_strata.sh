@@ -29,7 +29,7 @@ emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -Wall -Wno-unused-function -Wn
     -Wno-unused-but-set-variable -Ibuild/gen -Ifirmware/src \
     --no-entry -sSTANDALONE_WASM -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=33554432 -sFILESYSTEM=0 \
     -o build/emu_strata/strata.wasm web/emu/strata_web.c
-sed -e 's|<title>Felucca</title>|<title>Strata V0.75 Emulator</title>|' \
+sed -e 's|<title>Felucca</title>|<title>Strata V0.8 Emulator</title>|' \
     -e 's|content="Felucca, the multi-engine synth firmware for the FM-1, running in your browser: the same code the instrument runs."|content="Strata, a wavetable synth firmware for the FM-1, running in your browser: the same code the instrument runs."|' \
     -e 's|  Felucca by Leo Kuroshita, Hügelton Instruments · |  Strata, a Felucca fork · Felucca by Leo Kuroshita, Hügelton Instruments · |' \
     -e 's|<nav><a href="../installer/">Install</a><a href="../editor/">Editor</a><a href="https://github.com/hugelton/Felucca">Source</a></nav>|<nav><a href="https://github.com/hugelton/Felucca">Felucca</a></nav>|' \
@@ -37,7 +37,7 @@ sed -e 's|<title>Felucca</title>|<title>Strata V0.75 Emulator</title>|' \
     -e 's|"felucca-emu-flash"|"strata-emu-flash"|; s|"felucca-emu-knobs"|"strata-emu-knobs"|; s|"felucca-emu-knobmode"|"strata-emu-knobmode"|' \
     -e 's|fetch("felucca.wasm")|fetch("strata.wasm")|; s|felucca.wasm: |strata.wasm: |' \
     -e 's|console.warn("Felucca: |console.warn("Strata: |; s|console.warn(`Felucca: |console.warn(`Strata: |' \
-    -e 's|@VERSION@|V0.75|g; s|@PREVIEW@| (hardware test build)|g' \
+    -e 's|@VERSION@|V0.8|g; s|@PREVIEW@| (hardware test build)|g' \
     web/emu/index.html > build/emu_strata/index.html
 grep -q 'fetch("strata.wasm")' build/emu_strata/index.html || { echo "emu_strata: the page did not take the module's name"; exit 1; }
 cp web/emu/worklet.js build/emu_strata/

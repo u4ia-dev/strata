@@ -31,7 +31,7 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, VOICE: 9, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, REVERB: 15,
               OTT: 16, EQ: 17, EQ2: 21, PHASER: 24, PHASER2: 25, CHAIN: 36, MENU: 37, GLOBAL: 38, SAVE: 39, BROWSE: 40,
-              KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45 };                            // SEC_*
+              KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, SPAT: 47, SCHN: 48 };   // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
@@ -194,14 +194,17 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   play(ex, 0.1);
   check(`.. a slot it made (slot ${made + 1}) and left at 0 is freed when it closes`,
         made >= 0 && !slots(ex).some(([a, d]) => a === SRC.LFO2 && d === pos));
-  tap(ex, B.REC);                               // (spaced: a single tap does nothing)
-  const one = ex.web_test_mod();
-  ex.web_buttons(1 << B.REC); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.08);
-  ex.web_buttons(1 << B.REC); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.08);
+  tap(ex, B.REC);                               // (V0.8: a tap arms the sequencer, again not; REC + OCT+ latches the layer)
+  const armed = ex.web_test_sq(5, -1), armTxt = cstr(ex, ex.web_test_toast());
+  tap(ex, B.REC);
+  const one = ex.web_test_mod(), disarmed = ex.web_test_sq(5, -1);
+  ex.web_buttons(1 << B.REC); play(ex, 0.03); ex.web_buttons((1 << B.REC) | (1 << B.OCTUP)); play(ex, 0.03);
+  ex.web_buttons(1 << B.REC); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.35);
   const latched = ex.web_test_mod();
   tap(ex, B.REC);
-  check(`REC: a tap nothing (${one}), a double tap latches the layer (${latched}), a tap lets it go (${ex.web_test_mod()})`,
-        one === 0 && latched === 2 && ex.web_test_mod() === 0);
+  check(`REC: a tap arms the sequencer (${armed}, "${armTxt}"), again not (${disarmed}; the layer ${one}); REC + OCT+ latches the layer (${latched}), a tap lets it go (${ex.web_test_mod()}; armed ${ex.web_test_sq(5, -1)})`,
+        armed === 1 && armTxt === "REC ARMED" && disarmed === 0 && one === 0 && latched === 2 && ex.web_test_mod() === 0 &&
+        ex.web_test_sq(5, -1) === 0);
 }
 {                                               // the SETTINGS (HOME held 5 s), its palettes
   const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page();
@@ -629,12 +632,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 0.1);
   tap(ex, B.EDIT);
 }
-{                                               // GLO's MATRIX, a slot at a time (a fresh unit); SEQ: a word
+{                                               // GLO's MATRIX, a slot at a time (a fresh unit); SEQ: its menu (V0.8)
   const m = await boot(), mscr = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
   const mtap = (b) => { m.web_buttons(1 << b); play(m, 0.03); m.web_buttons(0); play(m, 0.35); };
   play(m, 0.2);
   mtap(B.SEQ);
-  const seq = [cstr(m, m.web_test_toast()), m.web_test_page_section()];
+  const seq = [cstr(m, m.web_test_page_name()), m.web_test_page_section()];
   for (let i = 0; i < 3; i++) mtap(B.GLO);      // (VOICE, PLAY, then the MATRIX's SLOTS)
   const sec = m.web_test_page_section(), pg = cstr(m, m.web_test_page_name()), first = m.web_test_page_virt(1);
   m.web_enc(E.K1, -1);                          // KNOB 1: the slot before slot 1, round: slot 8
@@ -648,8 +651,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   for (let i = 0; i < 6; i++) { m.web_enc(E.K4, 1); play(m, 0.004); }   // KNOB 4: how much, quickly
   play(m, 0.1);
   const b = mscr(), src = m.web_test_value(SRC8), dst = m.web_test_value(DST8), amt = m.web_test_value(AMT8);
-  check(`SEQ: "${seq[0]}" (the page stays: ${seq[1]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b)} pixels`,
-        seq[0] === "SEQUENCER: IN A LATER VERSION" && seq[1] === SEC.OSCA && sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
+  check(`SEQ: its menu (section ${seq[1]}, ${seq[0]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b)} pixels`,
+        seq[0] === "NOTES" && seq[1] === SEC.SEQ && sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
         s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b) > 300);
 }
 {                                               // SCL: the keys' scale, its root, how they fit it, their velocity
@@ -1741,6 +1744,231 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`the bloom (open, swirl in thousandths): silence ${b0}; a note, 0.15 s: ${b1} (swirling, opening); 1.75 s: ${b2} (open, unwound); let go, 4 s: ${b3} (a bud), then ${still} blits in 1 s`,
         b0[0] === 0 && b0[1] === 0 && b1[1] > 400 && b1[0] > 100 && b2[0] > 400 && Math.abs(b2[1]) < 150 && b3[0] < 20 &&
         Math.abs(b3[1]) < 20 && still === 0);
+}
+
+{                                               // V0.8, the sequencer: playback, feel, record live and by step, patterns, chain, motion, PATTERNS, a power cycle
+  const q = await boot(), qt = () => cstr(q, q.web_test_toast());
+  const SMP = 44117.647 * 60 / 120 / 4;         // (a 1/16 step at 120 BPM, in samples)
+  const sq = (f, v = -1) => q.web_test_sq(f, v), qs = (p, s, f, v = -1) => q.web_test_sq_step(p, s, f, v);
+  const qp = (p, f, v = -1) => q.web_test_sq_pat(p, f, v), K = (n) => n - 53;
+  const sent = (m0, on) => {                    // what went out over USB since m0: [note, velocity, time]
+    const r = [];
+    for (let i = m0; i < q.web_test_mout_n(); i++) {
+      const p = q.web_test_mout(i);
+      if (((p >> 8) & 0xF0) === (on ? 0x90 : 0x80)) r.push([(p >> 16) & 127, (p >> 24) & 127, q.web_test_mout_t(i)]);
+    }
+    return r;
+  };
+  const press = (b) => { q.web_buttons(1 << b); play(q, 0.03); q.web_buttons(0); play(q, 0.01); };
+  const qtap = (b) => { press(b); play(q, 0.34); };
+  const qchord = (held, b) => { q.web_buttons(1 << held); play(q, 0.03); q.web_buttons((1 << held) | (1 << b)); play(q, 0.03);
+                                q.web_buttons(1 << held); play(q, 0.03); q.web_buttons(0); play(q, 0.35); };
+  const until = (qn) => { for (let i = 0; i < 4000 && q.web_test_arp(1) < qn; i++) play(q, 0.0015); };   // the transport at qn thousandths of a quarter
+  const clear = (p) => { for (let s = 0; s < 64; s++) { for (let f = 0; f < 4; f++) qs(p, s, f, 255); qs(p, s, 8, 2); qs(p, s, 9, 100); qs(p, s, 10, 50); } };
+  const notes = (p, s) => [0, 1, 2, 3].map((f) => qs(p, s, f)).filter((n) => n !== 255).join(" ");
+  play(q, 0.2);
+  q.web_test_chd(13, 1);                        // USB OUT: what the sequencer plays read from what it sends
+
+  for (const [s, n] of [[0, 60], [4, 64], [8, 67], [12, 72]]) qs(0, s, 0, n);   // pattern 1: C4 E4 G4 C5, a step in four
+  let m0 = q.web_test_mout_n();
+  press(B.PLAY);
+  play(q, 2.15);
+  press(B.PLAY);
+  let on = sent(m0, 1), off = sent(m0, 0), t0 = on.length ? on[0][2] : 0;
+  const at = (x) => Math.round((x[2] - t0) / SMP * 100) / 100;
+  const lens = on.slice(0, 4).map((x) => { const o = off.find((y) => y[0] === x[0] && y[2] > x[2]); return o ? Math.round((o[2] - x[2]) / SMP * 100) / 100 : -1; });
+  check(`SEQ: pattern 1 on PLAY (C4 E4 G4 C5 a step in four): ${on.map((x) => `${x[0]}@${at(x)}`).join(" ")}; each ${lens.join(" ")} of a step (LENGTH 1/2); stopped: running ${sq(10)}`,
+        on.map((x) => x[0]).slice(0, 5).join() === "60,64,67,72,60" && [0, 4, 8, 12, 16].every((v, i) => on[i] && Math.abs(at(on[i]) - v) < 0.03) &&
+        lens.every((x) => Math.abs(x - 0.5) < 0.03) && sq(10) === 0);
+
+  clear(0);                                     // the feel: SWING 75 %, NUDGE -25 % on step 3, CHANCE 0 % on step 4, TRANSPOSE +12, LENGTH 4
+  for (const [s, n] of [[0, 60], [1, 62], [2, 64], [3, 65]]) qs(0, s, 0, n);
+  qs(0, 2, 10, 25);
+  qs(0, 3, 9, 0);
+  qp(0, 0, 4); qp(0, 2, 75); qp(0, 4, 36);
+  m0 = q.web_test_mout_n();
+  press(B.PLAY);
+  play(q, 0.95);
+  press(B.PLAY);
+  on = sent(m0, 1); t0 = on.length ? on[0][2] : 0;
+  check(`.. SWING 75 %, NUDGE -25 % (step 3), CHANCE 0 % (step 4), TRANSPOSE +12: ${on.map((x) => `${x[0]}@${at(x)}`).join(" ")}`,
+        on.map((x) => x[0]).slice(0, 6).join() === "72,74,76,72,74,76" &&
+        [0, 1.5, 1.75, 4, 5.5, 5.75].every((v, i) => on[i] && Math.abs(at(on[i]) - v) < 0.03));
+  qs(0, 3, 9, 100); qs(0, 2, 10, 50); qp(0, 2, 50); qp(0, 4, 24);
+  const dir = (d) => { qp(0, 3, d); const m = q.web_test_mout_n(); press(B.PLAY); play(q, 1.0); press(B.PLAY); return sent(m, 1).map((x) => x[0]).slice(0, 8).join(" "); };
+  const back = dir(1), ping = dir(2);
+  qp(0, 3, 0);
+  check(`.. DIRECTION: BACKWARD ${back}; PING-PONG ${ping}`, back === "65 64 62 60 65 64 62 60" && ping === "60 62 64 65 64 62 60 62");
+
+  sq(0, 1);                                     // recording, live: pattern 2, REC armed, PLAY; C4 just after step 3, E4 just before step 6
+  qtap(B.REC);
+  const armTxt = qt(), armed = sq(5);
+  m0 = q.web_test_mout_n();
+  press(B.PLAY);
+  until(525);                                   // (step 2.1)
+  q.web_keys(1 << K(60));
+  play(q, 0.2);
+  q.web_keys(0);
+  until(1200);                                  // (step 4.8)
+  q.web_keys(1 << K(64));
+  play(q, 0.06);
+  const fresh = sent(m0, 1).filter((x) => x[0] === 64).length;
+  q.web_keys(0);
+  play(q, 0.1);
+  sq(4, 1);                                     // QUANTIZE: G4 near step 8, on it
+  until(1980);
+  q.web_keys(1 << K(67));
+  play(q, 0.05);
+  q.web_keys(0);
+  until(5400);                                  // (the next pass: the notes recorded play)
+  const again = sent(m0, 1).filter((x) => x[0] === 64).length;
+  press(B.PLAY);
+  sq(4, 0);
+  const r2 = [notes(1, 2), qs(1, 2, 10) - 50, qs(1, 2, 8)], r5 = [notes(1, 5), qs(1, 5, 10) - 50], r8 = [notes(1, 8), qs(1, 8, 10) - 50];
+  check(`.. REC ("${armTxt}", armed ${armed}), live: C4 at step 2.1 into step 3 (${r2[0]}, NUDGE ${r2[1]} %, LENGTH ${r2[2]} quarter steps: held 0.2 s); E4 at 4.8 into step 6 (${r5[0]}, ${r5[1]} %; not played again as it came: ${fresh}, the next pass: ${again}); QUANTIZE: G4 into step 9 (${r8[0]}, ${r8[1]} %)`,
+        armTxt === "REC ARMED" && armed === 1 && r2[0] === "60" && Math.abs(r2[1] - 10) <= 3 && Math.abs(r2[2] - 6) <= 1 &&
+        r5[0] === "64" && Math.abs(r5[1] + 20) <= 3 && fresh === 0 && again >= 1 && r8[0] === "67" && r8[1] === 0);
+
+  clear(2);                                     // REPLACE: a pass with REC armed clears what the playhead passes
+  sq(0, 2);
+  for (const s of [0, 3, 7, 11]) qs(2, s, 0, 48 + s);
+  sq(3, 1);
+  press(B.PLAY);
+  play(q, 2.1);
+  press(B.PLAY);
+  const left = qp(2, 7);
+  sq(3, 0);
+  check(`.. REPLACE: pattern 3's four notes after a pass armed: ${left ? "some left" : "none left"}`, left === 0);
+
+  qtap(B.SEQ);                                  // by step: stopped, armed, SEQ's menu shown: the keys fill the step picked
+  const ssec = q.web_test_page_section(), spg = cstr(q, q.web_test_page_name()), srec = sq(18);
+  sq(0, 3); sq(6, 0);
+  q.web_keys((1 << K(60)) | (1 << K(64)));
+  play(q, 0.05);
+  q.web_keys(0);
+  play(q, 0.05);
+  const c1 = sq(6);
+  q.web_keys(1 << K(67));
+  play(q, 0.05);
+  q.web_keys(0);
+  play(q, 0.05);
+  const st0 = notes(3, 0), st1 = notes(3, 1), c2 = sq(6);
+  check(`.. by step (SEQ: section ${ssec}, ${spg}; step recording ${srec}): C4 + E4 into step 1 (${st0}), then step ${c1 + 1} picked; G4 into step 2 (${st1}), then step ${c2 + 1}`,
+        ssec === SEC.SEQ && spg === "NOTES" && srec === 1 && st0 === "60 64" && c1 === 1 && st1 === "67" && c2 === 2);
+  qtap(B.REC);
+
+  qchord(B.SEQ, B.OCTUP);                       // SEQ + OCT+ / OCT-: the next pattern, the one before; playing, at the end of the one playing
+  const nx = [sq(0), qt()];
+  qchord(B.SEQ, B.OCTDN);
+  const pv = sq(0);
+  press(B.PLAY);
+  play(q, 0.1);
+  qchord(B.SEQ, B.OCTUP);
+  const queued = [sq(0), sq(1), qt()];
+  play(q, 1.6);
+  const switched = [sq(0), sq(1)];
+  press(B.PLAY);
+  check(`.. SEQ + OCT+: pattern ${nx[0] + 1} ("${nx[1]}"); OCT-: ${pv + 1}; playing, OCT+: still ${queued[0] + 1}, ${queued[1] + 1} next ("${queued[2]}"); at its end: ${switched[0] + 1} (next ${switched[1]})`,
+        nx[0] === 4 && nx[1] === "PATTERN 5" && pv === 3 && queued[0] === 3 && queued[1] === 4 && queued[2] === "NEXT: PATTERN 5" &&
+        switched[0] === 4 && switched[1] === 255);
+
+  for (const p of [0, 1]) { clear(p); qp(p, 0, 4); qs(p, 0, 0, 60 + p); }   // CHAIN: pattern 1 twice, pattern 2, round again
+  q.web_test_sq_chain(0, 0, 0); q.web_test_sq_chain(0, 1, 2); q.web_test_sq_chain(1, 0, 1); q.web_test_sq_chain(1, 1, 1);
+  q.web_test_sq_chain(2, 0, 255);
+  sq(2, 1);
+  m0 = q.web_test_mout_n();
+  press(B.PLAY);
+  play(q, 3.05);
+  press(B.PLAY);
+  const chainSeq = sent(m0, 1).map((x) => x[0] - 59).join(" ");
+  sq(2, 0);
+  check(`.. CHAIN (1 twice, 2): the patterns played ${chainSeq}`, chainSeq.startsWith("1 1 2 1 1 2"));
+
+  const CUT = pid(q, 4, "TONE", 1), cut0 = q.web_test_value(CUT);   // MOTION: a lane holds the cutoff at steps 1 and 3, the patch untouched
+  clear(4);
+  qp(4, 0, 4); qp(4, 5, CUT);
+  qs(4, 0, 11, 254); qs(4, 2, 11, 0);
+  sq(0, 4);
+  press(B.PLAY);
+  until(60);
+  const mo0 = [sq(14), sq(15), q.web_test_follow(CUT), q.web_test_value(CUT)];
+  until(310);
+  const mo1 = [sq(14), q.web_test_follow(CUT)];
+  until(560);
+  const mo2 = [sq(14), sq(15), q.web_test_follow(CUT)];
+  press(B.PLAY);
+  play(q, 0.05);
+  const mo3 = [sq(14), q.web_test_follow(CUT), q.web_test_value(CUT)];
+  check(`.. MOTION: step 1 holds the cutoff (${mo0[0] === CUT ? "it" : mo0[0]}) at ${mo0[1]} (followed ${mo0[2]}, the patch ${mo0[3]}); step 2 lets go (${mo1[0]}, ${mo1[1]}); step 3 at ${mo2[1]} (${mo2[2]}); stopped: ${mo3[0]}, ${mo3[1]}, the patch ${mo3[2]}`,
+        mo0[0] === CUT && mo0[1] === 1000 && mo0[2] === 1000 && mo0[3] === cut0 && mo1[0] === 65535 && mo1[1] === cut0 &&
+        mo2[0] === CUT && mo2[1] === 0 && mo2[2] === 0 && mo3[0] === 65535 && mo3[1] === cut0 && mo3[2] === cut0);
+  clear(5);                                     // .. recorded: armed and playing, the cutoff's knob turned: a lane for it, its values at the steps it passes
+  qp(5, 0, 8);
+  sq(0, 5);
+  sq(5, 1);
+  for (let g = 0; g < 200 && !(q.web_test_page_section() === 4 && cstr(q, q.web_test_page_name()) === "TONE"); g++) q.web_test_go(g);
+  press(B.PLAY);
+  until(100);
+  let held = 1;
+  for (let i = 0; i < 12; i++) { q.web_enc(E.K2, -3); play(q, 0.04); if (sq(14) !== 65535) held = 0; }
+  until(2000);
+  press(B.PLAY);
+  sq(5, 0);
+  const lane = qp(5, 5), vals = Array.from({ length: 8 }, (_, s) => qs(5, s, 11)).filter((x) => x !== 255).length;
+  q.web_test_set(CUT, cut0);
+  check(`.. MOTION recorded: the cutoff's knob turned while playing armed: lane 1 the cutoff (${lane === CUT ? "it" : lane}), ${vals} steps with values; the knob heard while it turned (${held})`,
+        lane === CUT && vals >= 3 && held === 1);
+
+  qtap(B.SEQ);                                  // PATTERNS (SEQ held): a white key picks, COPY, CLEAR, PASTE (the black ones at the left)
+  clear(2); qs(2, 0, 0, 62);
+  q.web_buttons(1 << B.SEQ);
+  play(q, 0.8);
+  const lay = q.web_test_lay();
+  q.web_keys(1 << 4); play(q, 0.05); q.web_keys(0); play(q, 0.05);   // (A3: pattern 3)
+  const picked = sq(0);
+  q.web_keys(1 << 1); play(q, 0.05); q.web_keys(0); play(q, 0.05);   // (F#3: COPY)
+  const copied = sq(20);
+  q.web_keys(1 << 5); play(q, 0.05); q.web_keys(0); play(q, 0.05);   // (A#3: CLEAR)
+  const cleared = qp(2, 7), clrTxt = qt();
+  q.web_keys(1 << 3); play(q, 0.05); q.web_keys(0); play(q, 0.05);   // (G#3: PASTE)
+  const pasted = notes(2, 0);
+  play(q, 5.0);                                 // (held on past 5 s: a key used, no reset)
+  q.web_buttons(0);
+  play(q, 0.3);
+  check(`.. PATTERNS: SEQ held (layer ${lay}); A3: pattern ${picked + 1}; F#3 copies (${copied}); A#3 clears (holds ${cleared}: "${clrTxt}"); G#3 pastes (${pasted}); let go: closed (${q.web_test_lay()}), nothing reset (${notes(2, 0)})`,
+        lay === 5 && picked === 2 && copied === 1 && cleared === 0 && clrTxt === "PATTERN 3 CLEARED: PASTE UNDOES" && pasted === "62" &&
+        q.web_test_lay() === 0 && notes(2, 0) === "62");
+
+  const g0 = [q.web_test_page_section(), cstr(q, q.web_test_page_name())];   // the grammar: a tap the next page, twice the next section; held 5 s: the steps cleared
+  qtap(B.SEQ);
+  const g1 = cstr(q, q.web_test_page_name());
+  press(B.SEQ); press(B.SEQ); play(q, 0.35);
+  const g2 = [q.web_test_page_section(), cstr(q, q.web_test_page_name())];
+  for (let g = 0; g < 200 && q.web_test_page_section() !== SEC.SEQ; g++) q.web_test_go(g);
+  q.web_buttons(1 << B.SEQ);
+  play(q, 5.3);
+  q.web_buttons(0);
+  play(q, 0.1);
+  const rs = [qt(), qp(2, 7)];
+  check(`.. SEQ's taps: ${g0[1]} (section ${g0[0]}), then ${g1}; twice: section ${g2[0]} (${g2[1]}); held 5 s on SEQ: "${rs[0]}" (pattern 3 holds ${rs[1]})`,
+        g0[0] === SEC.SEQ && g1 !== g0[1] && g2[0] === SEC.SPAT && rs[0] === "PATTERN 3 CLEARED: PASTE UNDOES" && rs[1] === 0);
+
+  qs(6, 9, 0, 70); qs(6, 9, 4, 90); qs(6, 9, 8, 7); qp(6, 0, 24); qp(6, 1, 5);   // a power cycle: the patterns and the sequencer's settings kept
+  sq(0, 6); sq(2, 1); sq(3, 1); q.web_test_sq_chain(3, 0, 6); q.web_test_sq_chain(3, 1, 4);
+  play(q, 6.0);
+  const nor = new Uint8Array(q.memory.buffer, q.web_nor(), q.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const q2 = instance.exports;
+  if (q2._initialize) q2._initialize();
+  new Uint8Array(q2.memory.buffer, q2.web_nor(), q2.web_nor_size()).set(nor);
+  q2.web_master(700);
+  q2.web_boot();
+  play(q2, 0.3);
+  const kp = [q2.web_test_sq_step(6, 9, 0, -1), q2.web_test_sq_step(6, 9, 4, -1), q2.web_test_sq_step(6, 9, 8, -1),
+              q2.web_test_sq_pat(6, 0, -1), q2.web_test_sq_pat(6, 1, -1), q2.web_test_sq_step(1, 0, 0, -1)];
+  const ks = [q2.web_test_sq(0, -1), q2.web_test_sq(2, -1), q2.web_test_sq(3, -1), q2.web_test_sq_chain(3, 0, -1), q2.web_test_sq_chain(3, 1, -1)];
+  check(`.. after a power cycle: pattern 7's step 10 ${kp.slice(0, 3).join(" ")}, LENGTH ${kp[3]}, RATE ${kp[4]}; pattern 2's step 1 ${kp[5]}; the pattern shown ${ks[0] + 1}, CHAIN ${ks[1]}, RECORD ${ks[2]}, slot 4 ${ks[3] + 1} x${ks[4]}`,
+        kp.join() === "70,90,7,24,5,61" && ks.join() === "6,1,1,6,4");
 }
 
 console.log(`emu: ${checks} checks, ${failed} failed`);

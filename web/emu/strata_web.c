@@ -147,8 +147,9 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
                                                                * and the page; V0.75: each one's time, samples) */
 #define SY_MIDI_OUT(pkt) (web_mout_t[web_mout_n % 256u] = chs.t, web_mout[web_mout_n++ % 256u] = (pkt))
 #include "../../firmware/src/sy_chord.c"
+#include "../../firmware/src/sy_seq.c"
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.75"                    /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.8"                     /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -158,6 +159,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_ui_fx.c"
 #include "../../firmware/src/sy_ui_save.c"
 #include "../../firmware/src/sy_ui_chord.c"
+#include "../../firmware/src/sy_ui_seq.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
@@ -727,4 +729,70 @@ EXPORT int32_t web_test_arp(uint32_t f)
 EXPORT int32_t web_test_voice_note(uint32_t i)
 {
     return i < SY_NVOICE && sy_v[i].on && sy_v[i].key ? sy_v[i].note : -1;
+}
+/* V0.8, the sequencer (sy_seq.c): f 0 the pattern shown, 1 the one next (255 none), 2 CHAIN, 3 RECORD, 4 QUANTIZE, 5
+ * REC armed, 6 the step picked, 7 the lane picked, 8 CHAIN's slot picked (v >= 0 sets them); 10 a pattern under way,
+ * 11 the step played last + 1, 12 the pattern playing, 13 CHAIN's slot playing, 14 lane 1's parameter held (65535
+ * none), 15 its value, 16 and 17 lane 2's, 18 step recording, 19 steps played, 20 the copy holds a pattern; read
+ * back */
+EXPORT int32_t web_test_sq(uint32_t f, int32_t v)
+{
+    volatile uint8_t *p[9] = {&sqd.cur, &sqd.next, &sqd.chain, &sqd.recmode, &sqd.quant, &sqd.arm, &sqd.cursor,
+                              &sqd.lane, &ui.qslot};
+    if (f < 9u) {
+        if (v >= 0) {
+            *p[f] = (uint8_t)v;
+            ui.dirty = D_ALL;
+        }
+        return *p[f];
+    }
+    return f == 10u ? sqs.run : f == 11u ? sqs.at : f == 12u ? sqs.pat : f == 13u ? sqs.cslot
+           : f == 14u ? sp_ovr_id[0] : f == 15u ? sp_ovr_v[0] : f == 16u ? sp_ovr_id[1] : f == 17u ? sp_ovr_v[1]
+           : f == 18u ? sqd.steprec : f == 19u ? sqs.atseq : f == 20u ? sq_clip_ok : -1;
+}
+/* pattern p's step s: f 0 .. 3 its notes (255 none), 4 .. 7 their velocities, 8 LENGTH (quarter steps), 9 CHANCE,
+ * 10 NUDGE + 50, 11 lane 1's value (255 none), 12 lane 2's (v >= 0 sets them); read back */
+EXPORT int32_t web_test_sq_step(uint32_t p, uint32_t s, uint32_t f, int32_t v)
+{
+    sq_pat_t *q = &sq_pat[p % SQ_NPAT];
+    uint8_t *b;
+    s %= SQ_NSTEP;
+    b = f < 4u ? &q->note[s][f] : f < 8u ? &q->vel[s][f - 4u] : f == 8u ? &q->len[s] : f == 9u ? &q->chance[s]
+        : f == 10u ? (uint8_t *)&q->nudge[s] : f == 11u ? &q->lane[0][s] : f == 12u ? &q->lane[1][s] : 0;
+    if (!b)
+        return -1;
+    if (v >= 0) {
+        *b = (uint8_t)(f == 10u ? v - 50 : v);
+        ui.dirty = D_ALL;
+    }
+    return f == 10u ? q->nudge[s] + 50 : *b;
+}
+/* pattern p: f 0 LENGTH, 1 RATE, 2 SWING, 3 DIRECTION, 4 TRANSPOSE + 24, 5 lane 1's parameter (65535 none), 6 lane
+ * 2's, 7 holds anything (v >= 0 sets them, but 7); read back. The value parameter id follows (the override's or the
+ * patch's): web_test_follow */
+EXPORT int32_t web_test_sq_pat(uint32_t p, uint32_t f, int32_t v)
+{
+    sq_pat_t *q = &sq_pat[p % SQ_NPAT];
+    if (v >= 0) {
+        if (f == 0u) q->length = (uint8_t)v;
+        else if (f == 1u) q->rate = (uint8_t)v;
+        else if (f == 2u) q->swing = (uint8_t)v;
+        else if (f == 3u) q->dir = (uint8_t)v;
+        else if (f == 4u) q->transpose = (int8_t)(v - 24);
+        else if (f == 5u || f == 6u) q->lane_id[f - 5u] = (uint16_t)v;
+        ui.dirty = D_ALL;
+    }
+    return f == 0u ? q->length : f == 1u ? q->rate : f == 2u ? q->swing : f == 3u ? q->dir : f == 4u ? q->transpose + 24
+           : f == 5u ? q->lane_id[0] : f == 6u ? q->lane_id[1] : f == 7u ? sq_pat_used(q) : -1;
+}
+EXPORT int32_t web_test_follow(uint32_t id) { return id < SP_COUNT ? sp_last.v[id] : -1; }
+/* CHAIN's slot i: f 0 its pattern (255: the chain ends there), 1 its repeats (v >= 0 sets them); read back */
+EXPORT int32_t web_test_sq_chain(uint32_t i, uint32_t f, int32_t v)
+{
+    uint8_t *b = f ? &sqd.crep[i % SQ_NCHAIN] : &sqd.cpat[i % SQ_NCHAIN];
+    if (v >= 0) {
+        *b = (uint8_t)v;
+        ui.dirty = D_ALL;
+    }
+    return *b;
 }

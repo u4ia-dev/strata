@@ -22,7 +22,8 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
             OCTUP: 13 };                                                                     // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
-              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45 };   // SEC_*
+              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, SPAT: 47,
+              SCHN: 48 };   // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
@@ -581,6 +582,99 @@ for (const [i, nm] of [[8, "moss"], [9, "dusk"], [10, "sand"], [11, "neon"]]) { 
   shot(`Filter-${nm}`);
 }
 ex.web_test_palette(0);
+
+// ---- V0.8: the sequencer (pattern 1: 24 steps of a chord, a line and a chord again; a lane on the cutoff; CHAIN)
+{
+  const qs = (p, s, f, v) => ex.web_test_sq_step(p, s, f, v), qp = (p, f, v) => ex.web_test_sq_pat(p, f, v);
+  const sq = (f, v) => ex.web_test_sq(f, v);
+  const put = (p, s, ns, len, vel = 100, chance = 100, nudge = 0) => {
+    ns.forEach((n, i) => { qs(p, s, i, n); qs(p, s, 4 + i, vel - 8 * i); });
+    qs(p, s, 8, len); qs(p, s, 9, chance); qs(p, s, 10, 50 + nudge);
+  };
+  ex.web_test_chd(0, 0);                        // (the chords off, no bass: the notes as they are)
+  ex.web_test_chd(9, 0);
+  put(0, 0, [60, 64, 67], 6);
+  put(0, 3, [63], 2, 90, 100, 20);
+  put(0, 4, [65], 2, 70);
+  put(0, 6, [67], 3, 110, 100, -15);
+  put(0, 8, [58, 62, 65], 8, 95);
+  put(0, 11, [72], 1, 60, 50);
+  put(0, 12, [70], 2, 100, 75, 10);
+  put(0, 14, [67], 1, 80, 100, -30);
+  put(0, 16, [60, 63, 67], 6);
+  put(0, 20, [55], 4, 85, 60);
+  qp(0, 0, 24);
+  go(SEC.FILTER, "TONE");
+  const cut = ex.web_test_page_param(1);
+  qp(0, 5, cut);                                // MOTION: lane 1 the cutoff, a ramp over the first 16 steps
+  for (let s = 0; s < 16; s += 1) if (s % 3 !== 2) qs(0, s, 11, Math.round(40 + 200 * s / 15));
+  put(2, 0, [48], 4);                           // pattern 3: a bass line (PATTERN's grid: two that hold notes)
+  put(2, 4, [51], 2);
+  sq(0, 0);
+  sq(6, 8);                                     // the step picked: 9 (the second chord)
+  go(SEC.SEQ, "NOTES");
+  run(0.1);
+  shot("SeqNotes");
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(0.7);                                     // (playing: the playhead over step 6)
+  shot("SeqNotesPlay");
+  turn(1, 2);                                   // NOTE turning: the chord two semitones up
+  shot("SeqNotesTurn");
+  turn(1, -2);
+  rest();
+  go(SEC.SEQ, "FEEL");
+  sq(6, 6);
+  run(0.1);
+  shot("SeqFeel");
+  go(SEC.SEQ, "MOTION");
+  sq(6, 4);
+  run(0.1);
+  shot("SeqMotion");
+  go(SEC.SPAT, "PATTERN");
+  sq(1, 2);                                     // (pattern 3 next)
+  run(0.1);
+  shot("SeqPattern");
+  sq(1, 255);
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(0.3);
+  go(SEC.SPAT, "PLAY+REC");
+  qp(0, 4, 29);                                 // TRANSPOSE +5, PING-PONG, REPLACE, QUANTIZE on
+  qp(0, 3, 2);
+  sq(3, 1);
+  sq(4, 1);
+  run(0.1);
+  shot("SeqPlayRec");
+  turn(0, -2);                                  // TRANSPOSE turning
+  shot("SeqPlayRecTurn");
+  rest();
+  qp(0, 4, 24); qp(0, 3, 0); sq(3, 0); sq(4, 0);
+  for (const [i, p, r] of [[0, 0, 2], [1, 2, 1], [2, 0, 1], [3, 255, 1]]) {   // CHAIN: 1 twice, 3, 1, round
+    ex.web_test_sq_chain(i, 0, p);
+    ex.web_test_sq_chain(i, 1, r);
+  }
+  sq(2, 1);
+  sq(8, 1);
+  go(SEC.SCHN, "CHAIN");
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(3.4);                                     // (playing: slot 2)
+  shot("SeqChain");
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(0.3);
+  sq(2, 0);
+  go(SEC.SEQ, "NOTES");
+  sq(0, 0);
+  ex.web_buttons(1 << 9);                       // PATTERNS: SEQ held
+  run(0.8);
+  shot("SeqPatterns");
+  ex.web_buttons(0);
+  run(0.3);
+  sq(5, 1);                                     // REC armed, stopped, SEQ's menu: the keys fill the step picked
+  sq(6, 2);
+  run(0.1);
+  shot("SeqStepRec");
+  sq(5, 0);
+  run(0.1);
+}
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
 writeFileSync(`${out}/lint.txt`, lints.join("\n"));
 writeFileSync(`${out}/shots.json`, JSON.stringify(shots));

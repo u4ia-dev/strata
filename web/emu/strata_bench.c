@@ -108,19 +108,31 @@ int main(void)
     report("FILTER VALUES, KNOB 2 turning, 2 s");
     run(1500);
     web_test_chd(4, 1);                             /* V0.75: ARP over C E G, 1/16 at 120 BPM: its pages as it plays */
-    web_test_chd(5, 2);
+    web_test_chd(5, 0);                             /* (V0.8: the style ARP, the page STYLE: their V0.75 names) */
     run(50);
-    page(SEC_ARP, "PERFORM");
+    page(SEC_ARP, "STYLE");
     web_keys(chord);
     run(300);
     start();
     run(2000);
-    report("ARP PERFORM, the arpeggio playing, 2 s");
-    page(SEC_ARP, "STEPS");
+    report("ARP STYLE, the arpeggio playing, 2 s");
+    page(SEC_STEPS, "STEPS");
     run(300);
     start();
     run(2000);
     report("ARP STEPS, the arpeggio playing, 2 s");
     web_keys(0);
+    web_test_chd(4, 0);
+    run(300);
+    for (i = 0; i < 16u; i++)                       /* V0.8: pattern 1, a note a step, its NOTES page as it plays */
+        web_test_sq_step(0, i, 0, 60 + (int32_t)(i % 8u) * 2);
+    page(SEC_SEQ, "NOTES");
+    web_buttons(1u << B_PLAY);
+    run(30);
+    web_buttons(0);
+    run(300);
+    start();
+    run(2000);
+    report("SEQ NOTES, a pattern playing, 2 s");
     return 0;
 }
