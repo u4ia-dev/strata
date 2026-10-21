@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,55 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 14. V0.81 (V0.8 LOOPER's fixes, and less of everything)
+
+From the build (2026-10-21): the image **417,184 B** (−1,176 on V0.8 LOOPER: the looper's recording state `lpr`
+was 1,636 B of `.data` for two initial values, now set in `lp_boot`; +~460 B of code: USB MIDI out's recovery, the
+matrix's lists); `.data` + `.bss` **60,660 B** (−1,024: `wg_a`, the wavetable generator's harmonics, was outside the
+pool since V0.6, as `static float wg_a[N], wg_b[N] SY_POOL;` gives the section to the last name only); the pool
+361,788 B (+1,024, the same array); the stacks as V0.8 LOOPER's (interrupts ~2,536 B, main ~4,788 B). Left: **164,380
+B** of the app slot, **13,068 B** of `.data` + `.bss`, **19,140 B** of the pool (4 KiB of each the build's margin).
+
+The engine (`tools/costprobe/sy_dyn.sh`, instructions a sample on the target's listing, the renders bit for bit as
+V0.8's: `tests/sy_golden.txt` unchanged):
+
+| Scenario | V0.8 | V0.81 | |
+| --- | ---: | ---: | ---: |
+| idle | 166 | 153 | −7.8 % |
+| 1 voice, A × 1 | 313 | 295 | −5.8 % |
+| 8 voices, A × 1 | 1,368 | 1,314 | −3.9 % |
+| 8 voices, A + B × 1, LP12 | 2,222 | 2,166 | −2.5 % |
+| 8 voices, A + B × 3, LP24, every effect | 4,961 | 4,904 | −1.1 % |
+| SUPERSAW, 1 note | 1,368 | 1,350 | −1.3 % |
+| SUPERSAW, 8 notes | 4,356 | 4,300 | −1.3 % |
+| PLUCK, 8 notes | 1,996 | 1,939 | −2.9 % |
+| PAD, 8 notes | 3,870 | 3,817 | −1.4 % |
+
+Where: the matrix's offsets (`mod_offsets`, twice a block and once a voice) walked all eight slots and looked up each
+destination's section; `mod_map` now keeps each pass's slots and offsets as lists when the slots change (the sums in
+the same order). The parameters' change scan (`sp_block`, every block) tests four pairs a branch. The starter sounds are
+scenarios now (`sy_profile.c`): the V0.65 test ran them, and V0.8's "every effect" scenarios ran no effect at all (the
+chain was empty: `sp_chain_from_old` now builds it).
+
+What the rest costs, and why it stays: in SUPERSAW's 8 notes the oscillators' kernel is 1,026 (~21 instructions an
+instance a sample, already the V0.65 floor), the SVF 646 (20 a stage a channel a sample, no spills), the reverb 451 (a
+third of a single note's cost; reading its six steady lines at offsets fixed a block would move the goldens), the
+unison voices' setup ~300 an instance a block (the price of 32-sample blocks: a longer block halves it and moves
+every golden and the latency). The idle 153 is the master's two DC blockers and Q15 out, the parameters' scan, the
+matrix's map: ~4 % of a core.
+
+The chip (the AC7911B8 datasheet, [PHASE0.md](PHASE0.md) §2): the core is rated DC–320 MHz and the boot loader leaves
+it at 360 MHz, so there is no clock to gain; the measured ~180 integer instructions a µs is the 180 MHz bus's clock,
+which suggests memory traffic, not instructions, sets the pace (**unverified**: BENCH times instruction loops, not
+loads). The official firmware's 28 KB of cache RAM asks for 7 ways of a 6-way D-cache: not taken. Its SPI2 DMA panel
+scan fits this board's pins (PA3, PA4) but would save ~0.5 % of the CPU while any LED glows (2 of the 16 bits) (the bit-banged shift is
+also the glow's timer): not taken.
+
+Not done, and why: a compact table of the parameters held by the looper's tracks (~640 B: needs a policy for a full
+table, a change of behaviour); one list for UNDO's pass and the one before (512 B: needs proof they are never both in
+use); the project's selected track and scene kept out of its autosave's comparison (they are saved on purpose, as the
+sound's edits are; a write is one sector erase in two alternating sectors).
 
 ## 13. V0.8 (the looper)
 

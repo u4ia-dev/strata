@@ -195,12 +195,36 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     return 1;
 }
 
+/* Strata V0.81 (as the official firmware's MIDI router recovers): a note the full ring dropped may have been an
+ * off (a host reads the port only while an app has it open: the ring fills meanwhile), so its channel is marked,
+ * nothing more goes in, and once the ring has room an All Notes Off goes out on each channel marked; the notes
+ * from then on are new. The producer's side (the audio ISR), once a packet and once a half (sy_app.c) */
+static volatile uint16_t mo_lost;                   /* the channels a note was dropped on (bit a channel) */
+static void midi_out_recover(void)
+{
+    uint32_t c;
+    if (!mo_lost || !usb.config || mo_w - mo_r > MQ - 17u)   /* (room for 16 and the packet after them) */
+        return;
+    for (c = 0; c < 16u; c++)
+        if ((mo_lost >> c) & 1u) {
+            midi_out_q[mo_w % MQ] = 0x0Bu | (0xB0u | c) << 8 | 123u << 16;
+            RING_PUBLISH();
+            mo_w++;
+        }
+    mo_lost = 0;
+}
+
 static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 {
-    if (usb.config && mo_w - mo_r < MQ) {
+    if (!usb.config)
+        return;
+    midi_out_recover();
+    if (!mo_lost && mo_w - mo_r < MQ) {
         midi_out_q[mo_w % MQ] = pkt;
         RING_PUBLISH();
         mo_w++;
+    } else if ((pkt & 0x0Eu) == 0x08u) {            /* (a note's on or off, CIN 8 or 9) */
+        mo_lost |= (uint16_t)(1u << ((pkt >> 8) & 15u));
     }
 }
 

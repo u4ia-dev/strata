@@ -26,7 +26,8 @@ enum { WTF_ANALOG, WTF_PWM, WTF_ADDITIVE, WTF_BANDS, WTF_FORMANT, WTF_CHAOS, WTF
 #define WG_PI 3.14159265f
 
 static float wg_buf[WT_FRAME] SY_POOL;          /* the 2048-point cycle / its FFT, then the frame's nine levels */
-static float wg_a[WG_NH], wg_b[WG_NH] SY_POOL;  /* the frame's harmonics */
+static float wg_a[WG_NH] SY_POOL, wg_b[WG_NH] SY_POOL;   /* the frame's harmonics (V0.81: each its own SY_POOL: on
+                                                          * the list's end it named wg_b alone, wg_a 1 KB of .bss) */
 static float wg_sin[513] SY_POOL;                /* sin(2 pi j / 2048), j = 0 .. 512 (a quarter) */
 static struct {
     const wt_recipe_t *r;

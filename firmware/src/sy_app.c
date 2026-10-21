@@ -40,6 +40,9 @@ static int32_t sy_abuf[2u * SY_HALF_WORDS] __attribute__((aligned(4)));
 #define SY_BLOCK_TAP(o, n)
 #define SY_NESTED_TICKS() 0u
 #endif
+#ifndef SY_MIDI_POLL
+#define SY_MIDI_POLL()                           /* (V0.81: USB MIDI out's recovery, usb.c midi_out_recover) */
+#endif
 
 /* MASTER: the level the platform reads from the pot, Q12 (4096: as rendered; the emulator's page sets its own and
  * leaves this), ramped over each half from the one before (no steps) */
@@ -160,6 +163,7 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             SY_BLOCK_TAP(o + 2u * b, SY_BLK);
         }
         sy_master_now = g1;
+        SY_MIDI_POLL();                          /* (notes the full ring dropped: All Notes Off once it has room) */
         c2t = c2_half_end(fm1_ticks() - t0 - SY_NESTED_TICKS());   /* (.. waits for it: its part not the sound's) */
         for (i = 0; i < 2u * SY_HALF; i++)
             o[i] *= 1 << SY_OUT_SHIFT;

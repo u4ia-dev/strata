@@ -162,6 +162,15 @@ loads; Felucca's record (`FELU`) in the same sector reads as none; all 64 user s
 written keeps its pair's other slots, a slot emptied reads empty; every object's sectors inside the allow-list (no
 erase or program refused), and the hooks refuse the loader's area and the stock firmware's backup.
 
+### 2.6 USB MIDI out (`sy_midi_out_test`, 9 checks, V0.81)
+
+`usb.c`'s out ring as the audio interrupt fills it: with room, every packet in and in order, nothing added (V0.8's
+behaviour, packet for packet); full, a note's packet lost marks its channel (a controller's does not) and nothing more
+goes in, so no note goes out that the recovery would cut; with room for 17 again, an All Notes Off on each channel
+marked, in channel order, then the packet; the half's poll sends them with no packet after; while USB is not
+configured nothing goes in and the mark waits; all 16 channels fit the room asked for. Felucca's own tests of the
+ring (`scale_test`, `chord_test`, `v156_test`, `midi_control_test`, `midi_uart_test`) pass as before.
+
 ## 3. Known gaps (targets not met)
 
 - **Aliasing of bright tables**: −27.7 dB worst (BAND SWEEP, TWIN BANDS, WIDE BAND), against a −40 dBc target. The
@@ -333,6 +342,22 @@ renders of the sounds that use them re-recorded:
   check (§2.4) fails on the old code. The tests had set those values before a load, never while a sound played.
 - **RING MOD's page name ran on.** `char name[8]` and "RING MOD": C keeps the 8 characters and drops the end without a
   warning, so the header read on into the knobs' ids. An emulator check (§6.3) asks every page's name to end in time.
+
+### 5.5 Five more for V0.81 (the stress test, the sanitizers, the official firmware)
+
+- **DELAY's page wrote past its handles.** `ui_p_delay` put MIX's handle as knob 4 on the DELAY page (no knob there)
+  and cleared it after: the write went one past `pg.hx[4]`, into `pg.hy[0]`. Inside the page's own struct, so nothing
+  else was hit and the page drew as it should; undefined all the same. Found by UBSan in the stress test (§6.6).
+- **Two stale places in the looper.** A take's start (the track's scene now the empty clip) and a launch while stopped
+  left the track's next event pointing into the clip it played before. No sound came of either (the walk skips a
+  track while its take records, and PLAY and a take's end look the place up again), but an edit path that trusted it
+  would have walked another clip's list. Both set it now; the stopped launch also lets the old clip's knob values go.
+  Found by the stress test's invariant ("a track's next event not in its clip").
+- **1 KB of the pool was in `.bss`.** `static float wg_a[N], wg_b[N] SY_POOL;` gives the section to `wg_b` alone. Found
+  reading the symbols ([BUDGET.md](BUDGET.md) §14).
+- **USB MIDI out could leave a note on.** A full out ring (a host reads the port only while an app has it open) dropped
+  packets, a note-off among them, and the instrument it reached held that note. The official firmware's MIDI router
+  recovers with All Notes Off on the channels it used; `usb.c` does the same now (§2.6).
 
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
@@ -593,6 +618,22 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 - **The drawing's time**: six sessions now (FILTER's VALUES with a knob turning added); against V0.66 UI's tree on
   one machine, interleaved, 7 runs each: at or under it in each but HOME in silence (+5 µs in 2 s, nothing drawn);
   [UI.md](UI.md) §5.
+
+### 6.6 The stress test (`web/emu/strata_fuzz.c`, V0.81)
+
+The whole app (`strata_web.c`, natively) under AddressSanitizer and UBSan, driven at random: the buttons (taps,
+holds, chords with OCT, a key while one is held), the keys, the knobs, MIDI in (notes on every channel, controllers,
+start, continue, stop, the clock), the looper's own (launches, scenes, REC, UNDO PASS, notes and knob moves put in,
+the tracks' settings in their ranges, the clips' lengths), the pages, PLAY, MASTER, time; the audio rendered between.
+After every step: the event pool (every event in one clip's list, the free list or UNDO's, none twice, the counts),
+each clip (sorted, its count, inside its length; events in a clip of no length only while its take records), each
+track's scenes and next event, the recording's lists, the chords' side in use the selected track's, the voices'
+tracks, the parameters held. 24 seeds of 3,000 steps (~15 minutes of play each) run clean on V0.81.
+
+    cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -ffp-contract=off -w        -Ibuild/gen -Ifirmware/src -o build/emu/strata_fuzz web/emu/strata_fuzz.c -lm
+    for s in $(seq 1 24); do build/emu/strata_fuzz $s 3000 || echo "seed $s failed"; done
+
+A failure prints its step; a third argument prints every step (`build/emu/strata_fuzz SEED STEPS v`).
 
 ## 7. Needs hardware test
 

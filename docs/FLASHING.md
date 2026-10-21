@@ -1,6 +1,6 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.8 LOOPER`: the STRATA UI of V0.67,
+This is the procedure for putting Strata's **hardware test build** (`V0.81`, V0.8 LOOPER's fixes: the STRATA UI of V0.67,
 SCL's chords, the ARP, the 8-track looper and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Chords",
 "The ARP", "The looper", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
@@ -51,6 +51,15 @@ firmwares run); the keys played from the scan's timer while they only play, so d
 up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB under the pad); BENCH counts late halves
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
+
+**New in V0.81** (V0.8 LOOPER debugged and trimmed before its test; nothing on the panel changes): USB MIDI out no
+longer leaves a note on: when its queue fills (a computer reads the port only while an app has it open) and a note is
+lost, an All Notes Off goes out on that channel once there is room, as the official firmware does; the engine does
+1-8 % less work for the same sound, bit for bit (the matrix and the parameters' scan); 1 KB of RAM back and the image
+1.2 KB smaller; two of the looper's internal states that could go stale (a take's start, a launch while stopped: no
+sound came of them) and a write past an array on DELAY's page, found by a new stress test. [BUDGET.md](BUDGET.md)
+§14, [TESTING.md](TESTING.md) §5.5. Package `build/strata.fwsc`, 610,090 bytes, sha256
+`c370d0a740074f419688529c212d9e4c514fc23918ca65965c175635bd792220`.
 
 **New in V0.8 LOOPER** (stage 1 of [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "The looper"): V0.8's
 sequencer (never installed) rebuilt as an 8-track looper. SEQ opens LOOP (CLIPS, MIXER), TRACK (TRACK, RECORD,
@@ -357,6 +366,17 @@ CORE 2 (V0.8 BENCH; the test page's row "core2"):
     STATE OFF. If anything goes wrong: hold HOME while switching on (SAFE START: core 1 is not started), or let a
     second failed boot take the unit to backup mode as any build does (section 7).
 
+New in V0.81:
+
+31. **USB MIDI out, with nothing reading it.** TRACK: track 1 SYNTH+MIDI (or MIDI), CHANNEL 1. With the FM-1 on a
+    computer and **no MIDI app open**, play the keys for a minute (well over 64 notes). Then open a MIDI monitor (or a
+    DAW with a synth on channel 1) and play a note: older notes may come first, then **All Notes Off** (controller
+    123) on channel 1, then yours; nothing left sounding. Whether the computer reads the port while no app has it
+    open is **unverified** (Windows is said not to; macOS reads it): if nothing old arrives, the queue never filled and
+    there was nothing to recover, which is fine too.
+32. **The load.** HOME's CPU figure in silence and with a chord of SUPERSAW: a little under what V0.8 would show (the
+    model says 1-8 % of the engine's work); note both.
+
 ## 5. The report
 
 On the flasher page, step 3: **Read the device report** opens Strata's USB serial console (Chrome asks for the port:
@@ -425,6 +445,16 @@ marked.
 
 ## 8. What was checked, and where
 
+- **V0.81**: built and checked by the build: the image 417,184 bytes (−1,176), RAM 60,660 of 73,728 bytes (−1,024),
+  the pool 361,788 bytes (+1,024: the generator's harmonics where they belong), the interrupt stack ~2.5 KB, the main
+  stack ~4.8 KB, register access in `hal/` only; the flasher rebuilt (sha256 `c370d0a7...5bd792220`). **Verified on
+  host**: the engine's 94 checks with its golden renders unchanged (the matrix and scan changes move no sample), USB
+  MIDI out's 9 (§2.6 of TESTING.md) and Felucca's five ring tests, the stress test's 24 seeds × 3,000 steps under
+  AddressSanitizer and UBSan (TESTING.md §6.6), the cost model (BUDGET.md §14). **Verified in the emulator**: 132
+  checks, 127 screens and 583 knob turns, the flasher's 26 and the test page's 21. **Needs a hardware test**: steps
+  31-32, and everything V0.8 LOOPER's steps 26-30 ask. **Unverified**: whether a computer reads USB MIDI while no app
+  has it open (step 31); the core's margin at the boot loader's 360 MHz against the datasheet's 320 (PHASE0.md §2:
+  every Felucca fork runs there).
 - **V0.8 LOOPER**: built and checked by the build: the image 418,360 bytes, RAM 61,684 of 73,728 bytes (+8,048 on
   V0.8 BENCH: the chords' eight sides, the looper's state, the parameters held), the pool 360,764 bytes (the 2,048
   events in place of the patterns), the interrupt stack ~2.5 KB, the main stack ~4.8 KB, register access in `hal/`

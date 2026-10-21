@@ -147,7 +147,7 @@ CPU guard, 14 effects, 15 MIDI, 16 presets and storage, 17 user interface, 18 te
 
 | | |
 | --- | --- |
-| CPU | one pi32v2 core at 360 MHz for audio (the second is a v1 option), ~205 listing instructions/µs on integer code; single-precision FPU on the general registers (`-mcpu=r3 -mfprev1`), timing on the device unknown |
+| CPU | one pi32v2 core at 360 MHz for audio (the boot loader's clock; the AC7911B8 datasheet rates it DC–320 MHz: PHASE0.md §2) (the second is a v1 option), ~205 listing instructions/µs on integer code; single-precision FPU on the general registers (`-mcpu=r3 -mfprev1`), timing on the device unknown |
 | Audio | 44,117.6 Hz; 128-frame halves (2,901 µs) rendered in the ALNK0 interrupt in four blocks of 32 samples |
 | Budget | plan for ≤ 75 % of a half at the worst case (Felucca sheds voices at 85 %); ~8 % goes to the system |
 | RAM | 72 KiB `.data/.bss` + 360 KiB pool (+ 24 KiB RAM code); V0.65: 372 KiB pool, the main stack 12 KiB (BUDGET.md §4) |

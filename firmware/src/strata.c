@@ -33,7 +33,7 @@
 #endif
 #define FM1_CPU1_USED STRATA_CPU2   /* (hal/fm1_sys.h: every reset holds it first) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.8 LOOPER"              /* the splash and the console (V0.8: the looper, CORE 2); build.py
+#define STRATA_VERSION "V0.81"                    /* the splash and the console (V0.8: the looper, CORE 2; V0.81 its fixes); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
@@ -116,6 +116,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #include "sy_text.c"
 #include "sy_store.c"
 #define SY_MIDI_OUT(pkt) midi_out_event(pkt)   /* the chords out over USB MIDI (usb.c's ring, the audio ISR its producer) */
+#define SY_MIDI_POLL() midi_out_recover()      /* (V0.81: the ring's lost notes ended, a half) */
 #include "sy_chord.c"
 #include "sy_loop.c"                             /* (V0.8: the looper, on the chords' keys: a side a track) */
 #include "sy_c2.c"                               /* (V0.8 BENCH: the second core measured) */

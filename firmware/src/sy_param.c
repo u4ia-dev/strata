@@ -509,7 +509,13 @@ static void sp_changed(uint32_t i)
 static void sp_block(void)
 {
     uint32_t i, k;
-    for (k = 0; k < SP_NPAIR; k++)
+    for (k = 0; k + 4u <= SP_NPAIR; k += 4u)      /* (V0.81: four pairs a test, a third of the scan's time) */
+        if ((sy_patch.pw[k] ^ sp_last.w[k]) | (sy_patch.pw[k + 1u] ^ sp_last.w[k + 1u]) |
+            (sy_patch.pw[k + 2u] ^ sp_last.w[k + 2u]) | (sy_patch.pw[k + 3u] ^ sp_last.w[k + 3u]))
+            for (i = 2u * k; i < 2u * k + 8u; i++)
+                if (sp_target(i) != sp_last.v[i])
+                    sp_changed(i);
+    for (; k < SP_NPAIR; k++)
         if (sy_patch.pw[k] != sp_last.w[k])
             for (i = 2u * k; i < 2u * k + 2u; i++)
                 if (sp_target(i) != sp_last.v[i])

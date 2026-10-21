@@ -145,7 +145,7 @@ static struct {
     volatile uint32_t touch_ms;                  /* .. when it last turned */
     uint16_t mv_id, mv_t;                        /* the move recorded last: its parameter, its tick */
     int16_t mv_v;                                /* .. its value */
-} lpr = {.touch = 0xFFFFu, .mv_id = 0xFFFFu};
+} lpr;                                           /* (V0.81: set in lp_boot, not .data's 1.6 KB of the image) */
 enum { LP_REQ_NONE, LP_REQ_TAP, LP_REQ_UNDO, LP_REQ_STOPALL };
 
 /* ------------------------------------------------------------------------------------- the event pool --- */
@@ -812,6 +812,8 @@ static void lp_bar_line(float q, int first)      /* a bar starts at q */
             lp_stop_trk(t);
         lps[t].next = LP_NOSCN;
         lps[t].play = lpr.scn;
+        lps[t].cur = LP_END;                     /* (nothing played until the take ends: lp_take_end) */
+        lps[t].pt = 0;
         lpr.t0 = q;
         lpr.st = LR_TAKE;
         lpx.seq++;
@@ -879,8 +881,13 @@ static void sy_loop_block(void)
         for (t = 0; t < LP_NTRK; t++) {
             lp_ends(t);
             if (!cht.run && lps[t].next != LP_NOSCN && lps[t].next != LP_STOP && lps[t].next < LP_NSCN) {
-                lps[t].play = lps[t].next;       /* (stopped: what is launched is on, from the start when it runs) */
+                if (lps[t].play != lps[t].next)  /* (stopped: what is launched is on, from the start when it runs) */
+                    sp_ovr_drop(t);
+                lps[t].play = lps[t].next;
                 lps[t].next = LP_NOSCN;
+                lps[t].cur = lpp.clip[t][lps[t].play].head;
+                lps[t].pt = 0;
+                lps[t].resync = 0;
                 lpx.seq++;
             } else if (!cht.run && lps[t].next == LP_STOP) {
                 lps[t].play = LP_NOSCN;
@@ -1203,6 +1210,7 @@ static void lp_boot(void)                       /* power-on (before the flash's 
 {
     uint32_t i;
     lp_project_clear();
+    lpr.touch = lpr.mv_id = 0xFFFFu;
     for (i = 0; i < 27u; i++)
         lpx.keynote[i] = 0xFF;
     lpx.bar = lpx.beat = -1;

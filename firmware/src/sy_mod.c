@@ -17,6 +17,8 @@ static struct {
     uint8_t slot[NSLOT];           /* each slot's destination index (0xFF: unused) */
     uint8_t src[NSLOT];
     int16_t key[3 * NSLOT];        /* the slot parameters this was made from */
+    uint8_t nz[2], z[2][NSLOT];    /* V0.81: each pass's offsets (0 the voices' and the effects', 1 the macros') */
+    uint8_t na[2], as[2][NSLOT];   /* .. and its slots, in slot order (mod_offsets: the sums as before, bit for bit) */
 } mm;
 static uint8_t mod_idx[SP_COUNT];  /* a parameter's index in the offsets (0xFF: none) */
 static float sy_src_g[SRC_COUNT];  /* global sources (macros, wheel, bend, aftertouch, expression, fixed) */
@@ -46,6 +48,16 @@ static void mod_map(void)
         }
         mm.slot[s] = mod_idx[dst];
     }
+    mm.nz[0] = mm.nz[1] = mm.na[0] = mm.na[1] = 0;
+    for (i = 0; i < mm.n; i++) {
+        uint32_t m = SP[mm.dst[i]].sec == SEC_MACRO;
+        mm.z[m][mm.nz[m]++] = (uint8_t)i;
+    }
+    for (s = 0; s < NSLOT; s++)
+        if (mm.slot[s] != 0xFF) {
+            uint32_t m = SP[mm.dst[mm.slot[s]]].sec == SEC_MACRO;
+            mm.as[m][mm.na[m]++] = (uint8_t)s;
+        }
     for (s = 0; s < 3u * NSLOT; s++)
         mm.key[s] = sy_patch.p[SP_M1_SRC + s];
 }
@@ -54,17 +66,13 @@ static void mod_map(void)
  * voice's sources in gv). macros: only the slots into macros (their pass), else all the others */
 static void mod_offsets(float *off, const float *vs, int macros)
 {
-    uint32_t s;
-    for (s = 0; s < mm.n; s++)
-        if ((SP[mm.dst[s]].sec == SEC_MACRO) == !!macros)
-            off[s] = 0.0f;
-    for (s = 0; s < NSLOT; s++) {
-        uint32_t d = mm.slot[s], src = mm.src[s];
-        float v;
-        if (d == 0xFF || (SP[mm.dst[d]].sec == SEC_MACRO) != !!macros)
-            continue;
-        v = src <= SRC_VOICE_LAST ? (vs ? vs[src] : 0.0f) : sy_src_g[src];
-        off[d] += v * (float)sy_patch.p[SP_M1_AMT + 3u * s] * 0.001f;
+    uint32_t k, m = macros ? 1u : 0u;
+    for (k = 0; k < mm.nz[m]; k++)
+        off[mm.z[m][k]] = 0.0f;
+    for (k = 0; k < mm.na[m]; k++) {
+        uint32_t s = mm.as[m][k], src = mm.src[s];
+        float v = src <= SRC_VOICE_LAST ? (vs ? vs[src] : 0.0f) : sy_src_g[src];
+        off[mm.slot[s]] += v * (float)sy_patch.p[SP_M1_AMT + 3u * s] * 0.001f;
     }
 }
 

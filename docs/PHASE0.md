@@ -31,14 +31,17 @@ clone here uses `-c core.autocrlf=false`; the build instructions will say so.
 
 | | | |
 | --- | --- | --- |
-| SoC | JieLi AC791N (WL82), two pi32v2 cores | FM-1-RE `docs/architecture.md` [repo] |
-| Clock | **360 MHz** (PLL 540 MHz × 2/3; HSB 180, LSB 60 MHz). Felucca never programs the PLL; this is what the boot loader leaves. The stock firmware itself switches to 240 MHz | [device, X0X `docs/plans/2026-10-04-dual-core-and-clock.md`, read from the PLL registers on a unit]; ChoralRoot `docs/DUALCORE.md` (Melodee) agrees |
+| SoC | JieLi AC791N (WL82), two pi32v2 cores; the part is the **AC7911B8**: QFN48, its 1 MiB (8 Mbit) flash in the package, 26 GPIOs, 4 audio ADCs and one DAC channel | FM-1-RE `docs/architecture.md` [repo]; the AC7911B8 datasheet V1.1 (2022-02-25, the user's copy, V0.81) |
+| Clock | **360 MHz** (PLL 540 MHz × 2/3; HSB 180, LSB 60 MHz). Felucca never programs the PLL; this is what the boot loader leaves. The stock firmware itself switches to 240 MHz. **The datasheet rates the core DC–320 MHz**: the boot loader's 360 MHz is 12.5 % over it (every Felucca fork has run there; its margin on a unit, hot or cold, is **unverified**), so there is no headroom to take: the clock stays the boot loader's | [device, X0X `docs/plans/2026-10-04-dual-core-and-clock.md`, read from the PLL registers on a unit]; ChoralRoot `docs/DUALCORE.md` (Melodee) agrees; the rating: the datasheet |
 | Throughput | **~205 listing instructions per µs** on integer code (1.76 cycles each on average) | [device, ChoralRoot `docs/CZ1.md`: listing counts against a measured render time] |
 | Branches | a one-instruction branch loop takes 7 cycles | [device, X0X, same doc]. The compiler also emits zero-overhead `rep N rX { }` hardware loops [listing] |
 | Issue | pairs of instructions issue together (`a # b` in the listing) | [listing] |
 | FPU | single precision, works on the general registers: `-mcpu=r3 -mfprev1`. One-instruction divide, no square root. Doubles are software | [listing: a float multiply is one 4-byte instruction with these flags, a libcall without]; shipping on units in X0X, FoMni, Polly, AMB-1 (`tools/build.py` of each). FPU timing on the device: **unverified** |
 | Integer DSP | 32×32→64 multiply and multiply-accumulate (`r1_r0 += r3 * r2`), hardware divide, `clz`, `smax`, bit-field extract, post-increment loads | [listing] |
-| I-cache | 32 KB, shared by both cores; code runs from XIP flash through it | X0X notes; **unverified** |
+| I-cache | 32 KB, 8 ways; code runs from XIP flash through it. Shared by both cores: **unverified** | the datasheet (size, ways); X0X notes |
+| D-cache | 24 KB, 6 ways. The official firmware's linker (`fm1_open` `sdk/config/linker.ld.in`, `FREE_DACHE_WAY = 7`) takes 7 ways of 4 KB as 28 KB of RAM at `0x1F28000`: more ways than the datasheet gives, so that RAM is **unverified** and Strata does not use it | the datasheet; `fm1_open` [repo] |
+| Panel peripherals | SPI2's group C is PA3 (CLK) and PA4 (DO): the 595 chain's SRCLK and SER, so the official firmware's DMA scan (`fm1_open` `app/board/fm1_input.h`) fits this board. Strata keeps the bit-banged shift: it is also the timer of the LEDs' dim pulse (the glow is lit over its first ~14 of 16 bits, `hal/fm1_input.h`), so a DMA shift would save ~2 bits' time a tick while anything glows (the idle default). The quadrature decoder is on PC9 / PC10 only: the encoders are in the matrix | the datasheet's pin table; `fm1_open` [repo] |
+| Interrupt levels | the datasheet says four; the ICFG field both firmwares write is 3 bits (Strata: audio 3, TIMER5 4; the official: audio 4, panel 5), and TIMER5 nesting in the audio interrupt is measured on the device | the datasheet; `hal/fm1_irq.h`; [device, V0.66 BENCH] |
 | Second core | Felucca 1.6.1 has it as a beta (MENU > SYSTEM > 2ND CORE, off by default). A heavy 4-track project: one core 65–74 % (slowest half 3,285 µs, late halves), two cores 35–51 % | [device, Felucca PR #247]. X0X: 43/83/115 % → 39/54/68 % [device]. ChoralRoot raises the core rails before starting it (Melodee found misreads at the boot loader's voltage) |
 
 ### Memory

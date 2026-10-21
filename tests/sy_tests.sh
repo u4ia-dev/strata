@@ -24,6 +24,8 @@
 #             source's mean), determinism and golden renders (tests/sy_golden.txt; GOLDEN_UPDATE=1 rewrites it, for
 #             an intended change of sound only), effects (OTT sums back, the synced delay, extremes bounded), cost.
 #             Demos (the test sounds as WAV) in build/sy_demo/.
+#   MIDI OUT  (tests/sy_midi_out_test.c, V0.81) usb.c's out ring: a note lost to a full ring marks its channel, an
+#             All Notes Off on each once there is room (and the half's poll), as before when nothing is lost.
 set -e
 cd "$(dirname "$0")/.."
 OUT=build/host
@@ -52,6 +54,9 @@ run "store: Strata's flash, torn writes, the allow-list, the user slots" "$OUT/s
 $CC -Ibuild/gen -o "$OUT/sy_engine_test" tests/sy_engine_test.c -lm
 run "engine: parameters, matrix, voices, timing, clicks, health, DC, golden renders, effects, cost" \
     "$OUT/sy_engine_test" tests/sy_golden.txt build/sy_demo
+
+cc -O2 -w -o "$OUT/sy_midi_out_test" tests/sy_midi_out_test.c
+run "USB MIDI out: notes lost to a full ring ended (All Notes Off), as before with room (V0.81)"     "$OUT/sy_midi_out_test"
 
 [ $fail = 0 ] && echo "sy_tests: all passed" || echo "sy_tests: FAILED"
 exit $fail

@@ -381,9 +381,8 @@ static void ui_p_delay(void)
         float b[8] = {xh - 20.0f, 186.0f, xh, 166.0f, xl, 166.0f, xl + 20.0f, 186.0f};
         lk_poly(b, 4u, 1.5f, tone && (ui_hot(0) || ui_hot(1)) ? sk.hot : sk.ink);
     }
-    ui_mix_row(p, SP_DL_MIX, tone ? 2u : 4u);
-    if (!tone)
-        pg.has &= (uint8_t)~16u;
+    if (tone)                                       /* (V0.81: TIME's page has no knob on MIX: no handle there. It was */
+        ui_mix_row(p, SP_DL_MIX, 2u);               /* knob "4", a write past pg.hx[3] into pg.hy[0], found by UBSan) */
     ui_title_p(DLY_NAMES[pp], UI_TITLE_X, SP_DL_MODE);
     if (p[SP_DL_SYNC])
         sp_put(w, NOTE_NAMES[p[SP_DL_NOTE] < (int16_t)SY_NNOTE ? p[SP_DL_NOTE] : 0]);

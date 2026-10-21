@@ -5,9 +5,9 @@
 scenario of sy_profile.c): each scenario's share of one core, the parts (the engine idle, a voice, a unison
 instance, the effects), and how many voices x unison fit.
 
-Rates: listing instructions a microsecond on the device. 205 was measured on integer code (ChoralRoot, docs/CZ1.md);
-this engine's float code has no device figure yet: the BENCH page will give it. So every figure here is an
-estimate, shown at 150, 205 and 300 a microsecond.
+Rates: listing instructions a microsecond on the device. V0.65's BENCH RUN on the user's FM-1 (2026-10-18): 154 on
+its float loop, 180 on its integer loop; 205 was ChoralRoot's integer figure. Every figure here is an estimate,
+shown at 154, 180 and 205 a microsecond.
 
     budget.py DIR
 """
@@ -16,13 +16,14 @@ import os
 import sys
 
 FS = 44117.647
-RATES = (150.0, 205.0, 300.0)
+RATES = (154.0, 180.0, 205.0)
 PLAN_LOAD = 0.75                       # the most we plan for (the guard sheds at 70 / 78 / 85 %)
 SYSTEM = 0.08                          # audio ISR frame work, TIMER5 key scan, USB (ChoralRoot: 4-6 %)
 NAMES = ["idle: no voice, no effect", "1 voice: A x 1", "1 voice: A x 16", "8 voices: A x 1",
          "8 voices: A + B x 1, LP12", "8 voices: A + B x 3, LP24, every effect",
          "8 voices: A + B x 16 (budget 48), LADDER, every effect",
-         "8 voices: A BEND+ / B SYNC x 1, LP12, SUB + pink NOISE", "1 voice: A x 1, every effect"]
+         "8 voices: A BEND+ / B SYNC x 1, LP12, SUB + pink NOISE", "1 voice: A x 1, every effect",
+         "SUPERSAW, 1 note", "SUPERSAW, 8 notes", "PLUCK, 8 notes", "PAD, 8 notes"]
 
 
 def load(d):
