@@ -832,7 +832,7 @@ const LOOK = [
   ["pages", "Every page draws; HOME's bloom, an envelope and an LFO move while notes play, stop when they end"],
   ["select", "SELECT picks the section, ALGORITHM the page, in every family"],
   ["editoct", "EDIT + OCT- turns the section shown off, EDIT + OCT+ on"],
-  ["glo", "GLO: VOICE, MATRIX, GLOBAL; SEQ says the sequencer comes in a later version"],
+  ["glo", "GLO: VOICE, MATRIX, GLOBAL"],
   ["fxear", "The new effects by ear, each knob to its ends: FLANGER, PHASER, the FX FILTER's types (COMB at a high RESO, DJ), BITCRUSH, TREMOLO and AUTOPAN, RING MOD, TAPE"],
   ["save", "SAVE once (a new version), twice (the browser), held 5 s (over its slot), a rename; off and on: the sound and the list come back"],
   ["browser", "In the browser: OCT- held 3 s deletes the user preset (a countdown), SAVE + OCT- at once brings it back; a V0.5 preset loads, its effects as the chain"],
@@ -846,6 +846,10 @@ const LOOK = [
   ["grammar", "V0.75: every menu button the same way: a tap its menu, again its next page, twice its next section, + OCT+ / OCT- on and off (HOME: the sounds; LFO: points), held 5 s a countdown then its section reset (SAVE + OCT- undoes); SELECT the section, ALGORITHM the page; a knob's value never covered by a flag"],
   ["arpsteps", "V0.75: ARP > STEPS and RATCHET: TIE holds the note on, REST is silent, each step's LEVEL and OCTAVE, RATCHET's 2-4 hits, CHANCE, SLIDE gliding with VOICE's GLIDE in a mono mode; GROOVE's GATE and SWING by ear; the marker over the steps follows what you hear"],
   ["clock", "V0.75: PLAY on: the arpeggio steps on its beat. GLOBAL > CLOCK IN MIDI with a DAW sending clock: BPM follows the DAW; its play and stop start and stop PLAY; the arpeggio stays on the DAW's beat over a few minutes; INTERNAL again: the panel's BPM"],
+  ["seq", "V0.8: SEQ's menu by step: REC armed, stopped, on SEQ > NOTES the keys fill the step picked (a chord: keys held together) and move on; PLAY plays it in time (and on a DAW's clock with CLOCK IN MIDI); NOTE, VELOCITY, LENGTH, CHANCE, NUDGE, SWING, RATE sound as set; no stuck notes when PLAY stops"],
+  ["seqrec", "V0.8: REC armed and PLAY: what you play on the keys (and from a MIDI keyboard) lands where you played it, as long as you held it, with no doubled note; QUANTIZE ON puts it on the steps; REPLACE clears what the playhead passes; with SCL's chords or the ARP on, the pattern plays through them"],
+  ["seqpat", "V0.8: the patterns: SEQ + OCT+ / OCT- and SEQ held (PATTERNS: a white key picks one; F#3 COPY, G#3 PASTE, A#3 CLEAR) - while playing, the next starts at the end of this one; CHAIN plays its slots in turn; off and on: the patterns and the chain come back"],
+  ["motion", "V0.8: MOTION: REC armed and playing, turn FILTER > TONE's CUTOFF for a bar: on the next pass the movement plays back, and the knob turned again is heard while it turns; stopped, the sound's own cutoff; a SAVE keeps the knob's value, not the lane's"],
   ["bloom", "V0.67: HOME's bloom: a bud in silence; a note swirls it into spiral arms that settle into a sunflower in about a second; it opens with the level and closes after the release; nothing moves in silence"],
 ];
 for (const [k, t] of LOOK) {
