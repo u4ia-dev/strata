@@ -6,8 +6,8 @@
  *     layer's banner; its body (what the module does, drawn from the values as the DSP reads them, with the four
  *     knobs' numbered handles on what each moves; VALUES: the four as figures, ui_p_values); its bottom row (the
  *     section's pages as zones, the one shown inverted; a word for a moment instead: the toast);
- *   - a knob turning: its handle HOT, its value in a flag beside it, the shape before the turn dashed (ui_ghost) until
- *     the gesture ends; MOMENTARY (LFO held): the shape it goes back to, dashed, the whole time;
+ *   - a knob turning: its handle HOT, its value HOT where the page shows it, else in the bottom row (V0.75: no flag over
+ *     the page), the shape before the turn dashed (ui_ghost) until the gesture ends; MOMENTARY (LFO held): the shape it goes back to, dashed, the whole time;
  *   - HOME: the sound's name, the bloom (the scope's two sides, 2 x 212 points as they are captured, sown as a
  *     sunflower's seeds: opening with the sound, swirling at each note), the four macros; the countdowns of the long
  *     holds (a ring that empties), the layers (MOD, PERFORM, MACROS, MOMENTARY, JUMP), the SETTINGS, SAFE START.
@@ -39,7 +39,8 @@ static void ui_p_cperf(void);
 static void ui_p_cbass(void);
 static void ui_p_cmidi(void);
 static const char *ui_chord_nv(uint32_t id, char *v);
-static void ui_p_steps(void);                       /* .. ARP's (V0.75) */
+static void ui_p_steps(void);                       /* .. ARP's (V0.75), STRUM's */
+static void ui_p_strum(void);
 static void ui_p_ratch(void);
 static void ui_p_groove(void);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
@@ -112,7 +113,8 @@ static int ui_mod_word(uint32_t id, char *t)
 static struct {
     float hx[4], hy[4];
     uint8_t has, mom;
-    uint8_t figs;                                   /* the page shows each knob's value as a figure (no flag: V0.75) */
+    uint8_t figs;                                   /* V0.75: the knobs whose values the page shows (bit k; no flag */
+                                                    /* for those: the value itself HOT while it turns) */
     const sy_patch_t *gh;
     float live_lo, live_hi;                         /* the rows its live parts take (voices, levels): ui_live */
 } pg;
@@ -150,6 +152,17 @@ static uint16_t ui_ink(int hot) { return hot ? sk.hot : sk.ink; }
 static void ui_title(const char *s, float x)        /* a module's word at the top of its body: 14 px bold */
 {
     lk_text(x, 24.0f, T14B, s, sk.ink, sk.ground, 0, 17);
+}
+/* .. the word is parameter id's value (V0.75): the knob that sets it on this page turning, HOT (its value shown in
+ * place: no value in the bottom row for it) */
+static void ui_title_p(const char *s, float x, int32_t id)
+{
+    uint32_t k;
+    for (k = 0; k < 4u && UI_PG[ui.page].id[k] != id; k++)
+        ;
+    if (k < 4u)
+        pg.figs |= (uint8_t)(1u << k);
+    lk_text(x, 24.0f, T14B, s, ui_ink(k < 4u && ui_hot(k)), sk.ground, 0, 17);
 }
 static void ui_sub(float x, const char *a, const char *b)   /* .. under it: a word in LAB, a value in INK (10 px) */
 {
@@ -254,21 +267,6 @@ static const char *ui_knob_nv(uint32_t k, char *v)
     }
     return n;
 }
-/* .. as its flag says it: "DETUNE 35.0%" */
-static void ui_flag_text(uint32_t k, char *t)
-{
-    int32_t id = ui_virt(UI_PG[ui.page].id[k]);
-    char v[SP_TEXT_N + 8];
-    const char *n;
-    t[0] = 0;
-    if (id >= UI_SCUR && id <= UI_BBANK) {
-        ui_save_flag(id, t);
-        return;
-    }
-    n = ui_knob_nv(k, v);
-    if (n)
-        sp_put(sp_put(sp_put(t, n), n[0] ? " " : ""), v);
-}
 
 /* ------------------------------------------------------------------------------------------- HOME --- */
 /* the bloom (V0.67): the scope's capture kept here (sy_engine.c sy_scope: three periods of the newest voice's note,
@@ -278,8 +276,10 @@ static void ui_flag_text(uint32_t k, char *t)
  * sine's periods as rings, a saw's as a spiral's grain, a chord's as their interference; the newest HOT. It opens with the sound (the capture's level: a bud of 22 px in silence, 44 px at -6 dBFS; quick to
  * open, slow to close), swirls at each new note (the golden angle bent: the seeds wind into spiral arms, up the
  * keys one way, down them the other) and unwinds back into the sunflower in about a second, and turns once in 48
- * s. Each seed's angle from the last by a rotation, its radius by a reciprocal root: no tables; 424 dots, the
- * old trace's 424 segments */
+ * s. Each seed's angle from the last by a rotation, its radius by a reciprocal root: no tables. V0.75: a seed every
+ * fourth sample (106 of them, L's and R's in turn), twice as far apart and larger: the spiral and its pattern
+ * plainer */
+#define UI_SEED_STEP 4u
 #define UI_BX 166.0f
 #define UI_BY 116.0f
 #define UI_BLOOM_R 49.5f                            /* (the disc the live box sends: the bloom stays inside it, the */
@@ -353,14 +353,16 @@ static void ui_bloom(void)
     uint32_t j;
     int32_t pk = ui_scope_pk();
     float g = sy_minf(1.0f / (float)(pk > 2048 ? pk : 2048), 4.0f / 32768.0f), ga = 0.381966f + 0.0042f * ui_twist;
-    float k = (22.0f + 22.0f * ui_open) * (1.0f / 20.58f), sw = 0.4f + 0.6f * ui_open;   /* (the last seed: 22 .. 44 px) */
+    const uint32_t N = 2u * SY_SCOPE_N / UI_SEED_STEP;
+    float k = (22.0f + 22.0f * ui_open) * lk_rsqrt((float)N), sw = 0.4f + 0.6f * ui_open;   /* (the last: 22 .. 44 px) */
     float cs = sy_cos2pi(ga), sn = sy_sin2pi(ga), vx = sy_cos2pi(ui_spin), vy = sy_sin2pi(ui_spin), x = UI_BX, y = UI_BY;
-    for (j = 0; j < 2u * SY_SCOPE_N; j++) {         /* seed j: L's sample j / 2 (j even), R's (odd) */
-        float jj = (float)j + 0.5f, v = ui_scope_ok ? (float)ui_scope[j & 1u][j >> 1] * g : 0.0f, u = 0.5f + 0.5f * v;
-        float r = k * jj * lk_rsqrt(jj) + 2.5f * v * sw, nx;
+    for (j = 0; j < N; j++) {                       /* seed j: L's (j even) or R's (odd) sample 4 (j / 2) */
+        uint32_t si = (j >> 1) * UI_SEED_STEP;
+        float jj = (float)j + 0.5f, v = ui_scope_ok ? (float)ui_scope[j & 1u][si] * g : 0.0f, u = 0.5f + 0.5f * v;
+        float r = k * jj * lk_rsqrt(jj) + 3.5f * v * sw, nx;
         x = UI_BX + r * vx;
         y = UI_BY + r * vy;
-        lk_disc(x, y, 0.55f + 0.95f * u * sw, sy_mix565(sk.mid, sk.ink, (uint32_t)(u * 256.0f)));
+        lk_disc(x, y, 0.9f + 1.4f * u * sw, sy_mix565(sk.mid, sk.ink, (uint32_t)(u * 256.0f)));
         nx = vx * cs - vy * sn;
         vy = vx * sn + vy * cs;
         vx = nx;
@@ -584,7 +586,7 @@ static void ui_p_wave(void)
         lk_label(211.0f, 176.0f, "AMT", 60);
         ui_H(3, 217.0f, yt - 16.0f);
     }
-    ui_title(WT_NAMES[t->id], 26.0f);
+    ui_title_p(WT_NAMES[t->id], 26.0f, (int32_t)(SP_A_TABLE + b));
     sp_put(w, WARP_NAMES[mode < WARP_COUNT ? mode : 0]);
     ui_sub(26.0f, "WARP", w);
     ui_H(1, 8.0f, 27.0f);
@@ -651,7 +653,7 @@ static void ui_p_unison(void)
     lk_text(214.0f, 192.0f, T9, "R", sk.lab, sk.ground, 0, 0);
     ui_H(3, sy_maxf(lx, 34.0f) - 5.0f, 184.0f);
     sp_put(sp_fix(w, (int32_t)nv, 0u, 0), nv == 1u ? " VOICE" : " VOICES");
-    ui_title(w, UI_TITLE_X);
+    ui_title_p(w, UI_TITLE_X, (int32_t)(SP_A_UNI + b));
     sp_put(sp_put(w, UMODE_NAMES[umode & 1u]), " \xB7 BLEND");
     sp_put(sp_fix(v, (sy_patch.p[SP_A_BLEND + b] + 5) / 10, 0u, 0), "%");
     ui_sub(UI_TITLE_X, w, v);
@@ -698,7 +700,7 @@ static void ui_p_spread(void)
         else
             lk_hollow(x, y, 2.3f);
     }
-    ui_title(UMODE_NAMES[umode & 1u], UI_TITLE_X);
+    ui_title_p(UMODE_NAMES[umode & 1u], UI_TITLE_X, (int32_t)(SP_A_UMODE + b));
     sp_text(SP_A_SPREAD + b, sy_patch.p[SP_A_SPREAD + b], w);
     ui_sub(UI_TITLE_X, "WT SPREAD", w);
     lk_label(170.0f, 162.0f, "PHASE", 20);
@@ -895,7 +897,7 @@ static void ui_p_sub(void)
     y = lk_fader(214.0f, 50.0f, 180.0f, ui_v(sy_patch.p, SP_SUB_LEVEL));
     lk_arrow(70.0f, 197.0f, 70.0f - 10.0f - 20.0f * pw, 197.0f, 3.0f, 1.0f, ui_ink(ui_hot(3)));
     lk_arrow(130.0f, 197.0f, 130.0f + 10.0f + 20.0f * pw, 197.0f, 3.0f, 1.0f, ui_ink(ui_hot(3)));
-    ui_title(SUB_NAMES[shape < SUB_NSHAPE ? shape : 0], UI_TITLE_X);
+    ui_title_p(SUB_NAMES[shape < SUB_NSHAPE ? shape : 0], UI_TITLE_X, SP_SUB_SHAPE);
     sp_fix(w, oct, 0u, 1);
     ui_sub(UI_TITLE_X, "OCT", w);
     lk_label(84.0f, 192.0f, "WIDTH", 20);
@@ -928,7 +930,7 @@ static void ui_p_noise(void)
     lk_seg(24.0f, 177.0f + 9.0f * c, 180.0f, 177.0f - 9.0f * c, 1.5f, ui_ink(ui_hot(1)));
     lk_hollow(102.0f, 177.0f, 2.5f);
     y = lk_fader(222.0f, 50.0f, 180.0f, ui_v(sy_patch.p, SP_NZ_LEVEL));
-    ui_title(NZ_NAMES[(uint32_t)sy_patch.p[SP_NZ_TYPE] % 3u], UI_TITLE_X);
+    ui_title_p(NZ_NAMES[(uint32_t)sy_patch.p[SP_NZ_TYPE] % 3u], UI_TITLE_X, SP_NZ_TYPE);
     lk_text(10.0f, 69.0f, T9, "L", sk.lab, sk.ground, 0, 0);
     lk_text(10.0f, 127.0f, T9, "R", sk.lab, sk.ground, 0, 0);
     lk_label(24.0f, 192.0f, "LOW", 60);
@@ -1300,7 +1302,7 @@ static void ui_p_voice(void)
             nv++;
         }
     }
-    ui_title(VMODE_NAMES[(uint32_t)sy_patch.p[SP_V_MODE] % 3u], UI_TITLE_X);
+    ui_title_p(VMODE_NAMES[(uint32_t)sy_patch.p[SP_V_MODE] % 3u], UI_TITLE_X, SP_V_MODE);
     if (nv) {
         lk_disc(22.5f, 152.0f, 2.0f, sk.hot);
         sp_put(sp_fix(w, (int32_t)nv, 0u, 0), " PLAYING");
@@ -1491,7 +1493,7 @@ static void ui_p_keys(void)
         if (pc == 0)
             lk_ring(cx, 194.0f, 4.5f, 1.0f, ui_ink(ui_hot(1)));
     }
-    ui_title(UI_SCALE_LONG[ui.scale % UI_NSCALE], UI_TITLE_X);
+    ui_title_p(UI_SCALE_LONG[ui.scale % UI_NSCALE], UI_TITLE_X, UI_SCALE);
     ui_sub(UI_TITLE_X, "ROOT", UI_NOTE_NAME[ui.root % 12u]);
     x = 26.0f;
     for (k = 0; k < UI_NFIT; k++)
@@ -1584,8 +1586,9 @@ static void ui_p_panel(void)
     lk_text(132.0f, 112.0f, T9, "300", sk.lab, sk.ground, 0, 0);
     lk_text(216.0f, 112.0f, T9, "600", sk.lab, sk.ground, 0, 0);
     sp_fix(t, HOLD_MS[settings_hold % 4u], 0u, 0);
-    lk_text(190.0f, 90.0f, T9, t, sk.ink, sk.ground, 0, 0);
-    lk_text(205.0f, 90.0f, T9, " MS", sk.lab, sk.ground, 0, 0);
+    lk_text(190.0f, 84.0f, T9, t, ui_ink(ui_hot(1)), sk.ground, 0, 0);   /* (its value here, HOT while it turns: */
+    lk_text(205.0f, 84.0f, T9, " MS", sk.lab, sk.ground, 0, 0);          /* clear of the slider's thumb) */
+    pg.figs |= 2u;
     ui_H(0, 114.0f, 44.0f);
     ui_H(1, 164.0f, 82.0f);
 }
@@ -1857,7 +1860,7 @@ static void ui_p_jump(void)
         int on = sec == cur && sec != 0xFFu;
         if (LK_BLACK[k % 12u]) {                    /* (a black key's word over it) */
             uint32_t c = UI_KEY_JUMP[k];
-            const char *s = c == SEC_MACRO ? "HM" : c == SEC_VOICE ? "VC" : c == SEC_GLOBAL ? "GL" : c == SEC_KEYS ? "KY"
+            const char *s = c == SEC_MACRO ? "HM" : c == SEC_VOICE ? "VC" : c == SEC_GLOBAL ? "GL" : c == SEC_KEYS ? "SC"
                             : c == SEC_MENU ? "ST" : c == SEC_CHAIN ? "FX" : 0;
             if (s) {
                 lk_text_c(cx, 34.0f, on ? T9B : T9, s, on ? sk.ink : sk.lab, sk.ground, 0, 0);
@@ -1893,11 +1896,12 @@ static int ui_cd_view(uint32_t *n, float *frac, char *title, const char **sub, c
         held = fm1_ms - ui.bt_t[b];
         dur = b == B_OCTDN ? UI_DEL_MS : UI_LONG_MS;
         *sub = "LET GO TO STOP";
-        if (b == B_LFO) {
-            uint32_t k = ui_lfo();
-            sp_draw_t t;
-            sp_fix(sp_put(title, "DELETE POINT "), (int32_t)ui_lpt(k, ui_pts(k, &t)) + 1, 0u, 0);
-            *label = SEC_NAMES[ui_sec()];
+        if (ui_cd_quiet(b)) {                       /* (a menu button: what it shows reset) */
+            uint32_t sec = ui_menu_sec(ui_btn_fam(b));
+            sp_put(sp_put(title, "RESET "), ui_sec_name(sec));
+            *sub = "LET GO, A KNOB OR A KEY STOP IT";
+            *sub2 = sec < SEC_COUNT ? "SAVE + OCT- UNDOES IT" : 0;
+            *label = ui_sec_name(sec);
         } else if (b == B_SAVE) {
             sp_fix(sp_put(title, "SAVE OVER USER "), sy_app_slot() + 1, 0u, 0);
             *sub = "LET GO, OCT, A KNOB OR A BUTTON STOP IT";
@@ -2041,7 +2045,7 @@ static void ui_top(void)
     if (sec == SEC_MACRO) {
         sp_put(sp_fix(r, (int32_t)ui_bpm_now(), 0u, 0), " BPM");
         right = r;
-    } else if (sec == SEC_KEYS || sec == SEC_ARP) { /* (V0.7: the chord playing, by name; else the octave) */
+    } else if (f == FAM_SCL || f == FAM_ARP) {      /* (V0.7: the chord playing, by name; else the octave) */
         if (chd.mode != CH_OFF && chs.built && chs.n)
             sy_chord_name(r);
         else
@@ -2049,7 +2053,7 @@ static void ui_top(void)
         right = r;
     }
     n = 0;
-    if (f == FAM_EDIT || f == FAM_ENV || f == FAM_LFO || f == FAM_GLO) {
+    if (f == FAM_EDIT || f == FAM_ENV || f == FAM_LFO || f == FAM_GLO || f == FAM_SCL || f == FAM_ARP) {
         n = ui_fam_secs(f, secs);
         for (i = 0; i < n; i++)
             if (secs[i] == sec)
@@ -2067,7 +2071,37 @@ static void ui_top(void)
         lk_chain_sq(nc, sp_chain_find(sy_patch.p, sec - SEC_DRIVE), byp);
     }
 }
-/* the bottom row: the toast, MIDI LEARN's word, or the section's pages as zones (HOME, the browser, NAME IT: none) */
+/* the knob turning's name and value in the bottom row, HOT (V0.75: in the zones' place until its gesture ends, never
+ * over the page; a value the page shows itself (pg.figs) is HOT there instead, and VALUES' are its figures). 1: shown */
+static int ui_value_row(void)
+{
+    int32_t k = ui_turning(), id;
+    char v[SP_TEXT_N + 8], t[48];
+    const char *n = 0;
+    if (k < 0 || UI_PG[ui.page].graph == G_VALUES || ((pg.figs >> (uint32_t)k) & 1u) || !((pg.has >> (uint32_t)k) & 1u))
+        return 0;
+    id = ui_virt(UI_PG[ui.page].id[k]);
+    if (id >= UI_SCUR && id <= UI_BBANK) {
+        ui_save_flag(id, t);
+        if (!t[0])
+            return 0;
+    } else if (!(n = ui_knob_nv((uint32_t)k, v))) {
+        return 0;
+    }
+    if (!lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
+        return 1;
+    lk_disc(11.0f, LK_ZY + 7.5f, 3.0f, sk.hot);
+    if (n) {
+        float x = n[0] ? lk_text(19.0f, LK_ZY + 1.5f, T10B, n, sk.lab, sk.ground, 0, 12) + 6.0f : 19.0f;
+        lk_text(x, LK_ZY + 1.5f, T10B, lk_fit(t, sizeof t, v, T10B, 0, 232.0f - x), sk.hot, sk.ground, 0, 12);
+    } else {
+        char f[48];
+        lk_text(19.0f, LK_ZY + 1.5f, T10B, lk_fit(f, sizeof f, t, T10B, 0, 213.0f), sk.hot, sk.ground, 0, 12);
+    }
+    return 1;
+}
+/* the bottom row: the toast, MIDI LEARN's word, the knob turning's value, or the section's pages as zones (HOME, the
+ * browser, NAME IT: none) */
 static void ui_bottom(void)
 {
     uint32_t sec = ui_sec(), p, n = 0, cur = 0, nv = 0, vat = 0, vi = 0;
@@ -2077,6 +2111,8 @@ static void ui_bottom(void)
         lk_toast(ui.toast);
         return;
     }
+    if (ui_value_row())
+        return;
     if (ui.learn && sec != SEC_MENU) {
         char t[40];
         if (ui.ml_pick >= 0)
@@ -2181,7 +2217,7 @@ static void (*const UI_PAGE[])(void) = {
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
     [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
-    [G_GROOVE] = ui_p_groove,
+    [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
@@ -2189,7 +2225,8 @@ _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*"
 enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP };
 static uint32_t ui_view(void)
 {
-    if (ui.ub_t0 || (ui.cd_btn != NB && fm1_ms - ui.bt_t[ui.cd_btn] >= HOLD_MS[settings_hold % 4u]))
+    if (ui.ub_t0 || (ui.cd_btn != NB && fm1_ms - ui.bt_t[ui.cd_btn] >= (ui_cd_quiet(ui.cd_btn) ? UI_CD_SHOW_MS
+                                                                                                 : HOLD_MS[settings_hold % 4u])))
         return V_CD;
     if (ui.safe)
         return V_SAFE;
@@ -2265,19 +2302,13 @@ static void ui_page(void)
                 n++;
             }
     }
-    for (k = 0; k < 4u; k++)                        /* the handles, the knob turning's HOT, its value in a flag */
+    for (k = 0; k < 4u; k++)                        /* the handles, the knob turning's HOT (its value: ui_value_row) */
         if (pg.has >> k & 1u) {
             int32_t id = ui_virt(UI_PG[ui.page].id[k]);
             int hot = ui_hot(k) || (v == V_PAGE && ui.learn && ui.ml_pick >= 0 && id >= 0 && ui_eff(id) == ui.ml_pick) ||
                       (v == V_MOD && ui.mod_last >= 0 && id == ui.mod_last);
             lk_handle(pg.hx[k], pg.hy[k], k + 1u, hot);
         }
-    if (v == V_PAGE && g != G_VALUES && !pg.figs && ui_turning() >= 0 && (pg.has >> ui.act_k & 1u)) {
-        char t[48];
-        ui_flag_text(ui.act_k, t);
-        if (t[0])
-            lk_flag(pg.hx[ui.act_k], pg.hy[ui.act_k], t);
-    }
 }
 
 /* ------------------------------------------------------------------------------------------ frame --- */
@@ -2412,9 +2443,6 @@ static void sy_ui_leds(void)
             ui_led(ui_jump_sec(k) == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
-        } else if (chd.mode == CH_FREE && k < CH_NBTN && ui_sec() != SEC_SAVE) {   /* FREE's chord buttons: the */
-            int lit = k < 4u ? k == (chd.type & 3u) : ((chd.ext >> (k - 4u)) & 1u) != 0u;   /* latched lit, the rest */
-            ui_led(lit ? fm1_led : fm1_led_dim, 14u + k);                                     /* glowing (V0.7) */
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
             int32_t n = sy_ui_key_note(k, 0);           /* mid level; a key SNAP moves or WHITE silences: dark */
             uint32_t pc = n >= 0 && (ui.fit != UI_FIT_SNAP || n == UI_KEY0 + (int32_t)k)
@@ -2426,14 +2454,16 @@ static void sy_ui_leds(void)
         }
     }
     for (f = 0; f < FAM_N; f++)
-        if (FAM_BTN[f] < NB)
+        if (FAM_BTN[f] < NB && FAM_BTN[f] != B_ARP)   /* (ARP's: the ARP on or off, below) */
             ui_led(f == ui.fam ? fm1_led : fm1_led_dim, panel.btn[FAM_BTN[f]]);
     if (ui.mod)
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
     else
         ui_led(fm1_led_dim, panel.btn[B_REC]);
-    if (chd.perf && !(chs.pf && ui.abeat_t && fm1_ms - ui.abeat_t < 70u))   /* ARP: PERFORM on (V0.7); ARP's and */
-        ui_led(fm1_led, panel.btn[B_ARP]);                                    /* PATTERN's beats dark a moment */
+    if (chd.perf && !(chs.pf && ui.abeat_t && fm1_ms - ui.abeat_t < 70u))   /* ARP: lit while on (ARP's and */
+        ui_led(fm1_led, panel.btn[B_ARP]);                                    /* PATTERN's beats dark a moment), */
+    else if (!chd.perf)                                                       /* glowing while off */
+        ui_led(fm1_led_dim, panel.btn[B_ARP]);
     if (ui.run) {                                   /* PLAY: its green LED while running, its own each beat (a */
         float b = ui_beats();                       /* quarter of it lit; V0.75: the audio side's beat) */
         fm1_led[UI_LED_PLAY_GREEN >> 3] |= (uint8_t)(1u << (UI_LED_PLAY_GREEN & 7u));
@@ -2457,8 +2487,8 @@ static void sy_ui_frame(void)
     static uint32_t load_t, orbit_t, swing_t, cd_t, reel_t, beat;
     if ((ui.dirty & D_ALL) == D_ALL)                /* (everything redrawn: everything sent, whatever the panel had) */
         memset(ui_rowh, 0, sizeof ui_rowh);
-    if (ui.act_k < 4u && fm1_ms - ui.act_t >= UI_GESTURE_MS) {   /* (the handle, the shape as it rests) */
-        ui.dirty |= D_DISP;
+    if (ui.act_k < 4u && fm1_ms - ui.act_t >= UI_GESTURE_MS) {   /* (the handle, the shape as it rests; the zones */
+        ui.dirty |= D_DISP | D_FOOT;                             /* back) */
         ui.act_k = 0xFF;
     }
     if (ui.safe && (int32_t)(fm1_ms - ui.safe_t) >= 0) {

@@ -34,9 +34,14 @@
  *     key opens its section: the white keys OSC A .. EQ, five black keys HOME, VOICE, GLOBAL, KEYS, SETTINGS).
  *   - SCL: the keys' scale, its root, how they fit it, their velocity; SCL held, a key is the root.
  *   - PLAY: the transport on and off (the FREE LFOs start on the beat; PLAY's green LED on, its own blinking each
- *     beat; ARP and PATTERN step on its beat). ARP: PERFORM on and off (V0.7); ARP held, its pages (V0.75: PERFORM,
- *     ARP's STEPS and RATCHET, GROOVE: sy_ui_chord.c). CLOCK IN MIDI (GLOBAL): MIDI's clock the tempo, its start and
- *     stop the transport.
+ *     beat; ARP and PATTERN step on its beat). CLOCK IN MIDI (GLOBAL): MIDI's clock the tempo, its start and stop the
+ *     transport.
+ *   - V0.75, one grammar for the menu buttons (HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP): a tap opens the menu where it
+ *     was left, another its next page (through its sections; ALGORITHM reaches VALUES); twice, its next section (FX:
+ *     the chain view <-> the module picked; HOME: the presets); held, its layer (above); held 5 s, what it shows back
+ *     to its starting values (a countdown from 2 s, nothing touched meanwhile; HOME: the SETTINGS); with OCT+ / OCT-,
+ *     on / off (ui_combo). SELECT: the menu's section (one section: its pages); ALGORITHM: the section's pages. SAVE
+ *     keeps its own (once, twice, held 5 s, + OCT undo and redo).
  *   - The SETTINGS (HOME held 5 s): SCREEN (the palette, HELP: a hint at the bottom entering a section, the LEDs'
  *     GLOW), PANEL (ACCEL, the HOLD time), MIDI (its CHANNEL, LEARN, CLEAR the learned CCs, PROGRAM changes).
  *     MIDI LEARN on: the next knob turned on any page picks its parameter, the next CC is set to it (OCT- takes
@@ -49,7 +54,6 @@
 static int sy_app_held(uint32_t k);                 /* sy_app.c: key k's note sounding (its LED) */
 static void sy_app_octave(int32_t d);               /* .. OCT- / OCT+ */
 static int32_t sy_app_oct(void);
-static void sy_app_chord_root(uint32_t n);          /* .. HARP's chord's root (V0.7) */
 static void sy_app_run(uint32_t on);                /* .. the transport on, off (V0.75: the audio side's beat) */
 static int sy_app_clock(void);                      /* .. the tempo from MIDI's clock now (CLOCK IN MIDI) */
 static int sy_app_clock_lost(void);                 /* .. it stopped coming (1 once: the panel's tempo again) */
@@ -102,23 +106,27 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_HELP, UI_GLOW, UI_HOLD, UI_MCH, UI_LEARN, UI_MCLR, UI_MPC,   /* (the SETTINGS' others) */
        UI_BRUN, UI_BCLR,                              /* (BENCH's: RUN, CLEAR the peaks) */
        UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX,         /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
-       UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI,          /* (V0.7, SCL's chords (sy_chord.c chd): CHORD's, PERFORM's, */
-       UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* BASS's, MIDI's) */
+       UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR,          /* (V0.7, SCL's chords (sy_chord.c chd): CHORD's, the ARP's */
+       UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* STYLE's, BASS's, MIDI's) */
        UI_BON, UI_BOCT, UI_BLVL, UI_CIN, UI_COUT, UI_COCH, UI_CBCH,
        UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH,       /* (V0.75, ARP's: GROOVE's; a step's (the one picked: STEPS', */
-       UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT, UI_SRAT, UI_SCHN, UI_SSLD,   /* RATCHET's); GLOBAL's CLOCK IN) */
+       UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT, UI_SRAT, UI_SCHN, UI_SSLD,   /* RATCHET's); STRUM's; GLOBAL's */
+       UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP,           /* CLOCK IN) */
        UI_CLOCK };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
 #define SEC_BROWSE (SEC_COUNT + 3)
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
-#define SEC_ARP (SEC_COUNT + 5)                     /* (V0.75: ARP held, PERFORM's pages) */
-#define SEC_N (SEC_COUNT + 6)                       /* every section, the UI's own too (ui.spage) */
+#define SEC_ARP (SEC_COUNT + 5)                     /* (V0.75, the ARP's: STYLE, GROOVE; */
+#define SEC_CHORD (SEC_COUNT + 6)                   /* SCL's chords: CHORD, STRUM, BASS; */
+#define SEC_CMID (SEC_COUNT + 7)                    /* .. their MIDI; */
+#define SEC_STEPS (SEC_COUNT + 8)                   /* the ARP's STEPS, RATCHET) */
+#define SEC_N (SEC_COUNT + 9)                       /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_N };   /* (sy_ui_draw.c UI_PAGE) */
+       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM, G_N };   /* (UI_PAGE) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -265,13 +273,14 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
-    {SEC_KEYS, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HEXT, UI_HVOI}},   /* (V0.7: sy_ui_chord.c) */
-    {SEC_KEYS, G_BASS, "BASS", {UI_BON, UI_BOCT, UI_BLVL, -1}},
-    {SEC_KEYS, G_CMIDI, "MIDI", {UI_CIN, UI_COUT, UI_COCH, UI_CBCH}},
-    {SEC_ARP, G_PERF, "PERFORM", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},  /* (V0.75: ARP held) */
-    {SEC_ARP, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
-    {SEC_ARP, G_RATCH, "RATCHET", {UI_SSTEP, UI_SRAT, UI_SCHN, UI_SSLD}},
+    {SEC_CHORD, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR}},   /* (V0.7: sy_ui_chord.c) */
+    {SEC_CHORD, G_STRUM, "STRUM", {UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP}},
+    {SEC_CHORD, G_BASS, "BASS", {UI_BON, UI_BOCT, UI_BLVL, -1}},
+    {SEC_CMID, G_CMIDI, "MIDI", {UI_CIN, UI_COUT, UI_COCH, UI_CBCH}},
+    {SEC_ARP, G_PERF, "STYLE", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},    /* (V0.75: the ARP button's) */
     {SEC_ARP, G_GROOVE, "GROOVE", {UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH}},
+    {SEC_STEPS, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
+    {SEC_STEPS, G_RATCH, "RATCHET", {UI_SSTEP, UI_SRAT, UI_SCHN, UI_SSLD}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
@@ -284,10 +293,9 @@ enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU,
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
     {SEC_LFO1, SEC_LFO2, 0xFF}, {0xFF}, {SEC_CHAIN, 0xFF}, {SEC_VOICE, SEC_MATRIX, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
-    {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, 0xFF}, {SEC_ARP, 0xFF},
+    {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, SEC_CHORD, SEC_CMID, 0xFF}, {SEC_ARP, SEC_STEPS, 0xFF},
 };
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL, NB};   /* (ARP: */
-                                                                                    /* its tap PERFORM, held its pages) */
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL, B_ARP};
 static int ui_is_fx(uint32_t sec) { return sec >= SEC_DRIVE && sec < SEC_CHAIN; }   /* an effect module's section */
 /* the effects' costs on one core, % (TESTING.md §4: the cost model at the measured ~150 instructions a us; the new
  * modules' estimated), by type: the chain view's sum */
@@ -412,6 +420,8 @@ static struct {
     uint8_t run;                                    /* PLAY: the transport running, since run_t (its beat: the audio */
     uint32_t run_t;                                 /* side's, chs.tq) */
     uint8_t astep;                                  /* ARP's STEPS, RATCHET: the step picked (0 .. 15) */
+    uint8_t lastmode;                               /* SCL + OCT+: the chords' MODE back on (KEY, FREE) */
+    uint8_t lay_lock;                               /* GLO + OCT+: PERFORM's layer latched (a tap, GLO + OCT-: let go) */
     uint32_t abeat_t;                               /* .. a beat of ARP's or PATTERN's (the ARP LED dark a moment) */
     uint8_t scale, root, fit, kvel;                 /* SCL: the keys' scale, its root (0 C .. 11 B), how a key fits */
                                                     /* it (UI_FIT_*), the keys' velocity (1 .. 127) */
@@ -499,7 +509,8 @@ static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
 static const char *ui_sec_name(uint32_t s)
 {
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
-           : s == SEC_KEYS ? "KEYS" : s == SEC_ARP ? "ARP" : "PRESETS";
+           : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD" : s == SEC_CMID ? "MIDI"
+           : s == SEC_STEPS ? "STEPS" : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
 static void ui_save_over(void);
@@ -629,7 +640,7 @@ static const char *ui_hint(uint32_t sec)
     if (sec == SEC_ENV1 || sec == SEC_ENV2)
         return "ENV HELD: ENV 2 ONTO A KNOB";
     if (sec == SEC_LFO1 || sec == SEC_LFO2)
-        return "LFO HELD: A CHANGE FOR NOW";
+        return "LFO+OCT+ ADDS A POINT, OCT- DELETES";
     if (sec == SEC_VOICE)
         return "GLO HELD: BEND, WHEEL, GLIDE";
     if (sec == SEC_MACRO)
@@ -645,9 +656,13 @@ static const char *ui_hint(uint32_t sec)
     if (sec == SEC_MENU)
         return "HOME: BACK TO THE SOUND";
     if (sec == SEC_KEYS)                            /* (V0.7) */
-        return "SCL+KEY: ROOT \xB7 ARP HELD: ARP";
+        return "SCL HELD + A KEY: THE ROOT";
+    if (sec == SEC_CHORD)
+        return "SCL+OCT+ CHORDS ON, OCT- OFF";
     if (sec == SEC_ARP)                             /* (V0.75) */
-        return "ARP: ON, OFF \xB7 PLAY: ON THE BEAT";
+        return "ARP+OCT+ ON, OCT- OFF";
+    if (sec == SEC_STEPS)
+        return "KNOB 1: THE STEP";
     return 0;
 }
 
@@ -724,7 +739,7 @@ static void ui_family_tap(uint32_t f)
               : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)
                                                                   : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
     else if (ui_sec() != SEC_CHAIN)
-        ui_step_pages(1, f == FAM_EDIT || f == FAM_FX, 1);
+        ui_step_pages(1, 0, 1);
 }
 
 /* SELECT: the family's sections in their order (each on the page it showed last) */
@@ -735,8 +750,10 @@ static void ui_step_section(int32_t s)
     for (i = 0; i < n; i++)
         if (secs[i] == sec)
             k = i;
-    if (n < 2u)
+    if (n < 2u) {                                   /* (one section: its pages, as ALGORITHM) */
+        ui_step_pages(s, 1, 0);
         return;
+    }
     k = (uint32_t)(((int32_t)k + s % (int32_t)n + (int32_t)n) % (int32_t)n);
     next = secs[k];
     ui_go(UI_PG[ui.spage[next]].sec == next ? ui.spage[next] : ui_first_page(next));
@@ -1116,6 +1133,12 @@ static void ui_lfo_add(void)
  * let go, a knob, another button, OCT (its pages, or SAVE's undo and redo: a chord), another page or the MOD layer
  * stop it */
 #define UI_LONG_MS 5000u
+#define UI_CD_SHOW_MS 2000u                         /* a menu button's countdown shows from here (HOME's, SAVE's from */
+                                                    /* HOLD) */
+static void ui_reset(uint32_t b);
+static void ui_mod_close(void);
+static void ui_lay_close(void);
+static int ui_cd_quiet(uint32_t b) { return b != B_HOME && b != B_SAVE && b != B_OCTDN && b != NB; }
 static void ui_cd_arm(uint32_t b)
 {
     ui.cd_btn = (uint8_t)b;
@@ -1128,18 +1151,6 @@ static void ui_cd_stop(void)
     ui.cd_btn = NB;
     ui.dirty |= D_DISP;                             /* (the countdown's screen: the page back) */
 }
-static void ui_lfo_del_arm(void)                    /* (LFO's hold, on POINTS) */
-{
-    uint32_t k = ui_lfo(), i;
-    sp_draw_t t;
-    const sp_draw_t *d = ui_pts(k, &t);
-    i = ui_lpt(k, d);
-    if (i == 0u || i + 1u >= d->n) {
-        ui_toast("THE END POINTS STAY");
-        return;
-    }
-    ui_cd_arm(B_LFO);
-}
 static void ui_lfo_del(void)
 {
     uint32_t k = ui_lfo(), i, j;
@@ -1147,7 +1158,11 @@ static void ui_lfo_del(void)
     const sp_draw_t *d = ui_pts(k, &t);
     char s[32];
     i = ui_lpt(k, d);
-    if (sy_next_st || i == 0u || i + 1u >= d->n)
+    if (i == 0u || i + 1u >= d->n) {
+        ui_toast("THE END POINTS STAY");
+        return;
+    }
+    if (sy_next_st)
         return;
     ui_edit();
     w = ui_pts_edit(k);
@@ -1164,11 +1179,11 @@ static void ui_lfo_del(void)
 }
 #define UI_DEL_MS 3000u                             /* OCT- held in the browser: the preset playing deleted */
 static void ui_browse_del(void);                    /* sy_ui_save.c */
-static void ui_cd_tick(void)                        /* every millisecond while it counts */
+static void ui_cd_tick(void)
 {
     uint32_t b = ui.cd_btn, held = fm1_ms - ui.bt_t[b], left, dur = b == B_OCTDN ? UI_DEL_MS : UI_LONG_MS;
-    if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || ui.mod ||
-        (b == B_LFO && UI_PG[ui.page].id[0] != UI_LPT) || (b == B_SAVE && sy_app_slot() < 0) ||
+    if (!(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || (ui.mod && (ui.mod_btn != b || ui.mod_last >= 0)) ||
+        ui.mom_n || (b == B_SAVE && sy_app_slot() < 0) ||
         (b == B_OCTDN && (ui_sec() != SEC_BROWSE || sy_app_slot() < 0))) {
         ui_cd_stop();
         return;
@@ -1176,14 +1191,19 @@ static void ui_cd_tick(void)                        /* every millisecond while i
     if (held >= dur) {
         ui.cd_btn = NB;
         ui.dirty |= D_DISP;
-        if (b == B_LFO)
-            ui_lfo_del();
-        else if (b == B_SAVE)
+        if (b == B_SAVE) {
             ui_save_over();
-        else if (b == B_OCTDN)
+        } else if (b == B_OCTDN) {
             ui_browse_del();
-        else
+        } else if (b == B_HOME) {
             ui_go(ui_first_page(SEC_MENU));
+        } else {                                    /* (a menu button: its layer closes, what it shows reset) */
+            if (ui.mod && ui.mod_btn == b)
+                ui_mod_close();
+            if (ui.lay && ui.lay_btn == b)
+                ui_lay_close();
+            ui_reset(b);
+        }
         return;
     }
     left = (dur - held + 999u) / 1000u;             /* (sy_ui_draw.c: the countdown's screen, its ring live) */
@@ -1333,7 +1353,7 @@ static void ui_chord_turn(int32_t item, int32_t s)
     if ((item >= UI_PRATE && item <= UI_PFEEL) || item >= UI_AGATE) {
         switch (item) {
         case UI_PRATE: chd.rate[st] = (uint8_t)sy_clampi(chd.rate[st] + s, 0, CH_NRATE - 1); break;
-        case UI_PMOVE: chd.move[st] = (uint8_t)((chd.move[st] + (uint32_t)(s % nm + nm)) % (uint32_t)nm); break;
+        case UI_PMOVE: chd.move[st] = (uint8_t)sy_clampi(chd.move[st] + s, 0, nm - 1); break;
         case UI_PFEEL:
             ch_feel_range(st, &lo, &hi, &step);
             chd.feel[st] = (uint8_t)sy_clampi(chd.feel[st] + s * step, lo, hi);
@@ -1347,34 +1367,42 @@ static void ui_chord_turn(int32_t item, int32_t s)
                 sy_app_keys_hand();             /* (the keys held: latched from now) */
             break;
         case UI_SSTEP: ui.astep = (uint8_t)((a + (uint32_t)(s % 16 + 16)) % AR_NSTEP); break;
-        case UI_STYPE: chd.st[a] = (uint8_t)((chd.st[a] + (uint32_t)(s % 3 + 3)) % AS_N); break;
+        case UI_STYPE: chd.st[a] = (uint8_t)sy_clampi(chd.st[a] + s, 0, AS_N - 1); break;
         case UI_SLVL: chd.lvl[a] = (uint8_t)sy_clampi(chd.lvl[a] + 5 * s, 5, 100); break;
         case UI_SOCT: chd.oct[a] = (uint8_t)sy_clampi(chd.oct[a] + s, 0, 4); break;
         case UI_SRAT: chd.rat[a] = (uint8_t)sy_clampi(chd.rat[a] + s, 1, 4); break;
         case UI_SCHN: chd.chn[a] = (uint8_t)sy_clampi(chd.chn[a] + 5 * s, 0, 100); break;
-        default: chd.sld[a] = s > 0; break;
+        case UI_SSLD: chd.sld[a] = s > 0; break;
+        case UI_STRUM: chd.strum = (uint8_t)sy_clampi(chd.strum + s, 0, CH_NSTRUM - 1); break;
+        case UI_SDIR: chd.sdir = (uint8_t)sy_clampi(chd.sdir + s, 0, CH_NSDIR - 1); break;
+        case UI_SHUM: chd.human = (uint8_t)sy_clampi(chd.human + 5 * s, 0, 100); break;
+        default: chd.taper = (uint8_t)sy_clampi(chd.taper + 5 * s, 0, 100); break;
         }
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
         return;
     }
     switch (item) {
-    case UI_HMODE: chd.mode = (uint8_t)sy_clampi(chd.mode + s, 0, CH_NMODE - 1); break;
-    case UI_HTYPE:                                  /* (KEY's own: FREE's stays latched) */
-        if (chd.mode == CH_KEY)
-            chd.ktype = (uint8_t)((chd.ktype + (uint32_t)(s % 4 + 4)) % 4u);
-        else
-            chd.type = (uint8_t)((chd.type + (uint32_t)(s % 4 + 4)) % 4u);
+    case UI_HMODE:
+        chd.mode = (uint8_t)sy_clampi(chd.mode + s, 0, CH_NMODE - 1);
+        if (chd.mode != CH_OFF)
+            ui.lastmode = chd.mode;
         break;
-    case UI_HEXT: chd.ext = (uint8_t)((chd.ext + (uint32_t)(s % 16 + 16)) % 16u); break;
+    case UI_HTYPE:                                  /* (KEY's SHAPE, FREE's TYPE: each its own) */
+        if (chd.mode == CH_KEY)
+            chd.ktype = (uint8_t)sy_clampi(chd.ktype + s, 0, CH_KT_N - 1);
+        else
+            chd.ftype = (uint8_t)sy_clampi(chd.ftype + s, 0, CH_FT_N - 1);
+        break;
     case UI_HVOI: chd.voicing = (uint8_t)sy_clampi(chd.voicing + s, 0, CH_NVOIC - 1); break;
-    case UI_PSTY: chd.style = (uint8_t)((st + (uint32_t)(s % PF_N + PF_N)) % PF_N); break;
+    case UI_HSPR: chd.spread = (uint8_t)sy_clampi(chd.spread + s, 0, CH_NSPREAD - 1); break;
+    case UI_PSTY: chd.style = (uint8_t)sy_clampi(st + s, 0, PF_N - 1); break;
     case UI_BON: chd.bass = s > 0; break;
     case UI_BOCT: chd.boct = (uint8_t)sy_clampi(chd.boct + s, 1, 2); break;
     case UI_BLVL: chd.blvl = (uint8_t)sy_clampi(chd.blvl + 5 * s, 5, 100); break;
     case UI_CIN: chd.min = s > 0; break;
     case UI_COUT: chd.mout = s > 0; break;
-    case UI_COCH: chd.och = (uint8_t)((chd.och + (uint32_t)(s % 16 + 16)) % 16u); break;
-    default: chd.bch = (uint8_t)((chd.bch + (uint32_t)(s % 16 + 16)) % 16u); break;
+    case UI_COCH: chd.och = (uint8_t)sy_clampi(chd.och + s, 0, 15); break;
+    default: chd.bch = (uint8_t)sy_clampi(chd.bch + s, 0, 15); break;
     }
     if (!was && sy_chord_active())
         sy_app_keys_hand();                         /* (V0.75: the keys held go over to the chords) */
@@ -1417,7 +1445,7 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         else
             ui.kvel = (uint8_t)sy_clampi(ui.kvel + ui_accel(e, s, 126), 1, 127);
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
-    } else if (item >= UI_HMODE && item <= UI_SSLD) {   /* SCL's chords, ARP's */
+    } else if (item >= UI_HMODE && item <= UI_STAP) {   /* SCL's chords, ARP's */
         ui_chord_turn(item, s);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
         chd.clock = s > 0;
@@ -1477,7 +1505,7 @@ static void ui_act(uint32_t k)
         ui.dirty |= D_KNOB(ui.act_k);
     ui.act_k = (uint8_t)k;
     ui.act_t = fm1_ms;
-    ui.dirty |= D_KNOB(k) | D_DISP;
+    ui.dirty |= D_KNOB(k) | D_DISP | D_FOOT;       /* (V0.75: its value in the bottom row) */
 }
 static int32_t ui_act_id(void)
 {
@@ -1515,6 +1543,7 @@ static void ui_lay_close(void)
         sy_patch.p[ui.mom_id[i]] = ui.mom_v[i];
     ui.mom_n = 0;
     ui.lay = LAY_NONE;
+    ui.lay_lock = 0;
     ui.dirty = D_ALL;
 }
 /* PERFORM's and MACROS' knobs: the bend (16 detents from the middle to an end), the mod wheel, GLIDE, VOLUME;
@@ -1616,14 +1645,161 @@ static void ui_knob(uint32_t k, int32_t s)
 static void sy_ui_touch(void) { ui.dirty |= D_KNOBS | D_DISP | D_HEAD | D_FOOT; }
 
 /* ---------------------------------------------------------------------------------------- buttons --- */
-static int ui_has_layer(uint32_t b) { return b == B_REC || b == B_ENV; }
 #define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_FX) | (1u << B_GLO) | \
-                  (1u << B_REC))                    /* held with OCT- / OCT+: the section's pages (FX on the chain */
-                                                    /* view: add, take out; EDIT on a source or the filter: on, off) */
+                  (1u << B_SCL) | (1u << B_ARP) | (1u << B_REC))   /* held with OCT- / OCT+: ui_combo */
 static void ui_browse_undel(void);                  /* sy_ui_save.c */
 static int ui_src_sec(uint32_t s)                   /* a section EDIT + OCT turns on and off */
 {
     return s == SEC_OSCA || s == SEC_OSCB || s == SEC_SUB || s == SEC_NOISE || s == SEC_FILTER;
+}
+static uint32_t ui_btn_fam(uint32_t b)              /* the menu a button opens (FAM_N: none) */
+{
+    uint32_t f;
+    for (f = 0; f < FAM_N && (FAM_BTN[f] != b || b == NB); f++)
+        ;
+    return f;
+}
+/* the section menu f shows: the one shown, else where it was left (else its first) */
+static uint32_t ui_menu_sec(uint32_t f)
+{
+    uint8_t secs[NFXC];
+    if (ui.fam == f)
+        return ui_sec();
+    if (ui_in_fam(ui.fpage[f], f) && ui_page_live(ui.fpage[f]))
+        return UI_PG[ui.fpage[f]].sec;
+    return ui_fam_secs(f, secs) ? secs[0] : SEC_CHAIN;
+}
+/* a menu button held with OCT+ (up) or OCT- (V0.75, one grammar: on, add, next / off, take out, back): HOME the next
+ * or previous sound; EDIT the source or the filter its menu shows on, off; FX a module added, taken out (the chain
+ * view), the module its menu shows in, bypassed; ENV, REC their MOD layer latched, let go; GLO PERFORM's layer
+ * latched, let go; LFO a point added, the one picked deleted (its POINTS page shown); SCL the chords on (MODE as it
+ * was), off; ARP the ARP on, off. From any page: the page stays (LFO's: its POINTS) */
+static void ui_combo(uint32_t b, int up)
+{
+    char t[32];
+    uint32_t sec;
+    t[0] = 0;
+    if (b == B_HOME) {
+        sy_app_sound_step(up ? 1 : -1);
+    } else if (b == B_EDIT) {
+        sec = ui_menu_sec(FAM_EDIT);
+        if (ui_src_sec(sec) && !ui.mod) {
+            ui_edit_step();
+            sy_patch.p[ui_sec_power(sec)] = (int16_t)up;
+            sp_put(sp_put(sp_put(t, ui_sec_name(sec)), ": "), up ? "ON" : "OFF");
+        }
+    } else if (b == B_FX) {
+        if (ui.mod)
+            return;
+        sec = ui_menu_sec(FAM_FX);
+        if (ui_sec() == SEC_CHAIN || sec == SEC_CHAIN) {
+            if (ui_sec() != SEC_CHAIN)
+                ui_go(ui_first_page(SEC_CHAIN));
+            if (up)
+                ui_chain_add();
+            else
+                ui_chain_del();
+        } else if (ui_is_fx(sec)) {
+            ui_edit_step();
+            sy_patch.p[FXI_ON[sec - SEC_DRIVE]] = (int16_t)up;
+            sp_put(sp_put(t, SEC_NAMES[sec]), up ? " IN" : " BYPASSED");
+        }
+    } else if (b == B_ENV || b == B_REC) {
+        if (up && ui.mod && ui.mod_btn == b) {
+            ui.mod = 2u;
+        } else if (up && !ui.mod) {
+            ui_mod_open(b, b == B_ENV ? SRC_ENV2 : ui.mod_pick, 1);
+        } else if (!up && ui.mod && ui.mod_btn == b) {
+            ui_mod_close();
+        }
+        ui.dirty = D_ALL;
+    } else if (b == B_GLO) {
+        if (up && !ui.lay && !ui.mod)
+            ui_lay_open(LAY_PERF, B_GLO);
+        if (up && ui.lay == LAY_PERF)
+            ui.lay_lock = 1;
+        else if (!up && ui.lay == LAY_PERF)
+            ui_lay_close();
+        ui.dirty = D_ALL;
+    } else if (b == B_LFO) {
+        if (ui.mod || ui.lay)
+            return;
+        sec = ui_menu_sec(FAM_LFO);
+        if (UI_PG[ui.page].sec != sec || UI_PG[ui.page].id[0] != UI_LPT)
+            ui_go(ui_first_page(sec));               /* (its POINTS page) */
+        if (up)
+            ui_lfo_add();
+        else
+            ui_lfo_del();
+    } else if (b == B_SCL || b == B_ARP) {
+        int was = sy_chord_active();
+        if (b == B_SCL)
+            chd.mode = (uint8_t)(up ? (ui.lastmode % CH_NMODE ? ui.lastmode % CH_NMODE : CH_KEY) : CH_OFF);
+        else
+            chd.perf = (uint8_t)up;
+        if (!was && sy_chord_active())
+            sy_app_keys_hand();                     /* (a chord held: it plays the new way at once) */
+        chd.gen++;
+        if (b == B_SCL)
+            sp_put(sp_put(t, "CHORDS "), up ? CH_MODE_NAME[chd.mode % CH_NMODE] : "OFF");
+        else
+            sp_put(sp_put(t, up ? "ARP ON: " : "ARP OFF"), up ? PF_NAME[chd.style % PF_N] : "");
+    }
+    if (t[0])
+        ui_toast(t);
+    ui.dirty |= D_DISP | D_HEAD | D_KNOBS;
+}
+/* held 5 s (V0.75): what the menu shows back to its starting values: a section of the sound's (its parameters'
+ * defaults, its ON as it is; an LFO's points too; SAVE + OCT- undoes it), GLOBAL's tempo, SCL's scale, its chords,
+ * their MIDI, the ARP's settings, its steps */
+static void ui_reset(uint32_t b)
+{
+    uint32_t f = ui_btn_fam(b), sec, id;
+    char t[32];
+    if (f == FAM_N)
+        return;
+    sec = ui_menu_sec(f);
+    if (sec < SEC_COUNT) {
+        int32_t pw = ui_sec_power(sec);
+        ui_edit_step();
+        for (id = 0; id < SP_COUNT; id++)
+            if (SP[id].sec == sec && (int32_t)id != pw)
+                sy_patch.p[id] = SP[id].def;
+        if (sec == SEC_LFO1 || sec == SEC_LFO2) {
+            uint32_t k = sec == SEC_LFO2;
+            sy_draw_edit();
+            sp_shape_pts(0, &sy_patch.draw[k]);
+            sy_draw_done();
+            ui.lpt[k] = 0;
+        }
+    } else if (sec == SEC_GLOBAL) {
+        ui.bpm = 120;
+        ui.tsb = 4;
+        ui.tsn = 2;
+        chd.clock = 0;
+        sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+    } else if (sec == SEC_KEYS) {
+        ui.scale = 0;
+        ui.root = 0;
+        ui.fit = UI_FIT_OFF;
+        ui.kvel = 100;
+    } else if (sec == SEC_CHORD || sec == SEC_CMID || sec == SEC_ARP) {
+        if (sec == SEC_CHORD)
+            ch_chord_defaults();
+        else if (sec == SEC_CMID)
+            ch_midi_defaults();
+        else
+            ch_arp_defaults();
+        chd.gen++;
+    } else if (sec == SEC_STEPS) {
+        ch_steps_clear();
+        ui.astep = 0;
+    } else {
+        return;
+    }
+    sp_put(sp_put(t, ui_sec_name(sec)), ": RESET");
+    ui_toast(t);
+    ui.dirty = D_ALL;
 }
 
 static void ui_press(uint32_t b)
@@ -1651,24 +1827,12 @@ static void ui_press(uint32_t b)
                 ui_undo(b == B_OCTUP);
             return;
         }
-        if (held) {
+        if (held) {                                 /* a menu button held: its OCT+ / OCT- (ui_combo) */
+            uint32_t h;
+            for (h = 0; h < NB && !((held >> h) & 1u); h++)
+                ;
             ui.bt_chord |= (uint16_t)(held | (1u << b));
-            if ((held & (1u << B_FX)) && ui_sec() == SEC_CHAIN && !ui.mod) {
-                if (b == B_OCTUP)
-                    ui_chain_add();
-                else
-                    ui_chain_del();
-            } else if ((held & (1u << B_EDIT)) && ui_src_sec(ui_sec()) && !ui.mod) {
-                uint32_t pw = (uint32_t)ui_sec_power(ui_sec());
-                char t[24];
-                ui_edit_step();
-                sy_patch.p[pw] = b == B_OCTUP;
-                sp_put(sp_put(sp_put(t, ui_sec_name(ui_sec())), ": "), b == B_OCTUP ? "ON" : "OFF");
-                ui_toast(t);
-                ui.dirty |= D_HEAD | D_DISP;
-            } else {
-                ui_step_pages(b == B_OCTUP ? 1 : -1, 1, 0);
-            }
+            ui_combo(h, b == B_OCTUP);
             return;
         }
         if (ui.learn) {                             /* MIDI LEARN: OCT- the picked one's CC away, OCT+ done */
@@ -1691,7 +1855,7 @@ static void ui_press(uint32_t b)
     }
 }
 
-static void ui_hold(uint32_t b)                     /* held past HOLD: its layer (none on SAVE's or the browser's) */
+static void ui_hold(uint32_t b)
 {
     if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
         if (b == B_HOME)
@@ -1702,30 +1866,25 @@ static void ui_hold(uint32_t b)                     /* held past HOLD: its layer
     }
     if (b == B_REC && !ui.mod)
         ui_mod_open(B_REC, ui.mod_pick, 0);
-    else if (b == B_ENV && !ui.mod)
-        ui_mod_open(B_ENV, SRC_ENV2, 0);
     else if (b == B_HOME && !ui.mod)
         ui_cd_arm(B_HOME);                          /* (5 s: the SETTINGS) */
-    else if (b == B_LFO && UI_PG[ui.page].id[0] == UI_LPT && !ui.mod)
-        ui_lfo_del_arm();
-    else if (ui.mod || ui.lay)
-        return;
-    else if (b == B_GLO)
-        ui_lay_open(LAY_PERF, b);
-    else if (b == B_FX)
-        ui_lay_open(LAY_MAC, b);
-    else if (b == B_LFO)
-        ui_lay_open(LAY_MOM, b);
-    else if (b == B_EDIT)
-        ui_lay_open(LAY_JUMP, b);
     else if (b == B_SAVE && !ui.mod)
         ui_save_hold();                             /* (5 s: over its own slot) */
-    else if (b == B_ARP && !ui.mod) {               /* ARP held: its pages, where they were left (V0.75) */
-        ui.prev_page = ui.page;
-        ui_go(ui_in_fam(ui.fpage[FAM_ARP], FAM_ARP) ? ui.fpage[FAM_ARP] : ui_first_page(SEC_ARP));
+    else if (ui_btn_fam(b) < FAM_N && !ui.mod && !ui.lay) {   /* a menu button: its layer, and its 5 s armed */
+        if (b == B_ENV)
+            ui_mod_open(B_ENV, SRC_ENV2, 0);
+        else if (b == B_GLO)
+            ui_lay_open(LAY_PERF, b);
+        else if (b == B_FX)
+            ui_lay_open(LAY_MAC, b);
+        else if (b == B_LFO)
+            ui_lay_open(LAY_MOM, b);
+        else if (b == B_EDIT)
+            ui_lay_open(LAY_JUMP, b);
+        else if (b == B_SCL)
+            ui_toast("SCL HELD: A KEY IS THE ROOT");
+        ui_cd_arm(b);
     }
-    else if (b == B_SCL && !ui.mod)
-        ui_toast("SCL HELD: A KEY IS THE ROOT");
 }
 
 static void ui_release(uint32_t b, int held)
@@ -1736,7 +1895,7 @@ static void ui_release(uint32_t b, int held)
     if (held) {                                     /* a held layer closes (a latched one stays); SAVE held on a */
         if (ui.mod == 1u && ui.mod_btn == b)        /* sound from no user slot, no OCT meanwhile (undo, redo): */
             ui_mod_close();                         /* nothing to save over */
-        if (ui.lay && ui.lay_btn == b)
+        if (ui.lay && ui.lay_btn == b && !ui.lay_lock)
             ui_lay_close();
         if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && sy_app_slot() < 0 &&
             ui_sec() != SEC_SAVE && ui_sec() != SEC_BROWSE)
@@ -1767,18 +1926,6 @@ static void ui_release(uint32_t b, int held)
         ui_toast(ui.run ? "PLAY" : "STOP");
         return;
     }
-    if (b == B_ARP) {                               /* ARP: PERFORM on and off (V0.7) */
-        char t[32];
-        int was = sy_chord_active();
-        chd.perf = (uint8_t)!chd.perf;
-        if (!was)                                   /* (V0.75: a chord held, then ARP: it plays) */
-            sy_app_keys_hand();
-        chd.gen++;
-        sp_put(sp_put(t, chd.perf ? "PERFORM: " : "PERFORM OFF"), chd.perf ? PF_NAME[chd.style % PF_N] : "");
-        ui_toast(t);
-        ui.dirty |= D_DISP | D_HEAD;
-        return;
-    }
     if (b == B_SEQ) {
         ui_toast("SEQUENCER: IN A LATER VERSION");
         return;
@@ -1792,43 +1939,48 @@ static void ui_release(uint32_t b, int held)
         }
         return;
     }
-    if (b == B_FX && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod && ui.fam == FAM_FX) {   /* FX twice: the chain */
-        if (ui_fam_of(UI_PG[ui.prev_page].sec) == FAM_FX)   /* view <-> the module (the first tap's page step undone) */
-            ui_go(ui.prev_page);
-        ui_chain_flip();
-        ui.tap_t[b] = 0;
-        return;
-    }
     if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {
         ui.tap_t[b] = fm1_ms;                       /* HOME: NAME IT back to the browser, unsaved; the browser back */
         ui_go(ui_sec() == SEC_SAVE ? ui_first_page(SEC_BROWSE) : ui.sv_ret);
         return;
     }
-    if (ui_has_layer(b) && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod) {   /* a double tap: latched */
-        if (b == B_ENV)
-            ui_go(ui.prev_page);                    /* (the first tap's page step undone) */
-        ui_mod_open(b, b == B_ENV ? SRC_ENV2 : ui.mod_pick, 1);
+    if (ui.mod == 2u && b == ui.mod_btn) {          /* a tap lets a latched layer go */
+        ui_mod_close();
         ui.tap_t[b] = 0;
         return;
     }
-    if (b == B_LFO && fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod && UI_PG[ui.prev_page].id[0] == UI_LPT) {
-        ui_go(ui.prev_page);                        /* twice on the POINTS page: a point (the page step undone) */
-        ui_lfo_add();
+    if (ui.lay && ui.lay_lock && b == ui.lay_btn) {
+        ui_lay_close();
+        ui.tap_t[b] = 0;
+        return;
+    }
+    if (b == B_REC) {                               /* REC twice: its MOD layer, latched */
+        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod) {
+            ui_mod_open(B_REC, ui.mod_pick, 1);
+            ui.tap_t[b] = 0;
+        } else {
+            ui.tap_t[b] = fm1_ms;
+        }
+        return;
+    }
+    f = ui_btn_fam(b);
+    if (f == FAM_N)
+        return;
+    if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS && ui.fam == f && !ui.mod && !ui.lay) {   /* twice: the next section */
+        if (ui_fam_of(UI_PG[ui.prev_page].sec) == f)   /* (the first tap's page step undone) */
+            ui_go(ui.prev_page);
+        if (f == FAM_FX)
+            ui_chain_flip();                        /* (FX: the chain view <-> the module picked) */
+        else if (f == FAM_HOME)
+            ui_browse_open();                       /* (HOME: the presets) */
+        else
+            ui_step_section(1);
         ui.tap_t[b] = 0;
         return;
     }
     ui.tap_t[b] = fm1_ms;
-    if (ui.mod == 2u && b == ui.mod_btn) {          /* a tap lets a latched layer go */
-        ui_mod_close();
-        return;
-    }
-    if (b == B_REC)
-        return;
-    for (f = 0; f < FAM_N; f++)
-        if (FAM_BTN[f] == b) {
-            ui.prev_page = ui.page;
-            ui_family_tap(f);
-        }
+    ui.prev_page = ui.page;
+    ui_family_tap(f);
 }
 
 static void ui_buttons(void)
@@ -1939,14 +2091,7 @@ static int sy_ui_key(uint32_t k)
     if ((ui.bt_down & (1u << B_SCL)) && !ui.mod) {  /* SCL held: a key is the root (no note; SCL's tap none); while */
         char t[24];                                 /* HARP plays, the harp's chord's (V0.7) */
         ui.bt_chord |= (uint16_t)(1u << B_SCL);
-        if (chd.perf && chd.style == PF_HARP && chd.mode != CH_OFF) {
-            int32_t n = sy_ui_key_note(k, sy_app_oct());
-            sy_app_chord_root((uint32_t)(n < 0 ? UI_KEY0 + (int32_t)k : n));
-            sp_put(sp_put(t, "HARP ROOT "), UI_NOTE_NAME[(uint32_t)(n < 0 ? UI_KEY0 + (int32_t)k : n) % 12u]);
-            ui_toast(t);
-            ui.dirty |= D_DISP | D_HEAD;
-            return 1;
-        }
+        ui_cd_stop();
         ui.root = (uint8_t)((UI_KEY0 + (int32_t)k) % 12);
         sp_put(sp_put(t, "ROOT "), UI_NOTE_NAME[ui.root]);
         ui_toast(t);
@@ -1976,14 +2121,14 @@ static void sy_ui_ms(void)
     chd.vel = (uint8_t)sy_ui_key_vel();
     if (chs.seq != seq) {                           /* (a chord changed: SCL's pages name it, show it) */
         seq = chs.seq;
-        if (ui_sec() == SEC_KEYS || ui_sec() == SEC_ARP)
+        if (ui.fam == FAM_SCL || ui.fam == FAM_ARP)
             ui.dirty |= D_DISP | D_HEAD;
     }
     if (chs.beat != beat) {                         /* (ARP's, PATTERN's beat: the ARP LED dark a moment) */
         beat = chs.beat;
         ui.abeat_t = fm1_ms | 1u;
     }
-    if (chs.atseq != atseq && ui_sec() == SEC_ARP && fm1_ms - at_t >= 40u) {   /* (a step played: ARP's pages */
+    if (chs.atseq != atseq && ui.fam == FAM_ARP && fm1_ms - at_t >= 40u) {   /* (a step played: ARP's pages */
         atseq = chs.atseq;                                                     /* show where, 25 a second at most) */
         at_t = fm1_ms;
         ui.dirty |= D_DISP;
@@ -2005,12 +2150,9 @@ static void sy_ui_ms(void)
         else
             ui_step_section(s);
     }
-    if ((s = panel_enc(EN_ALGO)) != 0) {            /* ALGORITHM: the section's pages (the chain view: the type) */
+    if ((s = panel_enc(EN_ALGO)) != 0) {            /* ALGORITHM: the section's pages (V0.75: everywhere) */
         ui_cd_stop();
-        if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
-            ui_chain_turn(UI_CTYPE, s);
-        else
-            ui_step_pages(s, 1, 0);
+        ui_step_pages(s, 1, 0);
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
         sy_app_sound_step(s);
@@ -2029,8 +2171,10 @@ static void settings_save(void) {}
 /* the settings the flash keeps (sy_app.c, SS_SETTINGS): "SET1", the palette, ACCEL, BPM (2), TS-BEAT, TS-NOTE, the
  * HOLD time; SCL's scale, root, fit and velocity; HELP, GLOW, MIDI's channel and PROGRAM; MIDI LEARN's map (a CC
  * and a parameter, 2 bytes, each); V0.7, the chords' (sy_chord.c chd: CHORD 4, PERFORM 2 + 3 x 6, BASS 3, MIDI 4,
- * KEY's type); V0.75, ARP's (GROOVE's GATE, SWING, LATCH, LENGTH, GLOBAL's CLOCK IN; the steps: a byte each of the
- * kind, SLIDE, OCTAVE and RATCHET, then their LEVELs, their CHANCEs).
+ * KEY's type; V0.75 (none installed before): MODE, FREE's TYPE, KEY's SHAPE, VOICING, the ARP on, its STYLE, its
+ * three styles' RATE, MOVE and FEEL, BASS 3, MIDI 4, SPREAD, STRUM 4, SCL + OCT+'s MODE); V0.75, the ARP's (GROOVE's
+ * GATE, SWING, LATCH, LENGTH, GLOBAL's CLOCK IN; the steps: a byte each of the kind, SLIDE, OCTAVE and RATCHET, then
+ * their LEVELs, their CHANCEs).
  * Fields are only added at the end: a shorter record (an older build's, 11 bytes at least) leaves the rest as they
  * were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
 #define SS_SET_ML (19u + 3u * ML_N)
@@ -2063,11 +2207,14 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         }
         {
             uint8_t *c = b + SS_SET_ML;
-            c[0] = chd.mode, c[1] = chd.type, c[2] = chd.ext, c[3] = chd.voicing, c[4] = chd.perf, c[5] = chd.style;
+            memset(c, 0, 32u);
+            c[0] = chd.mode, c[1] = chd.ftype, c[2] = chd.ktype, c[3] = chd.voicing, c[4] = chd.perf, c[5] = chd.style;
             for (i = 0; i < PF_N; i++)
-                c[6u + i] = chd.rate[i], c[12u + i] = chd.move[i], c[18u + i] = chd.feel[i];
-            c[24] = chd.bass, c[25] = chd.boct, c[26] = chd.blvl;
-            c[27] = chd.min, c[28] = chd.mout, c[29] = chd.och, c[30] = chd.bch, c[31] = chd.ktype;
+                c[6u + i] = chd.rate[i], c[9u + i] = chd.move[i], c[12u + i] = chd.feel[i];
+            c[15] = chd.bass, c[16] = chd.boct, c[17] = chd.blvl;
+            c[18] = chd.min, c[19] = chd.mout, c[20] = chd.och, c[21] = chd.bch;
+            c[22] = chd.spread, c[23] = chd.strum, c[24] = chd.sdir, c[25] = chd.human, c[26] = chd.taper;
+            c[27] = ui.lastmode;
         }
         {
             uint8_t *a = b + SS_SET_AR;
@@ -2101,20 +2248,24 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         ui.mpc = b[18] != 0;
         fm1_led_dim_level(ui.glow);
     }
-    if (n >= SS_SET_AR) {                           /* (V0.7's chords, each kept in its range) */
+    if (n >= SS_SET_AR) {                           /* (the chords, each kept in its range) */
         const uint8_t *c = b + SS_SET_ML;
         uint32_t i;
-        chd.mode = (uint8_t)(c[0] % CH_NMODE), chd.type = c[1] & 3u, chd.ext = c[2] & 15u;
+        chd.mode = (uint8_t)(c[0] % CH_NMODE), chd.ftype = (uint8_t)(c[1] % CH_FT_N), chd.ktype = (uint8_t)(c[2] % CH_KT_N);
         chd.voicing = (uint8_t)(c[3] % CH_NVOIC), chd.perf = c[4] != 0, chd.style = (uint8_t)(c[5] % PF_N);
         for (i = 0; i < PF_N; i++) {
             int32_t lo, hi, st;
             ch_feel_range(i, &lo, &hi, &st);
             chd.rate[i] = (uint8_t)(c[6u + i] % CH_NRATE);
-            chd.move[i] = (uint8_t)(c[12u + i] % ch_moves(i));
-            chd.feel[i] = (uint8_t)sy_clampi(c[18u + i], lo, hi);
+            chd.move[i] = (uint8_t)(c[9u + i] % ch_moves(i));
+            chd.feel[i] = (uint8_t)sy_clampi(c[12u + i], lo, hi);
         }
-        chd.bass = c[24] != 0, chd.boct = (uint8_t)sy_clampi(c[25], 1, 2), chd.blvl = (uint8_t)sy_clampi(c[26], 1, 100);
-        chd.min = c[27] != 0, chd.mout = c[28] != 0, chd.och = c[29] & 15u, chd.bch = c[30] & 15u, chd.ktype = c[31] & 3u;
+        chd.bass = c[15] != 0, chd.boct = (uint8_t)sy_clampi(c[16], 1, 2), chd.blvl = (uint8_t)sy_clampi(c[17], 1, 100);
+        chd.min = c[18] != 0, chd.mout = c[19] != 0, chd.och = c[20] & 15u, chd.bch = c[21] & 15u;
+        chd.spread = (uint8_t)(c[22] % CH_NSPREAD), chd.strum = (uint8_t)(c[23] % CH_NSTRUM);
+        chd.sdir = (uint8_t)(c[24] % CH_NSDIR), chd.human = (uint8_t)sy_clampi(c[25], 0, 100);
+        chd.taper = (uint8_t)sy_clampi(c[26], 0, 100);
+        ui.lastmode = (uint8_t)(c[27] % CH_NMODE ? c[27] % CH_NMODE : CH_KEY);
         chd.gen++;
     }
     if (n >= SS_SETTINGS_LEN) {                     /* (V0.75's ARP) */
@@ -2159,6 +2310,7 @@ static void sy_ui_boot(void)
     ui.ml_pick = -1;
     memset((void *)ml_cc, 0xFF, sizeof ml_cc);
     ch_defaults();                                  /* (V0.7: the chords off) */
+    ui.lastmode = CH_KEY;
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;
     ui.tsn = 2;

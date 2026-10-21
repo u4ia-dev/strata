@@ -2,17 +2,19 @@
  * Copyright (C) 2026 u4ia */
 /* STRATA's chords (V0.7; docs/CONTROLS.md "Chords"), SCL's family after the Orchid's ideas (our own design and code),
  * and the arpeggiator (V0.75; docs/CONTROLS.md "The ARP"):
- *   - CHORD: KEY, a key plays its in-key chord (stacked thirds of SCALE's scale from its root); FREE, the keys F3 ..
- *     C4 are eight chord buttons (MAJ MIN SUS DIM, 6 m7 M7 9: a tap latches, buttons tapped together combine; a
- *     tap of extensions alone keeps the triad) and C#4 .. G5 the roots; OFF, the keys as they are (PERFORM and BASS
- *     still act on what is held). VOICING: the chord through inversions and octaves (-3 .. +6), or AUTO, the
- *     inversion nearest the last chord;
- *   - PERFORM (the ARP button; ARP held: its pages): STRUM, STRUM 2 OCT, ARP, PATTERN, HARP, SLOP, each with its own
- *     RATE (ms or a note value of GLOBAL's tempo), MOVE and FEEL. ARP (V0.75) is a step arpeggiator: thirteen MODEs
- *     over the chord (or the keys held) across 1-4 OCTAVES, and sixteen STEPS (LENGTH of them play), each PLAY, TIE
- *     (the note before held on through it) or REST, with its LEVEL, OCTAVE, RATCHET (1-4 hits), CHANCE and SLIDE (on
- *     into the next note: legato). GROOVE: GATE and SWING (ARP's and PATTERN's), LATCH (what the keys held keeps
- *     playing until the next press after all were let go; every style but HARP, and with PERFORM off);
+ *   - CHORD: KEY, a key plays its in-key chord (SCALE's scale stacked from the key: SHAPE TRIAD, 7TH, 9TH, SUS2,
+ *     SUS4, 6TH, ADD9, POWER); FREE, every key plays TYPE's chord on it (MAJ .. 13); OFF, the keys as they are (the
+ *     ARP and BASS still act on what is held). VOICING: the chord through inversions and octaves (-3 .. +6), or AUTO,
+ *     the inversion nearest the last chord; SPREAD: CLOSE, OPEN (drop 2), WIDE, 2 OCT (doubled an octave up). The
+ *     knobs alone set them: no key is a button;
+ *   - STRUM: a chord's notes one after another, STRUM apart (0: together), in DIRECTION (UP, DOWN, ALTERNATE,
+ *     RANDOM), HUMAN loosening their times and levels, TAPER the later ones softer; the chords and PATTERN's stabs;
+ *   - the ARP (the ARP button's menu; ARP + OCT+ on, ARP + OCT- off): its STYLE ARP, PATTERN or HARP, each with its
+ *     own RATE (ms or a note value of GLOBAL's tempo), MOVE and FEEL. ARP is a step arpeggiator: thirteen MODEs over
+ *     the chord (or the keys held) across 1-4 OCTAVES, and sixteen STEPS (LENGTH of them play), each PLAY, TIE (the
+ *     note before held on through it) or REST, with its LEVEL, OCTAVE, RATCHET (1-4 hits), CHANCE and SLIDE (on into
+ *     the next note: legato). GROOVE: GATE and SWING (ARP's and PATTERN's), LATCH (what the keys held keeps playing
+ *     until the next press after all were let go; ARP and PATTERN, and with the ARP off);
  *   - the transport: PLAY or MIDI's start runs it (sy_chord_run); ARP and PATTERN then step on its beat, their
  *     pattern from its bar's start, a key's first note at the next step. CLOCK IN MIDI (GLOBAL): MIDI's clock is the
  *     beat (sy_chord_clock: 24 a quarter note; the platform sets the tempo from it);
@@ -21,29 +23,33 @@
  * The panel's keys (the main loop or TIMER5) and MIDI (its interrupt) send key events into the audio interrupt's
  * rings (sy_app.c); everything below runs there, a block at a time before the engine's, so only the interrupt
  * touches the voices. The settings (chd) are the UI's, a byte each, read here as they stand (the arpeggio's live,
- * from step to step); the chord buttons write the type and extensions back. chs.seq tells the UI the chord changed,
- * chs.at the step that played. Needs the engine (sy_note_on / off, sy_tempo, sy_note_q, NOTE_NAMES) and SY_MIDI_OUT
- * (the platform's USB MIDI out; none: nothing sent). */
+ * from step to step). chs.seq tells the UI the chord changed, chs.at the step that played. Needs the engine
+ * (sy_note_on / off, sy_tempo, sy_note_q, NOTE_NAMES) and SY_MIDI_OUT (the platform's USB MIDI out; none: nothing
+ * sent). */
 
 #ifndef SY_MIDI_OUT
 #define SY_MIDI_OUT(pkt) ((void)(pkt))
 #endif
 
 /* ------------------------------------------------------------------------------------------ settings --- */
-#define CH_NBTN 8u                               /* FREE's chord buttons: the keys F3 .. C4 (0 .. 7) */
 #define CH_MAXN 8u                               /* a chord's notes at most, the bass apart */
 #define CH_NVOIC 11u                             /* VOICING: AUTO, then -3 .. +6 */
 #define CH_NRATE 19u                             /* RATE: 7 times in ms, then 12 note values */
+#define CH_NSPREAD 4u                            /* SPREAD: CLOSE, OPEN, WIDE, 2 OCT */
+#define CH_NSTRUM 18u                            /* STRUM: its gaps (CH_STRUM_MS) */
+#define CH_NSDIR 4u                              /* .. DIRECTION: UP, DOWN, ALTERNATE, RANDOM */
 #define AR_NSTEP 16u                             /* ARP's steps */
 enum { CH_OFF, CH_KEY, CH_FREE, CH_NMODE };
-enum { PF_STRUM, PF_STRUM2, PF_ARP, PF_PATTERN, PF_HARP, PF_SLOP, PF_N };
+enum { PF_ARP, PF_PATTERN, PF_HARP, PF_N };
 enum { AR_UP, AR_DOWN, AR_UPDN, AR_DNUP, AR_UPDN2, AR_PLAYED, AR_RANDOM, AR_WALK, AR_OUTIN, AR_INOUT, AR_PINKY,
        AR_THUMB, AR_CHORD, AR_N };
 enum { AS_PLAY, AS_TIE, AS_REST, AS_N };         /* a step: its note; the note before held on through it; silence */
+enum { KT_TRIAD, KT_7TH, KT_9TH, KT_SUS2, KT_SUS4, KT_6TH, KT_ADD9, KT_POWER, CH_KT_N };
 static struct {
-    uint8_t mode, type, ktype, ext, voicing;     /* CHORD: CH_*, FREE's type and KEY's (0 .. 3 each), the extensions
-                                                  * (bits: 6 m7 M7 9), 0 AUTO / 1 .. 10 */
-    uint8_t perf, style;                         /* PERFORM: on (the ARP button), PF_* */
+    uint8_t mode, ftype, ktype, voicing, spread; /* CHORD: CH_*, FREE's TYPE (CH_FT), KEY's SHAPE (KT_*), 0 AUTO /
+                                                  * 1 .. 10, SPREAD */
+    uint8_t strum, sdir, human, taper;           /* STRUM: its gap (CH_STRUM_MS's), DIRECTION, HUMAN and TAPER (%) */
+    uint8_t perf, style;                         /* the ARP: on (ARP + OCT+), its STYLE (PF_*) */
     uint8_t rate[PF_N], move[PF_N], feel[PF_N];  /* .. each style's own */
     uint8_t bass, boct, blvl;                    /* BASS: on, octaves under (1, 2), level (% of the chord's) */
     uint8_t min, mout, och, bch;                 /* MIDI: roots from MIDI in, out over USB, the chords' and the bass's
@@ -56,18 +62,33 @@ static struct {
     uint8_t root, vel;                           /* SCALE's root (0 C .. 11 B), the keys' velocity */
     uint16_t mask;                               /* SCALE's scale: a bit a semitone from its root */
     volatile uint8_t gen;                        /* bumped by the UI when it changed what makes the chord (the mode,
-                                                  * its type, voicing, PERFORM, its style, BASS, MIDI) */
+                                                  * its type, voicing, the ARP, its style, BASS, MIDI) */
 } chd;
 static const char *const CH_MODE_NAME[CH_NMODE] = {"OFF", "KEY", "FREE"};
-static const char *const CH_TYPE_NAME[2][4] = {{"MAJ", "MIN", "SUS", "DIM"}, {"IN KEY", "SUS2", "SUS4", "POWER"}};
-static const char *const CH_EXT_NAME[4] = {"6", "m7", "M7", "9"};
-static const char *const PF_NAME[PF_N] = {"STRUM", "STRUM 2 OCT", "ARP", "PATTERN", "HARP", "SLOP"};
+/* FREE's TYPEs: a name, the notes (semitones over the root) */
+typedef struct { const char *name; uint8_t n, iv[6]; } ch_ft_t;
+#define CH_FT_N 23u
+static const ch_ft_t CH_FT[CH_FT_N] = {
+    {"MAJ", 3, {0, 4, 7}},        {"MIN", 3, {0, 3, 7}},         {"SUS2", 3, {0, 2, 7}},        {"SUS4", 3, {0, 5, 7}},
+    {"DIM", 3, {0, 3, 6}},        {"AUG", 3, {0, 4, 8}},         {"POWER", 3, {0, 7, 12}},      {"6", 4, {0, 4, 7, 9}},
+    {"MIN6", 4, {0, 3, 7, 9}},    {"7", 4, {0, 4, 7, 10}},       {"MAJ7", 4, {0, 4, 7, 11}},    {"MIN7", 4, {0, 3, 7, 10}},
+    {"MIN7b5", 4, {0, 3, 6, 10}}, {"DIM7", 4, {0, 3, 6, 9}},     {"7SUS4", 4, {0, 5, 7, 10}},   {"ADD9", 4, {0, 4, 7, 14}},
+    {"MIN ADD9", 4, {0, 3, 7, 14}}, {"9", 5, {0, 4, 7, 10, 14}}, {"MAJ9", 5, {0, 4, 7, 11, 14}},
+    {"MIN9", 5, {0, 3, 7, 10, 14}}, {"6/9", 5, {0, 4, 7, 9, 14}}, {"MIN11", 6, {0, 3, 7, 10, 14, 17}},
+    {"13", 6, {0, 4, 7, 10, 14, 21}}};
+/* KEY's SHAPEs: the scale's degrees over the key's (-1 ends; POWER: the root, its fifth, the octave) */
+static const char *const CH_KT_NAME[CH_KT_N] = {"TRIAD", "7TH", "9TH", "SUS2", "SUS4", "6TH", "ADD9", "POWER"};
+static const int8_t CH_KT_DEG[CH_KT_N][5] = {{0, 2, 4, -1}, {0, 2, 4, 6, -1}, {0, 2, 4, 6, 8}, {0, 1, 4, -1},
+                                             {0, 3, 4, -1}, {0, 2, 4, 5, -1}, {0, 2, 4, 8, -1}, {-1}};
+static const char *const CH_SPREAD_NAME[CH_NSPREAD] = {"CLOSE", "OPEN", "WIDE", "2 OCT"};
+static const uint8_t CH_STRUM_MS[CH_NSTRUM] = {0, 2, 4, 6, 8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 120, 150, 200};
+static const char *const CH_SDIR_NAME[CH_NSDIR] = {"UP", "DOWN", "ALTERNATE", "RANDOM"};
+static const char *const PF_NAME[PF_N] = {"ARP", "PATTERN", "HARP"};
 static const char *const AR_NAME[AR_N] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP & DOWN", "AS PLAYED", "RANDOM",
                                           "WALK", "OUTSIDE IN", "INSIDE OUT", "PINKY", "THUMB", "CHORD"};
 static const char *const AS_NAME[AS_N] = {"PLAY", "TIE", "REST"};
-static const char *const ST_NAME[3] = {"UP", "DOWN", "ALTERNATE"};
-/* RATE: a gap (STRUM, SLOP: between notes) or a step (ARP, PATTERN): milliseconds, then note values (NOTE_NAMES),
- * shortest first: 1/32 1/16T 1/16 1/8T 1/16D 1/8 1/4T 1/8D 1/4 1/4D 1/2 1 BAR */
+/* RATE: a step: milliseconds, then note values (NOTE_NAMES), shortest first: 1/32 1/16T 1/16 1/8T 1/16D 1/8 1/4T
+ * 1/8D 1/4 1/4D 1/2 1 BAR */
 static const uint8_t CH_RATE_MS[7] = {5, 10, 20, 30, 50, 80, 120};
 static const uint8_t CH_RATE_NOTE[CH_NRATE - 7u] = {16, 15, 14, 12, 13, 11, 9, 10, 8, 7, 5, 3};
 /* PATTERN: sixteen rhythms of stabs, a step a bit (the first the lowest), sixteen steps */
@@ -75,20 +96,17 @@ static const uint16_t CH_PAT[16] = {0x1111, 0x5555, 0xFFFF, 0x4444, 0x4949, 0x14
                                     0xDDDD, 0x9999, 0x3333, 0x1041, 0x2929, 0xD6D6, 0x34B1, 0x9595};
 
 /* a style's MOVE: its count of choices; FEEL: its range and step */
-static uint32_t ch_moves(uint32_t s) { return s == PF_ARP ? AR_N : s == PF_PATTERN ? 16u : s == PF_HARP ? 1u : 3u; }
+static uint32_t ch_moves(uint32_t s) { return s == PF_ARP ? AR_N : s == PF_PATTERN ? 16u : 1u; }
 static void ch_feel_range(uint32_t s, int32_t *lo, int32_t *hi, int32_t *step)
 {
-    *lo = 0, *hi = 100, *step = 5;               /* STRUM's taper, SLOP's looseness, PATTERN's accent (%) */
+    *lo = 0, *hi = 100, *step = 5;               /* PATTERN's accent (%) */
     if (s == PF_ARP)
         *lo = 1, *hi = 4, *step = 1;             /* octaves */
     else if (s == PF_HARP)
         *lo = *hi = 0;
 }
-static const char *ch_feel_name(uint32_t s)
-{
-    return s == PF_ARP ? "OCTAVES" : s == PF_PATTERN ? "ACCENT" : s == PF_HARP ? "FEEL" : s == PF_SLOP ? "LOOSE" : "TAPER";
-}
-static const char *ch_move_name(uint32_t s) { return s == PF_ARP ? "MODE" : s == PF_PATTERN ? "PATTERN" : "DIRECTION"; }
+static const char *ch_feel_name(uint32_t s) { return s == PF_ARP ? "OCTAVES" : s == PF_PATTERN ? "ACCENT" : "FEEL"; }
+static const char *ch_move_name(uint32_t s) { return s == PF_ARP ? "MODE" : s == PF_PATTERN ? "PATTERN" : "MOVE"; }
 static int ch_stepped(uint32_t s) { return s == PF_ARP || s == PF_PATTERN; }   /* (a step at RATE: GROOVE's) */
 
 static void ch_steps_clear(void)                 /* ARP's steps: each a note, as played, in its octave, once, always */
@@ -103,35 +121,53 @@ static void ch_steps_clear(void)                 /* ARP's steps: each a note, as
         chd.sld[i] = 0;
     }
 }
-static void ch_defaults(void)
+/* the ARP's settings as they start (its steps apart) */
+static void ch_arp_defaults(void)
 {
-    static const uint8_t RATE[PF_N] = {3, 2, 9, 9, 0, 4}, FEEL[PF_N] = {0, 0, 1, 20, 0, 50};
+    static const uint8_t RATE[PF_N] = {9, 9, 0}, FEEL[PF_N] = {1, 20, 0};
     uint32_t s;
-    chd.mode = CH_OFF;
-    chd.type = 0;
-    chd.ktype = 0;
-    chd.ext = 0;
-    chd.voicing = 0;                             /* AUTO */
     chd.perf = 0;
-    chd.style = PF_STRUM;
+    chd.style = PF_ARP;
     for (s = 0; s < PF_N; s++) {
-        chd.rate[s] = RATE[s];                   /* STRUM 30 ms, STRUM 2 OCT 20 ms, ARP and PATTERN 1/16, SLOP 50 ms */
+        chd.rate[s] = RATE[s];                   /* ARP and PATTERN 1/16 */
         chd.move[s] = 0;
         chd.feel[s] = FEEL[s];
     }
+    chd.gate = 50;                               /* half a step, straight, no latch, all sixteen steps */
+    chd.swing = 50;
+    chd.latch = 0;
+    chd.len = AR_NSTEP;
+}
+/* CHORD's, STRUM's and BASS's as they start */
+static void ch_chord_defaults(void)
+{
+    chd.mode = CH_OFF;
+    chd.ftype = 0;
+    chd.ktype = KT_TRIAD;
+    chd.voicing = 0;                             /* AUTO */
+    chd.spread = 0;
+    chd.strum = 0;                               /* together */
+    chd.sdir = 0;
+    chd.human = 0;
+    chd.taper = 0;
     chd.bass = 0;
     chd.boct = 1;
     chd.blvl = 80;
+}
+static void ch_midi_defaults(void)
+{
     chd.min = 0;
     chd.mout = 0;
     chd.och = 0;                                 /* channel 1, the bass on 2 */
     chd.bch = 1;
-    chd.gate = 50;                               /* half a step, straight, no latch, all sixteen steps, the panel's */
-    chd.swing = 50;                              /* tempo */
-    chd.latch = 0;
-    chd.len = AR_NSTEP;
-    chd.clock = 0;
+}
+static void ch_defaults(void)
+{
+    ch_chord_defaults();
+    ch_arp_defaults();
+    ch_midi_defaults();
     ch_steps_clear();
+    chd.clock = 0;
     chd.vel = 100;
     chd.mask = 0xFFF;
     chd.gen++;
@@ -141,24 +177,28 @@ static int sy_chord_active(void) { return chd.mode != CH_OFF || chd.perf || chd.
 
 /* -------------------------------------------------------------------------------- the audio side --- */
 typedef struct { uint8_t id, note, vel, down; } ch_held_t;
+typedef struct { uint8_t note, vel, part; uint32_t t, off; } ch_dq_t;   /* a start STRUM put off: when; its end */
+                                                                        /* (0: held, as the key that played it) */
 #define CH_NAN 16u                               /* the stepped styles' notes sounding at most */
+#define CH_NDQ 16u                               /* the starts put off at most */
 static struct {
     ch_held_t held[CH_MAXN];                     /* roots held, in the order pressed (the last one plays); id: a key
                                                   * 0 .. 26, a MIDI note 128 + it; down: held now (LATCH keeps the
                                                   * ones let go) */
     uint8_t nheld;
-    uint8_t btn, gest_t, gest_e;                 /* FREE: the buttons down now; this gesture's triad (0xFF none), its
-                                                  * extensions */
     uint8_t n, note[CH_MAXN], ord[CH_MAXN];      /* the chord as voiced, its notes ascending; their built order */
     uint8_t root, bass, vel, built;              /* its root (root position), the bass note (0xFF none), the velocity;
                                                   * a chord was built (HARP's) */
     uint8_t on[16][2], non;                      /* notes this side has on: the note, its part (0 the chord, 1 the bass) */
     uint8_t q[16][3], nq;                        /* note-ons waiting for a block's starts (SY_STARTS_BLK): note, vel, part */
+    ch_dq_t dq[CH_NDQ];                          /* .. STRUM's, waiting for their time */
+    uint8_t ndq, sdir;                           /* .. how many; ALTERNATE's way */
     uint8_t harp[27];                            /* HARP: the note each key plays (0xFF none) */
+    uint8_t hroot;                               /* .. its chord's root as built (SCALE's root's note; a MIDI root) */
     uint8_t gen, mode, perf, style, latch;       /* chd's as last seen */
-    uint8_t pf, pf_dir;                          /* PERFORM: under way; ALTERNATE's way */
-    uint16_t pf_i;                               /* STRUM's, SLOP's: the notes sounded */
-    uint32_t t, pf_next;                         /* samples since power-on (a block a step); STRUM's next note */
+    uint8_t hseen;                               /* .. SCALE's root as HARP last built on it (+1; 0 none) */
+    uint8_t pf;                                  /* the ARP: under way */
+    uint32_t t;                                  /* samples since power-on (a block a step) */
     uint32_t seed;
     /* ARP and PATTERN: the steps */
     float ph;                                    /* the place in steps (free: since the start; on the beat: the
@@ -197,7 +237,12 @@ static void ch_on(uint32_t note, uint32_t vel, uint32_t part)   /* queued for th
     chs.q[chs.nq][2] = (uint8_t)part;
     chs.nq++;
 }
-static void ch_off(uint32_t note)                /* now (a queued start of it dropped) */
+static void ch_dq_drop(uint32_t i)
+{
+    chs.dq[i] = chs.dq[chs.ndq - 1u];
+    chs.ndq--;
+}
+static void ch_off(uint32_t note)                /* now (a queued start of it dropped, STRUM's too) */
 {
     uint32_t i, j;
     for (i = 0; i < chs.nq;)
@@ -208,6 +253,11 @@ static void ch_off(uint32_t note)                /* now (a queued start of it dr
         } else {
             i++;
         }
+    for (i = 0; i < chs.ndq;)
+        if (chs.dq[i].note == note)
+            ch_dq_drop(i);
+        else
+            i++;
     for (i = 0; i < chs.non; i++)
         if (chs.on[i][0] == note) {
             sy_note_off(note);
@@ -231,6 +281,7 @@ static void ch_part_off(uint32_t part)
 static void ch_all_off(void)
 {
     chs.nq = 0;
+    chs.ndq = 0;
     while (chs.non)
         ch_off(chs.on[chs.non - 1u][0]);
     chs.nan = 0;
@@ -264,9 +315,6 @@ static void ch_starts(uint32_t *starts, uint32_t max)
 }
 
 /* ------------------------------------------------------------------------------------------- chords --- */
-static const uint8_t CH_TRIAD[4][3] = {{0, 4, 7}, {0, 3, 7}, {0, 5, 7}, {0, 3, 6}};
-static const uint8_t CH_EXT_ST[4] = {9, 10, 11, 14};
-
 /* SCALE's pitch classes from its root, ascending (at least one); their count */
 static uint32_t ch_scale(uint8_t *s)
 {
@@ -295,9 +343,8 @@ static uint32_t ch_build(int32_t r, uint8_t *nt, uint8_t *od, uint8_t *root)
     int32_t iv[CH_MAXN];
     uint32_t n = 0, i, j;
     if (chd.mode == CH_KEY) {
-        static const uint8_t DEG[4][3] = {{0, 2, 4}, {0, 1, 4}, {0, 3, 4}, {0, 4, 7}};
         uint8_t s[12];
-        uint32_t m = ch_scale(s), k, t = chd.ktype & 3u;
+        uint32_t m = ch_scale(s), k, t = chd.ktype % CH_KT_N;
         int32_t rel = ((r - chd.root) % 12 + 12) % 12;
         for (k = 0; k < 12u && !((chd.mask >> (uint32_t)rel) & 1u) && chd.mask; k++, r--)
             rel = (rel + 11) % 12;
@@ -305,28 +352,20 @@ static uint32_t ch_build(int32_t r, uint8_t *nt, uint8_t *od, uint8_t *root)
             ;
         if (k == m)
             k = 0;
-#define CH_DEG(dd) ((int32_t)s[(k + (dd)) % m] - (int32_t)s[k] + 12 * (int32_t)((k + (dd)) / m))
-        if (t == 3u) {                           /* POWER: the root, its fifth, the octave */
+        if (t == KT_POWER) {                     /* POWER: the root, its fifth, the octave */
             iv[n++] = 0;
             iv[n++] = 7;
             iv[n++] = 12;
         } else {
-            for (i = 0; i < 3u; i++)
-                iv[n++] = CH_DEG(DEG[t][i]);
+            for (i = 0; i < 5u && CH_KT_DEG[t][i] >= 0; i++) {
+                uint32_t d = k + (uint32_t)CH_KT_DEG[t][i];
+                iv[n++] = (int32_t)s[d % m] - (int32_t)s[k] + 12 * (int32_t)(d / m);
+            }
         }
-        if (chd.ext & 1u)                        /* the in-key 6th, 7th (m7 or M7), 9th */
-            iv[n++] = CH_DEG(5u);
-        if (chd.ext & 6u)
-            iv[n++] = CH_DEG(6u);
-        if (chd.ext & 8u)
-            iv[n++] = CH_DEG(8u);
-#undef CH_DEG
     } else {
-        for (i = 0; i < 3u; i++)
-            iv[n++] = CH_TRIAD[chd.type & 3u][i];
-        for (i = 0; i < 4u; i++)
-            if ((chd.ext >> i) & 1u)
-                iv[n++] = CH_EXT_ST[i];
+        const ch_ft_t *f = &CH_FT[chd.ftype % CH_FT_N];
+        for (i = 0; i < f->n; i++)
+            iv[n++] = f->iv[i];
     }
     *root = (uint8_t)sy_clampi(r, 0, 127);
     for (i = j = 0; i < n; i++) {                /* (in range, each pitch once) */
@@ -386,8 +425,108 @@ static void ch_auto(uint8_t *nt, uint32_t n)
     }
     memcpy(nt, best, n);
 }
+/* SPREAD: OPEN, the second note from the top an octave down (drop 2); WIDE, the lowest an octave down and the highest
+ * one up; 2 OCT, the chord again an octave up (8 notes at most). The notes' count after it */
+static uint32_t ch_spread(uint8_t *nt, uint32_t n)
+{
+    uint32_t i, m = n, sp = chd.spread % CH_NSPREAD;
+    if (sp == 1u && n >= 3u && nt[n - 2u] >= 12u) {
+        nt[n - 2u] = (uint8_t)(nt[n - 2u] - 12u);
+    } else if (sp == 2u && n >= 2u) {
+        if (nt[0] >= 12u)
+            nt[0] = (uint8_t)(nt[0] - 12u);
+        if (nt[n - 1u] + 12u <= 127u)
+            nt[n - 1u] = (uint8_t)(nt[n - 1u] + 12u);
+    } else if (sp == 3u) {
+        for (i = 0; i < n && m < CH_MAXN; i++)
+            if (nt[i] + 12u <= 127u)
+                nt[m++] = (uint8_t)(nt[i] + 12u);
+    }
+    ch_sort(nt, m);
+    for (i = 1; i < m;)                          /* (each pitch once) */
+        if (nt[i] == nt[i - 1u]) {
+            uint32_t j;
+            for (j = i; j + 1u < m; j++)
+                nt[j] = nt[j + 1u];
+            m--;
+        } else {
+            i++;
+        }
+    return m;
+}
 
-/* ------------------------------------------------------------------------------------------- perform --- */
+/* ------------------------------------------------------------------------------------------- STRUM --- */
+/* the starts STRUM put off: due ones to the queue (a step's notes: on until their end) */
+static void ch_an_on(uint32_t note, uint32_t vel, uint32_t off);
+static void ch_dq_tick(void)
+{
+    uint32_t i;
+    for (i = 0; i < chs.ndq;)
+        if ((int32_t)(chs.t - chs.dq[i].t) >= 0) {
+            ch_dq_t d = chs.dq[i];
+            ch_dq_drop(i);
+            if (d.off)
+                ch_an_on(d.note, d.vel, d.off);
+            else
+                ch_on(d.note, d.vel, d.part);
+        } else {
+            i++;
+        }
+}
+/* a chord's notes (n of nt, ascending) started by STRUM from now: in DIRECTION, STRUM apart, HUMAN loosening their
+ * times (up to 12 ms late at 100 %) and levels (+-25 %), TAPER the last one at 100 - TAPER/2 %; len: each one's
+ * length (a stab's; 0: held until the chord ends) */
+static void ch_strum(const uint8_t *nt, uint32_t n, uint32_t vel, uint32_t len)
+{
+    uint8_t l[CH_MAXN];
+    uint32_t i, gap = (uint32_t)CH_STRUM_MS[chd.strum % CH_NSTRUM] * (uint32_t)(SY_FS / 1000.0f), dir = chd.sdir % CH_NSDIR;
+    uint32_t hu = (uint32_t)sy_clampi(chd.human, 0, 100), tp = (uint32_t)sy_clampi(chd.taper, 0, 100), t = chs.t;
+    memcpy(l, nt, n);
+    if (dir == 2u)                               /* (ALTERNATE: the other way each chord) */
+        dir = chs.sdir ^= 1u;
+    if (dir == 1u) {
+        for (i = 0; i < n / 2u; i++) {
+            uint8_t x = l[i];
+            l[i] = l[n - 1u - i];
+            l[n - 1u - i] = x;
+        }
+    } else if (dir == 3u) {
+        for (i = n; i > 1u; i--) {
+            uint32_t j = sy_rand(&chs.seed) % i;
+            uint8_t x = l[i - 1u];
+            l[i - 1u] = l[j];
+            l[j] = x;
+        }
+    }
+    for (i = 0; i < n; i++) {
+        int32_t v = (int32_t)vel;
+        uint32_t at = t + gap * i;
+        if (tp && n > 1u)
+            v -= v * (int32_t)(tp * i) / (int32_t)(n - 1u) / 200;
+        if (hu) {
+            at += (sy_rand(&chs.seed) % 1000u) * hu * (uint32_t)(SY_FS * 0.012f) / 100000u;
+            v += v * ((int32_t)(sy_rand(&chs.seed) % 101u) - 50) * (int32_t)hu / 20000;
+        }
+        v = sy_clampi(v, 1, 127);
+        if (at == chs.t || chs.ndq >= CH_NDQ) {  /* (now: at once) */
+            if (len)
+                ch_an_on(l[i], (uint32_t)v, chs.t + len);
+            else
+                ch_on(l[i], (uint32_t)v, 0u);
+        } else {
+            ch_dq_t *d = &chs.dq[chs.ndq++];
+            d->note = l[i];
+            d->vel = (uint8_t)v;
+            d->part = 0;
+            d->t = at;
+            d->off = len ? at + len : 0u;
+            if (len && !d->off)
+                d->off = 1u;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------------------------- the ARP --- */
 static uint32_t ch_rate_smp(void)               /* the style's RATE in samples (a block at least) */
 {
     uint32_t r = chd.rate[chd.style % PF_N] % CH_NRATE;
@@ -399,25 +538,6 @@ static float ch_rate_q(void)                    /* .. in quarter notes (0: a tim
 {
     uint32_t r = chd.rate[chd.style % PF_N] % CH_NRATE;
     return r < 7u ? 0.0f : sy_note_q(CH_RATE_NOTE[r - 7u]);
-}
-/* STRUM's and SLOP's notes in the order they sound (STRUM 2 OCT: the chord and an octave up, 8 at most); their count */
-static uint32_t ch_strum_list(uint8_t *l)
-{
-    uint32_t n = chs.n, i, up;
-    memcpy(l, chs.note, n);
-    if (chd.style == PF_STRUM2)
-        for (i = 0; i < chs.n && n < CH_MAXN; i++)
-            if (chs.note[i] + 12u <= 127u)
-                l[n++] = (uint8_t)(chs.note[i] + 12u);
-    ch_sort(l, n);
-    up = chd.move[chd.style] % 3u == 0u || (chd.move[chd.style] % 3u == 2u && !chs.pf_dir);
-    if (!up)
-        for (i = 0; i < n / 2u; i++) {
-            uint8_t t = l[i];
-            l[i] = l[n - 1u - i];
-            l[n - 1u - i] = t;
-        }
-    return n;
 }
 static uint8_t ch_fold(int32_t x)                /* a note into 0 .. 127 by octaves */
 {
@@ -536,16 +656,16 @@ static void ch_step(uint32_t k, uint32_t smp)
     chs.s = (uint8_t)((s + 1u) % len);
     chs.at = (uint8_t)(s + 1u);
     chs.atseq++;
-    if (st == PF_PATTERN) {                      /* PATTERN: a stab where its step's bit is (off the beat ACCENT softer) */
+    if (st == PF_PATTERN) {                      /* PATTERN: a stab where its step's bit is (off the beat ACCENT softer;
+                                                  * STRUMmed as a chord is) */
+        uint32_t v = chs.vel * (s % 4u ? 100u - (uint32_t)sy_clampi(chd.feel[PF_PATTERN], 0, 100) : 100u) / 100u;
+        uint32_t L = smp * g / 100u;
         if (!((CH_PAT[chd.move[PF_PATTERN] % 16u] >> s) & 1u) || !chs.n)
             return;
-        chs.h_n = chs.n;
-        memcpy(chs.h_note, chs.note, chs.n);
-        chs.h_vel = (uint8_t)(chs.vel * (s % 4u ? 100u - (uint32_t)sy_clampi(chd.feel[PF_PATTERN], 0, 100) : 100u) / 100u);
-        chs.h_left = 1;
-        chs.h_gap = smp;
-        chs.h_len = chs.h_last = smp * g / 100u;
-    } else {                                     /* ARP: the step's note (TIE, REST: none) */
+        ch_strum(chs.note, chs.n, v, L < SY_BLK ? SY_BLK : L);
+        return;
+    }
+    {                                            /* ARP: the step's note (TIE, REST: none) */
         uint32_t r = (uint32_t)sy_clampi(chd.rat[s], 1, 4), ties = 0, i;
         int32_t o = 12 * ((int32_t)sy_clampi(chd.oct[s], 0, 4) - 2);
         if (chd.st[s] != AS_PLAY)
@@ -630,54 +750,29 @@ static void ch_steps(void)
 static void ch_perf_start(void)
 {
     chs.pf = 1;
-    chs.pf_i = 0;
-    chs.pf_next = chs.t;
-    chs.pf_dir = (uint8_t)!chs.pf_dir;
     chs.at = 0;
     if (ch_stepped(chd.style % PF_N))
         ch_step_start();
 }
-/* a block of PERFORM: what is due now */
+/* a block of the ARP: what is due now (HARP: its keys alone) */
 static void ch_perform(void)
 {
-    uint32_t st = chd.style % PF_N, rate;
-    int32_t feel = chd.feel[st];
-    if (ch_stepped(st)) {
-        ch_an_tick();
-        if (chs.n)
-            ch_steps();
-        ch_hits();
+    if (!ch_stepped(chd.style % PF_N))
         return;
-    }
-    if (!chs.n || st == PF_HARP)
-        return;
-    {                                            /* STRUM, STRUM 2 OCT, SLOP */
-        uint8_t l[CH_MAXN];
-        uint32_t n = ch_strum_list(l);
-        rate = ch_rate_smp();
-        while (chs.pf_i < n && (int32_t)(chs.t - chs.pf_next) >= 0) {
-            int32_t v = chs.vel;
-            if (st == PF_SLOP) {                 /* (LOOSE 100: a gap of 15 .. 100 % of RATE, the level +-50 %) */
-                v += v * ((int32_t)(sy_rand(&chs.seed) % 101u) - 50) * feel / 10000;
-                chs.pf_next += rate * (100u - (uint32_t)feel * (sy_rand(&chs.seed) % 86u) / 100u) / 100u;
-            } else {                             /* (TAPER: the last note at 100 - TAPER/2 %) */
-                v -= n > 1u ? v * feel * chs.pf_i / (int32_t)(n - 1u) / 200 : 0;
-                chs.pf_next += rate;
-            }
-            ch_on(l[chs.pf_i], (uint32_t)v, 0u);
-            chs.pf_i++;
-        }
-    }
+    ch_an_tick();
+    if (chs.n)
+        ch_steps();
+    ch_hits();
 }
 
 /* ------------------------------------------------------------------------------------------- playing --- */
-/* the chord for what is held now: KEY and FREE, the last root's chord, voiced; OFF, the notes held. restart: a new
- * chord (everything it plays starts again, PERFORM from its start); else (OFF) only what changed (ARP and PATTERN:
- * their notes end as their steps say) */
+/* the chord for what is held now: KEY and FREE, the last root's chord, voiced and spread; OFF, the notes held.
+ * restart: a new chord (everything it plays starts again, the ARP from its start; STRUM's way); else (OFF) only what
+ * changed (ARP and PATTERN: their notes end as their steps say) */
 static void ch_play(int restart)
 {
-    uint8_t nt[CH_MAXN], od[CH_MAXN], root = 0;
-    uint32_t n = 0, i, bass = 0xFFu;
+    uint8_t nt[CH_MAXN], od[CH_MAXN], root = 0, st[CH_MAXN];
+    uint32_t n = 0, i, bass = 0xFFu, ns = 0;
     int steps = chd.perf && ch_stepped(chd.style % PF_N);
     if (!chs.nheld) {
         ch_all_off();
@@ -698,6 +793,10 @@ static void ch_play(int restart)
             ch_invert(nt, n, (int32_t)(chd.voicing % CH_NVOIC) - 4);
         else if (restart)
             ch_auto(nt, n);
+        if (chd.spread % CH_NSPREAD) {           /* (spread: the order as built is the notes' now) */
+            n = ch_spread(nt, n);
+            memcpy(od, nt, n);
+        }
     }
     if (chd.bass && n) {                         /* the root under the chord's lowest note, one or two octaves */
         int32_t b = root - 12 * (int32_t)sy_clampi(chd.boct, 1, 2);
@@ -729,48 +828,29 @@ static void ch_play(int restart)
     if (chd.perf && chd.style != PF_HARP) {
         if (restart || !chs.pf)
             ch_perf_start();
-        else if (chd.style == PF_STRUM || chd.style == PF_STRUM2 || chd.style == PF_SLOP)
-            for (i = 0; i < n; i++)              /* (OFF: a note held anew joins at once) */
-                if (!ch_is_on(nt[i]))
-                    ch_on(nt[i], chs.vel, 0u);
     } else {
-        for (i = 0; i < n; i++)
+        for (i = 0; i < n; i++)                  /* (the chord, STRUMmed; OFF: a note held anew joins) */
             if (restart || !ch_is_on(nt[i]))
-                ch_on(nt[i], chs.vel, 0u);
+                st[ns++] = nt[i];
+        ch_strum(st, ns, chs.vel, 0u);
     }
     chs.seq++;
 }
-/* FREE's chord buttons: a press starts a gesture or adds to it; the gesture is the chord (no triad in it: the one
- * before kept) */
-static void ch_button(uint32_t b, int down)
+/* HARP's chord: CHORD's on SCALE's root at C4 (a MIDI note in as a root: on it), in chs.note; OFF: the scale's */
+static void ch_harp_chord(int32_t r)
 {
-    if (!down) {
-        chs.btn &= (uint8_t)~(1u << b);
-        return;
-    }
-    if (!chs.btn) {
-        chs.gest_t = 0xFF;
-        chs.gest_e = 0;
-    }
-    chs.btn |= (uint8_t)(1u << b);
-    if (b < 4u)
-        chs.gest_t = (uint8_t)b;
-    else
-        chs.gest_e |= (uint8_t)(1u << (b - 4u));
-    if (chs.gest_t != 0xFF)
-        chd.type = chs.gest_t;
-    chd.ext = chs.gest_e;
-    if (chs.nheld)
-        ch_play(1);
-    else if (chs.built && chd.perf && chd.style == PF_HARP)
-        chs.n = (uint8_t)ch_build(chs.root, chs.note, chs.ord, &chs.root);
+    chs.n = (uint8_t)ch_build(r, chs.note, chs.ord, &chs.root);
+    if (chd.mode != CH_OFF && chd.spread % CH_NSPREAD)
+        chs.n = (uint8_t)ch_spread(chs.note, chs.n);
+    chs.hroot = (uint8_t)r;
+    chs.built = 1;
     chs.seq++;
 }
 /* HARP: the keys are strings over four octaves from the chord's root's in octave 3: each plays the chord's note at
  * or under its place (OFF: the scale's); a key on the note just played adds nothing */
 static void ch_harp(uint32_t k, int down)
 {
-    uint32_t first = chd.mode == CH_FREE ? CH_NBTN : 0u, nstr = 27u - first, s, pcs = 0, i;
+    uint32_t nstr = 27u, s, pcs = 0, i;
     int32_t at, x;
     if (k >= 27u)
         return;
@@ -785,11 +865,9 @@ static void ch_harp(uint32_t k, int down)
         }
         return;
     }
-    if (k < first)
-        return;
-    if (!chs.built) {                            /* (nothing played yet: the chord on SCALE's root at C4) */
-        chs.n = (uint8_t)ch_build(60 + chd.root, chs.note, chs.ord, &chs.root);
-        chs.built = 1;
+    if (!chs.built || chs.hseen != chd.root + 1u) {   /* (SCALE's root: the chord's) */
+        chs.hseen = (uint8_t)(chd.root + 1u);
+        ch_harp_chord(60 + chd.root);
     }
     if (chd.mode == CH_OFF)
         pcs = (uint32_t)chd.mask << chd.root | (uint32_t)chd.mask >> (12u - chd.root);
@@ -799,7 +877,7 @@ static void ch_harp(uint32_t k, int down)
     pcs &= 0xFFFu;
     if (!pcs)
         return;
-    s = k - first;
+    s = k;
     at = 48 + (int32_t)(chs.root % 12u) + (int32_t)(s * 48u / nstr);
     for (x = at; x >= 0 && !((pcs >> (uint32_t)(x % 12)) & 1u); x--)
         ;
@@ -827,12 +905,13 @@ static void ch_unlatch(void)
 static void sy_chord_key(uint32_t id, uint32_t note, uint32_t vel, int down)
 {
     uint32_t i, any = 0;
-    if (chd.mode == CH_FREE && id < CH_NBTN) {
-        ch_button(id, down);
-        return;
-    }
-    if (chd.perf && chd.style == PF_HARP && id < 27u) {
-        ch_harp(id, down);
+    if (chd.perf && chd.style == PF_HARP) {
+        if (id < 27u) {
+            ch_harp(id, down);
+            return;
+        }
+        if (down && note <= 127u)                /* (a MIDI note in as a root: HARP's chord on it) */
+            ch_harp_chord((int32_t)note);
         return;
     }
     for (i = 0; i < chs.nheld; i++)
@@ -870,22 +949,15 @@ static void sy_chord_key(uint32_t id, uint32_t note, uint32_t vel, int down)
     chs.nheld++;
     ch_play(chd.mode != CH_OFF || chs.nheld == 1u);
 }
-/* SCL held + a key while HARP plays: the chord's root (the scale's otherwise: the UI's) */
-static void sy_chord_root(uint32_t note)
-{
-    chs.n = (uint8_t)ch_build((int32_t)note, chs.note, chs.ord, &chs.root);
-    chs.built = 1;
-    chs.seq++;
-}
 /* everything this side plays ends; nothing held (a panic, a sound's load) */
 static void sy_chord_reset(void)
 {
     uint32_t i;
     ch_all_off();
     chs.nheld = 0;
-    chs.btn = 0;
     chs.pf = 0;
     chs.at = 0;
+    chs.hseen = 0;
     for (i = 0; i < 27u; i++)
         chs.harp[i] = 0xFF;
     chs.seq++;
@@ -940,15 +1012,16 @@ static void ch_transport(void)
         chs.pulses = chs.pulses >= 3840 * 24 ? chs.pulses - 3840 * 24 : 0;
     }
 }
-/* a block: the settings' changes, PERFORM's steps, the note-ons queued (starts: this block's so far, max of them) */
+/* a block: the settings' changes, the ARP's steps, STRUM's starts, the note-ons queued (starts: this block's so far,
+ * max of them) */
 static void sy_chord_block(uint32_t *starts, uint32_t max)
 {
     if (chd.gen != chs.gen) {                    /* (the mode, HARP: everything again, the keys too (press them */
         int all = chd.mode != chs.mode || (chd.perf && chd.style == PF_HARP && (chd.perf != chs.perf ||   /* again); */
                                                                                 chd.style != chs.style));
-        int perf = chd.perf != chs.perf || chd.style != chs.style;   /* PERFORM on, off, its style: what is held */
+        int perf = chd.perf != chs.perf || chd.style != chs.style;   /* the ARP on, off, its style: what is held */
         chs.gen = chd.gen;                       /* plays on the new way (V0.75: a chord held, then ARP); else the */
-        chs.mode = chd.mode;                     /* chord voiced again) */
+        chs.mode = chd.mode;                     /* chord voiced again; HARP's built again) */
         chs.perf = chd.perf;
         chs.style = chd.style;
         if (all) {
@@ -965,6 +1038,8 @@ static void sy_chord_block(uint32_t *starts, uint32_t max)
             chs.seq++;
         } else if (chs.nheld) {
             ch_play(1);
+        } else if (chd.perf && chd.style == PF_HARP && chs.built) {
+            ch_harp_chord(chs.hroot);
         }
     }
     if (chd.latch != chs.latch) {                /* (LATCH off: what was let go goes) */
@@ -974,6 +1049,7 @@ static void sy_chord_block(uint32_t *starts, uint32_t max)
     }
     if (chs.pf)
         ch_perform();
+    ch_dq_tick();
     ch_starts(starts, max);
     ch_transport();
     chs.t += SY_BLK;
@@ -1007,7 +1083,7 @@ static char *ch_name_of(char *b, const uint8_t *nt, uint32_t n, uint32_t root)
     else if (th == 3u && fi == 6u && (m & 512u) && !sv)
         q = "dim7", m &= ~512u;
     if (sv == 10u)
-        x = th && (m & 4u) ? "9" : "7";
+        x = th && (m & 32u) ? "11" : th == 4u && (m & 512u) ? "13" : th && (m & 4u) ? "9" : "7";
     else if (sv == 11u)
         x = m & 4u && th ? "maj9" : "maj7";
     else if (m & 512u)

@@ -131,7 +131,7 @@ static void ui_drive_meter(float v, int hot)
     if (v > 0.004f)
         lk_seg(222.0f, 120.0f - 60.0f * v, 222.0f, 120.0f, 3.0f, ui_ink(hot));
     lk_ring(222.0f, 130.0f, 7.0f, 1.5f, ui_ink(hot));
-    lk_text_r(236.0f, 142.0f, T9, "DRIVE", sk.lab, sk.ground, 20, 0);
+    lk_text_r(236.0f, 44.0f, T9, "DRIVE", sk.lab, sk.ground, 20, 0);   /* (over the meter, clear of the curves) */
 }
 
 /* FILTER TONE: the hill the sound passes over (VAR: the right side's thin), stippled under; the cutoff's post, the
@@ -179,7 +179,7 @@ static void ui_p_filter(void)
         }
         pk = ui_peak(y2, UI_FC);
         lk_mix(ui_v(p, SP_F_MIX));
-        ui_title(FT_NAMES[t], 8.0f);
+        ui_title_p(FT_NAMES[t], 8.0f, SP_F_TYPE);
         ui_H(0, 6.0f, 160.0f);
         ui_H(1, 12.0f + (float)pk - 5.0f, y2[pk] - 16.0f);
         ui_H(2, 32.0f + 196.0f * ui_v(p, SP_F_MIX) - 5.0f, 184.0f);
@@ -218,7 +218,7 @@ static void ui_p_filter(void)
         }
     }
     ui_drive_meter(ui_v(p, SP_F_DRIVE), ui_hot(3));
-    ui_title(FT_NAMES[t], UI_TITLE_X);
+    ui_title_p(FT_NAMES[t], UI_TITLE_X, SP_F_TYPE);
     if (!ui_mod_word(SP_F_CUT, w))
         sp_put(w, SLOPE[t]);
     lk_text(UI_TITLE_X, 42.0f, T10, w, sk.lab, sk.ground, 20, 0);
@@ -277,7 +277,7 @@ static void ui_p_drive(void)
     lk_seg(116.0f, 152.0f + 6.0f * tn, 226.0f, 152.0f - 6.0f * tn, 1.5f, ui_ink(ui_hot(2)));   /* TONE's tilt */
     lk_hollow(171.0f, 152.0f, 2.5f);
     ui_mix_row(p, SP_DR_MIX, 3);
-    ui_title(DRV_NAMES[type], UI_TITLE_X);
+    ui_title_p(DRV_NAMES[type], UI_TITLE_X, (int32_t)(SP_DR_TYPE + ui_fx_off()));
     lk_text(52.0f, 137.0f, T9, "IN", sk.lab, sk.ground, 60, 0);
     lk_text(116.0f, 164.0f, T9, "TONE", sk.lab, sk.ground, 60, 0);
     ui_H(0, 8.0f, 27.0f);
@@ -384,7 +384,7 @@ static void ui_p_delay(void)
     ui_mix_row(p, SP_DL_MIX, tone ? 2u : 4u);
     if (!tone)
         pg.has &= (uint8_t)~16u;
-    ui_title(DLY_NAMES[pp], UI_TITLE_X);
+    ui_title_p(DLY_NAMES[pp], UI_TITLE_X, SP_DL_MODE);
     if (p[SP_DL_SYNC])
         sp_put(w, NOTE_NAMES[p[SP_DL_NOTE] < (int16_t)SY_NNOTE ? p[SP_DL_NOTE] : 0]);
     else
@@ -448,7 +448,7 @@ static void ui_p_reverb(void)
     ui_mix_row(p, SP_RV_MIX, 3);
     if (tone)
         pg.has &= (uint8_t)~8u;
-    ui_title(RV_NAMES[p[SP_RV_TYPE] ? 1 : 0], UI_TITLE_X);
+    ui_title_p(RV_NAMES[p[SP_RV_TYPE] ? 1 : 0], UI_TITLE_X, SP_RV_TYPE);
     if (tone) {
         ui_H(0, 172.0f, 62.0f);
         ui_H(1, 127.0f, 146.0f);
@@ -902,7 +902,7 @@ static void ui_p_ffilt(void)
     lk_seg_dash(xc, ys[(uint32_t)sy_clampi(sy_floori(xc - 12.0f), 0, UI_FC - 1)] + 6.0f, xc, 170.0f, sk.ink, 2.0f, 2.0f);
     ui_drive_meter(ui_v(p, SP_FF_DRIVE), more && ui_hot(0));
     ui_mix_row(p, SP_FF_MIX, 3);
-    ui_title(FF_NAMES[t], UI_TITLE_X);
+    ui_title_p(FF_NAMES[t], UI_TITLE_X, (int32_t)(SP_FF_TYPE + ui_fx_off()));
     if (more) {
         pg.has &= (uint8_t)~8u;
         ui_H(0, 198.0f, 118.0f);
@@ -985,7 +985,7 @@ static void ui_p_trem(void)
         if (!more)
             ui_H(2, x1 + 4.0f, 112.0f);
     }
-    ui_title(TRM_MODES[pan], UI_TITLE_X);
+    ui_title_p(TRM_MODES[pan], UI_TITLE_X, (int32_t)(SP_TR_MODE + ui_fx_off()));
     sp_put(w, NOTE_NAMES[p[SP_TR_NOTE] < (int16_t)SY_NNOTE ? p[SP_TR_NOTE] : 0]);
     lk_chip(lk_chip(150.0f, 24.0f, "FREE", !p[SP_TR_SYNC]), 24.0f, w, p[SP_TR_SYNC] != 0);
     if (more) {

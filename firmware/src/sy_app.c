@@ -48,9 +48,9 @@ static int32_t sy_master_now = 4096;
 /* ------------------------------------------------------------------------------------------ events --- */
 /* a ring with one producer and the audio interrupt as its consumer: the panel's (main loop) and MIDI's */
 enum { SY_EV_NOTE, SY_EV_BEND, SY_EV_CC, SY_EV_AT, SY_EV_PANIC,
-       SY_EV_KEY, SY_EV_MKEY, SY_EV_CROOT,       /* (V0.7, the chords' (sy_chord.c): a key down or up (a its note as
+       SY_EV_KEY, SY_EV_MKEY,                    /* (V0.7, the chords' (sy_chord.c): a key down or up (a its note as
                                                   * SCALE fits it, 0xFF none; b the key, 0x80 down), a MIDI note as a root
-                                                  * (a the note, b its velocity, 0 up), HARP's root (a the note)) */
+                                                  * (a the note, b its velocity, 0 up)) */
        SY_EV_RUN, SY_EV_CLK };                   /* (V0.75: the transport (a 1 start, 2 continue, 0 stop), MIDI's clock) */
 typedef struct { uint8_t type, a, b; } sy_ev_t;
 #define SY_EVQ 64u
@@ -105,7 +105,6 @@ static void sy_ev_drain(sy_ring_t *g)
         case SY_EV_AT: sy_at = e->a; break;
         case SY_EV_KEY: sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7); break;
         case SY_EV_MKEY: sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u); break;
-        case SY_EV_CROOT: sy_chord_root(e->a); break;
         case SY_EV_RUN: sy_chord_run(e->a); break;
         case SY_EV_CLK: sy_chord_clock(); break;
         default:
@@ -191,7 +190,6 @@ static void sy_audio_init(void)
 /* the UI's performance: the panel's bend and a controller (GLO's PERFORM), as MIDI's would come */
 static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u, (v >> 7) & 127u); }
 static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
-static void sy_app_chord_root(uint32_t n) { sy_ev_push(&sy_ev_ui, SY_EV_CROOT, n & 127u, 0u); }   /* (HARP's, SCL + a key) */
 static void sy_app_run(uint32_t on) { sy_ev_push(&sy_ev_ui, SY_EV_RUN, on ? 1u : 0u, 0u); }       /* (PLAY: V0.75) */
 
 /* -------------------------------------------------------------------------------------------- MIDI --- */

@@ -17,7 +17,7 @@
  *   - text in Space Mono (gen_aa_font.py --preset space-mono) with the design's letter-spacing, on the baseline its
  *     CSS line box puts it (half the line height, plus (ascent - descent) / 2 of the face: 0.3795 em), aligned in a
  *     box;
- *   - the parts every screen shares: a knob's numbered handle, a value's flag, chips, the zones' row, the toast, the
+ *   - the parts every screen shares: a knob's numbered handle, chips, the zones' row, the toast, the
  *     top line (the module's name, its dot, the module dots or the chain's squares, the right word), a layer's
  *     banner, the mix row, a fader, the FM-1's 27 keys, the effects' glyphs (10 x 7, a bit a pixel: 9 bytes each).
  * Needs gfx.c and sy_core.h. */
@@ -790,22 +790,6 @@ static void lk_handle(float x, float y, uint32_t n, int hot)
     lk_lint_part = 0;
 #endif
 }
-/* a value's flag beside the handle at (hx, hy): HOT, its text in GROUND, its point at the handle (to its right, or to
- * its left where there is no room) */
-static void lk_flag(float hx, float hy, const char *s)
-{
-    float w = lk_tw(T12B, s, 0) + 10.0f, x = hx + 19.0f, y = sy_clampf(hy - 4.5f, 18.0f, 201.0f);
-    if (x + w > 238.0f) {                           /* (the left: its point the other way) */
-        x = hx - 9.0f - w;
-        if (x < 2.0f)                               /* (no room either side: over the handle's row, its point down) */
-            x = 2.0f;
-        lk_tri(x + w, y + 4.5f, x + w + 5.0f, y + 9.5f, x + w, y + 14.5f, sk.hot);
-    } else {
-        lk_tri(x, y + 4.5f, x - 5.0f, y + 9.5f, x, y + 14.5f, sk.hot);
-    }
-    lk_box(x, y, x + w, y + 19.0f, sk.hot);
-    lk_text(x + 5.0f, y + 3.0f, T12B, s, sk.ground, sk.hot, 0, 13);
-}
 /* a chip at (x, y), 10 px bold in a box 16 high (5 px at the sides, a border): cur inverted. Returns the next one's x */
 #define LK_CHIP_H 16.0f
 static float lk_chip(float x, float y, const char *s, int cur)
@@ -884,8 +868,8 @@ static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const ch
         else
             lk_ring(x, 9.0f, 2.5f, 1.0f, sk.lab);
     }
-    if (right)
-        lk_text_r(232.0f, 2.0f, T10B, right, sk.lab, sk.ground, 30, 13);
+    if (right)                                      /* (left of the dots, if any) */
+        lk_text_r(n ? 232.0f - (float)(n * 8u) - 4.0f : 232.0f, 2.0f, T10B, right, sk.lab, sk.ground, 30, 13);
 }
 /* the chain's eight squares at the top right: the module shown filled, the others in the chain outlined (bypassed:
  * dashed), the places after LINE */
