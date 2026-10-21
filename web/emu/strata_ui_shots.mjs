@@ -418,10 +418,21 @@ run(2.4);
 shot("SettingsHold");
 ex.web_buttons(0);
 run(0.1);
-for (const [nm, id] of [["SCREEN", "SetScreen"], ["PANEL", "SetPanel"], ["MIDI", "SetMidi"], ["BENCH", "SetBench"]]) {
+for (const [nm, id] of [["SCREEN", "SetScreen"], ["PANEL", "SetPanel"], ["MIDI", "SetMidi"], ["BENCH", "SetBench"],
+                        ["CORE 2", "SetCore2"]]) {
   go(SEC.MENU, nm);
   shot(id);
 }
+ex.web_test_c2(4, 1);                           // CORE 2 as a unit shows it after a test (example figures: the
+ex.web_test_c2(0, 1);                           // emulator has one core and measures nothing)
+ex.web_test_c2(1, 1);
+ex.web_test_c2(3, 412);
+go(SEC.MENU, "BENCH");
+go(SEC.MENU, "CORE 2");
+shot("SetCore2Done");
+ex.web_test_c2(4, 0);
+ex.web_test_c2(0, 5);
+ex.web_test_c2(1, 0);
 go(SEC.MENU, "MIDI");
 turn(1, 1);                                     // LEARN on
 run(1.6);

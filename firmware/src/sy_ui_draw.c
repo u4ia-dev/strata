@@ -259,6 +259,18 @@ static const char *ui_knob_nv(uint32_t k, char *v)
     } else if (id == UI_BCLR) {
         n = "PEAKS";
         sp_put(v, "CLEARED");
+    } else if (id == UI_C2ON) {                     /* (V0.8 BENCH: CORE 2's) */
+        n = "CORE 2";
+        sp_put(v, c2.on ? "ON" : "OFF");
+    } else if (id == UI_C2RUN) {
+        n = "TEST";
+        if (c2.test)
+            sp_put(sp_fix(v, (int32_t)c2_secs_left(), 0u, 0), " S");
+        else
+            sp_put(v, c2.done ? "DONE" : "30 S");
+    } else if (id == UI_C2LOAD) {
+        n = "LOAD";
+        sp_put(sp_fix(v, c2.load, 0u, 0), " VOICES");
     } else if (id == UI_CTYPE) {
         n = "ADD";
         sp_put(v, FXT_NAMES[ui.ctype % FXT_N]);
@@ -1746,6 +1758,84 @@ static void ui_p_bench(void)
     ui_H(1, 106.0f, 177.0f);
 }
 
+/* CORE 2 (V0.8 BENCH, sy_c2.c): what this power-on found, TEST's figures (a bar: against a half's 2.9 ms; core 1's
+ * tick its longest), then ON, TEST and LOAD */
+static char *ui_us(char *e, uint32_t us) { return sp_put(sp_fix(e, (int32_t)us, 0u, 0), " US"); }
+static void ui_p_core2(void)
+{
+    static const char *const ROW[8] = {"STATE", "TEST", "CORE 1", "CORE 0", "SLOWED", "WAIT", "JOBS", "STACK"};
+    uint32_t i;
+    char t[32];
+    for (i = 0; i < 8u; i++) {
+        float y = 24.0f + (float)(i * 18u), v = -1.0f, pk = 0.0f;
+        char *e;
+        t[0] = 0;
+        switch (i) {
+        case 0:
+            sp_put(t, C2_STATE[c2.state % C2_NSTATE]);
+            break;
+        case 1:
+            if (c2.test)
+                sp_put(sp_fix(t, (int32_t)c2_secs_left(), 0u, 0), " S LEFT");
+            else
+                sp_put(t, c2.done ? "DONE" : "READY: 30 S");
+            break;
+        case 2:                                     /* the oscillators on core 1, while core 0 rendered */
+            v = (float)c2_c1_us() / 2902.0f, pk = (float)c2_c1_max_us() / 2902.0f;
+            ui_us(t, c2_c1_us());
+            break;
+        case 3:                                     /* .. the same on core 0 */
+            v = (float)c2_c0_us() / 2902.0f;
+            ui_us(t, c2_c0_us());
+            break;
+        case 4:                                     /* core 0's render while core 1 ran: "+3% (612/594 US)" */
+            if (c2_with_us()) {
+                e = sp_put(sp_fix(t, c2_slowed_pct(), 0u, 1), "% (");
+                e = ui_us(sp_put(sp_fix(e, (int32_t)c2_with_us(), 0u, 0), "/"), c2_alone_us());
+                sp_put(e, ")");
+            } else {
+                sp_put(t, "\x97");
+            }
+            break;
+        case 5:
+            v = pk = (float)(c2.wait_max / FM1_TICKS_PER_US) / 2902.0f;
+            ui_us(t, c2.wait_max / FM1_TICKS_PER_US);
+            break;
+        case 6:                                     /* core 1's jobs done; any it would not run */
+            sp_put(sp_fix(sp_put(sp_fix(t, (int32_t)c2.j1_n, 0u, 0), ", "), (int32_t)c2_bad(), 0u, 0), " BAD");
+            break;
+        default:
+            v = (float)c2_stack() / 4096.0f;
+            sp_put(sp_fix(t, (int32_t)c2_stack(), 0u, 0), " B");
+            break;
+        }
+        lk_text(8.0f, y, T9, ROW[i], sk.lab, sk.ground, 40, 0);
+        if (v >= 0.0f) {
+            lk_seg(54.0f, y + 5.0f, 132.0f, y + 5.0f, 1.0f, sk.line);
+            if (v > 0.004f)
+                lk_seg(54.0f, y + 5.0f, 54.0f + 78.0f * sy_minf(v, 1.0f), y + 5.0f, 3.0f, sk.ink);
+            if (pk > 0.004f)
+                lk_seg(54.0f + 78.0f * sy_minf(pk, 1.0f), y + 1.0f, 54.0f + 78.0f * sy_minf(pk, 1.0f), y + 9.0f, 1.0f, sk.ink);
+            lk_text(140.0f, y, T9B, t, sk.ink, sk.ground, 0, 0);
+        } else {
+            lk_text(64.0f, y, T9B, t, i == 0u && c2.state != C2_ON && c2.state != C2_OFF ? sk.hot : sk.ink, sk.ground,
+                    0, 0);
+        }
+    }
+    lk_chip(20.0f, 176.0f, c2.on ? "ON" : "OFF", ui_hot(0));
+    lk_chip(84.0f, 176.0f, c2.test ? "STOP" : "TEST", ui_hot(1));
+    {
+        char l[16];
+        sp_put(sp_fix(sp_put(l, "LOAD "), c2.load, 0u, 0), "");
+        lk_chip(152.0f, 176.0f, l, ui_hot(2));
+    }
+    lk_text(20.0f, 196.0f, T9, !sy_bench.known ? "THE EMULATOR HAS ONE CORE" : c2.state == C2_ON ?
+            "PLAY A CHORD WHILE IT TESTS" : "ON, THEN RESTART: CORE 1 STARTS", sk.lab, sk.ground, 40, 0);
+    ui_H(0, 6.0f, 177.0f);
+    ui_H(1, 70.0f, 177.0f);
+    ui_H(2, 138.0f, 177.0f);
+}
+
 /* ----------------------------------------------------------------------------------------- layers --- */
 /* the MOD layer (REC held; ENV for ENV 2): the page's four parameters with the source's depth on each, the keys and
  * the sources they pick (REC's) */
@@ -2237,6 +2327,7 @@ static void (*const UI_PAGE[])(void) = {
     [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
     [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_QNOTES] = ui_p_qnotes, [G_QFEEL] = ui_p_qfeel,
     [G_QMOTION] = ui_p_qmotion, [G_QPAT] = ui_p_qpat, [G_QPLAY] = ui_p_qplay, [G_QCHAIN] = ui_p_qchain,
+    [G_CORE2] = ui_p_core2,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
@@ -2607,12 +2698,14 @@ static void sy_ui_frame(void)
             reel_t = fm1_ms;
             ui.dirty |= D_LIVE;
         }
-        if (g == G_BENCH && fm1_ms - load_t >= 250u) {   /* BENCH: its figures, four times a second when they move */
+        if ((g == G_BENCH || g == G_CORE2) && fm1_ms - load_t >= 250u) {   /* BENCH, CORE 2: their figures, four times
+                                                                            * a second when they move */
             static uint32_t sum;
             const uint32_t *w = (const uint32_t *)(const void *)&sy_bench;
             uint32_t s = (uint32_t)sy_app_load() * 31u + sy_g.level + sy_g.fx_lo * 7u + sy_g.shed * 131u, i;
             for (i = 0; i < sizeof sy_bench / 4u; i++)
                 s = s * 33u + w[i];
+            s = s * 33u + c2.halves + c2.state * 7u + c2.test * 131u + c2.done;
             load_t = fm1_ms;
             if (s != sum) {
                 sum = s;

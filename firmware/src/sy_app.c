@@ -26,6 +26,7 @@
 #endif
 _Static_assert(SY_HALF % SY_BLK == 0u, "a half is whole blocks");
 _Static_assert(SY_HALF == 128u, "MASTER's ramp steps a half in 128ths (sy_master_blk)");
+_Static_assert(SY_HALF == C2_HALF, "CORE 2's test renders a half (sy_c2.c)");
 
 static int32_t sy_abuf[2u * SY_HALF_WORDS] __attribute__((aligned(4)));
 
@@ -150,9 +151,10 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
     t0 = fm1_ticks();
     fm1_audio_ack_aux(p);
     if (p & FM1_AUDIO_HALF) {
-        uint32_t half = fm1_audio_free_half(), b, i, us;
+        uint32_t half = fm1_audio_free_half(), b, i, us, c2t;
         int32_t *o = &sy_abuf[half * SY_HALF_WORDS], g0 = sy_master_now, g1 = sy_master_q12;
         SY_HALF_START();
+        c2_half_start();                         /* (V0.8 BENCH: CORE 2's TEST hands core 1 its work, sy_c2.c) */
         for (b = 0; b < SY_HALF; b += SY_BLK) {
             sy_ev_starts = 0;
             sy_ev_drain(&sy_ev_ui);
@@ -165,10 +167,12 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             SY_BLOCK_TAP(o + 2u * b, SY_BLK);
         }
         sy_master_now = g1;
+        c2t = c2_half_end(fm1_ticks() - t0 - SY_NESTED_TICKS());   /* (.. waits for it: its part not the sound's) */
         for (i = 0; i < 2u * SY_HALF; i++)
             o[i] *= 1 << SY_OUT_SHIFT;
         fm1_audio_ack_half();
-        us = (fm1_ticks() - t0 - SY_NESTED_TICKS()) / FM1_TICKS_PER_US;
+        us = fm1_ticks() - t0 - SY_NESTED_TICKS();
+        us = (us > c2t ? us - c2t : 0u) / FM1_TICKS_PER_US;
         sy_load_q8 = us * 256u / (SY_HALF * 1000000u / 44118u);
         sy_cpu(sy_load_q8);
         sy_cpu_now((fm1_ticks() - t0) / FM1_TICKS_PER_US * 256u / (SY_HALF * 1000000u / 44118u));
@@ -740,6 +744,7 @@ static SY_NOINLINE void sy_app_boot(void)
     sy_slot = -1;
     sy_ui_boot();
     sy_flash_boot();
+    c2_boot(sy_boot_skipped);                    /* (V0.8 BENCH: core 1 started when CORE 2 is ON, before the audio) */
     if (sy_boot_skipped)
         sy_ui_safe(sy_boot_safe ? 1u : 2u);         /* (SAFE START's screen) */
     sp_snap();

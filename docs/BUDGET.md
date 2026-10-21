@@ -135,6 +135,22 @@ The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
 
+## 12. V0.8 BENCH (the second core, measured)
+
+From the build (2026-10-21): the image 400,636 B (+8,632 on V0.8: `sy_c2.c`, CORE 2's page, the console's lines);
+`.data` + `.bss` 53,636 B (+4,644: core 1's two stacks, 4,096 + 256 B, `hal/fm1_cpu1.S`; its mailbox, two cache
+lines each way; the test's sums); the pool 357,232 B (+512: the test's 32 phases and increments and its block
+buffer); `.c1_text` (core 1's waiting loop, 50 instructions) in RAMTEXT before `.spare_bss`, which is as V0.8's. The
+interrupt stack ~2,500 B (the test's job runs in the audio interrupt), the main stack ~4,936 B. The voices' code as
+V0.8 built it: the test reads the oscillators' kernels (`osc_run`, already called from several places) rather than
+`osc_block`, whose second caller made the compiler stop inlining it into the voice (found on the way: the first try
+moved `sy_block` out of the audio interrupt and `osc_block` out of the voice). Left: **180,928 B** of the app slot,
+**20,092 B** of `.data` + `.bss`, **23,696 B** of the pool (4 KiB of each the build's margin).
+
+What V0.9 needs from it ([LOOPER.md](LOOPER.md)): core 1's time for wavetable work against core 0's, how much core 0
+slows while both run (the shared bus and caches), the wait, and whether the unit's core 1 answers at all. **Needs a
+hardware test**: all of it (FLASHING.md step 30); the emulator has one core.
+
 ## 11. V0.8 (the sequencer)
 
 From the build (`tools/build.py --strata`, 2026-10-21): the image 392,004 B (V0.75 371,420: +20,584: the sequencer in

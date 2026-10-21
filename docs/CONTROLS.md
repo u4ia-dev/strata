@@ -66,7 +66,7 @@ every menu.
 | SEQ | SEQ | NOTES: STEP · NOTE · VELOCITY · LENGTH; FEEL: STEP · CHANCE · NUDGE · OCTAVE; MOTION: STEP · LANE · VALUE · PARAMETER (The sequencer, below) |
 | | PATTERN | PATTERN: PATTERN · LENGTH · RATE · SWING; PLAY+REC: TRANSPOSE · DIRECTION · RECORD · QUANTIZE |
 | | CHAIN | CHAIN: SLOT · PATTERN · REPEATS · CHAIN |
-| HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS |
+| HOME held 5 s | SETTINGS | SCREEN: COLOR · HELP · GLOW; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; BENCH: RUN · PEAKS; CORE 2: ON · TEST · LOAD |
 
 Some pages pick before they set: the LFO's POINTS (KNOB 1 the point), the EQ's POINTS (KNOB 1 LOW, MID or HIGH; KNOB
 2–4 that point's frequency, gain and Q) and the MATRIX (KNOB 1 the slot, 1–8; KNOB 2–4 its source, destination and
@@ -389,11 +389,22 @@ SETTINGS > SCREEN > GLOW sets how bright the glow is (HIGH or LOW).
 | PANEL | ACCEL: the knobs' speed sensitivity | HOLD: 300, 400, 500 or 600 ms before a held button's layer | | |
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
 | BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |
+| CORE 2 | ON / OFF: the second core started at the next power-on (V0.8 BENCH; off by default) | TEST: 30 s, again to stop | LOAD: the test's unison voices, 4–32 (16) | |
 
 BENCH shows what the FM-1 measures, a row each: AUDIO, CPU, SCREEN (V0.66: and the section of the longest frame),
 KEYS (V0.66: what the main loop held the keys up, drawing · over saves; on a page where the keys only play the scan's
 timer plays them), TABLES, FLASH, STACKS, RUN (what each means: [TESTING.md](TESTING.md) §8.3; how to use it in the
 hardware test: [FLASHING.md](FLASHING.md) §4). The emulator says it has no clock of its own.
+
+**CORE 2** (V0.8 BENCH: the FM-1's second core measured before the looper puts voices on it, [LOOPER.md](LOOPER.md)).
+ON takes effect at the next power-on (the settings are written after 3 s of quiet: wait 5 s, then switch off and on);
+not after a boot that crashed, nor with HOME held at power-on. Its rows: STATE (OFF, ANSWERING, NO ANSWER: OFF,
+MISREAD: OFF, STOPPED: OFF, SAFE START: NOT ON; a unit whose core 1 misreads or stops is held, plays on one core and
+turns ON off), TEST (READY, the seconds left, DONE), CORE 1 (its time for LOAD's oscillators a half, the tick its
+longest), CORE 0 (the same work on core 0), SLOWED (core 0's own render while core 1 ran, against alone), WAIT (core
+0's longest wait for core 1), JOBS (done, and BAD: any it would not run), STACK (core 1's, of 4,096 bytes). TEST runs
+while something plays: hold a chord or PLAY a pattern. The console's `bench` has the same figures (`c2_` lines). The
+emulator has one core: its page says so and TEST is refused.
 
 HOME leaves the SETTINGS. GLOBAL's TEMPO (BPM 20–300, TS-BEAT 1–16, TS-NOTE 1, 2, 4, 8, 16) and SCL's page are kept
 with the settings too, not with a sound.

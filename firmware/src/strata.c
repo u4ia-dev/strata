@@ -26,10 +26,14 @@
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_900"    /* the package identity (build.py: the .fwsc's marker string): Felucca's, kept (§16) */
 #endif
-#define FELUCCA_CPU2 0           /* the second core: v1 (§19) */
-#define FM1_CPU1_USED 0          /* (hal/fm1_sys.h: no second core to hold) */
+#define FELUCCA_CPU2 0           /* (Felucca's parts on the second core: none in Strata) */
+#ifndef STRATA_CPU2
+#define STRATA_CPU2 1            /* the second core built in (V0.8 BENCH: SETTINGS > CORE 2, OFF by default, sy_c2.c);
+                                  * build.py STRATA_CPU2=0: none of it (no stack, waiting loop or mailbox) */
+#endif
+#define FM1_CPU1_USED STRATA_CPU2   /* (hal/fm1_sys.h: every reset holds it first) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.8 HARDWARE TEST"       /* the splash and the console (V0.8: the sequencer); build.py
+#define STRATA_VERSION "V0.8 BENCH"               /* the splash and the console (V0.8 BENCH: the sequencer, CORE 2); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
@@ -48,6 +52,9 @@
 #include "fm1_adc.h"
 #include "fm1_lcd_hw.h"
 #include "fm1_flash.h"
+#if STRATA_CPU2
+#include "fm1_cpu1.h"                            /* (Felucca's mailbox, from X0X, Melodee and Jangada: sy_c2.c) */
+#endif
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")   /* a ring's slot stored before its index moves */
 static volatile uint32_t fm1_ms;                 /* milliseconds (sy_main.c's TIMER5); usb.c declares it too */
 
@@ -111,6 +118,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #define SY_MIDI_OUT(pkt) midi_out_event(pkt)   /* the chords out over USB MIDI (usb.c's ring, the audio ISR its producer) */
 #include "sy_chord.c"
 #include "sy_seq.c"                              /* (V0.8: the sequencer, on the chords' keys) */
+#include "sy_c2.c"                               /* (V0.8 BENCH: the second core measured) */
 #include "sy_sounds.h"
 
 /* --------------------------------------------------------------- UI --- */

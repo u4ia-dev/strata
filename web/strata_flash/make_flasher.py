@@ -93,7 +93,7 @@ def test_meta(app, version, product, sha):
             a += 1
             b = at(a, 1)
         return s.decode("latin-1")
-    need = ("SP", "SEC_NAMES", "sp_n", "sy_patch", "voice_block")
+    need = ("SP", "SEC_NAMES", "sp_n", "sy_patch", "fm1_alnk0_irq")
     if any(n not in syms for n in need):
         raise SystemExit(f"make_flasher: build/strata.syms lacks one of {need}")
     sp_a, sp_len = syms["SP"]
@@ -115,7 +115,8 @@ def test_meta(app, version, product, sha):
             raise SystemExit(f"make_flasher: {ram} at {a:#x} is not where memr reads")
     if syms["sp_n"][1] != 4 * len(params) or syms["sy_patch"][1] < 2 * len(params):
         raise SystemExit("make_flasher: sp_n / sy_patch are not the parameter table's size")
-    prints = [(a, at(a, 16).hex()) for a in (sp_a, names_a, syms["voice_block"][0])]
+    code = syms["voice_block" if "voice_block" in syms else "fm1_alnk0_irq"][0]   # (code: the voices' when the
+    prints = [(a, at(a, 16).hex()) for a in (sp_a, names_a, code)]                   # compiler kept them apart)
     return {"version": version, "product": product, "sha256": sha, "params": params, "secs": secs,
             "addr": {"sp_n": syms["sp_n"][0], "sy_patch": syms["sy_patch"][0]},
             "fingerprint": [[a, h] for a, h in prints],

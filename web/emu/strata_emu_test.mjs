@@ -1971,5 +1971,35 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         kp.join() === "70,90,7,24,5,61" && ks.join() === "6,1,1,6,4");
 }
 
+{                                               // V0.8 BENCH: CORE 2 (sy_c2.c): the emulator has one core
+  const k = await boot(), kt = () => cstr(k, k.web_test_toast());
+  const pg = goPage(k, SEC.MENU, "CORE 2");
+  play(k, 0.1);
+  const st = k.web_test_c2(0, -1), load = k.web_test_c2(2, -1);
+  k.web_enc(E.K2, 1);                           // TEST: refused, one core here
+  play(k, 0.1);
+  const t1 = kt();
+  k.web_enc(E.K1, 1);                           // ON (at the next power-on)
+  play(k, 0.1);
+  const t2 = kt();
+  k.web_enc(E.K3, -2);                          // LOAD 16 -> 8
+  play(k, 0.1);
+  const l2 = k.web_test_c2(2, -1);
+  check(`CORE 2: the page (${pg}); one core here (state ${st}); LOAD ${load}; TEST refused ("${t1}"); ON ("${t2}"); LOAD turned down twice: ${l2}`,
+        pg >= 0 && st === 5 && load === 16 && t1 === "ONE CORE HERE" && t2 === "ON AFTER A RESTART" && l2 === 8 &&
+        k.web_test_c2(1, -1) === 1);
+  play(k, 3.8);                                 // (3 s of quiet: the settings written) a power cycle
+  const nor = new Uint8Array(k.memory.buffer, k.web_nor(), k.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const k2 = instance.exports;
+  if (k2._initialize) k2._initialize();
+  new Uint8Array(k2.memory.buffer, k2.web_nor(), k2.web_nor_size()).set(nor);
+  k2.web_master(700);
+  k2.web_boot();
+  play(k2, 0.3);
+  check(`.. after a power cycle: ON ${k2.web_test_c2(1, -1)}, LOAD ${k2.web_test_c2(2, -1)}; still one core (state ${k2.web_test_c2(0, -1)})`,
+        k2.web_test_c2(1, -1) === 1 && k2.web_test_c2(2, -1) === 8 && k2.web_test_c2(0, -1) === 5);
+}
+
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

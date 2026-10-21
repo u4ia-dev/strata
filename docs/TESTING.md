@@ -548,6 +548,11 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   checked as it shows the turn: 75 findings before (the old flags over titles, figures, handles), none after (a value
   the page shows is lit in place; else it is in the bottom row). Found on the way: the top line's chord name under its
   section dots (moved left of them); `memmove` missing from the device's build (a loop).
+- **V0.8 BENCH, CORE 2** (132 checks; 122 screens and 573 knob turns, all clear): the page on the emulator's one core
+  (STATE ONE CORE BUILD), TEST refused ("ONE CORE HERE"), ON ("ON AFTER A RESTART") and LOAD 16 -> 8 kept through a
+  power cycle; two renders, the page as the emulator is and with a unit's figures after a test (example numbers, set by
+  `web_test_c2`: nothing is measured here). The build checks core 1's waiting loop (in RAM, calling only its job) and
+  that the voices' code is V0.8's (the listing: `voice_block` apart, `sy_block` in the interrupt).
 - **V0.8, the sequencer** (130 checks; 120 screens and 570 knob turns, all clear): pattern 1 on PLAY, C4 E4 G4 C5 a
   step in four, at 0 4 8 12 16 steps, each half a step long (LENGTH 1/2), read from what USB OUT sends; SWING 75 %,
   NUDGE −25 %, CHANCE 0 % and TRANSPOSE +12 (72@0 74@1.5 76@1.75, step 4 left out, 72@4); DIRECTION BACKWARD (65 64
@@ -589,6 +594,8 @@ Web MIDI, and the publishing host's own policy, which is not known here.
   frame's drawing: the BENCH page times a frame; if it is long the keys move to the TIMER5 tick.
 - The sequencer (V0.8): its timing by ear and against a DAW's clock, recording from the keys and MIDI, the patterns'
   writes (four objects at `0xCB000`, one a check) and their return at power-on.
+- The second core (V0.8 BENCH): that it starts and answers on the unit, 30 s of jobs without a misread, its time for
+  the oscillators' kernels against core 0's, how much core 0 slows while both run, its stack (FLASHING.md step 30).
 - The flash on the device: an erase's and a page's IRQ-off time against the hush (the ring silent before any write);
   a SAVE's write and the background writes after 3 s of silence; that nothing outside the allow-list is ever touched
   (the RAM driver's second guard). Before any of it: a full flash dump (the brief's `docs/02-update-and-recovery.md`

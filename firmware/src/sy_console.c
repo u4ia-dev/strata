@@ -270,6 +270,19 @@ static void con_bench(void)
     con_kv("run_flt_loops", (int32_t)SY_RUN_FLT);
     con_kv("run_flt_us", (int32_t)sy_bench.run_flt_us);
     con_kv("key_press_max_us", (int32_t)(fm1_in_stat.press_max / FM1_TICKS_PER_US));
+    con_ks("c2_state", C2_STATE[c2.state % C2_NSTATE]);   /* (V0.8 BENCH: CORE 2, sy_c2.c) */
+    con_kv("c2_on", c2.on);
+    con_kv("c2_load_voices", c2.load);
+    con_kv("c2_test_done", c2.done);
+    con_kv("c2_jobs", (int32_t)c2.j1_n);
+    con_kv("c2_bad", (int32_t)c2_bad());
+    con_kv("c2_core1_us", (int32_t)c2_c1_us());
+    con_kv("c2_core1_max_us", (int32_t)c2_c1_max_us());
+    con_kv("c2_core0_us", (int32_t)c2_c0_us());
+    con_kv("c2_render_alone_us", (int32_t)c2_alone_us());
+    con_kv("c2_render_with_us", (int32_t)c2_with_us());
+    con_kv("c2_wait_max_us", (int32_t)(c2.wait_max / FM1_TICKS_PER_US));
+    con_kv("c2_stack_used", (int32_t)c2_stack());
     {                                                   /* the event log (sy_main.c), oldest first: ev MS WHAT ARG */
         uint32_t i = sy_nlog > SY_NLOG ? sy_nlog - SY_NLOG : 0u;
         con_kv("events", (int32_t)sy_nlog);

@@ -257,6 +257,8 @@ def build_strata():
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
     if VERSION:
         flags.append(f'-DSTRATA_VERSION="{VERSION}"')
+    if not CPU2:
+        flags.append("-DSTRATA_CPU2=0")
     (OUT / "fm1_cpu1.o").unlink(missing_ok=True)
     # strata.c to LLVM IR without the optimizer (and once more with -g, only to tell which file defines what); usb.c,
     # midi_uart.c and ota.c marked to build as Felucca builds them (tools/strata_drivers.py); the IR at STRATA_OPT
@@ -264,6 +266,7 @@ def build_strata():
     tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
            ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
+           *([("cc", "-c", FW / "hal" / "fm1_cpu1.S", "-o", OUT / "fm1_cpu1.o")] if CPU2 else []),
            ("cc", *flags, *ir, "-o", OUT / "strata.ll"),
            ("cc", *flags, "-g", *ir, "-o", OUT / "strata_g.ll"))
     subprocess.run([sys.executable, SRC / "tools" / "strata_drivers.py", OUT / "strata.ll", OUT / "strata_g.ll",
@@ -394,7 +397,8 @@ def check(img, syms, dis, rt):
 # source, so a new kernel counts at once) is a callee. A "call" next to an <unknown instruction> is a jump table's
 # data the listing decoded (a '.' label inside a function), not a call.
 ISR_ROOTS_STACK = ("fm1_alnk0_irq", "fm1_timer5_irq")
-ISR_ICALLS = {"fm1_alnk0_irq": ("sy_fx.c", "FX_RUN"),         # fx_block: the chain's modules, by type
+ISR_ICALLS = {"fm1_alnk0_irq": ("sy_fx.c", "FX_RUN"),         # fx_block: the chain's modules, by type (inlined
+              "sy_block": ("sy_fx.c", "FX_RUN"),               # into the interrupt, or into sy_block: V0.8 BENCH)
               "osc_run": ("sy_osc.c", "OSC_KS"),               # the oscillator kernels
               "flt_block": ("sy_filter.c", "FLT_SVF")}         # the SVF types
 ISR_WRAP = 28                       # hal/fm1_isr.S: {psr, rets, reti} and {r3-r0} before the C body
@@ -567,7 +571,8 @@ def main():
     ap.add_argument("--strata", action="store_true", help="STRATA (firmware/src/strata.c) in place of Felucca")
     a = ap.parse_args()
     if a.strata:
-        UNIT, CPU2 = "strata", False                # (one core: Strata's second core is v1)
+        UNIT = "strata"                             # (V0.8 BENCH: the second core built in, SETTINGS > CORE 2 starts
+        CPU2 = os.environ.get("STRATA_CPU2") != "0"  # it; STRATA_CPU2=0: none of it)
     name = f"{UNIT}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)

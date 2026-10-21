@@ -148,6 +148,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #define SY_MIDI_OUT(pkt) (web_mout_t[web_mout_n % 256u] = chs.t, web_mout[web_mout_n++ % 256u] = (pkt))
 #include "../../firmware/src/sy_chord.c"
 #include "../../firmware/src/sy_seq.c"
+#include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
 #define STRATA_VERSION "V0.8"                     /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
@@ -786,6 +787,47 @@ EXPORT int32_t web_test_sq_pat(uint32_t p, uint32_t f, int32_t v)
            : f == 5u ? q->lane_id[0] : f == 6u ? q->lane_id[1] : f == 7u ? sq_pat_used(q) : -1;
 }
 EXPORT int32_t web_test_follow(uint32_t id) { return id < SP_COUNT ? sp_last.v[id] : -1; }
+/* V0.8 BENCH, CORE 2 (sy_c2.c; the emulator has one core): f 0 the state, 1 ON, 2 LOAD, 3 TEST's figures as a unit
+ * might show them after a test (v: core 1's microseconds a half; the rest made from it: for the page's render and its
+ * check, never measured here), 4 the platform's clock (sy_bench.known: the page's footer). v < 0 reads; the value
+ * after */
+EXPORT int32_t web_test_c2(uint32_t f, int32_t v)
+{
+    if (f == 0) {
+        if (v >= 0)
+            c2.state = (uint8_t)((uint32_t)v % C2_NSTATE);
+        return c2.state;
+    }
+    if (f == 1) {
+        if (v >= 0)
+            c2.on = v != 0;
+        return c2.on;
+    }
+    if (f == 2) {
+        if (v >= 0)
+            c2.load = (uint8_t)v;
+        return c2.load;
+    }
+    if (f == 3) {
+        if (v >= 0) {
+            uint32_t n = C2_SECS * C2_HALVES_S / C2_NPH, us = (uint32_t)v, t = FM1_TICKS_PER_US;
+            c2.j1_n = c2.j0_n = n;
+            c2.j1_sum = n * us * t, c2.j1_max = (us + us / 8u) * t;
+            c2.j0_sum = n * (us - us / 20u) * t;
+            c2.r_n[C2_IDLE] = c2.r_n[C2_SOLO] = c2.r_n[C2_PAR] = n;
+            c2.r_sum[C2_IDLE] = c2.r_sum[C2_SOLO] = n * 1180u * t, c2.r_sum[C2_PAR] = n * 1215u * t;
+            c2.wait_max = 140u * t;
+            c2.halves = C2_SECS * C2_HALVES_S, c2.test = 0, c2.done = 1;
+        }
+        return (int32_t)c2_c1_us();
+    }
+    if (f == 4) {
+        if (v >= 0)
+            sy_bench.known = v != 0;
+        return (int32_t)sy_bench.known;
+    }
+    return -1;
+}
 /* CHAIN's slot i: f 0 its pattern (255: the chain ends there), 1 its repeats (v >= 0 sets them); read back */
 EXPORT int32_t web_test_sq_chain(uint32_t i, uint32_t f, int32_t v)
 {

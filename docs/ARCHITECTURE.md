@@ -818,6 +818,13 @@ the FX, using Felucca's mailbox (`hal/fm1_cpu1.h`): hold before any reset, a tim
 by default. The unison budget doubles when core 1 answers. ChoralRoot raises the core supply before starting core 1;
 whether Strata needs that is decided by the device test.
 
+V0.8 BENCH (`sy_c2.c`; [LOOPER.md](LOOPER.md) stage 0): the mailbox built in (`STRATA_CPU2`, build.py; `STRATA_CPU2=0`
+builds none of it), core 1 started at power-on only when SETTINGS > CORE 2 is ON and the boot is clean (not SAFE
+START), before the audio as Felucca starts it, the PC limits open while it starts in the chip's ROM. No supply raise.
+Its only work is CORE 2's TEST, in the audio interrupt: core 1 runs the oscillators' kernels on state of its own while
+core 0 renders the half, and core 0 waits for it before the interrupt returns (so the flash is never off under it). A
+misread or a stall holds it, and CORE 2 turns itself off. The figures it reports decide V0.9's split of the voices.
+
 ## 20. Risks and open items
 
 | Risk | Mitigation |

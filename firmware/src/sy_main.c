@@ -16,6 +16,9 @@
  * millisecond, sy_app_frame every 15 ms; MASTER; the console; BENCH's timings and its RUN. */
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
+#if STRATA_CPU2
+extern uint32_t _c1_start[], _c1_end[], _c1_load[];
+#endif
 extern uint32_t _spare_bss_start[], _spare_bss_end[];   /* (strata.ld: the undo history, the FX lines) */
 extern char _ustack_top[];
 
@@ -213,10 +216,10 @@ static void sy_midi_take(void)
  * held over 0.6 ms; the keys left waiting over 20 ms by the main loop (drawing, or saving); frames over 50 ms. The
  * main loop writes it, every millisecond: what the counters moved by. The last 32 */
 enum { EV_LATE, EV_HELD, EV_UNDERRUN, EV_MISSED, EV_STALL, EV_FLASH, EV_LOAD, EV_SHED, EV_REFUSED, EV_TIMER5, EV_KEYS,
-       EV_SAVEWAIT, EV_FRAME, EV_N };
+       EV_SAVEWAIT, EV_FRAME, EV_CORE2, EV_N };
 static const char *const EV_NAMES[EV_N] = {"late_us", "late_held", "uac_underruns", "uac_missed", "uac_stalls",
                                             "flash_ops", "load", "shed", "refused", "timer5_gap_us", "keys_wait_ms",
-                                            "save_wait_ms", "frame_ms"};
+                                            "save_wait_ms", "frame_ms", "core2_state"};   /* (V0.8 BENCH: sy_c2.c C2_*) */
 #define SY_NLOG 32u
 static struct {
     uint32_t ms;
@@ -233,8 +236,16 @@ static void sy_log_ev(uint32_t type, uint32_t arg)
 }
 static void sy_log_poll(void)                    /* every millisecond */
 {
-    static uint32_t late, held, und, mis, stl, ops, loads, shed, refused;
+    static uint32_t late, held, und, mis, stl, ops, loads, shed, refused, c2s = 0xFFu;
     uint32_t g = sy_t5_gap / FM1_TICKS_PER_US;
+    if (c2.state != c2s) {                       /* (V0.8 BENCH: what power-on found, a give-up: ON cleared) */
+        c2s = c2.state;
+        sy_log_ev(EV_CORE2, c2s);
+        if (c2s == C2_MISREAD || c2s == C2_STALLED) {
+            c2.on = 0;
+            ui_toast(c2s == C2_MISREAD ? "CORE 2 MISREAD: OFF" : "CORE 2 STOPPED: OFF");
+        }
+    }
     sy_t5_gap = 0;
     if (g > sy_bench.t5_gap_max_us)
         sy_bench.t5_gap_max_us = g;
@@ -529,6 +540,10 @@ static void fm1_main(void)
 void fm1_cstart(void)
 {
     uint32_t *s, *d, p3, src, wdt, t_boot;
+#if STRATA_CPU2
+    fm1_cpu1_halt();                             /* (after Felucca, X0X, Jangada) a second core still running from before
+                                                  * a reset: held before the RAM it may be reading is cleared */
+#endif
     fm1_time_init();
     t_boot = fm1_ticks();
     fm1_reset_reason();
@@ -560,6 +575,10 @@ void fm1_cstart(void)
         *d = *s;
     for (s = _rt_load, d = _rt_start; d < _rt_end; s++, d++)
         *d = *s;                                 /* the flash driver's code that runs from RAM */
+#if STRATA_CPU2
+    for (s = _c1_load, d = _c1_start; d < _c1_end; s++, d++)
+        *d = *s;                                 /* the second core's waiting loop (hal/fm1_cpu1.h) */
+#endif
     fm1_mailbox_clear();
     fm1_guard_enable(FM1_GUARD_STACK | FM1_GUARD_WRITE | FM1_GUARD_BUS | FM1_GUARD_PC);
     fm1_boot.p3_rst = (uint8_t)p3;

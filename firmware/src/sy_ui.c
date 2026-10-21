@@ -118,7 +118,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_QLANE, UI_QVAL, UI_QPAR,                    /* sy_ui_seq.c) */
        UI_QPAT, UI_QPLEN, UI_QRATE, UI_QSWG,
        UI_QTRN, UI_QDIR, UI_QRMD, UI_QQNT,
-       UI_QSLOT, UI_QCPAT, UI_QCREP, UI_QCHAIN };
+       UI_QSLOT, UI_QCPAT, UI_QCREP, UI_QCHAIN,
+       UI_C2ON, UI_C2RUN, UI_C2LOAD };                /* (V0.8 BENCH, CORE 2's: ON, TEST, LOAD: sy_c2.c) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -136,7 +137,7 @@ enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
-       G_QNOTES, G_QFEEL, G_QMOTION, G_QPAT, G_QPLAY, G_QCHAIN, G_N };   /* (UI_PAGE) */
+       G_QNOTES, G_QFEEL, G_QMOTION, G_QPAT, G_QPLAY, G_QCHAIN, G_CORE2, G_N };   /* (UI_PAGE) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -282,6 +283,7 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
+    {SEC_MENU, G_CORE2, "CORE 2", {UI_C2ON, UI_C2RUN, UI_C2LOAD, -1}},   /* (V0.8 BENCH) */
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_CHORD, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR}},   /* (V0.7: sy_ui_chord.c) */
     {SEC_CHORD, G_STRUM, "STRUM", {UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP}},
@@ -1342,6 +1344,30 @@ static void ui_bench_turn(int32_t item)
     ui.dirty |= D_KNOBS | D_DISP | D_FOOT;
 }
 
+/* CORE 2 (V0.8 BENCH, sy_c2.c): ON (core 1 started at the next power-on; the settings kept after 3 s of quiet), TEST
+ * (30 s, while something plays; again: stopped), LOAD (the test's unison voices: a change starts the test again) */
+static void ui_c2_turn(int32_t item, int32_t s)
+{
+    if (item == UI_C2ON) {
+        if ((s > 0) != (c2.on != 0)) {
+            c2.on = s > 0;
+            ui_toast(c2.on ? "ON AFTER A RESTART" : "OFF AFTER A RESTART");
+        }
+    } else if (item == UI_C2RUN) {
+        if (c2.test)
+            c2_test(0), ui_toast("TEST STOPPED");
+        else if (c2_test(1))
+            ui_toast(c2.state == C2_ONECORE ? "ONE CORE HERE" : "CORE 2 IS NOT RUNNING");
+        else
+            ui_toast("TESTING: PLAY A CHORD");
+    } else {
+        c2.load = (uint8_t)sy_clampi(c2.load + 4 * s, 4, 32);
+        if (c2.test)
+            c2_test(1);
+    }
+    ui.dirty |= D_KNOBS | D_DISP | D_FOOT;
+}
+
 /* every millisecond: a CC MIDI LEARN heard, set to the parameter picked ("CC 74: FLT CUTOFF") */
 static void ui_learn_ms(void)
 {
@@ -1452,6 +1478,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui_set_turn(item, s);
     } else if (item == UI_BRUN || item == UI_BCLR) {   /* BENCH's */
         ui_bench_turn(item);
+    } else if (item >= UI_C2ON && item <= UI_C2LOAD) {   /* CORE 2's */
+        ui_c2_turn(item, s);
     } else if (item >= UI_SCUR && item <= UI_BBANK) {   /* SAVE's, the browser's */
         ui_save_item_turn(item, s);
     } else if (item == UI_EQPT) {                   /* the EQ's point: LOW, MID, HIGH, round (the MOD layer too: */
@@ -2266,13 +2294,14 @@ static void settings_save(void) {}
  * three styles' RATE, MOVE and FEEL, BASS 3, MIDI 4, SPREAD, STRUM 4, SCL + OCT+'s MODE); V0.75, the ARP's (GROOVE's
  * GATE, SWING, LATCH, LENGTH, GLOBAL's CLOCK IN; the steps: a byte each of the kind, SLIDE, OCTAVE and RATCHET, then
  * their LEVELs, their CHANCEs); V0.8, the sequencer's (the pattern shown, CHAIN on, RECORD, QUANTIZE, the chain's
- * slots: their patterns, their repeats).
+ * slots: their patterns, their repeats); V0.8 BENCH, CORE 2's (ON, LOAD, two spare).
  * Fields are only added at the end: a shorter record (an older build's, 11 bytes at least) leaves the rest as they
  * were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
 #define SS_SET_ML (19u + 3u * ML_N)
 #define SS_SET_AR (SS_SET_ML + 32u)
 #define SS_SET_SQ (SS_SET_AR + 5u + 3u * AR_NSTEP)
-#define SS_SETTINGS_LEN (SS_SET_SQ + 4u + 2u * SQ_NCHAIN)
+#define SS_SET_C2 (SS_SET_SQ + 4u + 2u * SQ_NCHAIN)
+#define SS_SETTINGS_LEN (SS_SET_C2 + 4u)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -2324,6 +2353,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             for (i = 0; i < SQ_NCHAIN; i++)
                 q[4u + i] = sqd.cpat[i], q[4u + SQ_NCHAIN + i] = sqd.crep[i];
         }
+        b[SS_SET_C2] = c2.on, b[SS_SET_C2 + 1u] = c2.load, b[SS_SET_C2 + 2u] = b[SS_SET_C2 + 3u] = 0;
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -2380,7 +2410,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             chd.chn[i] = (uint8_t)sy_clampi(a[5u + 2u * AR_NSTEP + i], 0, 100);
         }
     }
-    if (n >= SS_SETTINGS_LEN) {                     /* (V0.8's sequencer) */
+    if (n >= SS_SET_C2) {                           /* (V0.8's sequencer) */
         const uint8_t *q = b + SS_SET_SQ;
         uint32_t i;
         sqd.cur = (uint8_t)(q[0] % SQ_NPAT), sqd.chain = q[1] != 0;
@@ -2389,6 +2419,10 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             sqd.cpat[i] = q[4u + i] < SQ_NPAT ? q[4u + i] : SQ_NONE;
             sqd.crep[i] = (uint8_t)sy_clampi(q[4u + SQ_NCHAIN + i], 1, 16);
         }
+    }
+    if (n >= SS_SETTINGS_LEN) {                     /* (V0.8 BENCH's CORE 2) */
+        c2.on = b[SS_SET_C2] != 0;
+        c2.load = (uint8_t)(sy_clampi(b[SS_SET_C2 + 1u], 4, 32) & ~3);
     }
     if (n >= SS_SET_ML) {
         uint32_t i;

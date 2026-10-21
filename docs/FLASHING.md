@@ -1,7 +1,8 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.8 HARDWARE TEST`: the STRATA UI of V0.67,
-SCL's chords, the ARP and the sequencer: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP", "The sequencer") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.8 BENCH`: the STRATA UI of V0.67,
+SCL's chords, the ARP, the sequencer and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Chords", "The
+ARP", "The sequencer", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -51,6 +52,17 @@ up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB un
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
 
+**New in V0.8 BENCH** (stage 0 of the looper, [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "CORE 2"): the
+second core, built in and **off by default**, measured on your FM-1 before the looper's V0.9 puts voices on it.
+SETTINGS > CORE 2: ON starts core 1 at the next power-on (Felucca's way: X0X's mailbox with Melodee's and Jangada's
+hardening, no supply raise); TEST runs 30 s while something plays: core 1 renders wavetable oscillators while core 0
+plays, then core 0 the same work alone, and the page shows core 1's time against core 0's, how much core 0 slowed while
+core 1 ran, core 0's longest wait, the jobs and any it would not run (BAD), and core 1's stack. A unit whose core 1
+misreads or stops answering is held, plays on one core and turns CORE 2 off (some FM-1s do: fm1-x0x#10); never
+after a boot that crashed, or with HOME held at power-on. The voices are built exactly as V0.8's (the test reads the
+oscillators' own kernels with state of its own). Package `build/strata.fwsc`, 610,090 bytes, sha256
+`1ece869f4da115fd79e766b4e3f062d1f5380e1f3b4baaab5b6a514e083286ed`.
+
 **New in V0.8** (the sequencer; [CONTROLS.md](CONTROLS.md) "The sequencer"): the SEQ button's menu (SEQ: NOTES, FEEL,
 MOTION; PATTERN: PATTERN, PLAY+REC; CHAIN). Sixteen patterns of up to 64 steps, up to four notes a step, each step's
 VELOCITY, LENGTH, CHANCE and NUDGE; a pattern's LENGTH, RATE, SWING, DIRECTION and TRANSPOSE; two MOTION lanes a
@@ -96,7 +108,8 @@ the panel's controls, the presets and settings, the package, its identity and th
 package: `build/strata.fwsc`, 610,090 bytes, sha256 `5638a66636d7d14e6e80270c62ade1467ba93c17abe685c8bcae3a028fdef2a8`.
 
 Not in it yet: the factory presets (Phase 5; until then the eight starter sounds and INIT), the rest of MIDI out (V0.7
-sends the chords and V0.8 the sequencer's notes through them, V0.75 takes MIDI's clock), the second core.
+sends the chords and V0.8 the sequencer's notes through them, V0.75 takes MIDI's clock), voices on the second core
+(V0.8 BENCH only measures it), the 8-track looper ([LOOPER.md](LOOPER.md)).
 
 ## 2. Before anything: a full backup
 
@@ -312,6 +325,16 @@ New in V0.8 (the test page's "Listen and look" has them as rows; [CONTROLS.md](C
 29. **Kept.** After writing patterns, stop, wait 5 s in silence (the patterns' write), switch off and on: they and the
     chain come back. The device report's event log shows the writes (one sector pair each).
 
+New in V0.8 BENCH (the test page's row "core2"):
+
+30. **CORE 2.** HOME held 5 s (SETTINGS), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
+    wait 5 s in silence (the settings' write), switch off and on. CORE 2 again: STATE **ANSWERING** (else NO ANSWER:
+    OFF, which is an answer too: this unit runs on one core). Hold a chord, or PLAY a pattern, and turn KNOB 2 (TEST):
+    30 s, listening for clicks; then DONE. Note CORE 1, CORE 0, SLOWED, WAIT, JOBS (and BAD) and STACK, or read the
+    device report (its `c2_` lines). Then LOAD (KNOB 3) up to 32 and TEST again. To end: KNOB 1 left, 5 s, off and on:
+    STATE OFF. If anything goes wrong: hold HOME while switching on (SAFE START: core 1 is not started), or let a
+    second failed boot take the unit to backup mode as any build does (section 7).
+
 ## 5. The report
 
 On the flasher page, step 3: **Read the device report** opens Strata's USB serial console (Chrome asks for the port:
@@ -379,6 +402,17 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.8 BENCH**: built and checked by the build: the image 400,636 bytes, RAM 53,636 of 73,728 bytes (+4,644 on
+  V0.8: core 1's stacks 4,352 bytes, its mailbox, the test's state), the pool 357,232 bytes (+512: the test's phases
+  and buffer), the interrupt stack ~2.5 KB (the test's job in it), the main stack ~4.9 KB, the second core's waiting
+  loop in RAM (50 instructions, calling only its job), register access in `hal/` only; the voices' code built as V0.8's
+  (`voice_block` with `osc_block` inlined, `sy_block` in the audio interrupt: the listing). **Verified in the
+  emulator**: 132 checks (CORE 2's two: the page on one core, TEST refused, ON and LOAD through a power cycle), 122
+  screens (CORE 2's two), 573 knob turns, the flasher's 26, the test page's 21. **Needs a hardware test**: whether
+  core 1 starts and answers on your unit, runs 30 s of jobs without a misread, its time against core 0's, how much
+  core 0 slows while it runs, its stack, and no clicks while it tests (step 30). **Unverified**: all of the second
+  core's figures; the emulator has one core and measures nothing.
 
 - **V0.8**: built and checked by the build: the image 392,004 bytes, RAM 48,992 of 73,728 bytes (+448 on V0.75: the
   sequencer's settings and state), the pool 356,720 of 380,928 bytes (+14,348: the sixteen patterns and their copy),
