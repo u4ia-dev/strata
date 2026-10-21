@@ -31,12 +31,12 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, VOICE: 9, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, REVERB: 15,
               OTT: 16, EQ: 17, EQ2: 21, PHASER: 24, PHASER2: 25, CHAIN: 36, MENU: 37, GLOBAL: 38, SAVE: 39, BROWSE: 40,
-              KEYS: 41, ARP: 42 };                                                            // SEC_*
+              KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45 };                            // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
              PH_ON: 236, EQ2_MID: 209, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
-             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, CLOCK: 1067, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
+             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, CLOCK: 1071, DRAWN: 12 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 const pid = (x, sec, nm, k) => {               // the parameter at knob k of a page, found by its section and name
   const p = x.web_test_page();
@@ -256,17 +256,21 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         p0 === "WAVE" && off[0] === 0 && off[1] === "OSC A: OFF" && on[0] === 1 && on[1] === "OSC A: ON" &&
         off[2] === "WAVE" && on[2] === "WAVE" && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA &&
         ex.web_test_oct() === oct0);
-  ex.web_buttons(1 << B.ENV);                   // ENV held past its hold time: no ENV 2 layer after a chord
+  ex.web_buttons(1 << B.ENV);                   // V0.75: ENV + OCT+: ENV 2's MOD layer latched; ENV + OCT-: let go
   play(ex, 0.05);
   chord(B.ENV, B.OCTUP);
-  const p4 = name();
-  chord(B.ENV, B.OCTDN);
-  play(ex, 0.6);
-  const layer = ex.web_test_mod(), p5 = name();
+  const lat = ex.web_test_mod();
   ex.web_buttons(0);
   play(ex, 0.4);
-  check(`ENV held: OCT+ steps the section shown (WAVE -> ${p4}), OCT- back (${p5}); held on, no MOD layer (${layer}); let go, no tap (${name()})`,
-        p4 === "UNISON" && p5 === "WAVE" && layer === 0 && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA);
+  const still = ex.web_test_mod(), p4 = name();
+  ex.web_buttons(1 << B.ENV);
+  play(ex, 0.05);
+  chord(B.ENV, B.OCTDN);
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  check(`ENV + OCT+: ENV 2's MOD layer latched (${lat}; ENV let go: ${still}); ENV + OCT-: let go (${ex.web_test_mod()}); the page stays (${p4}, ${name()}), no tap`,
+        lat === 2 && still === 2 && ex.web_test_mod() === 0 && p4 === "WAVE" && name() === "WAVE" &&
+        ex.web_test_page_section() === SEC.OSCA);
   ex.web_buttons(1 << B.OCTUP); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.03);
   const o1 = ex.web_test_oct();
   ex.web_buttons(1 << B.OCTDN); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.03);
@@ -274,7 +278,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         o1 === oct0 + 1 && ex.web_test_oct() === oct0 && name() === "WAVE");
 }
 {                                               // an LFO's POINTS page
-  const twice = (b) => { for (let i = 0; i < 2; i++) { ex.web_buttons(1 << b); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.08); } play(ex, 0.3); };
+  const twice = () => { ex.web_buttons(1 << B.LFO); play(ex, 0.03); chord(B.LFO, B.OCTUP); ex.web_buttons(0); play(ex, 0.3); };   // (V0.75: LFO + OCT+)
   const pt = (i) => [1, 2, 3].map((f) => ex.web_test_draw(0, i, f));
   tap(ex, B.LFO);
   const sec = ex.web_test_page_section(), pg = name(), items = [0, 1, 2, 3].map((k) => ex.web_test_page_param(k));
@@ -315,28 +319,31 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   ex.web_enc(E.K1, -1);                         // point 4 (at 750, point 3 at 500)
   play(ex, 0.03);
   const [xa, xb] = [pt(1)[0], pt(2)[0]], n0 = ex.web_test_draw(0, 0, 0);
-  twice(B.LFO);
+  twice();
   const n1 = ex.web_test_draw(0, 0, 0), nw = ex.web_test_lpt(0), [xn, yn] = pt(nw);
-  check(`LFO twice on POINTS: a point (${n0} -> ${n1}) left of the one picked, at ${xn} (halfway ${xb} .. ${pt(nw + 1)[0]}), picked (${nw + 1}); the page stays (${name()})`,
+  check(`LFO + OCT+ on POINTS: a point (${n0} -> ${n1}) left of the one picked, at ${xn} (halfway ${xb} .. ${pt(nw + 1)[0]}), picked (${nw + 1}); the page stays (${name()})`,
         n1 === n0 + 1 && nw === 3 && xn === Math.floor((xb + pt(nw + 1)[0]) / 2) && name() === "POINTS" &&
         yn <= Math.max(pt(nw - 1)[1], pt(nw + 1)[1]) && yn >= Math.min(pt(nw - 1)[1], pt(nw + 1)[1]));
   ex.web_enc(E.K1, -nw);                        // the first point picked: the new one right of it
   play(ex, 0.03);
-  twice(B.LFO);
+  twice();
   check(`.. the first point picked: the new one right of it (point 2 at ${pt(1)[0]}, halfway 0 .. ${xa}), ${ex.web_test_draw(0, 0, 0)} points`,
         ex.web_test_draw(0, 0, 0) === n1 + 1 && ex.web_test_lpt(0) === 1 && pt(1)[0] === Math.floor(xa / 2));
-  tap(ex, B.EDIT);                              // twice from another family: to the LFO, no point
-  const n2 = ex.web_test_draw(0, 0, 0);
-  twice(B.LFO);
-  check(`.. LFO twice from another page: no point (${n2} -> ${ex.web_test_draw(0, 0, 0)}), the LFO's next page (${name()})`,
-        ex.web_test_draw(0, 0, 0) === n2 && name() === "SHAPE");
+  tap(ex, B.EDIT);                              // LFO + OCT+ from another menu: its POINTS shown, a point added
+  const n2 = ex.web_test_draw(0, 0, 0), e2 = ex.web_test_page_section();
+  twice();
+  const n3 = ex.web_test_draw(0, 0, 0);
+  check(`.. LFO + OCT+ from EDIT (section ${e2}): the LFO's POINTS (${name()}), a point added (${n2} -> ${n3})`,
+        e2 === SEC.OSCA && n3 === n2 + 1 && name() === "POINTS" && ex.web_test_page_section() === SEC.LFO1);
+  ex.web_enc(E.ALGO, 1);
+  play(ex, 0.03);
   ex.web_enc(E.K1, 8 - ex.web_test_value(SHAPE));   // SHAPE STAIRS: 16 points, no 17th
   play(ex, 0.03);
   ex.web_enc(E.ALGO, -1);
   play(ex, 0.03);
-  twice(B.LFO);
-  check(`STAIRS shown (16 points): LFO twice adds none (SHAPE ${ex.web_test_value(SHAPE)}, drawn ${ex.web_test_draw(0, 0, 0)} points)`,
-        ex.web_test_value(SHAPE) === 8 && ex.web_test_draw(0, 0, 0) === n2 && name() === "POINTS");
+  twice();
+  check(`STAIRS shown (16 points): LFO + OCT+ adds none (SHAPE ${ex.web_test_value(SHAPE)}, drawn ${ex.web_test_draw(0, 0, 0)} points)`,
+        ex.web_test_value(SHAPE) === 8 && ex.web_test_draw(0, 0, 0) === n3 && name() === "POINTS");
   ex.web_buttons(1 << B.REC);                   // the MOD layer: the points stay
   play(ex, 0.6);
   ex.web_enc(E.K3, 5);
@@ -344,62 +351,56 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   ex.web_buttons(0);
   play(ex, 0.1);
   check(`the MOD layer on POINTS: KNOB 3 changes nothing (SHAPE ${ex.web_test_value(SHAPE)}, ${ex.web_test_draw(0, 0, 0)} points)`,
-        ex.web_test_value(SHAPE) === 8 && ex.web_test_draw(0, 0, 0) === n2);
+        ex.web_test_value(SHAPE) === 8 && ex.web_test_draw(0, 0, 0) === n3);
   tap(ex, B.EDIT);
 }
-{                                               // LFO held 5 s on POINTS: the point picked goes
+{                                               // V0.75: LFO + OCT-: the point picked goes; LFO held 5 s: the LFO reset
   const n = () => ex.web_test_draw(0, 0, 0), toast = () => cstr(ex, ex.web_test_toast());
+  const del = () => { ex.web_buttons(1 << B.LFO); play(ex, 0.03); chord(B.LFO, B.OCTDN); const t = toast(); ex.web_buttons(0); play(ex, 0.4); return t; };
   tap(ex, B.LFO);                               // (POINTS: STAIRS shown, its 16 points)
   ex.web_enc(E.K1, 2 - ex.web_test_lpt(0));     // point 3
   play(ex, 0.03);
-  const shape0 = ex.web_test_value(ID.L1_SHAPE), n0 = n();
-  ex.web_buttons(1 << B.LFO);
-  play(ex, 1.5);
-  const count = cstr(ex, ex.web_test_cd());
-  play(ex, 0.5);
-  ex.web_buttons(0);
-  play(ex, 0.1);
-  check(`LFO held on POINTS: a countdown ("${count}"); let go at 2 s, nothing deleted (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}, the footer "${toast()}")`,
-        count === "DELETE POINT 3 4" && ex.web_test_value(ID.L1_SHAPE) === shape0 && n() === n0 && toast() === "");
-  ex.web_buttons(1 << B.LFO);
-  play(ex, 5.3);
-  const gone = toast();
-  ex.web_buttons(0);
-  play(ex, 0.4);
-  check(`.. held 5 s: point 3 goes ("${gone}"): STAIRS drawn (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}), ${n()} points, point ${ex.web_test_lpt(0) + 1} picked; the page stays (${name()})`,
+  const gone = del();
+  check(`LFO + OCT-: point 3 goes ("${gone}"): STAIRS drawn (SHAPE ${ex.web_test_value(ID.L1_SHAPE)}), ${n()} points, point ${ex.web_test_lpt(0) + 1} picked; the page stays (${name()})`,
         gone === "POINT 3 DELETED" && ex.web_test_value(ID.L1_SHAPE) === ID.DRAWN && n() === 15 && ex.web_test_lpt(0) === 1 &&
         ex.web_test_draw(0, 2, 1) === 250 && name() === "POINTS");
   ex.web_enc(E.K1, -1);                         // the first point: it stays
   play(ex, 0.03);
-  ex.web_buttons(1 << B.LFO);
-  play(ex, 1.0);
-  const ends = toast();
-  play(ex, 4.5);
+  const ends = del(), n1 = n();
+  ex.web_buttons(1 << B.LFO);                   // held: MOMENTARY, then the reset's countdown from 2 s
+  play(ex, 2.5);
+  const count = cstr(ex, ex.web_test_cd());
   ex.web_buttons(0);
   play(ex, 0.1);
-  const n1 = n();
-  ex.web_enc(E.K1, 4);                          // a knob turned during the countdown stops it
-  play(ex, 0.03);
-  ex.web_buttons(1 << B.LFO);
-  play(ex, 2.0);
+  const kept = [ex.web_test_value(ID.L1_SHAPE), n()];
+  ex.web_buttons(1 << B.LFO);                   // a knob turned during the countdown stops it
+  play(ex, 2.2);
   ex.web_enc(E.K3, 1);
-  play(ex, 3.5);
+  play(ex, 3.2);
   ex.web_buttons(0);
   play(ex, 0.1);
-  check(`.. the first point picked: "${ends}", none deleted (${n1}); a knob turned during the countdown stops it (${n()} points)`,
-        ends === "THE END POINTS STAY" && n1 === 15 && n() === 15);
-  ex.web_buttons(1 << B.SAVE);                  // SAVE + OCT-: undo (the level KNOB 3 set, then the delete)
+  const kept2 = ex.web_test_value(ID.L1_SHAPE);
+  ex.web_buttons(1 << B.LFO);
+  play(ex, 5.3);
+  const reset = toast();
+  ex.web_buttons(0);
+  play(ex, 0.4);
+  const r = [ex.web_test_value(ID.L1_SHAPE), n()];
+  check(`.. the first point picked: "${ends}" (${n1}); held: "${count}", let go at 2.5 s: kept (SHAPE ${kept[0]}, ${kept[1]} points); a knob turned stops it (${kept2}); held 5 s: "${reset}" (SHAPE ${r[0]}, ${r[1]} points)`,
+        ends === "THE END POINTS STAY" && n1 === 15 && count.startsWith("RESET LFO 1") && kept[0] === ID.DRAWN &&
+        kept[1] === 15 && kept2 === ID.DRAWN && reset === "LFO 1: RESET" && r[0] === 0 && name() === "POINTS");
+  ex.web_buttons(1 << B.SAVE);                  // SAVE + OCT-: the reset undone, SAVE + OCT+: again
   play(ex, 0.05);
-  chord(B.SAVE, B.OCTDN);
   chord(B.SAVE, B.OCTDN);
   const undone = [toast(), ex.web_test_value(ID.L1_SHAPE), n()];
   chord(B.SAVE, B.OCTUP);
-  const redone = [toast(), ex.web_test_value(ID.L1_SHAPE), n()];
+  const redone = [toast(), ex.web_test_value(ID.L1_SHAPE)];
+  chord(B.SAVE, B.OCTDN);
   ex.web_buttons(0);
   play(ex, 0.4);
-  check(`SAVE + OCT- twice: the delete undone ("${undone[0]}": SHAPE ${undone[1]} STAIRS, the drawn shape of ${undone[2]}); SAVE + OCT+: redone ("${redone[0]}": SHAPE ${redone[1]}, ${redone[2]} points); SAVE let go: no page, no octave`,
-        undone[0] === "UNDO" && undone[1] === 8 && undone[2] === 7 && redone[0] === "REDO" && redone[1] === ID.DRAWN &&
-        redone[2] === 15 && name() === "POINTS" && ex.web_test_oct() === 0);
+  check(`SAVE + OCT-: the reset undone ("${undone[0]}": SHAPE ${undone[1]}, ${undone[2]} points); SAVE + OCT+: again ("${redone[0]}": SHAPE ${redone[1]}); SAVE let go: no page, no octave`,
+        undone[0] === "UNDO" && undone[1] === ID.DRAWN && undone[2] === 15 && redone[0] === "REDO" && redone[1] === 0 &&
+        name() === "POINTS" && ex.web_test_oct() === 0);
 }
 {                                               // SYNC FREE / FIXED: RATE in Hz or a note value
   ex.web_enc(E.ALGO, 1);                      // LFO 1 SHAPE
@@ -799,16 +800,17 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   rtap(B.PLAY);
   play(r, 0.1);
   const off = [r.web_test_run(), (r.web_lit_buttons() >> 14) & 1, rt()];
-  rtap(B.ARP);                                  // (V0.7: ARP switches PERFORM, lit while on)
+  const rcombo = (h, b) => { r.web_buttons(1 << h); play(r, 0.03); r.web_buttons((1 << h) | (1 << b)); play(r, 0.03); r.web_buttons(0); };
+  rcombo(B.ARP, B.OCTUP);                       // (V0.75: ARP + OCT+ the ARP on, lit; ARP + OCT- off)
   play(r, 0.05);
   const arp = [rt(), (r.web_lit_buttons() >> B.ARP) & 1, r.web_test_chd(4, -1)];
-  rtap(B.ARP);
+  rcombo(B.ARP, B.OCTDN);
   play(r, 0.05);
   const arp2 = [rt(), (r.web_lit_buttons() >> B.ARP) & 1, r.web_test_chd(4, -1)];
   check(`PLAY: the transport on (${run}, "${word}"), LFO 1 from its start (phase ${ph0} -> ${ph1} of 65536), the green LED (${green}), PLAY lit a quarter of each beat (${on} of 100 at 120 BPM); again, off (${off[0]}, green ${off[1]}, "${off[2]}"); ARP: "${arp[0]}" (lit ${arp[1]}, PERFORM ${arp[2]}), again "${arp2[0]}" (${arp2[1]}, ${arp2[2]})`,
         run === 1 && word === "PLAY" && ph0 > 8000 && ph1 < 4000 && green === 1 && on >= 18 && on <= 32 &&
-        off[0] === 0 && off[1] === 0 && off[2] === "STOP" && arp[0] === "PERFORM: STRUM" && arp[1] === 1 && arp[2] === 1 &&
-        arp2[0] === "PERFORM OFF" && arp2[1] === 0 && arp2[2] === 0);
+        off[0] === 0 && off[1] === 0 && off[2] === "STOP" && arp[0] === "ARP ON: ARP" && arp[1] === 1 && arp[2] === 1 &&
+        arp2[0] === "ARP OFF" && arp2[1] === 0 && arp2[2] === 0);
 }
 {                                               // the SETTINGS: SCREEN, PANEL, MIDI (its channel, program changes,
   const g = await boot(), gt = () => cstr(g, g.web_test_toast()), gn = () => cstr(g, g.web_test_page_name());   // LEARN)
@@ -1127,7 +1129,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
                 "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "DRIVE 2", "CHORUS 2", "OTT 2", "EQ 2",
                 "FLANGER", "FLANGER 2", "PHASER", "PHASER 2", "FX FILTER", "FX FILTER 2", "BITCRUSH", "BITCRUSH 2",
                 "TREMOLO", "TREMOLO 2", "RING MOD", "RING MOD 2", "TAPE", "TAPE 2", "CHAIN", "MENU", "GLOBAL", "SAVE",
-                "BROWSE", "KEYS", "ARP"];
+                "BROWSE", "SCALE", "ARP", "CHORD", "MIDI", "STEPS"];
   const here = () => `${SECN[z.web_test_page_section()]} ${cstr(z, z.web_test_page_name())}`;
   const hush = () => { for (let k = 0; k < 40 && play(z, 0.25).peak > 1e-5; k++); play(z, 0.3); };
   const idleDraws = () => { play(z, 1.2); const d0 = z.web_screen_draws(); play(z, 1.0); return z.web_screen_draws() - d0; };
@@ -1230,108 +1232,131 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         ex.web_test_page_names_bad() === 0);
 }
 
-{                                               // V0.7: SCL's chords (sy_chord.c)
+{                                               // V0.7, V0.75: SCL's chords (sy_chord.c): FREE's TYPE, KEY's SHAPE, SPREAD, STRUM
   const c = await boot();
   let mask = 0;
   const notes = () => [...Array(8).keys()].map((i) => c.web_test_voice_note(i)).filter((n) => n >= 0).sort((a, b) => a - b);
   const press = (k) => { mask |= 1 << k; c.web_keys(mask); play(c, 0.04); };
   const release = (k) => { mask &= ~(1 << k); c.web_keys(mask); play(c, 0.06); };
-  const tapk = (k) => { press(k); release(k); };
   const nm = () => cstr(c, c.web_test_chord_name());
   const set = (f, v) => { c.web_test_chd(f, v); play(c, 0.01); };
   const K = (n) => n - 53;                      // a key by its note (F3 the first)
+  const chordOf = (n) => { press(K(n)); const r = [notes().join(" "), nm()]; release(K(n)); return r; };
+  const sent = (m0, on) => {
+    const r = [];
+    for (let i = m0; i < c.web_test_mout_n(); i++) {
+      const p = c.web_test_mout(i);
+      if (((p >> 8) & 0xF0) === (on ? 0x90 : 0x80)) r.push([(p >> 16) & 127, (p >> 24) & 127, c.web_test_mout_t(i)]);
+    }
+    return r;
+  };
   play(c, 0.3);
   const plain = (press(K(64)), notes());        // (the chords off: a key, its note, as before)
   release(K(64));
-  set(0, 2);                                    // FREE, its voicing as built (no AUTO)
+  set(0, 2);                                    // FREE: every key TYPE's chord, root position
   set(3, 4);
-  tapk(1);                                      // MIN, then E4
-  press(K(64));
-  const em = [notes().join(" "), nm()];
-  release(K(64));
-  const gone = notes().length;
-  press(1); press(5); release(5); release(1);   // MIN and m7 together: a minor seventh
-  press(K(64));
-  const em7 = [notes().join(" "), nm()];
-  release(K(64));
-  tapk(7);                                      // 9 alone: the triad kept, the extensions now 9
-  const keep = [c.web_test_chd(1, -1), c.web_test_chd(2, -1)];
-  tapk(0);                                      // MAJ alone: a major triad, no extension
-  set(3, 5);                                    // VOICING +1: the first inversion
-  press(K(60 + 12));                            // (C5: C4 is a chord button in FREE)
-  const inv = [notes().join(" "), nm()];
-  release(K(72));
-  check(`chords, FREE: off, a key plays ${plain}; MIN then E4: ${em[0]} "${em[1]}", let go ${gone} left; MIN + m7 together: ${em7[0]} "${em7[1]}"; 9 alone keeps MIN (${keep}); MAJ, VOICING +1, C5: ${inv[0]} "${inv[1]}"`,
+  set(1, 1);                                    // MIN on E4
+  const em = chordOf(64), gone = notes().length;
+  set(1, 11);                                   // MIN7
+  const em7 = chordOf(64);
+  set(1, 0);                                    // MAJ, VOICING +1, on C4 (no key is a button)
+  set(3, 5);
+  const inv = chordOf(60);
+  set(3, 4);
+  set(1, 21);                                   // MIN11 on D4, 13 on G3
+  const m11 = chordOf(62);
+  set(1, 22);
+  const g13 = chordOf(55);
+  check(`chords, FREE: off, a key plays ${plain}; MIN on E4: ${em[0]} "${em[1]}", let go ${gone} left; MIN7: ${em7[0]} "${em7[1]}"; MAJ, VOICING +1, C4: ${inv[0]} "${inv[1]}"; MIN11 on D4: ${m11[0]} "${m11[1]}"; 13 on G3: ${g13[0]} "${g13[1]}"`,
         plain.join() === "64" && em[0] === "64 67 71" && em[1] === "Em" && gone === 0 && em7[0] === "64 67 71 74" &&
-        em7[1] === "Em7" && keep[0] === 1 && keep[1] === 8 && inv[0] === "76 79 84" && inv[1] === "C/E");
+        em7[1] === "Em7" && inv[0] === "64 67 72" && inv[1] === "C/E" && m11[0] === "62 65 69 72 76 79" &&
+        m11[1] === "Dm11" && g13[0] === "55 59 62 65 69 76" && g13[1] === "G13");
+  set(1, 0);                                    // SPREAD: 2 OCT, OPEN, WIDE on C4's C major
+  set(2, 3);
+  const dbl = chordOf(60);
+  set(2, 1);
+  const open = chordOf(60);
+  set(2, 2);
+  const wide = chordOf(60);
+  set(2, 0);
+  check(`chords, SPREAD on C major: 2 OCT ${dbl[0]}; OPEN ${open[0]} "${open[1]}"; WIDE ${wide[0]}`,
+        dbl[0] === "60 64 67 72 76 79" && open[0] === "52 60 67" && open[1] === "C/E" && wide[0] === "48 64 79");
   set(0, 1);                                    // KEY in C major (SCALE: MAJOR), root position
   set(3, 4);
   goPage(c, SEC.KEYS, "SCALE");
   c.web_enc(E.K1, 1);
   play(c, 0.1);
-  press(K(62));                                 // D4: D minor in C major
-  const dm = [notes().join(" "), nm()];
-  release(K(62));
-  set(3, 0);                                    // AUTO from here
-  press(K(60));                                 // C4, then F4: AUTO keeps F near C (F/C)
-  release(K(60));
-  press(K(65));
-  const fauto = [notes().join(" "), nm()];
-  release(K(65));
-  set(2, 2);                                    // the in-key 7th: B4 a half-diminished seventh
+  const dm = chordOf(62);                       // D4: D minor in C major
+  set(3, 0);                                    // AUTO from here: C4 then F4 keeps F near C (F/C)
+  chordOf(60);
+  const fauto = chordOf(65);
+  set(16, 1);                                   // SHAPE 7TH: B4 a half-diminished seventh
   set(3, 4);
-  press(K(71));
-  const b7 = [notes().join(" "), nm()];
-  release(K(71));
-  set(2, 0);
-  check(`chords, KEY in C major: D4 ${dm[0]} "${dm[1]}"; C4 then F4 with AUTO: ${fauto[0]} "${fauto[1]}"; the 7th on B4: ${b7[0]} "${b7[1]}"`,
+  const b7 = chordOf(71);
+  set(16, 0);
+  check(`chords, KEY in C major: D4 ${dm[0]} "${dm[1]}"; C4 then F4 with AUTO: ${fauto[0]} "${fauto[1]}"; SHAPE 7TH on B4: ${b7[0]} "${b7[1]}"`,
         dm[0] === "62 65 69" && dm[1] === "Dm" && fauto[0] === "60 65 69" && fauto[1] === "F/C" && b7[0] === "71 74 77 81" &&
         b7[1] === "Bm7b5");
   set(9, 1);                                    // BASS: the root an octave under
-  const m0 = c.web_test_mout_n();
+  let m0 = c.web_test_mout_n();
   set(13, 1);                                   // USB OUT: the chords on channel 1, the bass on 2
   press(K(60));
   const withBass = notes().join(" ");
   release(K(60));
-  const sent = [];
+  const out = [];
   for (let i = m0; i < c.web_test_mout_n(); i++) {
     const p = c.web_test_mout(i);
-    sent.push(`${(p >> 8) & 0xF0 ? ((p >> 8) & 0xF0).toString(16) : "?"}:${(p >> 8) & 15}:${(p >> 16) & 127}`);
+    out.push(`${(p >> 8) & 0xF0 ? ((p >> 8) & 0xF0).toString(16) : "?"}:${(p >> 8) & 15}:${(p >> 16) & 127}`);
   }
-  const ons = sent.filter((s) => s.startsWith("90")), offs = sent.filter((s) => s.startsWith("80"));
-  check(`chords, BASS and USB OUT: C4 with its bass ${withBass}; sent ${sent.join(" ")}`,
+  const ons = out.filter((s) => s.startsWith("90")), offs = out.filter((s) => s.startsWith("80"));
+  check(`chords, BASS and USB OUT: C4 with its bass ${withBass}; sent ${out.join(" ")}`,
         withBass === "48 60 64 67" && ons.length === 4 && offs.length === 4 && ons.includes("90:1:48") && ons.includes("90:0:60") &&
         offs.includes("80:1:48") && offs.includes("80:0:67"));
   set(9, 0);
-  set(13, 0);
-  set(4, 1);                                    // PERFORM: STRUM, 30 ms apart
-  set(5, 0);
+  set(22, 9);                                   // STRUM 30 ms, UP: C4's C major, a note each 30 ms
+  m0 = c.web_test_mout_n();
   c.web_keys(mask |= 1 << K(60));
   play(c, 0.012);
   const s1 = notes().length;
   play(c, 0.1);
   const s3 = notes().join(" ");
   release(K(60));
-  set(5, 2);                                    // ARP: up, 1/16 at 120 BPM (125 ms a step, half of it sounding)
+  const up = sent(m0, 1);
+  set(23, 1);                                   // DOWN, TAPER 100 %: the last at half the level
+  set(25, 100);
+  m0 = c.web_test_mout_n();
+  press(K(60));
+  play(c, 0.1);
+  release(K(60));
+  const dn = sent(m0, 1);
+  const gaps = up.slice(1).map((x, i) => Math.round((x[2] - up[i][2]) / 44.1176));
+  check(`chords, STRUM 30 ms: ${s1} note at 12 ms, ${s3} at 112 ms (${up.map((x) => x[0]).join(" ")}, ${gaps.join(" ")} ms apart); DOWN with TAPER 100 %: ${dn.map((x) => `${x[0]}/${x[1]}`).join(" ")}`,
+        s1 === 1 && s3 === "60 64 67" && up.map((x) => x[0]).join() === "60,64,67" && gaps.every((g) => Math.abs(g - 30) <= 1) &&
+        dn.map((x) => x[0]).join() === "67,64,60" && dn[0][1] === 100 && dn[2][1] === 50);
+  set(22, 0);
+  set(23, 0);
+  set(25, 0);
+  set(13, 0);
+  set(4, 1);                                    // the ARP: ARP up at 1/16 (125 ms a step, half of it sounding)
+  set(5, 0);
   c.web_keys(mask |= 1 << K(60));
   const seqn = [];
   for (let i = 0; i < 5; i++) { play(c, 0.03); seqn.push(notes().join(" ") || "-"); play(c, 0.095); }
   release(K(60));
-  set(5, 3);                                    // PATTERN 1: a stab each quarter (500 ms)
+  set(5, 1);                                    // PATTERN 1: a stab each quarter (500 ms)
   c.web_keys(mask |= 1 << K(60));
   const stab = [];
   for (let i = 0; i < 4; i++) { play(c, 0.05); stab.push(notes().length); play(c, 0.2); }
   release(K(60));
-  check(`chords, PERFORM: STRUM ${s1} at 12 ms, ${s3} at 112 ms; ARP ${seqn.join(", ")}; PATTERN 1, every 250 ms: ${stab.join(" ")}`,
-        s1 === 1 && s3 === "60 64 67" && seqn.join() === "60,64,67,60,64" && stab.join() === "3,0,3,0");
-  set(5, 4);                                    // HARP: the keys are the chord's notes over four octaves
-  set(0, 2);                                    // (FREE: C#4 .. G5 the strings)
-  tapk(0);
+  check(`chords, the ARP: ARP ${seqn.join(", ")}; PATTERN 1, every 250 ms: ${stab.join(" ")}`,
+        seqn.join() === "60,64,67,60,64" && stab.join() === "3,0,3,0");
+  set(5, 2);                                    // HARP: every key a string over four octaves (FREE MAJ on SCALE's C)
+  set(0, 2);
   const hn = [];
-  for (const k of [8, 12, 16, 20, 26]) { press(k); hn.push(notes().join(" ")); release(k); }
+  for (const k of [0, 8, 12, 16, 20, 26]) { press(k); hn.push(notes().join(" ")); release(k); }
   set(4, 0);
   set(0, 0);
-  check(`chords, HARP on the last chord (C major), C#4 .. G5 rising: ${hn.join(" | ")}`,
+  check(`chords, HARP on C major (SCALE's root), F3 .. G5 rising: ${hn.join(" | ")}`,
         hn.every((x) => x.split(" ").length === 1) && hn.map(Number).every((x, i, a) => !i || x > a[i - 1]) &&
         hn.map(Number).every((x) => [0, 4, 7].includes(x % 12)));
   set(0, 2);                                    // MIDI IN as roots: a note makes a chord, its off ends it
@@ -1344,8 +1369,11 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const mo = notes().length;
   check(`chords, MIDI IN as roots (FREE, MAJ): D4 in, ${mi[0]} "${mi[1]}"; its off, ${mo} left`,
         mi[0] === "62 66 69" && mi[1] === "D" && mo === 0);
-  c.web_test_chd(5, 2);                         // the settings kept: FREE, ARP, the bass, through a power cycle
+  c.web_test_chd(5, 0);                         // the settings kept: FREE, ARP, the bass, MIDI in, STRUM, SPREAD
   c.web_test_chd(9, 1);
+  c.web_test_chd(22, 9);
+  c.web_test_chd(2, 2);
+  c.web_test_chd(1, 13);
   play(c, 8.0);                                 // (3 s of quiet after the reverb's tail: the settings written)
   const nor = new Uint8Array(c.memory.buffer, c.web_nor(), c.web_nor_size()).slice();
   const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -1355,8 +1383,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   c2.web_master(700);
   c2.web_boot();
   play(c2, 0.3);
-  check(`chords: after a power cycle FREE ${c2.web_test_chd(0, -1)}, the style ${c2.web_test_chd(5, -1)} (ARP), BASS ${c2.web_test_chd(9, -1)}, MIDI IN ${c2.web_test_chd(12, -1)}`,
-        c2.web_test_chd(0, -1) === 2 && c2.web_test_chd(5, -1) === 2 && c2.web_test_chd(9, -1) === 1 && c2.web_test_chd(12, -1) === 1);
+  const kept = [0, 1, 2, 5, 9, 12, 22].map((f) => c2.web_test_chd(f, -1));
+  check(`chords: after a power cycle MODE, TYPE, SPREAD, STYLE, BASS, MIDI IN, STRUM ${kept.join(" ")}`,
+        kept.join() === "2,13,2,0,1,1,9");
 }
 {                                               // V0.75: the ARP (sy_chord.c: MODE, the steps, GROOVE, LATCH, the beat)
   const c = await boot();
@@ -1378,8 +1407,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const steps0 = () => { for (let i = 0; i < 16; i++) { st(i, 0, 0); st(i, 1, 100); st(i, 2, 2); st(i, 3, 1); st(i, 4, 100); st(i, 5, 0); } };
   play(c, 0.3);
   set(13, 1);                                   // USB OUT: the arpeggio read from what it sends
-  set(4, 1);                                    // PERFORM: ARP, 1/16 at 120 BPM, half a step long
-  set(5, 2);
+  set(4, 1);                                    // the ARP: ARP, 1/16 at 120 BPM, half a step long
+  set(5, 0);
   const run = (mode, oct, notes, secs) => {     // MODE over the notes held: the first note-ons
     set(7, mode);
     set(8, oct);
@@ -1530,65 +1559,136 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`.. after a power cycle: GATE, SWING, LENGTH, LATCH, CLOCK IN ${kept.join(" ")}; step 3 ${kept2.join(" ")}`,
         kept.join() === "75,60,5,1,1" && kept2.join() === "1,40,4,2,55,1");
 }
-{                                               // V0.75: ARP's buttons and pages
-  const u = await boot(), name = () => cstr(u, u.web_test_page_name());
-  play(u, 0.3);
-  u.web_buttons(1 << B.ARP);                    // ARP held: its pages (no toggle)
-  play(u, 0.8);
-  u.web_buttons(0);
-  play(u, 0.4);
-  const opened = [u.web_test_page_section(), name(), u.web_test_chd(4, -1)];
-  tap(u, B.ARP);                                // a tap: PERFORM on, lit
-  const lit = (u.web_lit_buttons() >> B.ARP) & 1, on = u.web_test_chd(4, -1);
-  u.web_enc(E.ALGO, 1); play(u, 0.1);           // STEPS: KNOB 1 the step, 2 its kind, 3 its level, 4 its octave
-  const p1 = name();
-  u.web_enc(E.K1, 3); play(u, 0.05);
+{                                               // V0.75: the ARP button: a tap its menu (again: its next page, twice its
+  const u = await boot(), name = () => cstr(u, u.web_test_page_name()), toast = () => cstr(u, u.web_test_toast());
+  const combo = (h, b) => { u.web_buttons(1 << h); play(u, 0.03); u.web_buttons((1 << h) | (1 << b)); play(u, 0.03); u.web_buttons(0); play(u, 0.3); };
+  const twice = (b) => { for (let i = 0; i < 2; i++) { u.web_buttons(1 << b); play(u, 0.03); u.web_buttons(0); play(u, 0.08); } play(u, 0.3); };
+  play(u, 0.3);                                 // next section); ARP + OCT+ on, ARP + OCT- off, from any page
+  combo(B.ARP, B.OCTUP);
+  const fromEdit = [u.web_test_chd(4, -1), toast(), u.web_test_page_section(), (u.web_lit_buttons() >> B.ARP) & 1];
+  tap(u, B.ARP);
+  const opened = [u.web_test_page_section(), name()];
+  tap(u, B.ARP);
+  const p2 = name();
+  twice(B.ARP);
+  const p3 = [u.web_test_page_section(), name()];
+  u.web_enc(E.K1, 3); play(u, 0.05);           // STEPS: KNOB 1 the step, 2 its kind, 3 its level, 4 its octave
   u.web_enc(E.K2, 1); play(u, 0.05);
   u.web_enc(E.K3, -2); play(u, 0.05);
   u.web_enc(E.K4, 1); play(u, 0.05);
   const s1 = [u.web_test_arp(7), ...[0, 1, 2].map((f) => u.web_test_step(3, f, -1))];
   u.web_enc(E.ALGO, 1); play(u, 0.1);           // RATCHET: 2 its hits, 3 its chance, 4 its slide
-  const p2 = name();
+  const pr = name();
   u.web_enc(E.K2, 2); play(u, 0.05);
   u.web_enc(E.K3, -4); play(u, 0.05);
   u.web_enc(E.K4, 1); play(u, 0.05);
   const s2 = [3, 4, 5].map((f) => u.web_test_step(3, f, -1));
-  u.web_enc(E.ALGO, 1); play(u, 0.1);           // GROOVE: GATE, SWING, LENGTH, LATCH
-  const p3 = name();
+  u.web_enc(E.SELECT, 1); play(u, 0.1);         // SELECT: the ARP section (GROOVE, where it was left)
+  const pg = [u.web_test_page_section(), name()];
   u.web_enc(E.K1, 2); play(u, 0.05);
   u.web_enc(E.K2, 5); play(u, 0.05);
   u.web_enc(E.K3, -4); play(u, 0.05);
   u.web_enc(E.K4, 1); play(u, 0.05);
   const s3 = [17, 18, 20, 19].map((f) => u.web_test_chd(f, -1));
-  tap(u, B.ARP);                                // a tap there: PERFORM off, the page stays
-  check(`ARP held: ${opened[1]} (section ${opened[0]}; PERFORM ${opened[2]}); a tap: PERFORM ${on}, lit ${lit}; ${p1}: step ${s1[0] + 1} ${s1.slice(1)}; ${p2}: ${s2}; ${p3}: ${s3}; a tap: PERFORM ${u.web_test_chd(4, -1)} (${name()})`,
-        opened.join() === `${SEC.ARP},PERFORM,0` && on === 1 && lit === 1 && p1 === "STEPS" && s1.join() === "3,1,90,3" &&
-        p2 === "RATCHET" && s2.join() === "3,80,1" && p3 === "GROOVE" && s3.join() === "60,55,12,1" &&
-        u.web_test_chd(4, -1) === 0 && name() === "GROOVE");
-  const h = await boot();                       // a chord held, then ARP: it plays the chord held; ARP again: held
+  combo(B.ARP, B.OCTDN);
+  check(`ARP + OCT+ from EDIT: on (${fromEdit[0]}, "${fromEdit[1]}", lit ${fromEdit[3]}; the page stays: section ${fromEdit[2]}); a tap: its menu (section ${opened[0]}, ${opened[1]}), again: ${p2}, twice: ${p3[1]} (section ${p3[0]}); STEPS: step ${s1[0] + 1} ${s1.slice(1)}; ${pr}: ${s2}; SELECT: ${pg[1]} (section ${pg[0]}): ${s3}; ARP + OCT-: off (${u.web_test_chd(4, -1)}, ${name()})`,
+        fromEdit[0] === 1 && fromEdit[1] === "ARP ON: ARP" && fromEdit[2] === 0 && fromEdit[3] === 1 &&
+        opened.join() === `${SEC.ARP},STYLE` && p2 === "GROOVE" && p3.join() === `${SEC.STEPS},STEPS` &&
+        s1.join() === "3,1,90,3" && pr === "RATCHET" && s2.join() === "3,80,1" && pg.join() === `${SEC.ARP},GROOVE` &&
+        s3.join() === "60,55,12,1" && u.web_test_chd(4, -1) === 0 && name() === "GROOVE");
+  const h = await boot();                       // a chord held, then ARP + OCT+: it plays the chord held; + OCT-: held
+  const hcombo = (b) => { h.web_buttons(1 << B.ARP); play(h, 0.03); h.web_buttons((1 << B.ARP) | (1 << b)); play(h, 0.03); h.web_buttons(0); play(h, 0.3); };
   const notesH = () => [...Array(8).keys()].map((i) => h.web_test_voice_note(i)).filter((n) => n >= 0).sort((a, b) => a - b);
   play(h, 0.3);
-  h.web_test_chd(5, 2);
+  h.web_test_chd(5, 0);
   h.web_test_chd(13, 1);
   play(h, 0.02);
   h.web_keys((1 << 7) | (1 << 11) | (1 << 14));
   play(h, 0.3);
   const before = notesH().join(" "), m0 = h.web_test_mout_n();
-  tap(h, B.ARP);
+  hcombo(B.OCTUP);
   play(h, 0.6);
   const outs = [];
   for (let i = m0; i < h.web_test_mout_n(); i++) {
     const p = h.web_test_mout(i);
     if (((p >> 8) & 0xF0) === 0x90) outs.push((p >> 16) & 127);
   }
-  tap(h, B.ARP);
+  hcombo(B.OCTDN);
   play(h, 0.1);
   const heldOn = notesH().join(" ");
   h.web_keys(0);
   play(h, 1.5);
-  check(`a chord held (${before}), then ARP: it arpeggiates (${outs.slice(0, 6).join(" ")}); ARP again: ${heldOn} held; let go: ${notesH().length} voices`,
+  check(`a chord held (${before}), then ARP + OCT+: it arpeggiates (${outs.slice(0, 6).join(" ")}); ARP + OCT-: ${heldOn} held; let go: ${notesH().length} voices`,
         before === "60 64 67" && outs.slice(0, 6).join() === "60,64,67,60,64,67" && heldOn === "60 64 67" &&
         notesH().length === 0);
+}
+{                                               // V0.75: one grammar for the menu buttons
+  const g = await boot(), name = () => cstr(g, g.web_test_page_name()), sec = () => g.web_test_page_section();
+  const toast = () => cstr(g, g.web_test_toast());
+  const combo = (h, b) => { g.web_buttons(1 << h); play(g, 0.03); g.web_buttons((1 << h) | (1 << b)); play(g, 0.03); g.web_buttons(0); play(g, 0.3); };
+  const twice = (b) => { for (let i = 0; i < 2; i++) { g.web_buttons(1 << b); play(g, 0.03); g.web_buttons(0); play(g, 0.08); } play(g, 0.3); };
+  play(g, 0.3);
+  tap(g, B.ENV);                                // ENV: a tap its menu, again the next page, through ENV 1 to ENV 2
+  const e = [[sec(), name()]];
+  tap(g, B.ENV);
+  e.push([sec(), name()]);
+  tap(g, B.ENV);
+  e.push([sec(), name()]);
+  twice(B.ENV);                                 // twice: the next section (ENV 2 -> ENV 1)
+  e.push([sec(), name()]);
+  check(`a tap opens ENV (${e[0]}), again its next page (${e[1]}), on into ENV 2 (${e[2]}); twice: the next section (${e[3]})`,
+        e[0].join() === "5,ADSR" && e[1].join() === "5,SHAPE" && e[2].join() === "6,ADSR" && e[3][0] === 5);
+  const n0 = cstr(g, g.web_test_patch_name());  // HOME + OCT+: the next sound, OCT-: back; twice: the presets
+  combo(B.HOME, B.OCTUP);
+  const n1 = cstr(g, g.web_test_patch_name());
+  combo(B.HOME, B.OCTDN);
+  play(g, 0.6);
+  const n2 = cstr(g, g.web_test_patch_name());
+  twice(B.HOME);
+  const br = sec();
+  tap(g, B.HOME);
+  check(`HOME + OCT+: the next sound ("${n0}" -> "${n1}"), OCT-: back ("${n2}"); HOME twice: the presets (section ${br}); a tap there: back (${sec()})`,
+        n1 !== n0 && n2 === n0 && br === SEC.BROWSE && sec() !== SEC.BROWSE);
+  tap(g, B.EDIT);                               // EDIT held 5 s: the section shown reset; SAVE + OCT- undoes it
+  const POS = ID.A_POS, set = 400;
+  g.web_test_set(POS, set);
+  play(g, 0.6);
+  g.web_buttons(1 << B.EDIT);
+  play(g, 5.3);
+  const rs = [toast(), g.web_test_value(POS), g.web_test_lay()];
+  g.web_buttons(0);
+  play(g, 0.4);
+  g.web_buttons(1 << B.SAVE);
+  play(g, 0.05);
+  g.web_buttons((1 << B.SAVE) | (1 << B.OCTDN)); play(g, 0.03); g.web_buttons(1 << B.SAVE); play(g, 0.03);
+  g.web_buttons(0);
+  play(g, 0.4);
+  check(`EDIT held 5 s: "${rs[0]}" (WT POS ${set} -> ${rs[1]}, INIT's; JUMP closed: ${rs[2]}); SAVE + OCT-: back (${g.web_test_value(POS)})`,
+        rs[0] === "OSC A: RESET" && rs[1] === 0 && rs[2] === 0 && g.web_test_value(POS) === set);
+  combo(B.SCL, B.OCTUP);                        // SCL + OCT+: the chords on (KEY), OCT-: off
+  const ch = [g.web_test_chd(0, -1), toast()];
+  combo(B.SCL, B.OCTDN);
+  combo(B.GLO, B.OCTUP);                        // GLO + OCT+: PERFORM's layer latched; a GLO tap lets it go
+  const lay = g.web_test_lay();
+  tap(g, B.GLO);
+  const lay2 = g.web_test_lay();
+  check(`SCL + OCT+: the chords on (${ch[0]}, "${ch[1]}"), OCT-: off (${g.web_test_chd(0, -1)}); GLO + OCT+: PERFORM's layer latched (${lay}), a GLO tap: let go (${lay2})`,
+        ch[0] === 1 && ch[1] === "CHORDS KEY" && g.web_test_chd(0, -1) === 0 && lay === 1 && lay2 === 0);
+  const ON = ID.CH_ON;                          // FX + OCT- on CHORUS's page: bypassed; + OCT+: in
+  g.web_test_fx_on(1, 1);
+  g.web_test_set(ID.FXC1, 2);
+  play(g, 0.05);
+  goPage(g, SEC.CHORUS, "CHORUS");
+  play(g, 0.05);
+  combo(B.FX, B.OCTDN);
+  const byp = [g.web_test_value(ON), toast()];
+  combo(B.FX, B.OCTUP);
+  check(`FX + OCT- on CHORUS: bypassed (${byp[0]}, "${byp[1]}"), FX + OCT+: in (${g.web_test_value(ON)}, "${toast()}")`,
+        byp[0] === 0 && byp[1] === "CHORUS BYPASSED" && g.web_test_value(ON) === 1 && toast() === "CHORUS IN");
+  goPage(g, SEC.MENU, "SCREEN");                // SELECT in a menu of one section: its pages
+  g.web_enc(E.SELECT, 1);
+  play(g, 0.1);
+  check(`SELECT on SETTINGS (one section): its next page (${name()})`, name() === "PANEL");
 }
 {                                               // V0.67: VALUES, the family's taps, the bloom
   const v = await boot(), FILTER = 4;
@@ -1620,8 +1720,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   v.web_buttons(0);
   play(v, 0.4);
   const after = cstr(v, v.web_test_page_name());
-  check(`VALUES: FILTER's (page ${vp}, TONE's knobs): a quick turn of 20 detents moves the cutoff 20 (${dv}), on TONE ${dt}; EDIT tapped on MORE: ${after} (the VALUES pages skipped)`,
-        vp >= 0 && dv === 20 && dt > 40 && after === "TONE");
+  check(`VALUES: FILTER's (page ${vp}, TONE's knobs): a quick turn of 20 detents moves the cutoff 20 (${dv}), on TONE ${dt}; EDIT tapped on MORE: ${after} (V0.75: the next page through the sections, VALUES skipped)`,
+        vp >= 0 && dv === 20 && dt > 40 && after === "WAVE" && v.web_test_page_section() === 0);
   for (let q = 0; q < 200; q++) {               // HOME's bloom: a note swirls it and it opens; let go, it closes
     v.web_test_go(q);
     if (v.web_test_page_section() === SEC.MACRO) break;

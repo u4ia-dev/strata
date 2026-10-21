@@ -668,9 +668,10 @@ EXPORT uint16_t *web_lint_screen(void) { return web_lint_full; }
 /* HOME's bloom: f 0 how open, 1 its swirl (thousandths) */
 EXPORT int32_t web_test_bloom(uint32_t f) { return sy_floori((f ? ui_twist : ui_open) * 1000.0f + 0.5f); }
 /* V0.7, the chords: f 0 its count of notes, 1 its root, 2 the bass (255 none), 3 HARP's / the latched chord built, 10 + i
- * note i; the chord's name; a setting set (sy_chord.c chd, in its order: 0 mode, 1 type, 2 ext, 3 voicing, 4 perf,
- * 5 style, 6 the style's rate, 7 its move, 8 its feel, 9 bass, 10 its octaves, 11 its level, 12 MIDI in, 13 out, 14
- * the chords' channel, 15 the bass's, 16 KEY's type) and read back; the USB MIDI sent (its count, packet i); voice i's note (-1 off
+ * note i; the chord's name; a setting set (sy_chord.c chd: 0 mode, 1 FREE's type, 2 SPREAD, 3 voicing, 4 the ARP
+ * on, 5 its style (0 ARP, 1 PATTERN, 2 HARP), 6 the style's rate, 7 its move, 8 its feel, 9 bass, 10 its octaves, 11
+ * its level, 12 MIDI in, 13 out, 14 the chords' channel, 15 the bass's, 16 KEY's shape, 17 GATE, 18 SWING, 19 LATCH,
+ * 20 LENGTH, 21 CLOCK IN, 22 STRUM, 23 its DIRECTION, 24 HUMAN, 25 TAPER) and read back; the USB MIDI sent (its count, packet i); voice i's note (-1 off
  * or released) */
 EXPORT int32_t web_test_chord(uint32_t f)
 {
@@ -684,11 +685,12 @@ EXPORT const char *web_test_chord_name(void)
 }
 EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
 {
-    uint8_t *p[22] = {&chd.mode, &chd.type, &chd.ext, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
+    uint8_t *p[26] = {&chd.mode, &chd.ftype, &chd.spread, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
                       &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype,
-                      &chd.gate, &chd.swing, &chd.latch, &chd.len, &chd.clock};
+                      &chd.gate, &chd.swing, &chd.latch, &chd.len, &chd.clock, &chd.strum, &chd.sdir, &chd.human,
+                      &chd.taper};
     uint8_t *q = f == 6u ? &chd.rate[chd.style % PF_N] : f == 7u ? &chd.move[chd.style % PF_N]
-                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 22u ? p[f] : 0;
+                 : f == 8u ? &chd.feel[chd.style % PF_N] : f < 26u ? p[f] : 0;
     if (!q)
         return -1;
     if (v >= 0) {

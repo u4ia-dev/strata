@@ -6,7 +6,7 @@
 // the values set as the boards show them where the panel would take long. 240 x 240 (the panel's own pixels) and
 // twice that. It prints each file and what the session set.
 //   node web/emu/strata_ui_shots.mjs [build/emu_strata/strata.wasm] [build/emu_strata/ui_shots]   (after build_strata.sh)
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
 const wasm = process.argv[2] || "build/emu_strata/strata.wasm", out = process.argv[3] || "build/emu_strata/ui_shots";
@@ -22,7 +22,7 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
             OCTUP: 13 };                                                                     // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
-              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42 };                           // SEC_*
+              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45 };   // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
@@ -95,6 +95,7 @@ function shot(id) {
   }
 }
 
+rmSync(out, { recursive: true, force: true });       // (no shot left from a build before)
 mkdirSync(`${out}/lint`, { recursive: true });
 run(0.6);
 ex.web_test_screen(3);
@@ -277,42 +278,57 @@ shot("Keys");
 turn(0, -2);                                    // (back to CHROMATIC for the chords)
 rest();
 
-// ---- V0.7: SCL's chords (FREE: MIN + m7 latched, E4 held; KEY in C major; PERFORM's styles; BASS; MIDI)
-go(SEC.KEYS, "CHORD");
+// ---- V0.7, V0.75: SCL's chords (FREE: MIN7 on E4; KEY in C major; the ARP's styles; STRUM; BASS; MIDI)
+go(SEC.CHORD, "CHORD");
 shot("ChordOff");
-ex.web_test_chd(0, 2);                          // FREE, root position
+ex.web_test_chd(0, 2);                          // FREE MIN7, root position
+ex.web_test_chd(1, 11);
 ex.web_test_chd(3, 4);
-const held = (k, s) => { ex.web_keys(1 << k); run(s); };
-held(1, 0.05);
-ex.web_keys((1 << 1) | (1 << 5));               // MIN + m7 together
 run(0.05);
-ex.web_keys(0);
-run(0.1);
+const held = (k, s) => { ex.web_keys(1 << k); run(s); };
 held(11, 0.15);                                 // E4
 shot("Chord");
-turn(3, -4);                                    // VOICING to AUTO, turning
+turn(1, 3);                                     // TYPE turning (MIN7 -> DIM7): the strip, the current HOT
+shot("ChordType");
+turn(2, -4);                                    // VOICING to AUTO, turning
 shot("ChordTurn");
 rest();
 ex.web_keys(0);
 run(0.2);
-ex.web_test_chd(0, 1);                          // KEY in C major: A4 (A minor), its in-key 7th
+ex.web_test_chd(0, 1);                          // KEY in C major: A4 (A minor), SHAPE 7TH, SPREAD OPEN
 go(SEC.KEYS, "SCALE");
 turn(0, 1);
 rest();
-go(SEC.KEYS, "CHORD");
-ex.web_test_chd(2, 2);
+go(SEC.CHORD, "CHORD");
+ex.web_test_chd(16, 1);
+ex.web_test_chd(2, 1);
 ex.web_test_chd(9, 1);                          // (the bass on)
+run(0.05);
 held(16, 0.15);
 shot("ChordKey");
 ex.web_keys(0);
 run(0.3);
-go(SEC.ARP, "PERFORM");                         // (V0.75: ARP held, ARP's pages)
-ex.web_test_chd(4, 1);                          // PERFORM on
-for (const [st, id, move, feel] of [[0, "PerfStrum", 0, 40], [1, "PerfStrum2", 1, 0], [2, "PerfArp", 2, 2],
-                                     [3, "PerfPattern", 4, 60], [4, "PerfHarp", 0, 0], [5, "PerfSlop", 0, 80]]) {
+ex.web_test_chd(2, 0);
+go(SEC.CHORD, "STRUM");                         // STRUM 40 ms, DOWN, HUMAN 30 %, TAPER 50 %
+ex.web_test_chd(22, 10);
+ex.web_test_chd(23, 1);
+ex.web_test_chd(24, 30);
+ex.web_test_chd(25, 50);
+run(0.05);
+held(16, 0.3);
+shot("Strum");
+turn(0, 2);                                     // STRUM turning
+shot("StrumTurn");
+rest();
+ex.web_keys(0);
+run(0.3);
+for (const f of [22, 23, 24, 25]) ex.web_test_chd(f, 0);
+go(SEC.ARP, "STYLE");                           // (V0.75: the ARP button's menu)
+ex.web_test_chd(4, 1);                          // the ARP on
+for (const [st, id, move, feel] of [[0, "PerfArp", 2, 2], [1, "PerfPattern", 4, 60], [2, "PerfHarp", 0, 0]]) {
   ex.web_test_chd(5, st);
   ex.web_test_chd(7, move);
-  if (st !== 4) ex.web_test_chd(8, feel);
+  if (st !== 2) ex.web_test_chd(8, feel);
   run(0.05);
   shot(id);
 }
@@ -323,7 +339,7 @@ ex.web_test_chd(4, 0);
 ex.web_test_chd(0, 0);                          // (MODE OFF: the keys themselves, no bass)
 ex.web_test_chd(9, 0);
 ex.web_test_chd(4, 1);
-ex.web_test_chd(5, 2);
+ex.web_test_chd(5, 0);
 ex.web_test_chd(6, 9);                          // 1/16, UP-DOWN, 2 octaves
 ex.web_test_chd(7, 2);
 ex.web_test_chd(8, 2);
@@ -342,14 +358,14 @@ run(0.1);
 ex.web_keys(0);
 run(0.62);
 shot("ArpPerform");
-go(SEC.ARP, "STEPS");
+go(SEC.STEPS, "STEPS");
 turn(0, 3);                                     // step 4 picked: 2 hits an octave up at 80 %
 run(0.3);
 shot("ArpSteps");
 turn(2, -2);                                    // its LEVEL turning
 shot("ArpStepsTurn");
 rest();
-go(SEC.ARP, "RATCHET");
+go(SEC.STEPS, "RATCHET");
 turn(0, 8);                                     // step 12: 4 hits, CHANCE 75 %
 run(0.3);
 shot("ArpRatchet");
@@ -360,16 +376,16 @@ shot("ArpGroove");
 turn(1, 6);                                     // SWING to 64 %, turning
 shot("ArpGrooveTurn");
 rest();
-go(SEC.ARP, "PERFORM");
+go(SEC.ARP, "STYLE");
 ex.web_test_chd(7, 12);                         // CHORD over 3 octaves
 ex.web_test_chd(8, 3);
 run(0.3);
 shot("ArpChord");
-ex.web_test_chd(5, 3);                          // PATTERN 7 with GROOVE's swing and gate
+ex.web_test_chd(5, 1);                          // PATTERN 7 with GROOVE's swing and gate
 ex.web_test_chd(7, 6);
 run(0.3);
 shot("ArpPattern");
-ex.web_test_chd(19, 0);                         // (all back: LATCH off, the steps as they were, PERFORM off, MODE KEY)
+ex.web_test_chd(19, 0);                         // (all back: LATCH off, the steps as they were, the ARP off, MODE KEY)
 ex.web_test_chd(20, 16);
 ex.web_test_chd(17, 50);
 ex.web_test_chd(18, 50);
@@ -379,17 +395,17 @@ ex.web_test_chd(4, 0);
 ex.web_test_chd(0, 1);
 ex.web_test_chd(9, 1);
 run(0.4);
-go(SEC.KEYS, "BASS");
+go(SEC.CHORD, "BASS");
 held(14, 0.1);                                  // G4: G major (C major's), the bass under it
 shot("Bass");
 ex.web_keys(0);
 run(0.3);
-go(SEC.KEYS, "MIDI");
+go(SEC.CMID, "MIDI");
 ex.web_test_chd(12, 1);
 ex.web_test_chd(13, 1);
 run(0.05);
 shot("ChordMidi");
-for (const [f, v] of [[0, 0], [2, 0], [9, 0], [12, 0], [13, 0]]) ex.web_test_chd(f, v);   // (the chords off again)
+for (const [f, v] of [[0, 0], [2, 0], [9, 0], [12, 0], [13, 0], [16, 0]]) ex.web_test_chd(f, v);   // (the chords off again)
 go(SEC.KEYS, "SCALE");
 turn(0, -1);
 rest();
@@ -526,9 +542,9 @@ run(0.3);
 go(SEC.LFO1, "POINTS");
 turn(0, 1);
 rest();
-ex.web_buttons(1 << B.LFO);                     // LFO held on POINTS: the point picked deleted, a countdown first
+ex.web_buttons(1 << B.LFO);                     // LFO held 5 s (V0.75): the LFO reset, a countdown from 2 s first
 run(3.0);
-shot("LfoDelete");
+shot("LfoReset");
 ex.web_buttons(0);
 run(0.3);
 ex.web_test_screen(4);
