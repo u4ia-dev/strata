@@ -449,12 +449,23 @@ static int16_t sp_clamp(uint32_t id, int32_t v)
     return (int16_t)sy_clampi(v, SP[id].lo, SP[id].hi);
 }
 
+/* V0.8, the sequencer's motion (sy_seq.c): up to two parameters followed to values of its own instead of the
+ * patch's (a step's lane value), the patch itself untouched (its knob, a save, undo: the sound's own); 0xFFFF none.
+ * Set by the audio interrupt alone, before the block that reads them */
+#define SP_NOVR 2u
+static uint16_t sp_ovr_id[SP_NOVR] = {0xFFFFu, 0xFFFFu};
+static int16_t sp_ovr_v[SP_NOVR];
+static inline int16_t sp_target(uint32_t i)        /* the value parameter i follows */
+{
+    return i == sp_ovr_id[0] ? sp_ovr_v[0] : i == sp_ovr_id[1] ? sp_ovr_v[1] : sy_patch.p[i];
+}
+
 /* every value to its normalised one at once (a patch load: no glide from the old sound) */
 static void sp_snap(void)
 {
     uint32_t i;
     for (i = 0; i < SP_COUNT; i++) {
-        sp_last.v[i] = sy_patch.p[i];
+        sp_last.v[i] = sp_target(i);
         sp_n[i] = sp_norm_of(i, sp_last.v[i]);
     }
     for (i = 0; i < (SP_COUNT + 31u) / 32u; i++)
@@ -467,7 +478,7 @@ static void sp_snap(void)
  * 1e-5), the others (lists, switches and the values read as stored) take it at once */
 static void sp_changed(uint32_t i)
 {
-    sp_last.v[i] = sy_patch.p[i];
+    sp_last.v[i] = sp_target(i);
     if (!(SP[i].flags & F_SMOOTH))
         sp_n[i] = sp_norm_of(i, sp_last.v[i]);
     else if (!((sp_mvf[i >> 5] >> (i & 31u)) & 1u))
@@ -480,10 +491,13 @@ static void sp_block(void)
     for (k = 0; k < SP_NPAIR; k++)
         if (sy_patch.pw[k] != sp_last.w[k])
             for (i = 2u * k; i < 2u * k + 2u; i++)
-                if (sy_patch.p[i] != sp_last.v[i])
+                if (sp_target(i) != sp_last.v[i])
                     sp_changed(i);
-    if ((SP_COUNT & 1u) && sy_patch.p[SP_COUNT - 1u] != sp_last.v[SP_COUNT - 1u])
+    if ((SP_COUNT & 1u) && sp_target(SP_COUNT - 1u) != sp_last.v[SP_COUNT - 1u])
         sp_changed(SP_COUNT - 1u);
+    for (k = 0; k < SP_NOVR; k++)                  /* (a value of the sequencer's own: the patch's may be the same) */
+        if (sp_ovr_id[k] < SP_COUNT && sp_ovr_v[k] != sp_last.v[sp_ovr_id[k]])
+            sp_changed(sp_ovr_id[k]);
     for (k = 0; k < sp_nmv;) {
         uint32_t id = sp_mv[k];
         float t = sp_norm_of(id, sp_last.v[id]), d = t - sp_n[id];

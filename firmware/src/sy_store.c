@@ -14,6 +14,8 @@
  *                  from 0x97000 (Felucca's projects and user samples: a Strata install takes them over)
  *   settings       0xFC000 / 0xFD000 (Felucca's settings pair)
  *   the sound      0xE5000 / 0xE6000 (Felucca's autosave pair, above the update loader's staging)
+ *   patterns       V0.8, the sequencer's 16 (sy_seq.c): 4 to a sector pair, 4 pairs from 0xCB000, just above the
+ *                  user presets (Felucca's main store still: free since Strata took it over)
  * Needs the hooks, FL_IN and the FL_* ranges (hal/fm1_flash.h; the emulator's copy), sy_param.c (SP_PACK_MAX). */
 #define SS_MAGIC 0x41525453u                       /* "STRA" */
 #define SS_SECTOR 4096u
@@ -26,12 +28,17 @@
 #define SS_USER_BASE 0x97000u
 #define SS_SET_BASE 0xFC000u
 #define SS_EDIT_BASE 0xE5000u
-enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_NOBJ = SS_USER0 + SS_NPAIRS };
+#define SS_NSEQ 4u                                 /* V0.8: the sequencer's patterns, 4 to a pair */
+#define SS_SEQ_BASE (SS_USER_BASE + SS_NPAIRS * 2u * SS_SECTOR)
+enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_SEQ0 = SS_USER0 + SS_NPAIRS, SS_NOBJ = SS_SEQ0 + SS_NSEQ };
 _Static_assert(SS_SLOTS * SS_SLOT_BYTES <= SS_PAYLOAD_MAX, "a pair's slots fit its payload");
 _Static_assert(SP_PACK_MAX + 2u <= SS_SLOT_BYTES, "a packed patch fits a slot");
 _Static_assert(FL_IN(SS_USER_BASE, SS_NPAIRS * 2u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI), "user presets: the main store");
 _Static_assert(FL_IN(SS_SET_BASE, 2u * SS_SECTOR, FL_GLOB_LO, FL_GLOB_HI), "settings: the globals");
 _Static_assert(FL_IN(SS_EDIT_BASE, 2u * SS_SECTOR, FL_AUTO_LO, FL_AUTO_HI), "the sound playing: the autosave pair");
+_Static_assert(SS_SEQ_BASE == 0xCB000u, "the patterns: just above the user presets");
+_Static_assert(FL_IN(SS_SEQ_BASE, SS_NSEQ * 2u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI), "the patterns: the main store");
+_Static_assert(SS_SEQ_BASE + SS_NSEQ * 2u * SS_SECTOR <= FL_OTA_LO, "the patterns: below the update's staging");
 
 typedef struct {
     uint32_t magic;
@@ -68,6 +75,8 @@ static uint32_t ss_sector(uint32_t obj, uint32_t copy)   /* copy A (0) or B (1) 
         return SS_SET_BASE + copy * SS_SECTOR;
     if (obj == SS_EDIT)
         return SS_EDIT_BASE + copy * SS_SECTOR;
+    if (obj >= SS_SEQ0)
+        return SS_SEQ_BASE + (obj - SS_SEQ0) * 2u * SS_SECTOR + copy * SS_SECTOR;
     return SS_USER_BASE + (obj - SS_USER0) * 2u * SS_SECTOR + copy * SS_SECTOR;
 }
 

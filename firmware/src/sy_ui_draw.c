@@ -43,6 +43,15 @@ static void ui_p_steps(void);                       /* .. ARP's (V0.75), STRUM's
 static void ui_p_strum(void);
 static void ui_p_ratch(void);
 static void ui_p_groove(void);
+static void ui_p_qnotes(void);                      /* sy_ui_seq.c: the sequencer's pages (V0.8), PATTERNS */
+static void ui_p_qfeel(void);
+static void ui_p_qmotion(void);
+static void ui_p_qpat(void);
+static void ui_p_qplay(void);
+static void ui_p_qchain(void);
+static void ui_p_patterns(void);
+static const char *ui_seq_nv(uint32_t id, char *v);
+static int32_t ui_seq_key_pat(uint32_t k);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
@@ -262,6 +271,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
             sp_put(v, "THE END");
     } else if (id >= UI_HMODE && id <= UI_SSLD) {
         n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
+    } else if (id >= UI_QSTEP && id <= UI_QCHAIN) {
+        n = ui_seq_nv((uint32_t)id, v);             /* (the sequencer's, V0.8) */
     } else if (id >= UI_SCUR && id <= UI_BBANK) {
         return 0;                                   /* (SAVE's, the browser's: ui_save_flag) */
     }
@@ -2051,9 +2062,16 @@ static void ui_top(void)
         else
             sp_fix(sp_put(r, "OCT "), sy_app_oct(), 0u, 1);
         right = r;
+    } else if (f == FAM_SEQ) {                      /* (V0.8: the pattern, the one picked next, REC) */
+        e = sp_fix(sp_put(r, "P"), (int32_t)sqd.cur % SQ_NPAT + 1, 0u, 0);
+        if (sqd.next < SQ_NPAT)
+            e = sp_fix(sp_put(e, ">"), (int32_t)sqd.next + 1, 0u, 0);
+        if (sqd.arm)
+            sp_put(e, " REC");
+        right = r;
     }
     n = 0;
-    if (f == FAM_EDIT || f == FAM_ENV || f == FAM_LFO || f == FAM_GLO || f == FAM_SCL || f == FAM_ARP) {
+    if (f == FAM_EDIT || f == FAM_ENV || f == FAM_LFO || f == FAM_GLO || f == FAM_SCL || f == FAM_ARP || f == FAM_SEQ) {
         n = ui_fam_secs(f, secs);
         for (i = 0; i < n; i++)
             if (secs[i] == sec)
@@ -2217,12 +2235,13 @@ static void (*const UI_PAGE[])(void) = {
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
     [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
-    [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum,
+    [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_QNOTES] = ui_p_qnotes, [G_QFEEL] = ui_p_qfeel,
+    [G_QMOTION] = ui_p_qmotion, [G_QPAT] = ui_p_qpat, [G_QPLAY] = ui_p_qplay, [G_QCHAIN] = ui_p_qchain,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
 /* what the screen shows now: a countdown, SAFE START, a layer, or the page */
-enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP };
+enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP, V_PAT };
 static uint32_t ui_view(void)
 {
     if (ui.ub_t0 || (ui.cd_btn != NB && fm1_ms - ui.bt_t[ui.cd_btn] >= (ui_cd_quiet(ui.cd_btn) ? UI_CD_SHOW_MS
@@ -2232,7 +2251,8 @@ static uint32_t ui_view(void)
         return V_SAFE;
     if (ui.mod)
         return V_MOD;
-    return ui.lay == LAY_PERF ? V_PERF : ui.lay == LAY_MAC ? V_MAC : ui.lay == LAY_JUMP ? V_JUMP : V_PAGE;
+    return ui.lay == LAY_PERF ? V_PERF : ui.lay == LAY_MAC ? V_MAC : ui.lay == LAY_JUMP ? V_JUMP
+           : ui.lay == LAY_PAT ? V_PAT : V_PAGE;
 }
 
 /* MOMENTARY (LFO held): the page, with the values it goes back to as its shape's dashes (their patch, ~0.9 KB, on
@@ -2282,6 +2302,7 @@ static void ui_page(void)
     case V_PERF: lk_banner("PERFORM", "LET GO: BEND RETURNS"); ui_p_perf(); break;
     case V_MAC: lk_banner("MACROS", "LET GO: CLOSES"); ui_p_mac(); break;
     case V_JUMP: lk_banner("JUMP", "A KEY OPENS IT"); ui_p_jump(); break;
+    case V_PAT: lk_banner("PATTERNS", ui.run ? "A KEY: NEXT" : "A KEY PICKS IT"); ui_p_patterns(); break;
     default:
         if (ui.lay == LAY_MOM) {
             ui_page_mom(g);
@@ -2441,6 +2462,12 @@ static void sy_ui_leds(void)
                 ui_led(sy_patch.p[FXI_ON[in]] ? fm1_led : fm1_led_dim, 14u + k);
         } else if (ui.lay == LAY_JUMP && ui_jump_sec(k) != 0xFFu) {   /* JUMP: the keys that open a section, */
             ui_led(ui_jump_sec(k) == ui_sec() ? fm1_led : fm1_led_dim, 14u + k);   /* the one shown lit */
+        } else if (ui.lay == LAY_PAT) {             /* PATTERNS (V0.8): the one shown lit; the one next, those that */
+            int32_t pt = ui_seq_key_pat(k);         /* hold notes, COPY, PASTE and CLEAR glowing */
+            if (pt == (int32_t)sqd.cur)
+                ui_led(fm1_led, 14u + k);
+            else if (pt == (int32_t)sqd.next || (pt >= 0 && sq_pat_used(&sq_pat[pt])) || pt <= -2)
+                ui_led(fm1_led_dim, 14u + k);
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */
@@ -2456,10 +2483,15 @@ static void sy_ui_leds(void)
     for (f = 0; f < FAM_N; f++)
         if (FAM_BTN[f] < NB && FAM_BTN[f] != B_ARP)   /* (ARP's: the ARP on or off, below) */
             ui_led(f == ui.fam ? fm1_led : fm1_led_dim, panel.btn[FAM_BTN[f]]);
-    if (ui.mod)
+    if (ui.mod) {
         ui_led(fm1_led, panel.btn[ui.mod_btn]);
-    else
+    } else if (sqd.arm) {                           /* REC (V0.8): lit while armed (recording: dark the last quarter */
+        float bt = ui_beats();                      /* of each beat); glowing while not */
+        if (!ui.run || bt - (float)sy_floori(bt) < 0.75f)
+            ui_led(fm1_led, panel.btn[B_REC]);
+    } else {
         ui_led(fm1_led_dim, panel.btn[B_REC]);
+    }
     if (chd.perf && !(chs.pf && ui.abeat_t && fm1_ms - ui.abeat_t < 70u))   /* ARP: lit while on (ARP's and */
         ui_led(fm1_led, panel.btn[B_ARP]);                                    /* PATTERN's beats dark a moment), */
     else if (!chd.perf)                                                       /* glowing while off */

@@ -112,7 +112,13 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH,       /* (V0.75, ARP's: GROOVE's; a step's (the one picked: STEPS', */
        UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT, UI_SRAT, UI_SCHN, UI_SSLD,   /* RATCHET's); STRUM's; GLOBAL's */
        UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP,           /* CLOCK IN) */
-       UI_CLOCK };
+       UI_CLOCK,
+       UI_QSTEP, UI_QNOTE, UI_QVEL, UI_QLEN,          /* (V0.8, the sequencer's (sy_seq.c): NOTES', FEEL's and MOTION's */
+       UI_QCHN, UI_QNUD, UI_QOCT,                     /* (the step picked: KNOB 1), PATTERN's, PLAY+REC's, CHAIN's: */
+       UI_QLANE, UI_QVAL, UI_QPAR,                    /* sy_ui_seq.c) */
+       UI_QPAT, UI_QPLEN, UI_QRATE, UI_QSWG,
+       UI_QTRN, UI_QDIR, UI_QRMD, UI_QQNT,
+       UI_QSLOT, UI_QCPAT, UI_QCREP, UI_QCHAIN };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -122,11 +128,15 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_CHORD (SEC_COUNT + 6)                   /* SCL's chords: CHORD, STRUM, BASS; */
 #define SEC_CMID (SEC_COUNT + 7)                    /* .. their MIDI; */
 #define SEC_STEPS (SEC_COUNT + 8)                   /* the ARP's STEPS, RATCHET) */
-#define SEC_N (SEC_COUNT + 9)                       /* every section, the UI's own too (ui.spage) */
+#define SEC_SEQ (SEC_COUNT + 9)                     /* (V0.8, the SEQ button's: the steps (NOTES, FEEL, MOTION), */
+#define SEC_SPAT (SEC_COUNT + 10)                   /* the pattern (PATTERN, PLAY+REC), */
+#define SEC_SCHN (SEC_COUNT + 11)                   /* CHAIN) */
+#define SEC_N (SEC_COUNT + 12)                      /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM, G_N };   /* (UI_PAGE) */
+       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
+       G_QNOTES, G_QFEEL, G_QMOTION, G_QPAT, G_QPLAY, G_QCHAIN, G_N };   /* (UI_PAGE) */
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -281,21 +291,28 @@ static const ui_page_t UI_PG[] = {
     {SEC_ARP, G_GROOVE, "GROOVE", {UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH}},
     {SEC_STEPS, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
     {SEC_STEPS, G_RATCH, "RATCHET", {UI_SSTEP, UI_SRAT, UI_SCHN, UI_SSLD}},
+    {SEC_SEQ, G_QNOTES, "NOTES", {UI_QSTEP, UI_QNOTE, UI_QVEL, UI_QLEN}},     /* (V0.8: sy_ui_seq.c) */
+    {SEC_SEQ, G_QFEEL, "FEEL", {UI_QSTEP, UI_QCHN, UI_QNUD, UI_QOCT}},
+    {SEC_SEQ, G_QMOTION, "MOTION", {UI_QSTEP, UI_QLANE, UI_QVAL, UI_QPAR}},
+    {SEC_SPAT, G_QPAT, "PATTERN", {UI_QPAT, UI_QPLEN, UI_QRATE, UI_QSWG}},
+    {SEC_SPAT, G_QPLAY, "PLAY+REC", {UI_QTRN, UI_QDIR, UI_QRMD, UI_QQNT}},
+    {SEC_SCHN, G_QCHAIN, "CHAIN", {UI_QSLOT, UI_QCPAT, UI_QCREP, UI_QCHAIN}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
 #define UI_NPG (sizeof UI_PG / sizeof UI_PG[0])
 
 /* the families: the sections each button shows (0xFF ends). FX: the chain view (SEC_CHAIN), then the modules in the
- * chain, in its order (ui_fam_secs; every effect section is FX's: ui_fam_of). SEQ: none yet (the sequencer comes in
- * a later version; the matrix is GLO's) */
+ * chain, in its order (ui_fam_secs; every effect section is FX's: ui_fam_of). SEQ (V0.8): the sequencer's steps,
+ * its pattern, its chain (the matrix is GLO's) */
 enum { FAM_HOME, FAM_EDIT, FAM_ENV, FAM_LFO, FAM_SEQ, FAM_FX, FAM_GLO, FAM_MENU, FAM_SAVE, FAM_SCL, FAM_ARP, FAM_N };
 static const uint8_t FAM_SECS[FAM_N][7] = {
     {SEC_MACRO, 0xFF}, {SEC_OSCA, SEC_OSCB, SEC_SUB, SEC_NOISE, SEC_FILTER, 0xFF}, {SEC_ENV1, SEC_ENV2, 0xFF},
-    {SEC_LFO1, SEC_LFO2, 0xFF}, {0xFF}, {SEC_CHAIN, 0xFF}, {SEC_VOICE, SEC_MATRIX, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
+    {SEC_LFO1, SEC_LFO2, 0xFF}, {SEC_SEQ, SEC_SPAT, SEC_SCHN, 0xFF}, {SEC_CHAIN, 0xFF},
+    {SEC_VOICE, SEC_MATRIX, SEC_GLOBAL, 0xFF}, {SEC_MENU, 0xFF},
     {SEC_SAVE, SEC_BROWSE, 0xFF}, {SEC_KEYS, SEC_CHORD, SEC_CMID, 0xFF}, {SEC_ARP, SEC_STEPS, 0xFF},
 };
-static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, NB, B_FX, B_GLO, NB, NB, B_SCL, B_ARP};
+static const uint8_t FAM_BTN[FAM_N] = {B_HOME, B_EDIT, B_ENV, B_LFO, B_SEQ, B_FX, B_GLO, NB, NB, B_SCL, B_ARP};
 static int ui_is_fx(uint32_t sec) { return sec >= SEC_DRIVE && sec < SEC_CHAIN; }   /* an effect module's section */
 /* the effects' costs on one core, % (TESTING.md §4: the cost model at the measured ~150 instructions a us; the new
  * modules' estimated), by type: the chain view's sum */
@@ -385,7 +402,8 @@ static uint32_t ui_jump_sec(uint32_t k)
 #define D_ALL 127u
 #define D_LIVE 128u                                 /* the display's live rows alone (HOME's scope) */
 #define UI_DTAP_MS 300u                             /* a second tap within this: a double tap (it latches) */
-enum { LAY_NONE, LAY_PERF, LAY_MAC, LAY_MOM, LAY_JUMP };   /* the hold layers besides MOD: GLO, FX, LFO, EDIT */
+enum { LAY_NONE, LAY_PERF, LAY_MAC, LAY_MOM, LAY_JUMP, LAY_PAT };   /* the hold layers besides MOD: GLO, FX, LFO, EDIT,
+                                                                      * SEQ (V0.8: PATTERNS) */
 static struct {
     uint16_t page;
     uint16_t fpage[FAM_N];                          /* the page a family returns to */
@@ -420,6 +438,8 @@ static struct {
     uint8_t run;                                    /* PLAY: the transport running, since run_t (its beat: the audio */
     uint32_t run_t;                                 /* side's, chs.tq) */
     uint8_t astep;                                  /* ARP's STEPS, RATCHET: the step picked (0 .. 15) */
+    uint8_t qslot;                                  /* V0.8, CHAIN: the slot picked (0 .. 15) */
+    uint32_t qtouch_t;                              /* .. a lane's knob's last turn (sqd.ltouch let go after it) */
     uint8_t lastmode;                               /* SCL + OCT+: the chords' MODE back on (KEY, FREE) */
     uint8_t lay_lock;                               /* GLO + OCT+: PERFORM's layer latched (a tap, GLO + OCT-: let go) */
     uint32_t abeat_t;                               /* .. a beat of ARP's or PATTERN's (the ARP LED dark a moment) */
@@ -510,7 +530,8 @@ static const char *ui_sec_name(uint32_t s)
 {
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
            : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD" : s == SEC_CMID ? "MIDI"
-           : s == SEC_STEPS ? "STEPS" : "PRESETS";
+           : s == SEC_STEPS ? "STEPS" : s == SEC_SEQ ? "SEQ" : s == SEC_SPAT ? "PATTERN" : s == SEC_SCHN ? "CHAIN"
+           : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
 static void ui_save_over(void);
@@ -663,6 +684,12 @@ static const char *ui_hint(uint32_t sec)
         return "ARP+OCT+ ON, OCT- OFF";
     if (sec == SEC_STEPS)
         return "KNOB 1: THE STEP";
+    if (sec == SEC_SEQ)                             /* (V0.8) */
+        return "REC ARMS IT \xB7 STOPPED: KEYS FILL A STEP";
+    if (sec == SEC_SPAT)
+        return "SEQ+OCT+ NEXT PATTERN, OCT- BACK";
+    if (sec == SEC_SCHN)
+        return "SEQ HELD: THE PATTERNS";
     return 0;
 }
 
@@ -1410,6 +1437,8 @@ static void ui_chord_turn(int32_t item, int32_t s)
     ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
 }
 
+static void ui_seq_turn(int32_t item, int32_t s, uint32_t e);   /* sy_ui_seq.c (V0.8) */
+static int ui_seq_key(uint32_t k);
 static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
 {
     if (item == UI_COLOR) {
@@ -1447,6 +1476,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
     } else if (item >= UI_HMODE && item <= UI_STAP) {   /* SCL's chords, ARP's */
         ui_chord_turn(item, s);
+    } else if (item >= UI_QSTEP && item <= UI_QCHAIN) {   /* the sequencer's (V0.8: sy_ui_seq.c) */
+        ui_seq_turn(item, s, e);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
         chd.clock = s > 0;
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
@@ -1590,7 +1621,7 @@ static void ui_knob(uint32_t k, int32_t s)
         ui_lay_knob(k, s, EN_K1 + k);
         return;
     }
-    if (ui.lay == LAY_JUMP)                         /* (the map covers the page: nothing changes unseen) */
+    if (ui.lay == LAY_JUMP || ui.lay == LAY_PAT)    /* (the map covers the page: nothing changes unseen) */
         return;
     if (id < 0)
         return;
@@ -1636,6 +1667,13 @@ static void ui_knob(uint32_t k, int32_t s)
         ui_edit();
     }
     sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
+    if (ui.lay != LAY_MOM) {                        /* (V0.8: its lane in the pattern playing let go while it turns; */
+        uint32_t l;                                 /* REC armed and playing, written at the step playing) */
+        if (!sy_seq_knob((uint32_t)id, &l))
+            ui_toast("MOTION: BOTH LANES IN USE");
+        else if (sqd.ltouch)
+            ui.qtouch_t = fm1_ms;
+    }
     ui.dirty |= D_KNOB(k) | D_DISP;                 /* (the page's body: sy_ui_draw.c redraws rows 16 .. 221) */
     if (ui_sec() == SEC_LFO1 || ui_sec() == SEC_LFO2 || ui_sec() == SEC_MATRIX)
         ui.dirty |= D_HEAD;                         /* (their top line: an LFO's rate and mode, the slots in use) */
@@ -1646,7 +1684,7 @@ static void sy_ui_touch(void) { ui.dirty |= D_KNOBS | D_DISP | D_HEAD | D_FOOT; 
 
 /* ---------------------------------------------------------------------------------------- buttons --- */
 #define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_FX) | (1u << B_GLO) | \
-                  (1u << B_SCL) | (1u << B_ARP) | (1u << B_REC))   /* held with OCT- / OCT+: ui_combo */
+                  (1u << B_SCL) | (1u << B_ARP) | (1u << B_REC) | (1u << B_SEQ))   /* held with OCT- / OCT+: ui_combo */
 static void ui_browse_undel(void);                  /* sy_ui_save.c */
 static int ui_src_sec(uint32_t s)                   /* a section EDIT + OCT turns on and off */
 {
@@ -1659,6 +1697,23 @@ static uint32_t ui_btn_fam(uint32_t b)              /* the menu a button opens (
         ;
     return f;
 }
+/* V0.8: pattern n picked (SEQ + OCT, PATTERNS, PATTERN's knob): playing, from the end of the one playing; else now */
+static void ui_seq_pick(uint32_t n)
+{
+    char t[24];
+    n %= SQ_NPAT;
+    if (ui.run && sqs.run) {
+        sqd.next = n == sqd.cur ? SQ_NONE : (uint8_t)n;
+        sp_fix(sp_put(t, sqd.next == SQ_NONE ? "PATTERN " : "NEXT: PATTERN "), (int32_t)n + 1, 0u, 0);
+    } else {
+        sqd.cur = (uint8_t)n;
+        sqd.next = SQ_NONE;
+        sp_fix(sp_put(t, "PATTERN "), (int32_t)n + 1, 0u, 0);
+    }
+    ui_toast(t);
+    ui.dirty |= D_DISP | D_HEAD | D_KNOBS;
+}
+
 /* the section menu f shows: the one shown, else where it was left (else its first) */
 static uint32_t ui_menu_sec(uint32_t f)
 {
@@ -1731,6 +1786,10 @@ static void ui_combo(uint32_t b, int up)
             ui_lfo_add();
         else
             ui_lfo_del();
+    } else if (b == B_SEQ) {                        /* (V0.8: the next pattern, the one before; playing, from the */
+        uint32_t at = ui.run && sqd.next < SQ_NPAT ? sqd.next : sqd.cur;   /* end of the one playing) */
+        ui_seq_pick(at + (up ? 1u : SQ_NPAT - 1u));
+        return;
     } else if (b == B_SCL || b == B_ARP) {
         int was = sy_chord_active();
         if (b == B_SCL)
@@ -1794,6 +1853,25 @@ static void ui_reset(uint32_t b)
     } else if (sec == SEC_STEPS) {
         ch_steps_clear();
         ui.astep = 0;
+    } else if (sec == SEC_SEQ) {                    /* (V0.8: the pattern's steps, into PATTERNS' copy first: PASTE */
+        sq_clear();                                 /* puts them back) */
+        sqd.cursor = 0;
+        sp_put(sp_fix(sp_put(t, "PATTERN "), (int32_t)sqd.cur % SQ_NPAT + 1, 0u, 0), " CLEARED: PASTE UNDOES");
+        ui_toast(t);
+        ui.dirty = D_ALL;
+        return;
+    } else if (sec == SEC_SPAT) {                   /* (its LENGTH, RATE, SWING, DIRECTION, TRANSPOSE; RECORD, */
+        sq_pat_t *p = &sq_pat[sqd.cur % SQ_NPAT];   /* QUANTIZE) */
+        p->length = 16;
+        p->rate = SQ_RATE0;
+        p->swing = 50;
+        p->dir = SQ_FWD;
+        p->transpose = 0;
+        sqd.recmode = SQ_OVERDUB;
+        sqd.quant = 0;
+    } else if (sec == SEC_SCHN) {
+        sq_chain_defaults();
+        ui.qslot = 0;
     } else {
         return;
     }
@@ -1881,6 +1959,8 @@ static void ui_hold(uint32_t b)
             ui_lay_open(LAY_MOM, b);
         else if (b == B_EDIT)
             ui_lay_open(LAY_JUMP, b);
+        else if (b == B_SEQ)
+            ui_lay_open(LAY_PAT, b);                /* (V0.8: PATTERNS) */
         else if (b == B_SCL)
             ui_toast("SCL HELD: A KEY IS THE ROOT");
         ui_cd_arm(b);
@@ -1926,10 +2006,6 @@ static void ui_release(uint32_t b, int held)
         ui_toast(ui.run ? "PLAY" : "STOP");
         return;
     }
-    if (b == B_SEQ) {
-        ui_toast("SEQUENCER: IN A LATER VERSION");
-        return;
-    }
     if (b == B_OCTDN || b == B_OCTUP) {             /* (the browser: OCT-'s tap, the octave at its release) */
         if (b == B_OCTDN && ui_sec() == SEC_BROWSE) {
             char t[16] = "KEYS OCT ";
@@ -1954,13 +2030,12 @@ static void ui_release(uint32_t b, int held)
         ui.tap_t[b] = 0;
         return;
     }
-    if (b == B_REC) {                               /* REC twice: its MOD layer, latched */
-        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS && !ui.mod) {
-            ui_mod_open(B_REC, ui.mod_pick, 1);
-            ui.tap_t[b] = 0;
-        } else {
-            ui.tap_t[b] = fm1_ms;
-        }
+    if (b == B_REC) {                               /* REC (V0.8): the sequencer armed, or not (held: its MOD layer; */
+        if (ui.mod)                                 /* REC + OCT+ latches it) */
+            return;
+        sqd.arm ^= 1u;
+        ui_toast(!sqd.arm ? "REC OFF" : ui.run ? "RECORDING" : "REC ARMED");
+        ui.dirty |= D_DISP | D_HEAD;
         return;
     }
     f = ui_btn_fam(b);
@@ -2075,6 +2150,8 @@ static int sy_ui_key(uint32_t k)
         ui.dirty |= D_HEAD | D_DISP;
         return 1;
     }
+    if (ui.lay == LAY_PAT)                          /* PATTERNS (V0.8): a key picks a pattern, COPY, PASTE, CLEAR */
+        return ui_seq_key(k);
     if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section (a chain slot's: */
         uint32_t sec = UI_KEY_JUMP[k];                                /* its module) */
         if (sec >= UI_JUMP_FX) {
@@ -2133,6 +2210,20 @@ static void sy_ui_ms(void)
         at_t = fm1_ms;
         ui.dirty |= D_DISP;
     }
+    {                                               /* V0.8, the sequencer: the keys fill the step picked (stopped, */
+        static uint16_t qat, qseq;                  /* armed, SEQ's steps shown); a step played or recorded: SEQ's */
+        static uint32_t q_t;                        /* pages show it (25 a second at most); a lane's knob let go */
+        sqd.steprec = (uint8_t)(sqd.arm && !ui.run && !sqs.run && ui_sec() == SEC_SEQ && !ui.lay && !ui.mod);
+        if ((sqs.atseq != qat || sqs.seq != qseq) && fm1_ms - q_t >= 40u) {
+            if (sqs.seq != qseq || ui.fam == FAM_SEQ || ui.lay == LAY_PAT)
+                ui.dirty |= D_DISP | D_HEAD | D_KNOBS;
+            qat = sqs.atseq;
+            qseq = sqs.seq;
+            q_t = fm1_ms;
+        }
+        if (sqd.ltouch && fm1_ms - ui.qtouch_t >= UI_GESTURE_MS)
+            sqd.ltouch = 0;
+    }
     if (sy_app_clock_lost()) {                      /* (MIDI's clock gone: the panel's tempo again) */
         sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
         ui.dirty |= D_DISP | D_HEAD;
@@ -2174,12 +2265,14 @@ static void settings_save(void) {}
  * KEY's type; V0.75 (none installed before): MODE, FREE's TYPE, KEY's SHAPE, VOICING, the ARP on, its STYLE, its
  * three styles' RATE, MOVE and FEEL, BASS 3, MIDI 4, SPREAD, STRUM 4, SCL + OCT+'s MODE); V0.75, the ARP's (GROOVE's
  * GATE, SWING, LATCH, LENGTH, GLOBAL's CLOCK IN; the steps: a byte each of the kind, SLIDE, OCTAVE and RATCHET, then
- * their LEVELs, their CHANCEs).
+ * their LEVELs, their CHANCEs); V0.8, the sequencer's (the pattern shown, CHAIN on, RECORD, QUANTIZE, the chain's
+ * slots: their patterns, their repeats).
  * Fields are only added at the end: a shorter record (an older build's, 11 bytes at least) leaves the rest as they
  * were. n 0: written into b, their length; else b's (n bytes) taken: 1 (0: not these) */
 #define SS_SET_ML (19u + 3u * ML_N)
 #define SS_SET_AR (SS_SET_ML + 32u)
-#define SS_SETTINGS_LEN (SS_SET_AR + 5u + 3u * AR_NSTEP)
+#define SS_SET_SQ (SS_SET_AR + 5u + 3u * AR_NSTEP)
+#define SS_SETTINGS_LEN (SS_SET_SQ + 4u + 2u * SQ_NCHAIN)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -2225,6 +2318,12 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
                 a[5u + 2u * AR_NSTEP + i] = chd.chn[i];
             }
         }
+        {
+            uint8_t *q = b + SS_SET_SQ;
+            q[0] = sqd.cur, q[1] = sqd.chain, q[2] = sqd.recmode, q[3] = sqd.quant;
+            for (i = 0; i < SQ_NCHAIN; i++)
+                q[4u + i] = sqd.cpat[i], q[4u + SQ_NCHAIN + i] = sqd.crep[i];
+        }
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -2268,7 +2367,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         ui.lastmode = (uint8_t)(c[27] % CH_NMODE ? c[27] % CH_NMODE : CH_KEY);
         chd.gen++;
     }
-    if (n >= SS_SETTINGS_LEN) {                     /* (V0.75's ARP) */
+    if (n >= SS_SET_SQ) {                           /* (V0.75's ARP) */
         const uint8_t *a = b + SS_SET_AR;
         uint32_t i;
         chd.gate = (uint8_t)sy_clampi(a[0], 5, 200), chd.swing = (uint8_t)sy_clampi(a[1], 50, 75);
@@ -2279,6 +2378,16 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             chd.oct[i] = (uint8_t)sy_clampi((int32_t)((p >> 3) & 7u), 0, 4), chd.rat[i] = (uint8_t)((p >> 6) + 1u);
             chd.lvl[i] = (uint8_t)sy_clampi(a[5u + AR_NSTEP + i], 5, 100);
             chd.chn[i] = (uint8_t)sy_clampi(a[5u + 2u * AR_NSTEP + i], 0, 100);
+        }
+    }
+    if (n >= SS_SETTINGS_LEN) {                     /* (V0.8's sequencer) */
+        const uint8_t *q = b + SS_SET_SQ;
+        uint32_t i;
+        sqd.cur = (uint8_t)(q[0] % SQ_NPAT), sqd.chain = q[1] != 0;
+        sqd.recmode = (uint8_t)(q[2] % SQ_NRMODE), sqd.quant = q[3] != 0;
+        for (i = 0; i < SQ_NCHAIN; i++) {
+            sqd.cpat[i] = q[4u + i] < SQ_NPAT ? q[4u + i] : SQ_NONE;
+            sqd.crep[i] = (uint8_t)sy_clampi(q[4u + SQ_NCHAIN + i], 1, 16);
         }
     }
     if (n >= SS_SET_ML) {
@@ -2310,6 +2419,7 @@ static void sy_ui_boot(void)
     ui.ml_pick = -1;
     memset((void *)ml_cc, 0xFF, sizeof ml_cc);
     ch_defaults();                                  /* (V0.7: the chords off) */
+    sq_defaults();                                  /* (V0.8: sixteen empty patterns, 16 steps of 1/16 each) */
     ui.lastmode = CH_KEY;
     ui.bpm = 120;                                   /* 120 BPM in 4/4 */
     ui.tsb = 4;

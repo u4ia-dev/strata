@@ -10,8 +10,9 @@
  *   - The main loop: sy_app_ms every millisecond (the keys -> notes, the UI's buttons and knobs (sy_ui.c), a step of a
  *     wavetable build), sy_app_frame about 60 times a second (the screen where it changed, the LEDs: sy_ui_draw.c).
  *     A value a knob turns is a 16-bit store into the patch: the engine's smoother takes it at its next block.
- *   - The flash (sy_store.c), from the main loop only: a SAVE behind the engine's hush, the settings and the sound
- *     playing once 3 s have gone by without sound; the user presets' index read at power-on.
+ *   - The flash (sy_store.c), from the main loop only: a SAVE behind the engine's hush, the settings, the sound
+ *     playing and (V0.8) the sequencer's patterns once 3 s have gone by without sound (the patterns: the transport
+ *     stopped too); the user presets' index and the patterns read at power-on.
  * Needs the HAL (or the emulator's), panel.c, gfx.c, the sy_* engine, sy_text.c, sy_sounds.h, sy_gfx.c, sy_store.c
  * and the UI (sy_ui.c, sy_ui_draw.c, sy_ui_fx.c, sy_ui_save.c, which call back the sy_app_* below). */
 
@@ -99,12 +100,19 @@ static void sy_ev_drain(sy_ring_t *g)
             } else {
                 sy_note_off(e->a);
             }
+            sy_seq_input(0xFFu, e->a, e->b, e->b != 0u);   /* (V0.8: REC armed, recorded) */
             break;
         case SY_EV_BEND: sy_bend((int32_t)(e->a | (uint32_t)e->b << 7)); break;
         case SY_EV_CC: sy_cc(e->a, e->b); break;
         case SY_EV_AT: sy_at = e->a; break;
-        case SY_EV_KEY: sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7); break;
-        case SY_EV_MKEY: sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u); break;
+        case SY_EV_KEY:
+            sy_chord_key(e->b & 127u, e->a, chd.vel, e->b >> 7);
+            sy_seq_input(e->b & 127u, e->a, chd.vel, e->b >> 7);
+            break;
+        case SY_EV_MKEY:
+            sy_chord_key(128u + e->a, e->a, e->b, e->b != 0u);
+            sy_seq_input(0xFFu, e->a, e->b, e->b != 0u);
+            break;
         case SY_EV_RUN: sy_chord_run(e->a); break;
         case SY_EV_CLK: sy_chord_clock(); break;
         default:
@@ -150,6 +158,7 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             sy_ev_drain(&sy_ev_ui);
             sy_ev_drain(&sy_ev_key);
             sy_ev_drain(&sy_ev_midi);
+            sy_seq_block();                      /* (V0.8, the sequencer: its steps, as keys into the chords) */
             sy_chord_block(&sy_ev_starts, SY_STARTS_BLK);   /* (the chords: their steps, their notes' starts) */
             sy_block(o + 2u * b);
             sy_master_blk(o + 2u * b, g0, g1, b);
@@ -466,6 +475,7 @@ static struct {
     uint16_t slot;
     uint8_t pk[SP_PACK_MAX];                     /* the patch to write; after a delete, the one deleted (put back) */
     uint32_t len, quiet_t, check_t, edit_crc, set_crc;
+    uint32_t seq_crc[SQ_NOBJ];                   /* V0.8: the patterns as the flash has them (four an object) */
 } sy_fl;
 static void sy_ui_deleted(int rc, uint32_t s);   /* sy_ui_save.c: a delete or its putting back done */
 static void sy_ui_restored(int rc, uint32_t s);
@@ -567,6 +577,17 @@ static void sy_flash_ms(void)
         if (c != sy_fl.edit_crc && !ss_save(SS_EDIT, b, n))
             sy_fl.edit_crc = c;
     }
+    if (!chs.run && !sqs.run) {                  /* (V0.8: a group of patterns changed, one a check: stopped, so */
+        uint32_t o;                              /* nothing records meanwhile) */
+        for (o = 0; o < SQ_NOBJ; o++) {
+            uint32_t c = sq_obj_crc(o);
+            if (c != sy_fl.seq_crc[o]) {
+                if (!ss_save(SS_SEQ0 + o, ss_buf, sq_obj_pack(o)))
+                    sy_fl.seq_crc[o] = c;
+                break;
+            }
+        }
+    }
 }
 
 /* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held, or the platform
@@ -580,6 +601,12 @@ static void sy_flash_boot(void)
     int n;
     memset(&sy_fl, 0, sizeof sy_fl);
     sy_uidx_scan();
+    for (n = 0; n < (int)SQ_NOBJ; n++) {         /* (V0.8: the patterns; none kept yet: as they start, written only */
+        int m = ss_load(SS_SEQ0 + (uint32_t)n, ss_buf, SS_PAYLOAD_MAX);   /* once changed) */
+        if (m > 0)
+            sq_obj_take((uint32_t)n, ss_buf, (uint32_t)m);
+        sy_fl.seq_crc[n] = sq_obj_crc((uint32_t)n);
+    }
     if ((n = ss_load(SS_SETTINGS, b, sizeof b)) > 0 && sy_ui_settings(b, (uint32_t)n))
         sy_fl.set_crc = ss_crc32(b, (uint32_t)n);
     if (sy_boot_safe || (fm1_in.buttons & (1u << panel.btn[B_HOME]))) {
