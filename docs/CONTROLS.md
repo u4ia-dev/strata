@@ -235,7 +235,7 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   loads the one picked and closes the list (undo takes the load back). **3 s untouched**, the list goes and nothing
   changed; another button closes it too. **SAVE + OCT+** saves the sound playing as a new preset: NAME IT opens on its
   next version's name ("WARM PAD v2") in the first free slot; SAVE writes it and goes back to the page (HOME: back,
-  unsaved). **SAVE + OCT−** deletes the preset picked: a question first ("DELETE USER 3?"), a second SAVE + OCT− deletes
+  unsaved). **SAVE + OCT−** deletes the preset picked: a question first ("DELETE?" over its name), a second SAVE + OCT− deletes
   it, anything else keeps it; the starter sounds stay. With edits not saved, the bottom row warns "SAVE TWICE: YOUR
   EDITS GO" (F28). SAVE + OCT− / OCT+ outside the list are undo and redo, as before. A sound edited since it was loaded
   or saved has a small vermilion dot after its name on HOME, in the list and in the browser (F25).

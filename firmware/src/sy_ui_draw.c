@@ -2479,8 +2479,7 @@ static void ui_p_plist(void)
         uint8_t cat;
         const char *nm = sy_app_entry(SY_USER + ui.pl_ask - 1u, &cat);
         lk_frame(14.5f, 44.5f, 211.0f, 107.0f, 1.5f, sk.hot);
-        sp_put(sp_fix(sp_put(t, "DELETE USER "), (int32_t)ui.pl_ask, 0u, 0), "?");
-        lk_text(26.0f, 56.0f, T14B, t, sk.hot, sk.ground, 0, 17);
+        lk_text(26.0f, 56.0f, T14B, "DELETE?", sk.hot, sk.ground, 0, 17);   /* (the name under it says which) */
         lk_text(26.0f, 82.0f, T12B, lk_fit(t, sizeof t, nm ? nm : "?", T12B, 0, 188.0f), sk.ink, sk.ground, 0, 15);
         lk_text(26.0f, 108.0f, T9, "SAVE+OCT- AGAIN: DELETE IT", sk.ink, sk.ground, 20, 0);
         lk_text(26.0f, 124.0f, T9, "ANYTHING ELSE: KEEP IT", sk.lab, sk.ground, 20, 0);
