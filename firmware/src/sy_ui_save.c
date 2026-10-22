@@ -86,7 +86,7 @@ static void ui_save_new(void)
 {
     int32_t fr = sy_app_slot_free();
     if (fr < 0) {
-        ui_toast("ALL 128 USER SLOTS IN USE");
+        ui_toast("EVERY USER SLOT IN USE");
         return;
     }
     ui_save_version(sy_patch.name, ui.sv_name);
@@ -124,6 +124,25 @@ static void ui_save_open(void)
     ui.sv_sym = 0;
     ui.sv_key = 0xFF;
     ui.sv_slot = (uint8_t)(own >= 0 ? own : fr >= 0 ? fr : 0);
+    ui_go(ui_first_page(SEC_SAVE));
+}
+
+/* .. (V0.86, PRESETS' list: SAVE + OCT+) for a new preset: its next version's name, the first free slot */
+static void ui_save_open_new(void)
+{
+    int32_t fr = sy_app_slot_free();
+    if (fr < 0) {
+        ui_toast("EVERY USER SLOT IN USE");
+        return;
+    }
+    ui_save_version(sy_patch.name, ui.sv_name);
+    ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
+    ui.sv_cur = ui.sv_len;
+    ui.sv_cat = sy_patch.cat < CAT_COUNT ? sy_patch.cat : CAT_OTHER;
+    ui.sv_sym = 0;
+    ui.sv_key = 0xFF;
+    ui.sv_slot = (uint8_t)fr;
+    ui.sv_list = 1;
     ui_go(ui_first_page(SEC_SAVE));
 }
 
@@ -214,8 +233,9 @@ static void sy_ui_saved(int rc, uint32_t s)
     }
     ui_toast(t);
     ui.edited = 0;                                  /* (V0.86: saved, nothing unsaved: HOME's dot gone) */
-    if (ui_sec() == SEC_SAVE)
-        ui_go(ui_first_page(SEC_BROWSE));
+    if (ui_sec() == SEC_SAVE)                       /* (V0.86: from PRESETS' list, back to the page) */
+        ui_go(ui.sv_list ? ui.sv_ret : ui_first_page(SEC_BROWSE));
+    ui.sv_list = 0;
     ui.dirty |= D_HEAD | D_DISP;
 }
 
@@ -236,6 +256,7 @@ static void ui_browse_open(void)
     uint32_t sec = ui_sec();
     if (sec != SEC_SAVE && sec != SEC_BROWSE)
         ui.sv_ret = ui.page;
+    ui.sv_list = 0;
     ui.br_cat = 0;
     ui.br_bank = 0;
     ui_go(ui_first_page(SEC_BROWSE));
@@ -270,12 +291,14 @@ static void ui_browse_undel(void)
 static void sy_ui_deleted(int rc, uint32_t s)
 {
     char t[sizeof ui.toast];
+    int lst = ui.del_list;                          /* (V0.86: asked from PRESETS' list: no undo there) */
     ui.saving = 0;
+    ui.del_list = 0;
     if (rc) {
         sp_fix(sp_put(t, "DELETE FAILED: "), rc, 0u, 0);
     } else {
-        sp_put(sp_fix(sp_put(t, "DELETED USER "), (int32_t)s + 1, 0u, 0), " \xB7 SAVE+OCT- UNDO");
-        ui.undel = 1;
+        sp_put(sp_fix(sp_put(t, "DELETED USER "), (int32_t)s + 1, 0u, 0), lst ? "" : " \xB7 SAVE+OCT- UNDO");
+        ui.undel = !lst;
     }
     ui_toast(t);
     ui.dirty |= D_HEAD | D_DISP | D_KNOBS;

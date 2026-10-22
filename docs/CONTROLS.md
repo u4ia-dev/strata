@@ -16,7 +16,7 @@ V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulat
 | KNOB 1–4 | the four values on the screen, left to right |
 | SELECT | the next or previous module of the menu shown (OSC A, OSC B, SUB, NOISE, FILTER; an effect module; ..), stopping at the first and the last; a menu of one module: nothing (V0.86) |
 | ALGORITHM | the next or previous page of the module shown (everywhere, the FX chain view too), stopping at the first and the last |
-| PRESETS | the presets as a list (the starter sounds, INIT, then the user's): the one turned to loads when the turning stops (V0.86; SAVE, presets, undo, below); on SEQ's pages the track; on a drum track the drum |
+| PRESETS | the presets as a list (the starter sounds, INIT, then the user's): PRESETS picks, SAVE twice loads the one picked (V0.86; SAVE, presets, undo, below); on SEQ's pages the track; on a drum track the drum |
 | MASTER | the output level |
 | HOME, EDIT, ENV, LFO, FX, GLO, SCL, ARP | the menus: one grammar for all (Buttons, below) |
 | SEQ | the looper's menu (V0.8, below): once LOOP and CLIP, twice TRACK and SONG (V0.86); SEQ + OCT+ / OCT− the next track, the one before; held: the launch pad |
@@ -53,7 +53,7 @@ Buttons). SELECT picks the module, ALGORITHM steps its pages, in every menu; bot
 | EDIT | OSC A, OSC B | WAVE: WT POS · TABLE · WARP · AMOUNT; UNISON: UNISON · UNI MODE · DETUNE · BLEND; SPREAD: WIDTH · WT SPRD · PHASE · RAND; PITCH: OCT · SEMI · FINE · PH MODE; OUTPUT: LEVEL · PAN · ROUTE |
 | | SUB | MAIN: SHAPE · OCT · WIDTH; OUTPUT: LEVEL · PAN · ROUTE |
 | | NOISE | MAIN: TYPE · COLOR · STEREO; OUTPUT: LEVEL · PAN · ROUTE |
-| | FILTER | TONE: TYPE · CUTOFF · RESO · DRIVE; MORE: KEYTRACK · VAR · MIX |
+| | FILTER | TONE: TYPE · CUTOFF · RESO · DRIVE; RESPONSE: KEYTRACK · VAR · MIX |
 | ENV | ENV 1, ENV 2 | ADSR: ATTACK · DECAY · SUSTAIN · RELEASE; SHAPE: HOLD · A CURVE · D CURVE · R CURVE |
 | LFO | LFO 1, LFO 2 | POINTS: POINT · TIME · LEVEL · CURVE; SHAPE: SHAPE · SYNC · RATE · MODE; TIME: DELAY · RISE · PHASE · SMOOTH |
 | FX | FX CHAIN | CHAIN: ADD (the type) · SLOT · MOVE · MIX (below: the FX chain) |
@@ -106,16 +106,18 @@ line shows the chain's modules of 8 and their cost on one core (the cost model's
 | Module | Pages: KNOB 1 · 2 · 3 · 4 |
 | --- | --- |
 | DRIVE | DRIVE: TYPE · DRIVE · TONE · MIX |
-| CHORUS | CHORUS: RATE · DEPTH · DELAY · MIX; MORE: FEEDBACK · SPREAD (V0.86: the right side's taps from the left's, 0 .. 100 %) |
+| CHORUS | CHORUS: RATE · DEPTH · DELAY · MIX; SPACE: FEEDBACK · SPREAD (V0.86: the right side's taps from the left's, 0 .. 100 %) |
 | DELAY | DELAY: SYNC · TIME · FEEDBACK · MIX; TONE: MODE · LP · HP |
 | REVERB | REVERB: TYPE · SIZE · PREDELAY · MIX; TONE: DECAY · DAMP · LOW CUT · WIDTH |
 | OTT | OTT: DEPTH · TIME · UPWARD · DOWNWARD; BANDS: LOW · MID · HIGH |
 | EQ | POINTS: POINT · FREQ · GAIN · Q; SHAPES: SHAPE · FREQ · AMOUNT (below) |
-| FLANGER | FLANGER: SYNC · RATE · DEPTH · MIX; MORE: DELAY · FEEDBACK · SPREAD |
-| PHASER | PHASER: SYNC · RATE · DEPTH · MIX; MORE: CENTER · FEEDBACK · STAGES · SPREAD |
-| FILTER | FILTER: TYPE · CUTOFF · RESO · MIX; MORE: DRIVE · FOLLOW (V0.86: the cutoff follows the input's level, −100 .. +100 %) |
+| FLANGER | FLANGER: SYNC · RATE · DEPTH · MIX; TONE: DELAY · FEEDBACK · SPREAD |
+| PHASER | PHASER: SYNC · RATE · DEPTH · MIX; TONE: CENTER · FEEDBACK · STAGES · SPREAD |
+| FILTER | FILTER: TYPE · CUTOFF · RESO · MIX; DYNAMICS: DRIVE · FOLLOW (V0.86: the cutoff follows the input's level, −100 .. +100 %) |
 | BITCRUSH | CRUSH: BITS · RATE · MIX |
-| TREMOLO | TREMOLO: MODE (TREMOLO, AUTOPAN) · SYNC · RATE · DEPTH; MORE: SHAPE · SPREAD (V0.86: the right side's phase from the left's) |
+| TREMOLO | TREMOLO: MODE (TREMOLO, AUTOPAN) · SYNC · RATE · DEPTH; SHAPE: SHAPE · SPREAD (V0.86: the right side's phase from the left's) |
+
+No page is called MORE any more (V0.86, after the renders): each second page is named for what it holds.
 | RING MOD | RING MOD: FREQ · SHAPE · SPREAD · MIX |
 | TAPE | TAPE: WOW · FLUTTER · SATURATE · MIX; TONE: TONE · HISS (V0.86: a hiss under what plays, gated by it, −34 dB at most) |
 
@@ -225,13 +227,15 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   and symbols, OCT− deletes. KNOB 1 the cursor, KNOB 2 the character there (at the end: ADD), KNOB 3 the category, KNOB
   4 the slot: its own (a rename), or for a starter sound the first free one (a slot in use says what it would replace).
   16 characters. SAVE writes it and goes back to the browser, HOME goes back without.
-- **PRESETS' list** (V0.86, H4): turning PRESETS opens a list of the presets (six rows round the one turned to, the
-  one playing marked, a bar under the one turned to filling until it loads); the preset turned to loads 0.4 s after
-  the turning stops, so a quick flick passes over the presets between. The list goes 1.8 s after the last load; another
-  button closes it. **SAVE held** while it is open: back to the sound you had before the list (HOME keeps a copy of it).
-  **Unsaved edits** (F28): the first detent only opens the list on your sound ("EDITED: TURN ON TO LEAVE IT");
-  the next turns on. A sound edited since it was loaded or saved has a small vermilion dot after its name on HOME, in
-  the list and in the browser (F25).
+- **PRESETS' list** (V0.86, H4, changed after the renders): turning PRESETS opens a list of the presets (five rows
+  round the one picked, the one playing marked) and moves through it; nothing loads while it turns. **SAVE twice**
+  loads the one picked and closes the list (undo takes the load back). **3 s untouched**, the list goes and nothing
+  changed; another button closes it too. **SAVE + OCT+** saves the sound playing as a new preset: NAME IT opens on its
+  next version's name ("WARM PAD v2") in the first free slot; SAVE writes it and goes back to the page (HOME: back,
+  unsaved). **SAVE + OCT−** deletes the preset picked: a question first ("DELETE USER 3?"), a second SAVE + OCT− deletes
+  it, anything else keeps it; the starter sounds stay. With edits not saved, the bottom row warns "SAVE TWICE: YOUR
+  EDITS GO" (F28). SAVE + OCT− / OCT+ outside the list are undo and redo, as before. A sound edited since it was loaded
+  or saved has a small vermilion dot after its name on HOME, in the list and in the browser (F25).
 - **Undo, redo**: SAVE held + OCT− steps back, + OCT+ forward again, through the last 8 states: each knob gesture (a turn
   after a second without one), each MOD-layer edit, LFO point, effect switch and preset load. An undone load makes the
   sound the preset it was again.

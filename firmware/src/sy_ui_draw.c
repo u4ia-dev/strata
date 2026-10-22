@@ -2392,22 +2392,24 @@ static void ui_p_kscan(void)
 
 /* SAFE START: the sound before was not brought back (a crash, a hang or a failed boot came before; or HOME was held
  * at power-on), until a button, a knob or a key, or 6 s */
-/* PRESETS' list (V0.86, H4, F28): six rows round the one turned to, each its number and name (the one playing a dot at
- * the right, and its edits' dot after its name), the one turned to inverted with a bar under it filling until it loads;
- * at the top PRESETS and where it is; at the bottom what to do */
+/* PRESETS' list (V0.86, H4; the renders' note): five rows round the one picked, each its number and name (the one
+ * playing a dot at the right, its edits' dot after its name), the one picked inverted; at the top PRESETS and where it
+ * is; under the rows SAVE + OCT's; at the bottom SAVE twice (HOT when it would leave edits); SAVE + OCT-'s question
+ * over the rows while it waits for the second */
 static void ui_p_plist(void)
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
-    uint32_t n = sy_app_list(0, 0, ids), k, first, pos = ui.pl_pos;
-    char t[24], r[24], up[17];
+    uint32_t n = sy_app_list(0, 0, ids), k, first, pos = ui.pl_pos < n ? ui.pl_pos : (n ? n - 1u : 0u), now = sy_app_entry_now();
+    char t[40], r[24], up[17];
+    int lose = ui.edited && pos < n && ids[pos] != now;
     sp_fix(sp_put(sp_fix(r, (int32_t)pos + 1, 0u, 0), " OF "), (int32_t)n, 0u, 0);
     lk_top("PRESETS", -1, 0, 0, r, 0, 0);
     first = pos > 2u ? pos - 2u : 0u;
-    if (n > 6u && first > n - 6u)
-        first = n - 6u;
-    for (k = first; k < n && k < first + 6u; k++) {
+    if (n > 5u && first > n - 5u)
+        first = n - 5u;
+    for (k = first; k < n && k < first + 5u && !ui.pl_ask; k++) {   /* (the delete asked: its question in their place) */
         float y = 26.0f + (float)(k - first) * 31.0f, e;
-        int hi = k == pos, on = k == ui.pl_load;
+        int hi = k == pos, on = ids[k] == now;
         uint8_t cat;
         const char *nm = sy_app_entry(ids[k], &cat);
         uint32_t j;
@@ -2429,14 +2431,22 @@ static void ui_p_plist(void)
             lk_disc(e + 5.0f, y + 9.0f, 2.5f, hi ? sk.ground : sk.hot);
         if (on)
             lk_disc(226.0f, y + 11.5f, 3.0f, ink);
-        if (hi && ui.pl_pos != ui.pl_load) {        /* (the load coming: its bar filling) */
-            float f = sy_clampf((float)(fm1_ms - ui.pl_t) / (float)UI_PL_LOAD_MS, 0.0f, 1.0f);
-            lk_box(4.0f, y + 25.0f, 4.0f + 232.0f * f, y + 27.0f, sk.hot);
-        }
+    }
+    lk_text(8.0f, 186.0f, T9, "SAVE+OCT+: SAVE AS NEW, NAMED", sk.lab, sk.ground, 20, 0);
+    lk_text(8.0f, 199.0f, T9, "SAVE+OCT-: DELETE THE ONE PICKED", sk.lab, sk.ground, 20, 0);
+    if (ui.pl_ask) {                                /* (the delete's question) */
+        uint8_t cat;
+        const char *nm = sy_app_entry(SY_USER + ui.pl_ask - 1u, &cat);
+        lk_frame(14.5f, 44.5f, 211.0f, 107.0f, 1.5f, sk.hot);
+        sp_put(sp_fix(sp_put(t, "DELETE USER "), (int32_t)ui.pl_ask, 0u, 0), "?");
+        lk_text(26.0f, 56.0f, T14B, t, sk.hot, sk.ground, 0, 17);
+        lk_text(26.0f, 82.0f, T12B, lk_fit(t, sizeof t, nm ? nm : "?", T12B, 0, 188.0f), sk.ink, sk.ground, 0, 15);
+        lk_text(26.0f, 108.0f, T9, "SAVE+OCT- AGAIN: DELETE IT", sk.ink, sk.ground, 20, 0);
+        lk_text(26.0f, 124.0f, T9, "ANYTHING ELSE: KEEP IT", sk.lab, sk.ground, 20, 0);
     }
     if (lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
-        lk_text(8.0f, LK_ZY + 1.5f, T10B, ui.pl_guard ? "EDITED: TURN ON TO LEAVE IT" : "STOP: IT LOADS \xB7 HOLD SAVE: BACK",
-                ui.pl_guard ? sk.hot : sk.lab, sk.ground, 0, 12);
+        lk_text(8.0f, LK_ZY + 1.5f, T10B, lose ? "SAVE TWICE: YOUR EDITS GO" : "SAVE TWICE: LOAD IT", lose ? sk.hot : sk.lab,
+                sk.ground, 0, 12);
 }
 
 static void ui_p_safe(void)
@@ -2661,7 +2671,7 @@ static const char *ui_short(const char *nm, char *b)
         {"MIXER", "MIX"},   {"NOTES", "NTS"},  {"NOTE+", "NT+"},   {"CLIPS", "CLP"},  {"TEMPO", "TMP"},
         {"SLOTS", "SLT"},   {"VOICE", "VCE"},  {"CHORD", "CHD"},   {"STYLE", "STY"},  {"BANDS", "BND"},
         {"POWER", "PWR"},   {"BENCH", "BEN"},  {"MOTION", "MOT"},  {"BROWSE", "BRW"}, {"NAME IT", "NAME"},
-        {"KEY SCAN", "SCAN"}};
+        {"KEY SCAN", "SCAN"}, {"RESPONSE", "RSP"}, {"DYNAMICS", "DYN"}, {"SPACE", "SPC"}};
     uint32_t i, j;
     for (i = 0; nm[i] && i < 5u; i++)
         ;

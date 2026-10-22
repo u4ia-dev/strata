@@ -159,7 +159,7 @@ shot("Filter");
 turn(1, 6);
 shot("FilterTurn");
 rest();
-go(SEC.FILTER, "MORE");
+go(SEC.FILTER, "RESPONSE");
 ex.web_test_set(ex.web_test_page_param(0), 500);
 ex.web_test_set(ex.web_test_page_param(1), 300);
 shot("FilterMore");
@@ -225,13 +225,13 @@ run(0.2);
 shot("FxAdded");
 run(1.6);
 const MODS = [
-  [12, ["DRIVE", "Drive"]], [13, ["CHORUS", "Chorus"], ["MORE", "ChorusMore"]], [14, ["DELAY", "Delay"], ["TONE", "DelayTone"]],
+  [12, ["DRIVE", "Drive"]], [13, ["CHORUS", "Chorus"], ["SPACE", "ChorusMore"]], [14, ["DELAY", "Delay"], ["TONE", "DelayTone"]],
   [15, ["REVERB", "Reverb"], ["TONE", "ReverbTone"]], [16, ["OTT", "Ott"], ["BANDS", "OttBands"]],
 ];
 const MODS2 = [
-  [17, ["POINTS", "Eq"], ["SHAPES", "EqShapes"]], [22, ["FLANGER", "Flanger"], ["MORE", "FlangerMore"]],
-  [24, ["PHASER", "Phaser"], ["MORE", "PhaserMore"]], [26, ["FILTER", "FxFilter"], ["MORE", "FxFilterMore"]],
-  [28, ["CRUSH", "Crush"]], [30, ["TREMOLO", "Tremolo"], ["MORE", "TremoloMore"]], [32, ["RING MOD", "Ring"]],
+  [17, ["POINTS", "Eq"], ["SHAPES", "EqShapes"]], [22, ["FLANGER", "Flanger"], ["TONE", "FlangerMore"]],
+  [24, ["PHASER", "Phaser"], ["TONE", "PhaserMore"]], [26, ["FILTER", "FxFilter"], ["DYNAMICS", "FxFilterMore"]],
+  [28, ["CRUSH", "Crush"]], [30, ["TREMOLO", "Tremolo"], ["SHAPE", "TremoloMore"]], [32, ["RING MOD", "Ring"]],
   [34, ["TAPE", "Tape"], ["TONE", "TapeTone"]],
 ];
 chain([0, 1, 2, 3, 4]);
@@ -625,8 +625,13 @@ run(0.1);
 shot("HomeEdited");                             // (the unsaved dot)
 ex.web_enc(2, 1);                               // (edited: the first detent opens it alone)
 run(0.15);
-shot("PresetsGuard");
-run(2.5);
+shot("PresetsGuard");                           // (V0.86: SAVE twice would leave the edits: said so)
+ex.web_enc(2, 99);                              // (the last user preset; SAVE + OCT-: asked first)
+run(0.1);
+ex.web_buttons(1 << B.SAVE); run(0.05); ex.web_buttons((1 << B.SAVE) | (1 << B.OCTDN)); run(0.03);
+ex.web_buttons(1 << B.SAVE); run(0.03); ex.web_buttons(0); run(0.1);
+shot("PresetsDelete");
+run(3.2);
 
 // ---- V0.8: the looper (a project: T1 chords, T2 a MIDI bass line, T3 an arpeggio with the cutoff moving, clips in
 // other scenes; SONG A A B C)

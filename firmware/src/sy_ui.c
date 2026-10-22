@@ -194,7 +194,7 @@ typedef struct {
     UI_V(S, SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O)
 #define UI_CHOP(S, O, X)                                                                              \
     {S, G_CHORUS, "CHORUS", {SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O}},       \
-    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, X, -1, -1}},                                               \
+    {S, G_CHORUS, "SPACE", {SP_CH_FDBK + O, X, -1, -1}},                                               \
     UI_V(S, SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O)                          \
     UI_V(S, SP_CH_FDBK + O, X, -1, -1)
 #define UI_OTTP(S, O)                                                                                 \
@@ -212,17 +212,17 @@ typedef struct {
 /* V0.86: SYNC beside RATE on the first page (it makes RATE a note value) */
 #define UI_FLGP(S, O)                                                                                 \
     {S, G_FLANGER, "FLANGER", {SP_FL_SYNC + O, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_MIX + O}},      \
-    {S, G_FLANGER, "MORE", {SP_FL_DELAY + O, SP_FL_FDBK + O, SP_FL_SPREAD + O, -1}},                  \
+    {S, G_FLANGER, "TONE", {SP_FL_DELAY + O, SP_FL_FDBK + O, SP_FL_SPREAD + O, -1}},                  \
     UI_V(S, SP_FL_SYNC + O, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_MIX + O)                           \
     UI_V(S, SP_FL_DELAY + O, SP_FL_FDBK + O, SP_FL_SPREAD + O, -1)
 #define UI_PHSP(S, O)                                                                                 \
     {S, G_PHASER, "PHASER", {SP_PH_SYNC + O, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_MIX + O}},        \
-    {S, G_PHASER, "MORE", {SP_PH_CENTER + O, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O}},    \
+    {S, G_PHASER, "TONE", {SP_PH_CENTER + O, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O}},    \
     UI_V(S, SP_PH_SYNC + O, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_MIX + O)                           \
     UI_V(S, SP_PH_CENTER + O, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O)
 #define UI_FFXP(S, O, X)                                                                              \
     {S, G_FFILT, "FILTER", {SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O}},            \
-    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, X, -1, -1}},                                               \
+    {S, G_FFILT, "DYNAMICS", {SP_FF_DRIVE + O, X, -1, -1}},                                               \
     UI_V(S, SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O)                              \
     UI_V(S, SP_FF_DRIVE + O, X, -1, -1)
 #define UI_CRUP(S, O)                                                                                 \
@@ -230,7 +230,7 @@ typedef struct {
     UI_V(S, SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1)
 #define UI_TRMP(S, O, X)                                                                              \
     {S, G_TREM, "TREMOLO", {SP_TR_MODE + O, SP_TR_SYNC + O, SP_TR_RATE + O, SP_TR_DEPTH + O}},        \
-    {S, G_TREM, "MORE", {SP_TR_SHAPE + O, X, -1, -1}},                                                \
+    {S, G_TREM, "SHAPE", {SP_TR_SHAPE + O, X, -1, -1}},                                                \
     UI_V(S, SP_TR_MODE + O, SP_TR_SYNC + O, SP_TR_RATE + O, SP_TR_DEPTH + O)                          \
     UI_V(S, SP_TR_SHAPE + O, X, -1, -1)
 #define UI_RNGP(S, O)                                                                                 \
@@ -253,7 +253,7 @@ static const ui_page_t UI_PG[] = {
     UI_V(SEC_NOISE, SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, -1)
     UI_V(SEC_NOISE, SP_NZ_LEVEL, SP_NZ_PAN, SP_NZ_ROUTE, -1)
     {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
-    {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
+    {SEC_FILTER, G_FILTER, "RESPONSE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
     UI_V(SEC_FILTER, SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE)
     UI_V(SEC_FILTER, SP_F_KEY, SP_F_VAR, SP_F_MIX, -1)
     UI_ENV(E1, SEC_ENV1)
@@ -519,11 +519,12 @@ static struct {
     uint8_t boot;                                   /* .. the splash still shown (until UI_BOOT_MS: the main loop runs, USB
                                                      * and MIDI served, while it holds) */
     uint8_t edited;                                 /* .. (F25) the sound edited since it was loaded or saved: HOME's dot */
-    uint8_t pl_open, pl_guard, pl_hist, pl_edited;  /* .. (H4, F28) PRESETS' list open; its first detent held (edits);
-                                                     * a sound loaded from it (the one before on the history), edited */
-    uint16_t pl_pos, pl_load;                       /* .. the preset turned to, the one loaded (their places in it) */
-    uint8_t pl_back;                                /* .. the history's state of the sound before it */
-    uint32_t pl_t;                                  /* .. its last detent, or load */
+    uint8_t pl_open;                                /* .. (H4; the renders' note) PRESETS' list open */
+    uint16_t pl_pos;                                /* .. the preset picked (its place in it) */
+    uint8_t pl_ask;                                 /* .. SAVE + OCT-'s delete asked: the user slot + 1 (0 none) */
+    uint8_t sv_list;                                /* .. NAME IT opened from the list (SAVE + OCT+): back to sv_ret */
+    uint8_t del_list;                               /* .. the delete asked from the list */
+    uint32_t pl_t;                                  /* .. its last detent, or press */
     uint8_t cb_on, cb_t, cb_s;                      /* .. (S8) TOOLS: a copy kept; its clip (track, scene), */
     int8_t cb_bar;                                  /* .. the whole (-1) or a bar of it */
     uint32_t paste_t, halve_t, clr_t2;              /* .. PASTE, HALVE, CLEAR turned once (a second within 2 s does it) */
@@ -545,8 +546,7 @@ static struct {
     uint8_t ghold, ghold_k, ghold_new, ghold_turn;  /* .. (S7) the grid's step held (+1, 0 none), its key, put in by
                                                      * this press, a knob turned since (no taking out at the release) */
 } ui;
-#define UI_PL_LOAD_MS 400u                          /* PRESETS' list: a preset loads this long after the last detent */
-#define UI_PL_CLOSE_MS 1800u                        /* .. the list closes this long after its last load */
+#define UI_PL_CLOSE_MS 3000u                        /* PRESETS' list: gone this long after its last detent or press */
 #define UI_BOOT_MS 2000u                            /* (P4: the splash 2 s; fm1_ms counts from just after it is drawn) */
 
 static void ui_toast(const char *s)
@@ -1253,8 +1253,6 @@ static void ui_hist_drop(void)                      /* (full: the oldest goes) *
  * however many it loads */
 static void ui_hist_push(void)
 {
-    if (ui.pl_open && ui.pl_hist)
-        return;
     ui.undel = 0;                                   /* (a delete is put back only straight after it) */
     ui.h_cnt = ui.h_at;
     if (ui.h_cnt == UI_NHIST)
@@ -1326,16 +1324,20 @@ static void ui_undo(int redo)
 
 /* ----------------------------------------------------------------------------------------- PRESETS --- */
 /* V0.86: PRESETS by the page: SEQ's pages the track (C1, S4), a drum track the drum (K1, D3: the one EDIT's kit and
- * HOME show), else the sounds through a short list (H4): the one turned to loads UI_PL_LOAD_MS after the last detent
- * (a quick flick loads one, not twenty); SAVE held while it is open, back to the sound before it (the history keeps
- * that one state: ui_hist_push); with edits not saved, the first detent only opens it on them (F28) */
+ * HOME show), else the sounds as a list (H4; the renders' note of 2026-10-22): PRESETS moves through it, nothing
+ * loading; SAVE twice loads the one picked; SAVE + OCT+ the sound playing saved as a new preset, named first (NAME IT);
+ * SAVE + OCT- the one picked deleted, asked first (a second SAVE + OCT-); UI_PL_CLOSE_MS untouched, it goes, nothing
+ * changed */
 static void lp_select(uint32_t t);
 static char *ui_l_trk(char *b, uint32_t t);
+static void ui_save_open_new(void);                 /* sy_ui_save.c */
+static int sy_app_delete(uint32_t s);               /* sy_app.c */
 static void ui_pl_close(void)
 {
     if (!ui.pl_open)
         return;
     ui.pl_open = 0;
+    ui.pl_ask = 0;
     ui.dirty = D_ALL;
 }
 static void ui_pl_turn(int32_t s)
@@ -1344,69 +1346,61 @@ static void ui_pl_turn(int32_t s)
     uint32_t n = sy_app_list(0, 0, ids), now = sy_app_entry_now(), k;
     if (!n)
         return;
-    if (!ui.pl_open) {
+    if (!ui.pl_open) {                              /* (opened on the sound playing) */
         for (k = 0; k < n && ids[k] != now; k++)
             ;
-        ui.pl_pos = ui.pl_load = (uint16_t)(k < n ? k : 0u);
+        ui.pl_pos = (uint16_t)(k < n ? k : 0u);
         ui.pl_open = 1;
-        ui.pl_hist = 0;
-        ui.pl_edited = ui.edited;
-        ui.pl_t = fm1_ms;
-        ui.dirty = D_ALL;
-        if (ui.edited) {                            /* (F28: edits not saved: this detent opens it, nothing more) */
-            ui.pl_guard = 1;
-            return;
-        }
     }
-    ui.pl_guard = 0;
     ui.pl_pos = (uint16_t)sy_clampi((int32_t)ui.pl_pos + s, 0, (int32_t)n - 1);
+    ui.pl_ask = 0;
     ui.pl_t = fm1_ms;
     ui.dirty = D_ALL;
 }
-/* every millisecond: the preset turned to loaded once the turning stops; the list gone a moment after */
-static void ui_pl_ms(void)
+static void ui_pl_ms(void)                          /* every millisecond: untouched, the list goes */
 {
-    static uint32_t anim;
-    if (!ui.pl_open)
-        return;
-    if (ui.pl_pos != ui.pl_load) {
-        if (fm1_ms - ui.pl_t >= UI_PL_LOAD_MS && !sy_next_st) {
-            uint16_t ids[SY_NFACT + SS_NUSER];
-            uint32_t n = sy_app_list(0, 0, ids);
-            if (ui.pl_pos < n) {
-                int first = !ui.pl_hist;
-                sy_app_entry_load(ids[ui.pl_pos]);  /* (the first: the sound before goes on the history; the */
-                if (first && ui.h_at) {             /* next ones keep it there) */
-                    ui.pl_back = (uint8_t)(ui.h_at - 1u);
-                    ui.pl_hist = 1;
-                }
-            }
-            ui.pl_load = ui.pl_pos;
-            ui.pl_t = fm1_ms;
-            ui.dirty = D_ALL;
-        } else if (fm1_ms - anim >= 40u) {          /* (the bar under the row filling as it waits) */
-            anim = fm1_ms;
-            ui.dirty |= D_DISP;
-        }
-    } else if (fm1_ms - ui.pl_t >= UI_PL_CLOSE_MS && !ui.pl_guard) {
+    if (ui.pl_open && fm1_ms - ui.pl_t >= UI_PL_CLOSE_MS && !(ui.bt_down & (1u << B_SAVE)))
         ui_pl_close();
-    } else if (ui.pl_guard && fm1_ms - ui.pl_t >= 2u * UI_PL_CLOSE_MS) {
-        ui_pl_close();
-    }
 }
-/* SAVE held with the list open: the sound before it back (as undo takes a state back), the list closed */
-static void ui_pl_back(void)
+static void ui_pl_load(void)                        /* SAVE twice: the one picked loaded (undo takes it back) */
 {
-    char t[32];
-    if (ui.pl_hist) {
-        ui_hist_take(ui_hist_at(ui.pl_back));
-        sy_app_entry_mark(ui_hist_id[ui_hist_ix(ui.pl_back)]);
-        ui.edited = ui.pl_edited;
-        ui.edit_t = 0;
-        sp_put(sp_put(t, "BACK: "), sy_patch.name);
-        ui_toast(t);
-    }
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids);
+    if (ui.pl_pos < n && (ids[ui.pl_pos] != sy_app_entry_now() || ui.edited))
+        sy_app_entry_load(ids[ui.pl_pos]);
     ui_pl_close();
+}
+static void ui_pl_new(void)                         /* SAVE + OCT+: the sound playing as a new preset, named first */
+{
+    ui.sv_ret = ui.page;
+    ui_pl_close();
+    ui_save_open_new();
+}
+static void ui_pl_del(void)                         /* SAVE + OCT-: the one picked deleted, the second time */
+{
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids), s;
+    if (ui.pl_pos >= n)
+        return;
+    if (ids[ui.pl_pos] < SY_USER) {
+        ui_toast("A STARTER SOUND STAYS");
+        return;
+    }
+    s = ids[ui.pl_pos] - SY_USER;
+    if (ui.pl_ask != s + 1u) {
+        ui.pl_ask = (uint8_t)(s + 1u);
+        ui.dirty = D_ALL;
+        return;
+    }
+    ui.pl_ask = 0;
+    ui.dirty = D_ALL;
+    if (ui.saving || sy_app_delete(s)) {
+        ui_toast("BUSY: TRY AGAIN");
+        return;
+    }
+    ui.saving = 1;
+    ui.del_list = 1;
+    ui_toast("DELETING");
 }
 static void ui_presets(int32_t s)
 {
@@ -2451,7 +2445,9 @@ static void ui_reset(uint32_t b)
 static void ui_press(uint32_t b)
 {
     ui_safe_end();
-    if (b != B_SAVE)                                /* (PRESETS' list: any other button closes it) */
+    if (ui.pl_open && (b == B_SAVE || ((b == B_OCTDN || b == B_OCTUP) && (ui.bt_down & (1u << B_SAVE)))))
+        ui.pl_t = fm1_ms;                           /* (PRESETS' list: SAVE and SAVE + OCT its own; any other button */
+    else                                            /* closes it) */
         ui_pl_close();
     if (b != ui.cd_btn)
         ui_cd_stop();
@@ -2468,8 +2464,10 @@ static void ui_press(uint32_t b)
         char t[16] = "KEYS OCT ";
         uint16_t held = (uint16_t)(ui.bt_down & UI_CHORD);
         if (ui.bt_down & (1u << B_SAVE)) {          /* SAVE held: undo, redo (in the browser, a preset just */
-            ui.bt_chord |= (uint16_t)((1u << B_SAVE) | (1u << b));   /* deleted: back) */
-            if (b == B_OCTDN && ui_sec() == SEC_BROWSE && ui.undel)
+            ui.bt_chord |= (uint16_t)((1u << B_SAVE) | (1u << b));   /* deleted: back; PRESETS' list: a new */
+            if (ui.pl_open)                                           /* preset named, the one picked deleted) */
+                b == B_OCTUP ? ui_pl_new() : ui_pl_del();
+            else if (b == B_OCTDN && ui_sec() == SEC_BROWSE && ui.undel)
                 ui_browse_undel();
             else
                 ui_undo(b == B_OCTUP);
@@ -2505,9 +2503,8 @@ static void ui_press(uint32_t b)
 
 static void ui_hold(uint32_t b)
 {
-    if (b == B_SAVE && ui.pl_open) {                /* (V0.86: PRESETS' list: back to the sound before it) */
-        ui.bt_chord |= (uint16_t)(1u << B_SAVE);
-        ui_pl_back();
+    if (b == B_SAVE && ui.pl_open) {                /* (V0.86: PRESETS' list: SAVE held is for its OCT, nothing */
+        ui.bt_chord |= (uint16_t)(1u << B_SAVE);    /* more) */
         return;
     }
     if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
@@ -2557,8 +2554,13 @@ static void ui_release(uint32_t b, int held)
             ui_toast("NOTHING TO SAVE OVER: TAP SAVE");
         return;
     }
-    if (b == B_SAVE && ui.pl_open) {                /* (PRESETS' list open: SAVE's tap closes it, nothing saved) */
-        ui_pl_close();
+    if (b == B_SAVE && ui.pl_open) {                /* (PRESETS' list open: SAVE twice loads the one picked) */
+        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS) {
+            ui.tap_t[b] = 0;
+            ui_pl_load();
+        } else {
+            ui.tap_t[b] = fm1_ms;
+        }
         return;
     }
     if (b == B_SAVE) {                              /* SAVE: on NAME IT, written; else once (no second tap within */
@@ -2596,7 +2598,8 @@ static void ui_release(uint32_t b, int held)
     }
     if (b == B_HOME && (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)) {
         ui.tap_t[b] = fm1_ms;                       /* HOME: NAME IT back to the browser, unsaved; the browser back */
-        ui_go(ui_sec() == SEC_SAVE ? ui_first_page(SEC_BROWSE) : ui.sv_ret);
+        ui_go(ui_sec() == SEC_SAVE && !ui.sv_list ? ui_first_page(SEC_BROWSE) : ui.sv_ret);
+        ui.sv_list = 0;                             /* (NAME IT from the list: back to the page) */
         return;
     }
     if (ui.mod == 2u && b == ui.mod_btn) {          /* a tap lets a latched layer go */

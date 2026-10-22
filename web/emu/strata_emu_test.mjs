@@ -81,6 +81,10 @@ function cstr(ex, p) {
   return String.fromCharCode(...m.subarray(p, e));
 }
 const tap = (ex, b) => { ex.web_buttons(1 << b); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.35); };   // (no double tap)
+const saveTwice = (x) => {                      // SAVE twice (V0.86: PRESETS' list loads the one picked)
+  for (let i = 0; i < 2; i++) { x.web_buttons(1 << B.SAVE); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
+  play(x, 0.3);
+};
 const slots = (ex) => Array.from({ length: 8 }, (_, s) => [0, 1, 2].map((f) => ex.web_test_slot(s, f)));
 const fxTwice = (x) => {                        // FX tapped twice: the chain view <-> the module picked
   for (let i = 0; i < 2; i++) { x.web_buttons(1 << B.FX); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
@@ -164,17 +168,18 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
         s1 === SEC.CHAIN && c.join() === "2,4,0" && slot === 1 && s2 === SEC.REVERB && p3 !== p2 && s3 === SEC.REVERB &&
         s4 === SEC.CHORUS && ex.web_test_page_section() === SEC.CHAIN && ex.web_test_cslot() === 0);
 }
-{                                               // PRESETS' list (V0.86, H4, F28): edited, the first detent opens it
-  ex.web_enc(E.PRESET, 1);                      // alone; the next moves; the preset loads 0.4 s after the last
+{                                               // PRESETS' list (V0.86, the renders' note): PRESETS moves through it,
+  ex.web_enc(E.PRESET, 1);                      // nothing loading; 3 s untouched it goes; SAVE twice loads the one picked
   play(ex, 0.3);
-  const s0 = cstr(ex, ex.web_test_patch_name());
+  const o0 = [ex.web_test_pl(0), ex.web_test_pl(1), cstr(ex, ex.web_test_patch_name())];
+  play(ex, 3.0);
+  const o1 = [ex.web_test_pl(0), cstr(ex, ex.web_test_patch_name())];
   ex.web_enc(E.PRESET, 1);
-  play(ex, 0.2);
-  const s1 = cstr(ex, ex.web_test_patch_name());
-  play(ex, 0.4);
-  check(`PRESETS: edited, the first detent opens the list ("${s0}"), the next turns to PLUCK ("${s1}" at 0.2 s), loaded 0.4 s after ("${cstr(ex, ex.web_test_patch_name())}")`,
-        s0 === "SUPERSAW" && s1 === "SUPERSAW" && ex.web_test_sound() === 1 && cstr(ex, ex.web_test_patch_name()) === "PLUCK");
-  play(ex, 2.0);                                // (the list gone)
+  play(ex, 0.3);
+  saveTwice(ex);
+  check(`PRESETS: the list opens, PLUCK picked (${o0}), nothing loaded; 3 s untouched, gone (${o1}); again, SAVE twice: "${cstr(ex, ex.web_test_patch_name())}" loaded, the list gone (${ex.web_test_pl(0)})`,
+        o0.join() === "1,1,SUPERSAW" && o1.join() === "0,SUPERSAW" && ex.web_test_sound() === 1 &&
+        cstr(ex, ex.web_test_patch_name()) === "PLUCK" && ex.web_test_pl(0) === 0);
 }
 {                                               // the MOD layer, on OSC A's WAVE page
   tap(ex, B.EDIT);
@@ -508,10 +513,9 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   check(`SAVE + OCT-: a gesture at a time (WT POS ${v0} -> ${v1}, a second later ${v2}; undone ${u1}, ${u2[0]}, "${u2[1]}"); SAVE + OCT+ redoes (${ex.web_test_value(pos)})`,
         v1 === v0 + 6 && v2 === v1 + 1 && u1 === v1 && u2[0] === v0 && u2[1] === "UNDO" && ex.web_test_value(pos) === v1);
   const s0 = cstr(ex, ex.web_test_patch_name());
-  ex.web_enc(E.PRESET, 1);                      // (V0.86: edited, the list's first detent opens it; the next loads)
-  play(ex, 0.05);
-  ex.web_enc(E.PRESET, 1);
-  play(ex, 2.6);                                // (loaded, the list gone)
+  ex.web_enc(E.PRESET, 1);                      // (V0.86: the list, SAVE twice)
+  play(ex, 0.1);
+  saveTwice(ex);
   const s1 = cstr(ex, ex.web_test_patch_name());
   undo(B.OCTDN);
   check(`.. a sound's load undone ("${s0}" -> "${s1}" -> "${cstr(ex, ex.web_test_patch_name())}", WT POS ${ex.web_test_value(pos)})`,
@@ -1121,16 +1125,42 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         put[0] === "BACK IN USER 1" && put[1] === del0[2] && oc === del0[3] - 1 && ex.web_test_oct() === del0[3]);
   btn(B.HOME);
   play(ex, 0.1);
-  ex.web_enc(E.PRESET, -1);                     // PRESETS (V0.86: the list, no round): down to the first starter
-  play(ex, 0.05);
-  ex.web_enc(E.PRESET, -99);
-  play(ex, 2.6);                                // (loaded, the list gone)
+  ex.web_enc(E.PRESET, -99);                    // PRESETS (V0.86: the list, no round): down to the first starter,
+  play(ex, 0.1);                                // SAVE twice
+  saveTwice(ex);
   const st = [name(), ex.web_test_user_slot()];
   hold(1.0);
   ex.web_buttons(0);
   play(ex, 0.1);
   check(`SAVE held on a starter sound ("${st[0]}", user slot ${st[1]}): nothing to save over ("${toast()}"), nothing saved (USER 3 "${slotName(2)}")`,
         st[1] === -1 && toast() === "NOTHING TO SAVE OVER: TAP SAVE" && slotName(2) === "");
+  {                                             // (V0.86: in PRESETS' list, SAVE + OCT+ saves the sound as a new
+    const listChord = (b) => { ex.web_buttons(1 << B.SAVE); play(ex, 0.05); chord(B.SAVE, b); ex.web_buttons(0); play(ex, 0.4); };
+    const pg0 = ex.web_test_page();             // preset, named first; SAVE + OCT- deletes the one picked, asked)
+    ex.web_enc(E.PRESET, 1);
+    play(ex, 0.1);
+    listChord(B.OCTUP);
+    const nm = [ex.web_test_page_section(), sname(), ex.web_test_save_slot()];
+    tap(ex, B.SAVE);                            // (SAVE on NAME IT: written)
+    play(ex, 0.6);
+    const saved = [slotName(nm[2]), ex.web_test_page() === pg0, toast()];
+    ex.web_enc(E.PRESET, 99);                   // (the last user preset: the one just saved)
+    play(ex, 0.1);
+    listChord(B.OCTDN);
+    const ask = [ex.web_test_pl(2), slotName(nm[2])];
+    listChord(B.OCTDN);
+    play(ex, 0.6);
+    const gone = [slotName(nm[2]), toast()];
+    ex.web_enc(E.PRESET, -99);
+    play(ex, 0.1);
+    listChord(B.OCTDN);
+    const starter = [toast(), ex.web_test_pl(2)];
+    play(ex, 3.2);
+    check(`PRESETS' list: SAVE + OCT+ names a new preset (section ${nm[0]}, "${nm[1]}", USER ${nm[2] + 1}); SAVE: "${saved[0]}" saved, back to the page (${saved[1]}); SAVE + OCT- on it asks (${ask[0]}, kept "${ask[1]}"), again deletes ("${gone[0]}", "${gone[1]}"); on a starter: "${starter[0]}" (${starter[1]})`,
+          nm[0] === SEC.SAVE && nm[1] === "SUPERSAW v2" && saved[0] === "SUPERSAW v2" && saved[1] === true &&
+          ask[0] === nm[2] + 1 && ask[1] === "SUPERSAW v2" && gone[0] === "" && gone[1] === `DELETED USER ${nm[2] + 1}` &&
+          starter[0] === "A STARTER SOUND STAYS" && starter[1] === 0);
+  }
   const ra = ex.web_test_erase(0), rb = ex.web_test_erase(0xE8000);
   check(`the flash's allow-list: an erase at 0x00000 (the boot) or 0xE8000 (the stock firmware's backup) refused (${ra}, ${rb}; ${ex.web_test_refused()} refused)`,
         ra === -8 && rb === -8 && ex.web_test_refused() === 2);
@@ -1738,7 +1768,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     const nm = cstr(v, v.web_test_page_name());
     if (nm === "VALUES" && v.web_test_page_param(1) === cut && vp < 0) vp = q;
     if (nm === "TONE") tone = q;
-    if (nm === "MORE") more = q;
+    if (nm === "RESPONSE") more = q;            // (V0.86: MORE named for what it holds)
   }
   const quick = (page) => {                     // KNOB 2: twenty detents 5 ms apart (a quick turn)
     v.web_test_go(page);

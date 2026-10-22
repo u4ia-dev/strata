@@ -767,6 +767,8 @@ EXPORT int32_t web_test_power(int32_t batt, int32_t usbp)
     return ui_batt();
 }
 EXPORT uint32_t web_test_scr(void) { return ui.scr_st; }
+/* PRESETS' list (V0.86): f 0 open, 1 the one picked (its place), 2 SAVE + OCT-'s delete asked (the user slot + 1) */
+EXPORT int32_t web_test_pl(uint32_t f) { return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : -1; }
 EXPORT uint32_t web_test_lcd_off(void) { return web_lcd_off; }
 EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
 {
