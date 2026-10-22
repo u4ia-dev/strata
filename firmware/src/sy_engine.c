@@ -576,6 +576,7 @@ static void sy_block(int32_t *out)
     }
     sy_vol = vol1;
     fx_block(sy_mix_l, sy_mix_r);
+    sy_drum_block(sy_mix_l, sy_mix_r);               /* (V0.85: the duck on the synth, the drums added: sy_drum.c) */
     {                                                /* the master: no DC out of the effects (TUBE makes some), */
         float a0 = sy_dc[2][0], b0 = sy_dc[2][1], a1 = sy_dc[3][0], b1 = sy_dc[3][1];   /* to Q15 */
         for (i = 0; i < SY_BLK; i++) {
@@ -673,6 +674,7 @@ static void sy_init(void)
     wg_init();
     sp_defaults(&sy_patch);
     sp_snap();
+    sy_drum_init();                                  /* (V0.85: the kit's defaults, the drums silent) */
     for (i = 0; i < SY_NVOICE; i++)
         voice_init(&sy_v[i], i);
     sy_last_pitch = 60.0f;                           /* (everything from scratch: the same events give the */

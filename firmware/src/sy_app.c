@@ -114,6 +114,7 @@ static void sy_ev_drain(sy_ring_t *g)
         default:
             sy_chord_reset_all();
             sy_all_sound_off();
+            sy_drum_off();                       /* (V0.85: the drums and the duck too) */
             break;
         }
         g->r = g->r + 1u;
@@ -200,6 +201,10 @@ static void sy_audio_init(void)
 /* the UI's performance: the panel's bend and a controller (GLO's PERFORM), as MIDI's would come */
 static void sy_app_bend(uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_BEND, v & 127u, (v >> 7) & 127u); }
 static void sy_app_cc(uint32_t cc, uint32_t v) { sy_ev_push(&sy_ev_ui, SY_EV_CC, cc & 127u, v & 127u); }
+static void sy_app_drum(uint32_t note, uint32_t vel)   /* (V0.85: the grid's step put in, heard: a drum's note as */
+{                                                      /* MIDI's, to the track selected; a drum's release is none) */
+    sy_ev_push(&sy_ev_ui, SY_EV_NOTE, note & 127u, vel & 127u);
+}
 static void sy_app_run(uint32_t on) { sy_ev_push(&sy_ev_ui, SY_EV_RUN, on ? 1u : 0u, 0u); }       /* (PLAY: V0.75) */
 
 /* -------------------------------------------------------------------------------------------- MIDI --- */

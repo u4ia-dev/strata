@@ -354,11 +354,51 @@ times they were played, one to sixteen bars long. The design and its decisions: 
 - **Kept**: QUANTIZE, COUNT-IN, LAUNCH, CLICK, its LEVEL and the project loaded with the settings; the rest in the
   project.
 
+## The drums (V0.85)
+
+TRACK's TYPE has a fourth: **DRUMS**, a track that plays the project's drum kit (one kit a project; any track can be a
+drum track, they share it). The design: [LOOPER.md](LOOPER.md) stage 2. Everything else of a track is as above (its
+clips and scenes, VOLUME, PAN, MUTE, SOLO, recording, launching, SONG); a drum track has no chords, ARP or SCALE.
+
+- **The kit**: eight drums, each its own model. KICK (a sine swept down; PUNCH: how high the sweep starts; TONE: drive
+  and a click), SNARE (a body of two sines and noise; SNAP: the noise against the body; TONE: the noise's high-pass),
+  CLAP (noise through a band-pass in four bursts; SPREAD: the bursts apart, 4 .. 20 ms; TONE: narrower), HAT CL, HAT
+  OP and CYM (six square waves at a TR-808's frequencies and noise; METAL: the squares' share; TONE: the high-pass;
+  a HAT CL ends a HAT OP ringing), WT 1 and WT 2 (one-shots on OSC A's and OSC B's wavetable; TONE: the FRAME; BEND:
+  a fall from up to three octaves). Every drum: TUNE (±24 semitones), DECAY (its time to −60 dB, each model its own
+  range), LEVEL, PAN.
+- **Its keys** (a drum track selected): white keys 1-8 KICK, SNARE, CLAP, HAT CL, HAT OP, CYM, WT 1, WT 2; white keys
+  9-16 the same, accented; the first black key DUCK. They glow so (the accented ones brighter). MIDI notes in: GM's
+  drums: KICK 36 (35), SNARE 38 (37, 40), CLAP 39, HAT CL 42 (44), HAT OP 46, CYM 49 (51, 52, 53, 55, 57, 59), WT 1
+  45 (41, 43, 47: the low toms), WT 2 50 (48); DUCK C1 (24); any other note none. A drum played is recorded as a hit
+  (its first number), as notes are on a synth track.
+- **KIT** (EDIT on a drum track): DRUM (KNOB 1 the drum, TUNE, DECAY, TONE; its fall drawn, KICK's sweep dashed),
+  MORE (its PUNCH, SNAP, SPREAD, METAL or BEND; LEVEL; PAN: the eight as a mixer), ACCENT (ACCENT: an accented hit's
+  lift, up to +6 dB; VELOCITY: how much a hit's velocity counts, 0 every hit as LEVEL; the gain by velocity drawn),
+  DUCK (AMOUNT, ATTACK 0 .. 50 ms, RELEASE 20 ms .. 1 s, SHAPE: LINEAR, EXP (back quickly, then slowly), PUMP (held
+  down, back late); the synth's level drawn over time). Stopped, the drum you play is the one picked. EDIT held 5 s
+  on KIT: the kit as a project starts.
+- **The sidechain**: the DUCK row's hits make no sound; each ducks the synth (every synth track, after its effects)
+  by AMOUNT, over ATTACK, and lets it back over RELEASE along SHAPE. The drums are never ducked. MIDI tracks' notes go
+  out untouched.
+- **GRID, HIT** (SEQ's CLIP on a drum track, in place of NOTES and EDIT): the clip in sixteenths, sixteen steps at a
+  time, a row a drum and DUCK. On these two pages **the white keys are the sixteen steps** (a key puts a hit of the
+  row picked in, or takes it out; stopped, you hear it go in) and **the black keys pick the row** (1 KICK .. 9 DUCK);
+  the keys' LEDs show the row's hits, the playhead's step and the row. An empty clip gets a bar at the first step put
+  in, and plays when PLAY starts. KNOB 1 the step (the sixteen shown follow it), KNOB 2 the row; GRID: VELOCITY and
+  ACCENT of the hit there; HIT: CHANCE (100 % .. 13 %: how often it plays) and RATCHET (1 .. 4 hits in its sixteenth).
+  A hit's brightness is its velocity; accented, the cell's full height; under 100 %, hollow and filled as far as it
+  plays; a ratchet, its hits as slivers; DUCK's, frames. CLIP's third page is CLIP, as a synth track's.
+- **TYPE** changes keep a clip as it is: on a synth or MIDI track a hit plays as a sixteenth, on a drum track a note as
+  a plain hit of its drum (GM's numbers; others are silent). Back to DRUMS, nothing was lost.
+- **Kept** in the project: the kit (and the duck's settings), the tracks' TYPE, the hits with their ACCENT, CHANCE and
+  RATCHET. A project saved by V0.8 or V0.81 loads with the kit as a project starts.
+
 ## LEDs
 
 | LED | Lit | Glowing | Mid / breathing |
 | --- | --- | --- | --- |
-| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; the launch pad: a track's clip playing, the scene picked, a track not muted, SOLO on | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); the launch pad: a clip there, a scene with clips, STOP, SOLO, UNDO | mid: the scale's root |
+| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; the launch pad: a track's clip playing, the scene picked, a track not muted, SOLO on; GRID and HIT (V0.85): the row's hits, the row picked | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); the launch pad: a clip there, a scene with clips, STOP, SOLO, UNDO; a drum track: its eight drums and DUCK; GRID and HIT: rows with hits there | mid: the scale's root; a drum track's accented keys; GRID and HIT: the playhead's step |
 | A family button | the family shown | the others | |
 | REC | in its layer; the looper recording (dark the last quarter of each beat); counting in or waiting for the bar: blinking | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |

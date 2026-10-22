@@ -23,7 +23,7 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
               CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, LTRK: 47,
-              LCLIP: 48, LSONG: 49 };   // SEC_*
+              LCLIP: 48, LSONG: 49, KIT: 50, LGRID: 51 };   // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
@@ -705,6 +705,68 @@ ex.web_test_palette(0);
   ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); run(0.03);
   ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons(0); run(0.2);
   shot("LoopNextTrack");                        // (SEQ + OCT+: the next track, its word)
+  rest();
+}
+{                                               // ---- V0.85, the drums: T8 DRUMS, a beat on its grid, the kit's pages
+  const lp = (f, v = -1) => ex.web_test_lp(f, v), tr = (t, f, v = -1) => ex.web_test_lp_trk(t, f, v);
+  const g = (row, steps, vel = 100) => steps.forEach((st, i) => ex.web_test_grid(0, row, st, Array.isArray(vel) ? vel[i] : vel));
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0); run(0.2);   // (stopped)
+  if (lp(15)) { ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0); run(0.2); }
+  lp(0, 7); lp(1, 0);
+  tr(7, 0, 2);
+  go(SEC.LTRK, "TRACK");
+  run(0.1);
+  shot("DrumTrack");
+  g(0, [0, 4, 8, 10, 12], [120, 100, 110, 70, 100]);   // KICK
+  g(1, [4, 12], [110, 120]);                    // SNARE
+  ex.web_test_grid(2, 1, 12, 1);                // (its second accented)
+  g(2, [12, 15], [90, 60]);                     // CLAP
+  g(3, [0, 2, 4, 6, 8, 10, 12], [90, 60, 85, 55, 90, 60, 85]);   // HAT CL
+  ex.web_test_grid(3, 3, 6, 2);                 // (one at 75 %)
+  g(4, [14], 80);                               // HAT OP
+  g(5, [0], 70);                                // CYM
+  g(6, [3, 11], [90, 80]);                      // WT 1
+  g(7, [7], 85);                                // WT 2
+  ex.web_test_grid(4, 7, 7, 2);                 // (a ratchet of 3)
+  g(8, [0, 4, 8, 12]);                          // DUCK
+  ex.web_test_lp_launch(7, 0);
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(1.37);
+  go(SEC.LGRID, "GRID");
+  turn(1, 1);                                   // (the row: SNARE, its step 5)
+  turn(0, 4);
+  rest();
+  shot("DrumGrid");
+  turn(2, -8);                                  // VELOCITY turning
+  shot("DrumGridTurn");
+  rest();
+  go(SEC.LGRID, "HIT");
+  turn(1, 6);                                   // (WT 2's ratcheted step)
+  turn(0, 3);
+  rest();
+  shot("DrumHit");
+  ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
+  run(0.3);
+  go(SEC.KIT, "DRUM");
+  run(0.1);
+  shot("DrumKit");
+  turn(0, 5);                                   // (CYM: a long fall)
+  rest();
+  shot("DrumKitCym");
+  turn(2, 4);                                   // DECAY turning
+  shot("DrumKitTurn");
+  rest();
+  go(SEC.KIT, "MORE");
+  run(0.1);
+  shot("DrumMore");
+  go(SEC.KIT, "ACCENT");
+  run(0.1);
+  shot("DrumAccent");
+  go(SEC.KIT, "DUCK");
+  run(0.1);
+  shot("DrumDuck");
+  turn(3, 1);                                   // SHAPE turning: PUMP
+  shot("DrumDuckTurn");
   rest();
 }
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);

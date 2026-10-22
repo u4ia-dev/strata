@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,31 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 15. V0.85 (the drums)
+
+From the build (2026-10-21): the image **438,124 B** (+20,940 on V0.81: `sy_drum.c`, the drum synth and the duck, ~5
+KB; `sy_ui_drum.c`, the KIT's and the grid's pages, ~11 KB; the looper's hits, ratchets and grid, the stream's
+version 2); `.data` + `.bss` **62,228 B** (+1,568: the eight drum voices, ~1 KB; the kit, 72 B; the ratchets to come,
+8 x 12 B; the hits counted, 36 B; the UI's picks); the pool 361,860 B (+72: the project's head gathered, the kit in
+it); the interrupt stack ~2,712 B (+176: a block of a drum, 128 B) of 4,096 allowed, the main stack ~4,804 B. Left:
+**143,440 B** of the app slot, **11,500 B** of `.data` + `.bss`, **19,068 B** of the pool (4 KiB of each the build's
+margin). The flash: a project's stream 72 B longer (the kit), inside its four objects as before.
+
+The engine (`tools/costprobe/sy_dyn.sh`; the synth's renders bit for bit as before: `tests/sy_golden.txt` unchanged):
+
+| Scenario | V0.81 | V0.85 |
+| --- | ---: | ---: |
+| idle (the drums' block, nothing sounding) | 153 | 156 |
+| SUPERSAW, 8 notes | 4,300 | 4,301 |
+| the eight drums sounding at once | | 675 (518 over idle: 11-15 % of a core) |
+| SUPERSAW, 8 notes, the drums, the duck | | 4,832 |
+
+The drums' own: the three metal voices ~170 (V0.85's first build 232: their six squares now counted in a pass of their
+own, the phases in registers, the renders the same bit for bit), the mixing ~127 (each voice into both sides, its
+track's gains ramped), WT 1 and 2 ~52, SNARE ~40, CLAP ~27, KICK ~19. A beat seldom sounds more than three at once (a
+kick, a hat, a snare or clap: ~150-200). They count in the admission's block time like any fixed cost (sy_engine.c):
+a heavy sound has its voices trimmed first.
 
 ## 14. V0.81 (V0.8 LOOPER's fixes, and less of everything)
 

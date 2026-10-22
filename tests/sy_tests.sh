@@ -24,6 +24,10 @@
 #             source's mean), determinism and golden renders (tests/sy_golden.txt; GOLDEN_UPDATE=1 rewrites it, for
 #             an intended change of sound only), effects (OTT sums back, the synced delay, extremes bounded), cost.
 #             Demos (the test sounds as WAV) in build/sy_demo/.
+#   DRUMS     (tests/sy_drum_test.c, V0.85) the drum synth (firmware/src/sy_drum.c) through sy_block: every lane heard,
+#             bounded and ended; DECAY's time to -60 dB; TUNE; CLAP's bursts; the choke; ACCENT, VELOCITY, PAN, a muted
+#             track; the WT lanes' tables; the duck (AMOUNT, ATTACK, RELEASE, SHAPE, the synth only); 40 random kits;
+#             golden renders (tests/sy_drum_golden.txt; GOLDEN_UPDATE=1 rewrites it); the host's cost.
 #   MIDI OUT  (tests/sy_midi_out_test.c, V0.81) usb.c's out ring: a note lost to a full ring marks its channel, an
 #             All Notes Off on each once there is room (and the half's poll), as before when nothing is lost.
 set -e
@@ -54,6 +58,10 @@ run "store: Strata's flash, torn writes, the allow-list, the user slots" "$OUT/s
 $CC -Ibuild/gen -o "$OUT/sy_engine_test" tests/sy_engine_test.c -lm
 run "engine: parameters, matrix, voices, timing, clicks, health, DC, golden renders, effects, cost" \
     "$OUT/sy_engine_test" tests/sy_golden.txt build/sy_demo
+
+${CC%% -Wdouble-promotion*} -Wno-unused-function -Wno-unused-parameter -Ibuild/gen -o "$OUT/sy_drum_test" tests/sy_drum_test.c -lm
+run "drums: every lane, DECAY, TUNE, the bursts, the choke, ACCENT, VELOCITY, PAN, the duck, health, golden renders, cost" \
+    "$OUT/sy_drum_test" tests/sy_drum_golden.txt build/sy_demo
 
 cc -O2 -w -o "$OUT/sy_midi_out_test" tests/sy_midi_out_test.c
 run "USB MIDI out: notes lost to a full ring ended (All Notes Off), as before with room (V0.81)"     "$OUT/sy_midi_out_test"

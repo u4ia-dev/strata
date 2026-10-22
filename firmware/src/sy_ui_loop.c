@@ -18,11 +18,33 @@
 #define LG_N 5u                                     /* NOTES' GRID: a move's step */
 static const char *const LG_NAME[LG_N] = {"FREE", "1/32", "1/16", "1/8", "1/4"};
 static const uint8_t LG_TICKS[LG_N] = {1, 12, 24, 48, 96};
-static const char *const LT_TYPE3[3] = {"SYNTH", "SYNTH+MIDI", "MIDI"};   /* TYPE as the knob steps it */
-static uint32_t ui_l_type3(uint32_t t)              /* a track's TYPE: 0 SYNTH, 1 SYNTH with MIDI out, 2 MIDI */
+static const char *const LT_TYPE3[4] = {"SYNTH", "SYNTH+MIDI", "MIDI", "DRUMS"};   /* TYPE as the knob steps it */
+static uint32_t ui_l_type3(uint32_t t)              /* a track's TYPE: 0 SYNTH, 1 SYNTH with MIDI out, 2 MIDI, 3 DRUMS */
 {
     const lp_trk_t *k = &lpp.trk[t % LP_NTRK];
-    return k->type == LT_MIDI ? 2u : k->out ? 1u : 0u;
+    return k->type == LT_DRUM ? 3u : k->type == LT_MIDI ? 2u : k->out ? 1u : 0u;
+}
+static void sy_ui_drum_ms(void);                    /* sy_ui_drum.c (V0.85) */
+/* V0.85: the page shown as the selected track's TYPE wants it: a drum track's EDIT is its KIT, its CLIP the grid; a
+ * synth's, the sound's and NOTES (the page of the same drawing where there is one) */
+static void ui_l_follow(void)
+{
+    uint32_t s = ui_sec(), to = 0xFFu, p;
+    int drum = ui_drums();
+    if (drum && s == SEC_LCLIP)
+        to = SEC_LGRID;
+    else if (!drum && s == SEC_LGRID)
+        to = SEC_LCLIP;
+    else if (drum && ui.fam == FAM_EDIT && s != SEC_KIT)
+        to = SEC_KIT;
+    else if (!drum && s == SEC_KIT)
+        to = SEC_OSCA;
+    if (to == 0xFFu)
+        return;
+    for (p = 0; p < UI_NPG; p++)
+        if (UI_PG[p].sec == to && UI_PG[p].graph == UI_PG[ui.page].graph)
+            break;
+    ui_go(p < UI_NPG ? p : ui_first_page(to));
 }
 static char ui_l_scn(uint32_t s) { return (char)('A' + s % LP_NSCN); }
 static char *ui_l_trk(char *b, uint32_t t)          /* "T3 SYNTH" */
@@ -82,6 +104,7 @@ static void lp_select_to(uint32_t t, int keep)
     ui.lnote = 0;
     lpx.seq++;
     ui.dirty = D_ALL;
+    ui_l_follow();                                  /* (V0.85: a drum track's pages, or a synth's) */
 }
 static void lp_select(uint32_t t) { lp_select_to(t, 1); }
 static void lp_scale_keep(void)                     /* the selected track's SCALE as the UI has it (before a save) */
@@ -174,11 +197,10 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
         k->mute = v == 1, k->solo = v == 2;
         break;
     }
-    case UI_LTYPE: {
-        int32_t v = sy_clampi((int32_t)ui_l_type3(t) + s, 0, 2);
-        lp_out_off_all(t);
-        k->type = v == 2 ? LT_MIDI : LT_SYNTH;
-        k->out = v == 1;
+    case UI_LTYPE: {                                /* (V0.85: DRUMS too, its clips' notes turned: sy_loop.c) */
+        int32_t v = sy_clampi((int32_t)ui_l_type3(t) + s, 0, 3);
+        lp_type_set(t, v == 3 ? LT_DRUM : v == 2 ? LT_MIDI : LT_SYNTH, v == 1);
+        ui_l_follow();
         break;
     }
     case UI_LCH: k->ch = (uint8_t)sy_clampi(k->ch + s, 0, 15); break;
@@ -389,6 +411,7 @@ static void sy_ui_loop_ms(void)
         lpr.full = 0;
         ui_toast("FULL: 2048 NOTES AND MOVES");
     }
+    sy_ui_drum_ms();                                /* (V0.85: stopped, the drum played is KIT's) */
     if ((ui.fam == FAM_SEQ || ui.lay == LAY_PAD) && (lpx.seq != seq || cht.run) &&
         fm1_ms - t >= (lpx.seq != seq ? 40u : 80u)) {   /* (a change at once; the places moving 12 a second) */
         seq = lpx.seq;
@@ -453,7 +476,7 @@ static const char *ui_loop_nv(uint32_t id, char *v)
         else if (id == UI_LSTART)
             ui_l_pos(v, lp_et(i));
         else if (id == UI_LLEN)
-            ui_l_len(v, lp_ev[i].len);
+            ui_l_len(v, lp_len(i));
         else
             sp_fix(v, lp_ev[i].b & 0x7F, 0u, 0);
         return id == UI_LPITCH ? "PITCH" : id == UI_LSTART ? "START" : id == UI_LLEN ? "LENGTH" : "VELOCITY";
@@ -634,9 +657,10 @@ static void ui_p_ltrk(void)
     sp_fix(sp_put(v, "TRACK "), (int32_t)t + 1, 0u, 0);
     ui_l_head(v, 1);
     lk_label(UI_TITLE_X, 52.0f, "TYPE", 20);
-    for (i = 0, x = UI_TITLE_X; i < 3u; i++)
+    for (i = 0, x = UI_TITLE_X; i < 4u; i++)
         x = ui_chip(x, 66.0f, LT_TYPE3[i], i == ty, ui_hot(1));
-    lk_label(UI_TITLE_X, 92.0f, ty ? "ITS NOTES OUT ON USB MIDI: CHANNEL" : "MIDI CHANNEL (OUT WITH SYNTH+MIDI)", 20);
+    lk_label(UI_TITLE_X, 92.0f, ty == 1u || ty == 2u ? "ITS NOTES OUT ON USB MIDI: CHANNEL"
+                                : "MIDI CHANNEL (OUT WITH SYNTH+MIDI)", 20);
     sp_fix(sp_put(v, "CH "), k->ch + 1, 0u, 0);
     lk_text(UI_TITLE_X, 106.0f, T12B, v, ui_ink(ui_hot(2)), sk.ground, 0, 0);
     lk_label(UI_TITLE_X, 132.0f, "MIDI IN: NOTES ON", 20);
@@ -645,9 +669,10 @@ static void ui_p_ltrk(void)
     else
         sp_put(v, "ANY, WHILE SELECTED");
     lk_text(UI_TITLE_X, 146.0f, T12B, v, ui_ink(ui_hot(3)), sk.ground, 0, 0);
-    lk_text(UI_TITLE_X, 176.0f, T9, ty == 2u ? "ITS NOTES GO OUT, NO SOUND HERE" : "THE SOUND PLAYING (ITS OWN: V0.9)",
-            sk.lab, sk.ground, 20, 0);
-    lk_text(UI_TITLE_X, 190.0f, T9, "THE KEYS PLAY THE TRACK SELECTED", sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 176.0f, T9, ty == 3u ? "THE DRUM KIT: EDIT SHOWS IT" : ty == 2u ? "ITS NOTES GO OUT, NO SOUND HERE"
+                                    : "THE SOUND PLAYING (ITS OWN: V0.9)", sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 190.0f, T9, ty == 3u ? "KEYS: 8 DRUMS, ACCENTED, DUCK" : "THE KEYS PLAY THE TRACK SELECTED", sk.lab,
+            sk.ground, 20, 0);
     ui_H(1, 8.0f, 69.0f);
     ui_H(2, 8.0f, 109.0f);
     ui_H(3, 8.0f, 149.0f);
@@ -769,7 +794,7 @@ static void ui_l_roll(int velo)
             continue;
         y = y1 - 1.0f - h * ((float)(lp_ev[k].a - lo) + 0.5f);
         xa = UI_LRX0 + 1.0f + sx * (float)(et - w0);
-        xb = sy_minf(xa + sy_maxf(sx * (float)lp_ev[k].len - 1.0f, 2.0f), UI_LRX1 - 1.0f);
+        xb = sy_minf(xa + sy_maxf(sx * (float)lp_len(k) - 1.0f, 2.0f), UI_LRX1 - 1.0f);
         col = k == pick && hot ? sk.hot : sy_mix565(sk.mid, sk.ink, (uint32_t)(lp_ev[k].b & 0x7F) * 2u);
         lk_box(xa, y - hh, xb, y + hh, col);
         if (k == pick && !hot)
@@ -850,7 +875,7 @@ static void ui_p_lclip(void)
             if (!(lp_ev[k].t & LP_MOVE)) {
                 float x = 26.0f + 200.0f * (float)lp_et(k) / (float)c->len;
                 float y = 108.0f - (hi > lo ? 30.0f * (float)(lp_ev[k].a - lo) / (float)(hi - lo) : 15.0f);
-                lk_box(x, y - 1.0f, sy_minf(x + sy_maxf(200.0f * (float)lp_ev[k].len / (float)c->len, 1.5f), 226.0f),
+                lk_box(x, y - 1.0f, sy_minf(x + sy_maxf(200.0f * (float)lp_len(k) / (float)c->len, 1.5f), 226.0f),
                        y + 1.0f, sk.ink);
             }
         if (nm) {                                   /* (the moves of the one picked: a step line) */

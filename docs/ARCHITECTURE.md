@@ -55,6 +55,28 @@ and missed packets, flash work, loads, voices shed and refused, TIMER5 held, lon
 and the FX modules' short lines (19 KiB) in the spare SRAM V0.65's test found untouched (BUDGET.md). **Verified on
 host and in emulator**; V0.66 **needs a hardware test**.
 
+**V0.85, the drums** (2026-10-21, the looper's stage 2; LOOPER.md, CONTROLS.md "The drums"): a track TYPE DRUMS
+plays the project's kit.
+- `sy_drum.c` (engine side, in every build the engine is in: the host tests, the emulator, the workbench): eight
+  lanes, a voice each (a hit restarts it), each its own model in float (KICK a swept sine; SNARE two sines and
+  high-passed noise; CLAP band-passed noise in four bursts; HAT CL, HAT OP, CYM six squares at the TR-808's
+  frequencies and noise through an SVF high-pass, the squares counted in a pass of their own; WT 1, WT 2 a one-shot
+  read of OSC A's and B's tables at one mip level, its bend ramped a block at a time), an exponential decay to DECAY's
+  time; the gain LEVEL x velocity (VELOCITY's share) x ACCENT's lift, PAN, then its track's `sy_tgain`, ramped.
+  `sy_block` calls `sy_drum_block` after the effects: the duck (a gain on the synth's mix, AMOUNT down over ATTACK,
+  back over RELEASE along SHAPE, ramped each block; at rest nothing touched, so every golden render stands) and then
+  the drums added. All eight sounding: ~520 instructions a sample on the cost model (BUDGET.md §15).
+- `sy_loop.c`: a drum track's clip events are hits (GM's drum numbers; their length field the hit's own: LP_HIT, ACCENT,
+  CHANCE in eighths, RATCHET 1-4) fired past the chords (`lp_drum_fire`: the dice, then `sy_drum_hit` and the ratchet's
+  hits put off a sixteenth's fraction each, `lp_ratchets` a block); the keys and MIDI notes of a drum track go to rows
+  (`lp_drum_key`, `lp_drum_row`) and record as hits; the grid's edits (`lp_grid_toggle`, `lp_grid_attr`) for the UI. A
+  TYPE change leaves the clips as they are (`lp_len`: a hit plays as a sixteenth elsewhere). The project's stream is
+  version 2: the kit after the clips' sizes (72 bytes); version 1 still loads.
+- `sy_ui_drum.c`: KIT (EDIT's sections on a drum track: `ui_fam_secs`), GRID and HIT (CLIP's on a drum track; the
+  keys are the grid's there: `ui_grid_keys`, their LEDs `ui_drum_leds`), the page following the selected track's
+  TYPE (`ui_l_follow`). **Verified on host** (`sy_drum_test`, 18 checks) **and in emulator** (8 checks, 11 screens);
+  **needs a hardware test** (by ear, the load).
+
 **V0.8, the looper** (2026-10-21, after the user's call for an 8-track looper; LOOPER.md, CONTROLS.md "The looper";
 it replaced V0.8's sequencer, never installed): eight tracks, eight scenes, a clip each, SONG, four projects.
 - `sy_loop.c` runs in the audio interrupt, a block at a time before the chords' (`sy_loop_block`, then

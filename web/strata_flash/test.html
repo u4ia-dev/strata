@@ -851,6 +851,10 @@ const LOOK = [
   ["tracks", "V0.8 looper: SEQ + OCT+ the next track; record on tracks 2 and 3 too; SEQ held (the launch pad): white keys 1-8 launch the tracks' clips at the bar, 9-16 the scenes, black 1-8 MUTE; MIXER's VOLUME and PAN by ear; a track TYPE MIDI on a DAW or synth over USB (its CHANNEL), with MIDI IN on a channel"],
   ["project", "V0.8 looper: SONG (A, B, C with repeats, ON, PLAY) plays its scenes in turn; stop, wait 5 s in silence, switch off and on: the clips, tracks, chords and SONG come back; PROJECT 2 LOAD: empty, back to 1: all there"],
   ["core2", "V0.8: CORE 2 (SETTINGS > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
+  ["midiout", "V0.81: a track SYNTH+MIDI on channel 1, the FM-1 on a computer with no MIDI app open: play for a minute, then open a MIDI monitor and play a note: older notes may come first, then All Notes Off (CC 123) on channel 1, then yours; nothing left sounding"],
+  ["drums", "V0.85 drums: TRACK's TYPE DRUMS on track 1; the white keys 1-8 play KICK .. WT 2, 9-16 the same accented (louder), the first black key DUCK (silent); EDIT: KIT's pages, each drum's TUNE, DECAY, TONE and its own by ear; HAT CL cuts a ringing HAT OP"],
+  ["grid", "V0.85 grid: SEQ's CLIP on the drum track: GRID; black keys pick the row, white keys put steps in and out (stopped: heard as they go in); PLAY: the beat in time, the LEDs following; HIT: a step's CHANCE (it plays sometimes) and RATCHET (2-4 quick hits); TYPE SYNTH and back: the beat as it was"],
+  ["duck", "V0.85 duck: a synth track playing a held chord with the drum track's DUCK row on the beats: the chord dips on each and comes back (KIT > DUCK: AMOUNT, ATTACK, RELEASE, SHAPE by ear: PUMP the classic pumping); the drums themselves never dip"],
   ["bloom", "V0.67: HOME's bloom: a bud in silence; a note swirls it into spiral arms that settle into a sunflower in about a second; it opens with the level and closes after the release; nothing moves in silence"],
 ];
 for (const [k, t] of LOOK) {

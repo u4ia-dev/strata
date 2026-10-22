@@ -2003,6 +2003,123 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         p1[0] === 0 && p1[1] === back[0]);
 }
 
+{                                               // V0.85, the drums (sy_drum.c, sy_loop.c, sy_ui_drum.c): a drum track's pages and keys, the grid by its keys and LEDs, a beat, RATCHET and CHANCE from HIT's knobs, the duck, a take, TYPE, the kit's knobs, a power cycle
+  const d = await boot(), dt = () => cstr(d, d.web_test_toast());
+  const lp = (f, v = -1) => d.web_test_lp(f, v), tr = (t, f, v = -1) => d.web_test_lp_trk(t, f, v);
+  const kit = (l, f, v = -1) => d.web_test_kit(l, f, v), grid = (f, r, s, v = 0) => d.web_test_grid(f, r, s, v);
+  const hits = (r) => kit(r, 24);
+  const press = (b) => { d.web_buttons(1 << b); play(d, 0.03); d.web_buttons(0); play(d, 0.01); };
+  const keyTap = (k) => { d.web_keys(1 << k); play(d, 0.02); d.web_keys(0); play(d, 0.03); };
+  const W = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26], BK = [1, 3, 5, 8, 10, 13, 15, 17, 20];   // (white keys 1-16, black 1-9)
+  play(d, 0.6);                                 // (a tap in the first 400 ms after boot would read as a second)
+  // 1. T1 DRUMS: EDIT shows its KIT; white key 1 a KICK, white 9 the same accented (ACCENT 50 %: 1.5 x), black 1 DUCK
+  tr(0, 0, 2);
+  tap(d, B.SEQ);
+  tap(d, B.EDIT);
+  const kitPg = [d.web_test_page_section(), cstr(d, d.web_test_page_name())];
+  const h0 = [hits(0), hits(8)];
+  kit(0, 2, 0);                                 // (TONE 0: no click, the same shape at each gain)
+  d.web_keys(1 << W[0]); const p1 = play(d, 0.25).peak; d.web_keys(0); play(d, 0.6);
+  d.web_keys(1 << W[8]); const p2 = play(d, 0.25).peak; d.web_keys(0); play(d, 0.6);
+  keyTap(BK[0]);
+  const duck = [kit(0, 23), kit(0, 21)];
+  check(`DRUMS: T1 DRUMS, EDIT shows its KIT (section ${kitPg[0]}, ${kitPg[1]}); white key 1 a KICK (peak ${p1.toFixed(3)}), white 9 accented (${(p2 / p1).toFixed(2)} x), black 1 DUCK (state ${duck[0]}, the synth's gain ${duck[1]}): KICKs ${hits(0) - h0[0]}, DUCKs ${hits(8) - h0[1]}`,
+        tr(0, 0) === 2 && kitPg[0] === 50 && kitPg[1] === "DRUM" && p1 > 0.05 && Math.abs(p2 / p1 - 1.5) < 0.1 && duck[0] > 0 &&
+        hits(0) - h0[0] === 2 && hits(8) - h0[1] === 1);
+  // 2. the grid (SEQ's CLIP on a drum track): black keys the row, white keys the steps; an empty clip made a bar and
+  //    launched; the LEDs show the row's steps and the row
+  tap(d, B.SEQ);
+  const gp = goPage(d, 51, "GRID");
+  const put = (row, steps) => { keyTap(BK[row]); for (const s of steps) keyTap(W[s]); };
+  put(0, [0, 4, 8, 12]);                        // (KICK four to the floor)
+  put(1, [4, 12]);                              // (SNARE on 2 and 4)
+  put(3, [0, 2, 4, 6, 8, 10, 12, 14]);          // (HAT CL on the eighths)
+  put(8, [0, 4, 8, 12]);                        // (DUCK with the kick)
+  play(d, 0.05);
+  const lit = d.web_lit_keys(), want = [0, 4, 8, 12].reduce((m, s) => m | (1 << W[s]), 0) | (1 << BK[8]);
+  const g2 = [grid(5, 0, 0), grid(5, 0, 1), grid(5, 1, 4), grid(5, 3, 14), d.web_test_lp_clip(0, 0, 0, -1), d.web_test_lp_clip(0, 0, 1, -1), tr(0, 10)];
+  keyTap(W[1]); keyTap(W[1]);                   // (in and out again: step 2 of DUCK)
+  check(`.. GRID (page ${gp}): the keys put a beat in (KICK 1: ${g2[0]}, 2: ${g2[1]}; SNARE 5: ${g2[2]}; HAT 15: ${g2[3]}), the clip ${g2[4]} ticks, ${g2[5]} hits, launched (${g2[6]}); LEDs: the DUCK row's steps and its key lit (${(lit & want) === want ? "yes" : lit.toString(2)}); a step in and out: ${grid(5, 8, 1)}`,
+        gp >= 0 && g2[0] === 1 && g2[1] === 0 && g2[2] === 1 && g2[3] === 1 && g2[4] === 384 && g2[5] === 18 && g2[6] === 0 &&
+        (lit & want) === want && grid(5, 8, 1) === 0);
+  // 3. PLAY: two bars at 120 BPM (4 s): KICK 8, SNARE 4, HAT CL 16, DUCK 8; the synth's gain ducked to 1 - AMOUNT
+  const c0 = [0, 1, 3, 8].map(hits);
+  press(B.PLAY);
+  let gmin = 1000;
+  for (let i = 0; i < 4000 && d.web_test_arp(1) < 7950; i++) { play(d, 0.003); gmin = Math.min(gmin, kit(0, 21)); }
+  const c1 = [0, 1, 3, 8].map((r, i) => hits(r) - c0[i]);
+  check(`.. PLAY, two bars: KICK ${c1[0]}, SNARE ${c1[1]}, HAT CL ${c1[2]}, DUCK ${c1[3]}; the synth's gain down to ${gmin} (AMOUNT 60 %)`,
+        c1.join() === "8,4,16,8" && Math.abs(gmin - 400) <= 2);
+  // 4. HIT's knobs: STEP 5, ROW SNARE, RATCHET 4 hits; STEP 9, ROW KICK, CHANCE 50 %
+  goPage(d, 51, "HIT");
+  const turn = (k, n) => { d.web_enc(k, n); play(d, 0.3); };   // (a turn of its own: the UI sums a millisecond's)
+  turn(E.K1, -20); turn(E.K1, 4);               // (step 5)
+  turn(E.K2, -9); turn(E.K2, 1);                // (SNARE)
+  turn(E.K4, 3);                                // (RATCHET 4 hits)
+  turn(E.K1, 4); turn(E.K2, -1);                // (step 9, KICK)
+  turn(E.K3, 4);                                // (CHANCE 4: 50 %)
+  const attrs = [grid(4, 1, 4, 0), grid(3, 0, 8, 0)];
+  for (let i = 0; i < 4000 && d.web_test_arp(1) % 4000 < 3850; i++) play(d, 0.003);   // (just before a bar)
+  const c2 = [0, 1].map(hits);
+  play(d, 16.0);                                // (eight bars)
+  const c3 = [hits(1) - c2[1], hits(0) - c2[0]];   // (SNARE, KICK)
+  check(`.. HIT: SNARE step 5 RATCHET ${attrs[0] + 1} hits, KICK step 9 CHANCE ${100 - attrs[1] * 100 / 8} %; eight bars: SNARE ${c3[0]} (5 a bar), KICK ${c3[1]} (3 a bar and some of 8)`,
+        attrs[0] === 3 && attrs[1] === 4 && c3[0] === 40 && c3[1] > 24 && c3[1] < 32);
+  // 5. a take on a drum track (scene B, T1; the transport running, no count-in): KICK, SNARE, an accented HAT CL go in
+  //    as hits (GM's notes, no length: the hit's own); REC ends it, a bar
+  goPage(d, 46, "CLIPS");                       // (the keys play here: the grid's pages take them)
+  lp(1, 1); lp(3, 0);
+  press(B.REC);
+  for (let i = 0; i < 3000 && lp(10) !== 3; i++) play(d, 0.003);
+  const takeSt = lp(10);
+  keyTap(W[0]); play(d, 0.4); keyTap(W[1]); play(d, 0.4); keyTap(W[11]); play(d, 0.4);
+  for (let i = 0; i < 3000 && d.web_test_arp(1) % 4000 < 3200; i++) play(d, 0.003);
+  press(B.REC);
+  play(d, 0.1);
+  const tk = [0, 1, 2].map((i) => `${d.web_test_lp_note(0, 1, i, 0)}/${d.web_test_lp_note(0, 1, i, 3)}`);
+  check(`.. a take on T1 B: recording (${takeSt}); its hits ${tk.join(" ")} (KICK, SNARE, HAT CL accented: 16384 + 32), a bar (${d.web_test_lp_clip(0, 1, 0, -1)})`,
+        takeSt === 3 && tk.join(" ") === "36/16384 38/16384 42/16416" && d.web_test_lp_clip(0, 1, 0, -1) === 384);
+  // 6. TYPE: SYNTH keeps the hits as they are (each played as a sixteenth), DRUMS again: nothing lost; the pages
+  //    follow (GRID <-> NOTES)
+  press(B.PLAY);
+  play(d, 0.2);
+  goPage(d, 51, "GRID");
+  tr(0, 0, 0);
+  const asSynth = [d.web_test_lp_note(0, 1, 0, 3), d.web_test_page_section(), cstr(d, d.web_test_page_name())];
+  tr(0, 0, 2);
+  const asDrums = [d.web_test_lp_note(0, 1, 0, 3), d.web_test_page_section(), cstr(d, d.web_test_page_name())];
+  check(`.. TYPE SYNTH: a hit kept (${asSynth[0]}), the page ${asSynth[1]} ${asSynth[2]}; DRUMS again: ${asDrums[0]}, ${asDrums[1]} ${asDrums[2]}; the accented HAT ${d.web_test_lp_note(0, 1, 2, 3)}`,
+        asSynth.join() === "16384,48,NOTES" && asDrums.join() === "16384,51,GRID" && d.web_test_lp_note(0, 1, 2, 3) === 16416);
+  // 7. the kit's knobs: DRUM (TUNE, DECAY of the drum picked: the last played, stopped), MORE (LEVEL), DUCK (AMOUNT)
+  tap(d, B.EDIT);
+  goPage(d, 50, "DRUM");
+  keyTap(W[1]);                                 // (a SNARE played, stopped: the drum picked)
+  play(d, 0.3);
+  turn(E.K2, 5);                                // (TUNE +5)
+  goPage(d, 50, "MORE");
+  turn(E.K3, -20);                              // (LEVEL 100 -> 80: a turn after a pause, a step a detent)
+  goPage(d, 50, "DUCK");
+  turn(E.K1, -10);                              // (AMOUNT 60 -> 50)
+  const kv = [kit(1, 0) - 24, kit(1, 4), kit(0, 12)];
+  check(`.. the kit's knobs: the SNARE played is the drum picked; TUNE ${kv[0]}, LEVEL ${kv[1]}, the duck's AMOUNT ${kv[2]}`,
+        kv[0] === 5 && kv[1] === 80 && kv[2] === 50);
+  // 8. a power cycle: T1 DRUMS, its grid, its take, the kit come back
+  play(d, 4.0);                                 // (stopped and quiet: the project written)
+  const nor = new Uint8Array(d.memory.buffer, d.web_nor(), d.web_nor_size()).slice();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const d2 = instance.exports;
+  if (d2._initialize) d2._initialize();
+  new Uint8Array(d2.memory.buffer, d2.web_nor(), d2.web_nor_size()).set(nor);
+  d2.web_master(700);
+  d2.web_boot();
+  play(d2, 0.3);
+  d2.web_test_lp(1, 0);
+  const back = [d2.web_test_lp_trk(0, 0, -1), d2.web_test_grid(5, 0, 0, 0), d2.web_test_grid(5, 3, 14, 0), d2.web_test_grid(4, 1, 4, 0),
+                d2.web_test_lp_note(0, 1, 2, 3), d2.web_test_kit(1, 0, -1) - 24, d2.web_test_kit(1, 4, -1), d2.web_test_kit(0, 12, -1)];
+  check(`.. after a power cycle: T1 TYPE ${back[0]}; KICK 1 ${back[1]}, HAT 15 ${back[2]}, SNARE 5's RATCHET ${back[3] + 1}; the take's HAT ${back[4]}; the SNARE's TUNE ${back[5]}, LEVEL ${back[6]}; AMOUNT ${back[7]}`,
+        back.join() === "2,1,1,3,16416,5,80,50");
+}
+
 {                                               // V0.8 BENCH: CORE 2 (sy_c2.c): the emulator has one core
   const k = await boot(), kt = () => cstr(k, k.web_test_toast());
   const pg = goPage(k, SEC.MENU, "CORE 2");

@@ -129,6 +129,20 @@ static void check(void)
             fail("a chords' side's counts", (int)t, ch_s[t].nheld);
     if (sy_ntrk != SY_NOTRK)
         fail("sy_ntrk left set", sy_ntrk, 0);
+    for (k = 0; k < LP_NRAT; k++)                 /* (V0.85: the ratchets to come, the kit in its ranges, the duck) */
+        if (lpx.rat[k].left > 3u || lpx.rat[k].row >= DK_ROWS || lpx.rat[k].trk >= LP_NTRK)
+            fail("a ratchet's hits to come", (int)k, lpx.rat[k].left);
+    {
+        dk_kit_t was = dkk;
+        dk_sane();
+        if (memcmp(&was, &dkk, sizeof dkk))
+            fail("the kit out of its ranges", 0, 0);
+    }
+    if (dkd.st > 2u || !(dkd.g >= 0.0f && dkd.g <= 1.0f) || !(dkd.d >= 0.0f && dkd.d <= 1.0f))
+        fail("the duck's state", dkd.st, (int)(dkd.g * 1000.0f));
+    for (k = 0; k < DK_N; k++)
+        if (dkv[k].on && (!(dkv[k].a == dkv[k].a) || dkv[k].trk > SY_NOTRK))
+            fail("a drum voice", (int)k, dkv[k].trk);
 }
 
 /* ---------------------------------------------------------------------------------------------- moves --- */
@@ -186,8 +200,8 @@ static void act(void)
                 run_ms(20);
             }
         }
-    } else if (r < 70) {                          /* the looper's own */
-        uint32_t q = rn(8), t = rn(8), s = rn(8);
+    } else if (r < 70) {                          /* the looper's own (V0.85: the drums' too) */
+        uint32_t q = rn(11), t = rn(8), s = rn(8);
         TRACE("%u looper %u t%u s%u\n", step_no, q, t, s);
         if (q == 0)
             web_test_lp_launch(t, rn(5) == 0 ? LP_STOP : s);
@@ -202,11 +216,19 @@ static void act(void)
         else if (q == 5)
             web_test_lp(1, (int32_t)s);
         else if (q == 6) {                        /* (a setting in its range, as the UI keeps it) */
-            static const uint8_t TOP[8] = {2, 16, 17, 2, 128, 128, 2, 2};
+            static const uint8_t TOP[8] = {3, 16, 17, 2, 128, 128, 2, 2};
             uint32_t f = rn(8);
             web_test_lp_trk(t, f, (int32_t)rn(TOP[f]));
-        } else {                                  /* (a clip's length in bars, as LENGTH sets it) */
+        } else if (q == 7) {                      /* (a clip's length in bars, as LENGTH sets it) */
             web_test_lp_clip(t, s, 0, (int32_t)((1u + rn(16)) * 384u));
+        } else if (q == 8) {                      /* (V0.85: the grid of the selected clip: a step in or out, a hit's */
+            uint32_t f = rn(6);                   /* VELOCITY, ACCENT, CHANCE, RATCHET moved, read) */
+            TRACE("%u grid %u row %u step %u\n", step_no, f, t, s);
+            web_test_grid(f, rn(9), rn(40), f ? (int32_t)rn(9) - 4 : (int32_t)rn(128));
+        } else if (q == 9) {                      /* (the kit: any value, kept in range) */
+            web_test_kit(rn(8), rn(16), (int32_t)rn(140));
+        } else {                                  /* (a hit straight in: any row, the duck's too) */
+            web_test_drum_hit(rn(10), rn(9), rn(128), rn(2));
         }
         run_ms(rn(100));
     } else if (r < 76) {                          /* a page */

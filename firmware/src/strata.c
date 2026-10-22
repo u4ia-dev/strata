@@ -33,7 +33,7 @@
 #endif
 #define FM1_CPU1_USED STRATA_CPU2   /* (hal/fm1_sys.h: every reset holds it first) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.81"                    /* the splash and the console (V0.8: the looper, CORE 2; V0.81 its fixes); build.py
+#define STRATA_VERSION "V0.85 DRUMS"              /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums); build.py
                                                    * --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
@@ -112,6 +112,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #include "sy_filter.c"
 #include "sy_voice.c"
 #include "sy_fx.c"
+#include "sy_drum.c"
 #include "sy_engine.c"
 #include "sy_text.c"
 #include "sy_store.c"
@@ -130,6 +131,7 @@ static int st_prog(uint32_t off, const void *src, uint32_t n);
 #include "sy_ui_save.c"
 #include "sy_ui_chord.c"
 #include "sy_ui_loop.c"
+#include "sy_ui_drum.c"                           /* (V0.85: the drums' pages) */
 
 /* -------------------------------------------------------------- app --- */
 static volatile uint8_t sy_in_audio;             /* the audio interrupt is rendering (sy_main.c's TIMER5 nests in it) */

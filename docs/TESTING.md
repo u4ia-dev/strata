@@ -171,6 +171,23 @@ marked, in channel order, then the packet; the half's poll sends them with no pa
 configured nothing goes in and the mark waits; all 16 channels fit the room asked for. Felucca's own tests of the
 ring (`scale_test`, `chord_test`, `v156_test`, `midi_control_test`, `midi_uart_test`) pass as before.
 
+### 2.7 The drums (`sy_drum_test`, 18 checks, V0.85)
+
+The drum synth (`sy_drum.c`) through `sy_block`, as the audio interrupt runs it: every lane at velocity 127 heard,
+under 0.8 (-2 dB), every sample finite, its voice ended within its DECAY; WT 1 and 2 play no hit while their table is
+none or being built, and one once it is; DECAY as the time to -60 dB of KICK, HAT CL, HAT OP, CYM and WT 1 at 20, 50
+and 80 (within 11 % of the setting at worst, 30 % allowed); TUNE: the KICK once swept at 48 Hz x 2^(TUNE / 12) at -12,
+0, +12 (within 3 %); CLAP's four bursts 20 ms apart; a HAT CL ends a 2 s HAT OP within 60 ms; ACCENT 50 %: 1.5 x a
+plain hit; VELOCITY 0: every velocity alike, 100: by its square; PAN hard left: nothing right; a muted track's hits
+silent. The duck against the synth's held note rendered without it: down to 1 - AMOUNT in ATTACK's time, back in
+RELEASE's for each SHAPE; at half RELEASE LINEAR, EXP and PUMP where their curves put them; the output the unducked one
+x the gain sample for sample (over 0.1, 34,000 samples); at rest after, the gain exactly 1; a KICK with a full duck at
+once the KICK alone, bit for bit (the drums after the duck). 40 random kits, every lane at random velocity, accent and
+track: finite, every voice ended. Golden renders (each lane, and two bars of a beat over a held chord with the duck)
+twice the same and as recorded in `tests/sy_drum_golden.txt`. The host's cost: all eight sounding ~0.2 % of real time
+(the target's: BUDGET.md §15). And the engine's 94, its golden renders unchanged: the drums' block, nothing sounding,
+touches nothing.
+
 ## 3. Known gaps (targets not met)
 
 - **Aliasing of bright tables**: −27.7 dB worst (BAND SWEEP, TWIN BANDS, WIDE BAND), against a −40 dBc target. The
@@ -359,6 +376,19 @@ renders of the sounds that use them re-recorded:
   packets, a note-off among them, and the instrument it reached held that note. The official firmware's MIDI router
   recovers with All Notes Off on the channels it used; `usb.c` does the same now (§2.6).
 
+### 5.6 Found building V0.85
+
+- **A TYPE change lost the drums' details.** The first build turned a clip's hits into sixteenths when its track left
+  DRUMS and back into plain hits when it came back: one turn of TYPE there and back cost every ACCENT, CHANCE and
+  RATCHET. The emulator's power-cycle check found it (a ratchet gone after TYPE SYNTH and back). Now nothing is turned:
+  a hit keeps its marker on any track (a synth or MIDI track plays it as a sixteenth, `lp_len`), a note keeps its
+  length on a drum track (a plain hit), and a note's own length stays under the marker (16,383 ticks, ~42 quarters).
+- **SELECT and EDIT twice on a section the family no longer shows** stepped that section's pages (OSC A's on a drum
+  track, whose EDIT shows only its KIT): now they go to the family's first section. Reached in the emulator by a tap
+  within 400 ms of boot (read as a second tap); on the FM-1 the boot alone takes ~770 ms.
+- **The metal voices' cost**: their six squares' phases went through memory each sample (232 instructions a sample
+  for three voices); counted in a pass of their own, 170, the same sound bit for bit (the drums' golden renders).
+
 ## 6. In WebAssembly and in the emulator (Phase 3)
 
 The same sources compiled with Emscripten (6.0.12, `-O2 -ffp-contract=off`) and run under Node 18. The emulator's page
@@ -381,7 +411,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 130 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 140 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -486,6 +516,19 @@ MOD pages ran on, §5.4).
 while they only play, from the main loop in the layers: every check above that plays a key passes either way. One
 check more: eight notes at once over MIDI all sound (the app starts two a block). BENCH's rows fit with the SCREEN
 row naming every page's section (7 px to spare).
+
+V0.85, the drums (8 checks; 140 in all): T1 DRUMS, EDIT shows its KIT; white key 1 a KICK, white 9 the same accented
+(1.5 x the peak at ACCENT 50 %), black 1 DUCK (the duck's state, the synth's gain under 1). The GRID: black keys pick
+the row, white keys put a beat in (KICK four to the floor, SNARE on 2 and 4, HAT CL on the eighths, DUCK with the
+kick), the empty clip a bar long and launched; the DUCK row's steps and its key lit; a step in and out again. PLAY, two
+bars: KICK 8, SNARE 4, HAT CL 16, DUCK 8, the synth's gain down to 0.400 (AMOUNT 60 %). HIT's knobs (each turn a
+turn of its own: the UI sums a millisecond's): the SNARE's step 5 RATCHET 4 hits, the KICK's step 9 CHANCE 50 %;
+eight bars: SNARE 40, KICK 30 (24 and 6 of the 8 chances). A take on the drum track (REC, the keys from the CLIPS page:
+GRID's take the keys): its hits KICK, SNARE and an accented HAT CL (36/16384, 38/16384, 42/16416), a bar. TYPE SYNTH
+and back: the hits as they were, the pages following (GRID, NOTES, GRID). The kit's knobs: the SNARE played (stopped)
+is the drum picked, its TUNE +5, LEVEL 80, the duck's AMOUNT 50. A power cycle: all of it back. Screens: 11 more
+(the TRACK page with DRUMS, GRID and its VELOCITY turning, HIT on a ratchet, the KIT's DRUM, MORE, ACCENT and DUCK),
+the check clean; the knob sweep 611 turns (583 before), none with findings.
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
@@ -624,13 +667,16 @@ Web MIDI, and the publishing host's own policy, which is not known here.
 The whole app (`strata_web.c`, natively) under AddressSanitizer and UBSan, driven at random: the buttons (taps,
 holds, chords with OCT, a key while one is held), the keys, the knobs, MIDI in (notes on every channel, controllers,
 start, continue, stop, the clock), the looper's own (launches, scenes, REC, UNDO PASS, notes and knob moves put in,
-the tracks' settings in their ranges, the clips' lengths), the pages, PLAY, MASTER, time; the audio rendered between.
+the tracks' settings in their ranges, the clips' lengths; V0.85: the grid's steps in and out and their hits' values,
+the kit's values, hits of every row straight in), the pages, PLAY, MASTER, time; the audio rendered between.
 After every step: the event pool (every event in one clip's list, the free list or UNDO's, none twice, the counts),
 each clip (sorted, its count, inside its length; events in a clip of no length only while its take records), each
 track's scenes and next event, the recording's lists, the chords' side in use the selected track's, the voices'
-tracks, the parameters held. 24 seeds of 3,000 steps (~15 minutes of play each) run clean on V0.81.
+tracks, the parameters held; V0.85: the ratchets to come (their rows, tracks, counts), the kit in its ranges, the
+duck's state and gain, each drum voice's track. 24 seeds of 3,000 steps (~15 minutes of play each) run clean on V0.81
+and on V0.85.
 
-    cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -ffp-contract=off -w        -Ibuild/gen -Ifirmware/src -o build/emu/strata_fuzz web/emu/strata_fuzz.c -lm
+    cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_fuzz web/emu/strata_fuzz.c -lm
     for s in $(seq 1 24); do build/emu/strata_fuzz $s 3000 || echo "seed $s failed"; done
 
 A failure prints its step; a third argument prints every step (`build/emu/strata_fuzz SEED STEPS v`).

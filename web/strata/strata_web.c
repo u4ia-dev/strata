@@ -20,6 +20,7 @@
 #include "../../firmware/src/sy_filter.c"
 #include "../../firmware/src/sy_voice.c"
 #include "../../firmware/src/sy_fx.c"
+#include "../../firmware/src/sy_drum.c"
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_sounds.h"

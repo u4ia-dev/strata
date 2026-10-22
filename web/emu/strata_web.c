@@ -140,6 +140,7 @@ static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the H
 #include "../../firmware/src/sy_filter.c"
 #include "../../firmware/src/sy_voice.c"
 #include "../../firmware/src/sy_fx.c"
+#include "../../firmware/src/sy_drum.c"
 #include "../../firmware/src/sy_engine.c"
 #include "../../firmware/src/sy_text.c"
 #include "../../firmware/src/sy_store.c"
@@ -152,7 +153,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_loop.c"
 #include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.81"                           /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.85 DRUMS"                     /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -163,6 +164,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_ui_save.c"
 #include "../../firmware/src/sy_ui_chord.c"
 #include "../../firmware/src/sy_ui_loop.c"
+#include "../../firmware/src/sy_ui_drum.c"
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
@@ -787,6 +789,12 @@ EXPORT int32_t web_test_lp_trk(uint32_t t, uint32_t f, int32_t v)
     uint8_t *b = f == 0u ? &k->type : f == 1u ? &k->ch : f == 2u ? &k->cin : f == 3u ? &k->out : f == 4u ? &k->vol
                  : f == 5u ? &k->pan : f == 6u ? &k->mute : f == 7u ? &k->solo : 0;
     t %= LP_NTRK;
+    if (f == 0u && v >= 0) {                        /* (V0.85: TYPE as its knob sets it: DRUMS turns the clips' notes) */
+        lp_type_set(t, (uint32_t)v % LT_N, k->out);
+        ui_l_follow();
+        ui.dirty = D_ALL;
+        return k->type;
+    }
     if (b) {
         if (v >= 0) {
             *b = (uint8_t)v;
@@ -876,6 +884,48 @@ EXPORT int32_t web_test_lp_song(uint32_t i, uint32_t f, int32_t v)
 }
 EXPORT void web_test_lp_req(uint32_t r) { lpr.req = (uint8_t)r; }   /* 1 REC tapped, 2 UNDO PASS, 3 STOP ALL */
 EXPORT void web_test_lp_launch(uint32_t t, uint32_t s) { lp_launch(t, s); }   /* s: a scene, 254 stop */
+/* V0.85, the kit (sy_drum.c): f 0 .. 5 drum lane's TUNE (+ 24: 0 .. 48), DECAY, TONE, its own, LEVEL, PAN; 10 ACCENT,
+ * 11 VELOCITY, 12 the duck's AMOUNT, 13 ATTACK, 14 RELEASE, 15 SHAPE (v >= 0 sets them); 20 lane sounding, 21 the
+ * duck's gain x 1000, 22 the last lane hit (255 none), 23 the duck's state, 24 row lane's hits (0 .. 8); read back */
+EXPORT int32_t web_test_kit(uint32_t lane, uint32_t f, int32_t v)
+{
+    dk_lane_t *k = &dkk.l[lane % DK_N];
+    uint8_t *b = f == 1u ? &k->decay : f == 2u ? &k->tone : f == 3u ? &k->chr : f == 4u ? &k->level : f == 5u ? &k->pan
+                 : f == 10u ? &dkk.accent : f == 11u ? &dkk.vsens : f == 12u ? &dkk.amount : f == 13u ? &dkk.attack
+                 : f == 14u ? &dkk.release : f == 15u ? &dkk.shape : 0;
+    if (f == 0u) {
+        if (v >= 0) {
+            k->tune = (int8_t)sy_clampi(v - 24, -24, 24);
+            ui.dirty = D_ALL;
+        }
+        return k->tune + 24;
+    }
+    if (b) {
+        if (v >= 0) {
+            *b = (uint8_t)v;
+            dk_sane();
+            ui.dirty = D_ALL;
+        }
+        return *b;
+    }
+    return f == 20u ? dkv[lane % DK_N].on : f == 21u ? (int32_t)(dkd.g * 1000.0f + 0.5f) : f == 22u ? dk_last
+           : f == 23u ? dkd.st : f == 24u ? (int32_t)dk_nhit[lane % DK_ROWS] : -1;   /* (24: row lane's hits so far) */
+}
+EXPORT void web_test_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, uint32_t acc) { sy_drum_hit(lane, trk, vel, (int)acc); }
+/* the drum grid of the selected clip (sy_loop.c): f 0 step s of row toggled (1 in, 0 out, -1 neither), 1 .. 4 its
+ * hit's VELOCITY, ACCENT, CHANCE, RATCHET moved by v (0: read; -1 no hit), 5 a hit there (1, 0) */
+EXPORT int32_t web_test_grid(uint32_t f, uint32_t row, uint32_t s, int32_t v)
+{
+    int32_t r;
+    if (f == 0u)
+        r = lp_grid_toggle(row, s, v > 0 ? (uint32_t)v : 100u);
+    else if (f <= 4u)
+        r = lp_grid_attr(row, s, f - 1u, v);
+    else
+        r = lp_grid_at(lp_cur_clip(), row, s) != LP_END;
+    ui.dirty = D_ALL;
+    return r;
+}
 EXPORT int32_t web_test_ovr(uint32_t id) { return id < SP_COUNT && sp_ovr_on[id] ? sp_ovr_v[id] : -32768; }
 EXPORT int32_t web_test_voice_trk(uint32_t i) { return i < SY_NVOICE && sy_v[i].on ? sy_v[i].trk : -1; }
 EXPORT void web_test_knob_touch(uint32_t id) { lp_knob(id); }   /* (sy_ui.c ui_knob's: a knob turned) */

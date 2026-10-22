@@ -21,6 +21,7 @@
 #include "../firmware/src/sy_filter.c"
 #include "../firmware/src/sy_voice.c"
 #include "../firmware/src/sy_fx.c"
+#include "../firmware/src/sy_drum.c"
 #include "../firmware/src/sy_engine.c"
 #include "../firmware/src/sy_text.c"
 static const float UNITY[4] = {1.0f, 1.0f, 1.0f, 1.0f};   /* osc_block's source gains for a test of it alone */

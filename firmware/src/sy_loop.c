@@ -45,13 +45,23 @@
 #define LP_NON 16u                               /* .. a track's sounding at most */
 #define LP_NOPEN 8u                              /* notes held while recording, their lengths still to come */
 #define LP_NPASS 256u                            /* a pass's notes and moves UNDO PASS takes back at most */
-enum { LT_SYNTH, LT_MIDI, LT_N };                /* a track's TYPE (V0.85: DRUM) */
+enum { LT_SYNTH, LT_MIDI, LT_DRUM, LT_N };       /* a track's TYPE (V0.85: DRUMS, the kit: sy_drum.c) */
+/* V0.85, a drum track's notes are hits (their notes DK_NOTE's, GM's drums): their length is no length but the hit's
+ * own, LP_HIT marking it: ACCENT, CHANCE (0 always, 1 .. 7: 7/8 .. 1/8 of the times it comes), RATCHET (0 .. 3: 1 .. 4
+ * hits in its sixteenth). They stay so whatever the track's TYPE: a synth or MIDI track plays a hit as a sixteenth
+ * (lp_len), a drum track plays a note of a length as a hit of the defaults; a note's own length stays under LP_HIT */
+#define LP_HIT 0x4000u
+#define LP_ACC 0x0020u
+#define LP_CHN(len) (((len) >> 2) & 7u)
+#define LP_RAT(len) ((len) & 3u)
+#define LP_STEP 24u                              /* the grid's step: a sixteenth */
+#define LP_NRAT 8u                               /* ratchets' hits still to come at most */
 enum { LR_OFF, LR_COUNT, LR_WAIT, LR_TAKE, LR_DUB };   /* recording: off, counting in, waiting for a bar, the first
                                                        * take, overdubbing */
 enum { LL_BAR, LL_BEAT, LL_NOW, LL_N };          /* LAUNCH: when a launch plays */
 enum { LC_OFF, LC_REC, LC_ON, LC_N };            /* CLICK */
 enum { LQ_OFF, LQ_32, LQ_16, LQ_8, LQ_4, LQ_N }; /* QUANTIZE: the grid */
-static const char *const LT_NAME[LT_N] = {"SYNTH", "MIDI"};
+static const char *const LT_NAME[LT_N] = {"SYNTH", "MIDI", "DRUMS"};
 static const char *const LL_NAME[LL_N] = {"BAR", "BEAT", "NOW"};
 static const char *const LC_NAME[LC_N] = {"OFF", "REC", "ON"};
 static const char *const LQ_NAME[LQ_N] = {"OFF", "1/32", "1/16", "1/8", "1/4"};
@@ -125,6 +135,11 @@ static struct {
     uint32_t ck_n, ck_ph, ck_inc;                /* the click sounding: samples left, phase, increment */
     float ck_a;                                  /* .. its level */
     volatile uint16_t seq;                       /* something the UI shows changed (a launch, a record, an edit) */
+    uint32_t rnd;                                /* V0.85: CHANCE's dice */
+    struct {
+        uint8_t row, trk, vel, acc, left;        /* a RATCHET's hits to come: the drum, its track, how, how many more */
+        uint32_t at, step;                       /* .. the next one's sample (cht.t), the samples between */
+    } rat[LP_NRAT];
 } lpx;
 static struct {
     volatile uint8_t req;                        /* the UI's: LQ_REQ_* */
@@ -174,6 +189,8 @@ static void lp_release(uint32_t i)
     lp_nfree++;
 }
 static uint32_t lp_et(uint32_t i) { return lp_ev[i].t & LP_MAXT; }   /* an event's tick */
+static uint32_t lp_len(uint32_t i) { return lp_ev[i].len & LP_HIT ? LP_STEP : lp_ev[i].len; }   /* a note's length (a hit: a */
+                                                                                                 /* sixteenth) */
 /* event i into clip c, by its tick (after those of the same tick) */
 static void lp_insert(lp_clip_t *c, uint32_t i)
 {
@@ -301,6 +318,77 @@ static void lp_out_off(uint32_t t, uint32_t note, uint32_t part)
         SY_MIDI_OUT(0x08u | (0x80u | (k->ch & 15u)) << 8 | note << 16);
 }
 
+/* ------------------------------------------------------------------------------------------ the drums --- */
+/* V0.85: a note's drum row (GM's drums onto the eight; C1 the DUCK row), DK_ROWS none */
+static uint32_t lp_drum_row(uint32_t note)
+{
+    switch (note) {
+    case 35: case 36: return DK_KICK;
+    case 37: case 38: case 40: return DK_SNARE;
+    case 39: return DK_CLAP;
+    case 42: case 44: return DK_HATC;
+    case 46: return DK_HATO;
+    case 49: case 51: case 52: case 53: case 55: case 57: case 59: return DK_CYM;
+    case 41: case 43: case 45: case 47: return DK_WT1;
+    case 48: case 50: return DK_WT2;
+    case 24: return DK_DUCK;
+    default: return DK_ROWS;
+    }
+}
+/* a panel key's drum on a drum track: white keys 1-8 the eight, 9-16 the same accented; the first black key DUCK */
+static uint32_t lp_drum_key(uint32_t key, int *acc)
+{
+    static const uint8_t BLK[12] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0};   /* (from F: sy_gfx.c LK_BLACK) */
+    uint32_t i, w = 0;
+    *acc = 0;
+    if (key >= 27u || BLK[key % 12u])
+        return key == 1u ? DK_DUCK : DK_ROWS;
+    for (i = 0; i < key; i++)
+        w += !BLK[i % 12u];
+    *acc = w >= DK_N;
+    return w % DK_N;
+}
+/* a drum hit now for track t (muted: none); a ratchet's rat more in the sixteenth put off (lp_ratchets) */
+static void lp_drum_play(uint32_t t, uint32_t row, uint32_t vel, int acc, uint32_t rat)
+{
+    uint32_t i;
+    if (row >= DK_ROWS || lp_muted(t))
+        return;
+    sy_drum_hit(row, t, vel, acc);
+    if (!rat || !cht.run)
+        return;
+    for (i = 0; i < LP_NRAT && lpx.rat[i].left; i++)
+        ;
+    if (i == LP_NRAT)
+        return;                                  /* (eight ratchets under way: this one's repeats none) */
+    lpx.rat[i].row = (uint8_t)row;
+    lpx.rat[i].trk = (uint8_t)t;
+    lpx.rat[i].vel = (uint8_t)vel;
+    lpx.rat[i].acc = (uint8_t)(acc != 0);
+    lpx.rat[i].left = (uint8_t)rat;
+    lpx.rat[i].step = (uint32_t)((float)LP_STEP / (float)(rat + 1u) * lp_tick_smp());
+    lpx.rat[i].at = cht.t + lpx.rat[i].step;
+}
+static void lp_ratchets(void)                    /* a block: the ratchets' hits due */
+{
+    uint32_t i;
+    for (i = 0; i < LP_NRAT; i++)
+        while (lpx.rat[i].left && (int32_t)(cht.t - lpx.rat[i].at) >= 0) {
+            if (!lp_muted(lpx.rat[i].trk))
+                sy_drum_hit(lpx.rat[i].row, lpx.rat[i].trk, lpx.rat[i].vel, lpx.rat[i].acc);
+            lpx.rat[i].left--;
+            lpx.rat[i].at += lpx.rat[i].step;
+        }
+}
+/* a drum track's hit as its clip plays: CHANCE's dice, then the hit and its ratchet */
+static void lp_drum_fire(uint32_t t, const lp_ev_t *e)
+{
+    uint32_t len = e->len, hit = (len & LP_HIT) != 0u, ch = hit ? LP_CHN(len) : 0u;
+    if (ch && (sy_rand(&lpx.rnd) >> 29) < ch)    /* (CHANCE k: heard 8 - k times in 8) */
+        return;
+    lp_drum_play(t, lp_drum_row(e->a), e->b & 0x7Fu, hit && (len & LP_ACC), hit ? LP_RAT(len) : 0u);
+}
+
 /* a track's TYPE about to change (the main loop's): what it sounds ends first, the old way */
 static void lp_notes_off(uint32_t t);
 static void lp_out_off_all(uint32_t t)
@@ -398,8 +486,12 @@ static void lp_fire(uint32_t t, lp_ev_t *e)
         e->b &= (uint8_t)~LP_FRESH;
         return;
     }
+    if (lpp.trk[t].type == LT_DRUM) {            /* (V0.85: a hit, past the chords) */
+        lp_drum_fire(t, e);
+        return;
+    }
     {
-        float s = (float)(e->len ? e->len : 1u) * lp_tick_smp();
+        float s = (float)(e->len & LP_HIT ? LP_STEP : e->len ? e->len : 1u) * lp_tick_smp();
         uint32_t n = s < (float)SY_BLK ? SY_BLK : s > 2.0e9f ? 2000000000u : (uint32_t)s;
         lp_note_on(t, e->a, e->b, cht.t + n);
     }
@@ -539,7 +631,7 @@ static void lp_rec_close(void)                   /* the notes still held: their 
     for (i = 0; i < LP_NOPEN; i++)
         if (lpr.open[i].used) {
             float d = (cht.tq - lpr.open[i].q) * (float)LP_PPQ;
-            uint32_t m = c->len ? c->len : LP_MAXT, l = d < 1.0f ? 1u : d > (float)m ? m : (uint32_t)(d + 0.5f);
+            uint32_t m = c->len && c->len < LP_HIT ? c->len : LP_HIT - 1u, l = d < 1.0f ? 1u : d > (float)m ? m : (uint32_t)(d + 0.5f);
             lp_ev[lpr.open[i].ev].len = (uint16_t)l;
             lpr.open[i].used = 0;
         }
@@ -556,7 +648,7 @@ static void lp_rec_input(uint32_t t, uint32_t note, uint32_t vel, int down)
         for (i = 0; i < LP_NOPEN; i++)
             if (lpr.open[i].used && lpr.open[i].note == note) {
                 float d = (cht.tq - lpr.open[i].q) * (float)LP_PPQ;
-                uint32_t m = c->len ? c->len : LP_MAXT, l = d < 1.0f ? 1u : d > (float)m ? m : (uint32_t)(d + 0.5f);
+                uint32_t m = c->len && c->len < LP_HIT ? c->len : LP_HIT - 1u, l = d < 1.0f ? 1u : d > (float)m ? m : (uint32_t)(d + 0.5f);
                 lp_ev[lpr.open[i].ev].len = (uint16_t)l;
                 lpr.open[i].used = 0;
                 lpx.seq++;
@@ -592,6 +684,35 @@ static void lp_rec_input(uint32_t t, uint32_t note, uint32_t vel, int down)
         lpr.open[i].q = cht.tq;
         lpx.seq++;
     }
+}
+/* V0.85: a drum hit played into track t while it records (a hit: no length to wait for; LP_HIT's own, ACCENT if
+ * accented) */
+static void lp_rec_hit(uint32_t t, uint32_t row, uint32_t vel, int acc)
+{
+    lp_clip_t *c;
+    uint32_t raw, tk, e;
+    if (row >= DK_ROWS || t != lpr.trk || (lpr.st != LR_TAKE && lpr.st != LR_DUB))
+        return;
+    c = &lpp.clip[t][lpr.scn];
+    raw = lp_rec_tick(c);
+    tk = lp_quant(raw, lpr.st == LR_DUB ? c->len : 0u);
+    e = lp_alloc();
+    if (e == LP_END) {
+        lpr.full = 1;
+        return;
+    }
+    if (lpr.nundo)
+        lp_undo_drop();
+    lp_ev[e].t = (uint16_t)tk;
+    lp_ev[e].len = (uint16_t)(LP_HIT | (acc ? LP_ACC : 0u));
+    lp_ev[e].a = DK_NOTE[row];
+    lp_ev[e].b = (uint8_t)sy_clampi((int32_t)vel, 1, 127);
+    if (lpr.st == LR_DUB && (tk >= lps[t].pt || tk + c->len / 2u < raw))
+        lp_ev[e].b |= LP_FRESH;                  /* (as a note's: its key played it) */
+    lp_insert(c, e);
+    lps[t].resync = 1;
+    lp_pass_add(e);
+    lpx.seq++;
 }
 /* the first take ended: its length the bars it took, rounded (1 .. 16), its events round into it; it plays on */
 static void lp_take_end(void)
@@ -837,6 +958,7 @@ static void lp_transport_stopped(void)          /* stopped: the notes end, the m
     for (t = 0; t < LP_NTRK; t++)
         lp_notes_off(t);
     sp_ovr_drop(0xFFu);
+    memset(lpx.rat, 0, sizeof lpx.rat);          /* (V0.85: no ratchet's hits after) */
     lpx.run = 0;
     lpx.seq++;
 }
@@ -926,6 +1048,7 @@ static void sy_loop_block(void)
         lpr.st = LR_DUB;                         /* (the overdub's clip launched: it records from now) */
     for (t = 0; t < LP_NTRK; t++)
         lp_track_block(t);
+    lp_ratchets();                               /* (V0.85: the drums' ratchets due) */
     if (lpr.st == LR_TAKE && (cht.tq - lpr.t0) * (float)LP_PPQ >= (float)(lp_max_bars() * lp_bar_ticks()))
         lp_rec_stop();                           /* (sixteen bars: the take ends itself) */
     lp_rec_moves();
@@ -968,6 +1091,15 @@ static void sy_loop_key(uint32_t key, uint32_t note, uint32_t vel, int down, uin
             t = lpx.mtrk[note] % LP_NTRK;
         }
         id = 128u + note;
+    }
+    if (lpp.trk[t].type == LT_DRUM) {            /* (V0.85: a drum track: a key's drum or a note's, a hit now, past */
+        int acc = 0;                             /* the chords; a release nothing) */
+        uint32_t row = key < 27u ? lp_drum_key(key, &acc) : lp_drum_row(note);
+        if (down && row < DK_ROWS) {
+            lp_drum_play(t, row, vel ? vel : 100u, acc, 0u);
+            lp_rec_hit(t, row, vel ? vel : 100u, acc);
+        }
+        return;
     }
     sy_chord_key_t(t, id, note, vel, down);
     lp_rec_input(t, note, vel, down);
@@ -1015,6 +1147,20 @@ static uint32_t lp_note_at(const lp_clip_t *c, uint32_t i)
             return k;
     return LP_END;
 }
+/* an event deleted (V0.85): out of the recording's pass lists too, so that UNDO PASS never takes an event that went
+ * and came back as another */
+static void lp_forget(uint32_t k)
+{
+    uint32_t i, n;
+    for (i = n = 0; i < lpr.npass; i++)
+        if (lpr.pass[i] != k)
+            lpr.pass[n++] = lpr.pass[i];
+    lpr.npass = (uint16_t)n;
+    for (i = n = 0; i < lpr.nlast; i++)
+        if (lpr.last[i] != k)
+            lpr.last[n++] = lpr.last[i];
+    lpr.nlast = (uint16_t)n;
+}
 /* NOTES' edits of note i of the selected clip (f: 0 PITCH, 1 START (ticks), 2 LENGTH (ticks), 3 VELOCITY: by d;
  * 4 deleted). Its index after (a move in time reorders them; -1 gone) */
 static int32_t lp_note_edit(uint32_t i, uint32_t f, int32_t d)
@@ -1037,11 +1183,14 @@ static int32_t lp_note_edit(uint32_t i, uint32_t f, int32_t d)
             n += !(lp_ev[j].t & LP_MOVE);
         r = (int32_t)n;
     } else if (f == 2u) {
-        lp_ev[k].len = (uint16_t)sy_clampi(lp_ev[k].len + d, 1, (int32_t)c->len);
+        if (lpp.trk[lpp.sel % LP_NTRK].type != LT_DRUM)   /* (a hit's length is its own: the grid's; on a synth track */
+            lp_ev[k].len = (uint16_t)sy_clampi((int32_t)lp_len(k) + d, 1,   /* a hit is a sixteenth, a length from it) */
+                                               (int32_t)(c->len < LP_HIT ? c->len : LP_HIT - 1u));
     } else if (f == 3u) {
         lp_ev[k].b = (uint8_t)(sy_clampi((lp_ev[k].b & 0x7F) + d, 1, 127));
     } else {
         lp_unlink(c, k);
+        lp_forget(k);
         lp_release(k);
         n = lp_note_n(c);
         r = n ? (int32_t)(i < n ? i : n - 1u) : -1;
@@ -1162,6 +1311,103 @@ static void lp_knob(uint32_t id)
     }
 }
 
+/* a track's TYPE set (V0.85; TRACK's knob): what it sounded ends the old way. Its clips stay as they are (a hit plays
+ * as a sixteenth on a synth or MIDI track, a note as a hit on a drum track: a turn there and back loses nothing) */
+static void lp_type_set(uint32_t t, uint32_t type, uint32_t out)
+{
+    lp_trk_t *k;
+    uint32_t fl;
+    t %= LP_NTRK;
+    k = &lpp.trk[t];
+    lp_out_off_all(t);
+    fl = LP_LOCK();
+    k->type = (uint8_t)(type % LT_N);
+    k->out = (uint8_t)(out != 0u && type == LT_SYNTH);
+    LP_UNLOCK(fl);
+    lpx.seq++;
+}
+
+/* the drum grid (V0.85, CLIP's GRID and HIT on a drum track): the selected clip in sixteenths, a row a drum (and
+ * DUCK). Row r's first hit in step s (LP_END none) */
+static uint32_t lp_grid_at(const lp_clip_t *c, uint32_t row, uint32_t s)
+{
+    uint32_t k, t0 = s * LP_STEP, t1 = t0 + LP_STEP;
+    for (k = c->head; k != LP_END && lp_et(k) < t1; k = lp_ev[k].next)
+        if (!(lp_ev[k].t & LP_MOVE) && lp_et(k) >= t0 && lp_drum_row(lp_ev[k].a) == row)
+            return k;
+    return LP_END;
+}
+/* step s of row: a hit put in (velocity vel; an empty clip made one bar first, launched when its track plays
+ * nothing), or what is there taken out. 1 put in, 0 taken out, -1 neither (a take recording it, past its end, full) */
+static int32_t lp_grid_toggle(uint32_t row, uint32_t s, uint32_t vel)
+{
+    lp_clip_t *c = lp_cur_clip();
+    uint32_t t = lpp.sel % LP_NTRK, fl, k;
+    int32_t r;
+    if (row >= DK_ROWS || (lp_cur_rec() && lpr.st == LR_TAKE))
+        return -1;
+    fl = LP_LOCK();
+    if (!c->len) {
+        c->len = (uint16_t)lp_bar_ticks();
+        if (lps[t].play >= LP_NSCN && lps[t].next == LP_NOSCN)
+            lps[t].next = lpp.scn;
+    }
+    if (s * LP_STEP >= c->len) {
+        r = -1;
+    } else if (lp_grid_at(c, row, s) != LP_END) {
+        while ((k = lp_grid_at(c, row, s)) != LP_END) {
+            lp_unlink(c, k);
+            lp_forget(k);
+            lp_release(k);
+        }
+        r = 0;
+    } else if ((k = lp_alloc()) == LP_END) {
+        lpr.full = 1;
+        r = -1;
+    } else {
+        lp_ev[k].t = (uint16_t)(s * LP_STEP);
+        lp_ev[k].len = LP_HIT;
+        lp_ev[k].a = DK_NOTE[row];
+        lp_ev[k].b = (uint8_t)sy_clampi((int32_t)vel, 1, 127);
+        lp_insert(c, k);
+        r = 1;
+    }
+    lps[t].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return r;
+}
+/* the hit of row in step s: f 0 VELOCITY (1 .. 127), 1 ACCENT (0, 1), 2 CHANCE (0 .. 7), 3 RATCHET (0 .. 3), moved
+ * by d (0: as it is); its value (-1: no hit there) */
+static int32_t lp_grid_attr(uint32_t row, uint32_t s, uint32_t f, int32_t d)
+{
+    lp_clip_t *c = lp_cur_clip();
+    uint32_t fl = LP_LOCK(), k = lp_grid_at(c, row, s), len;
+    int32_t v = -1;
+    if (k != LP_END) {
+        len = lp_ev[k].len & LP_HIT ? lp_ev[k].len : LP_HIT;
+        if (f == 0u) {
+            v = sy_clampi((lp_ev[k].b & 0x7F) + d, 1, 127);
+            lp_ev[k].b = (uint8_t)((uint32_t)v | (lp_ev[k].b & LP_FRESH));
+        } else if (f == 1u) {
+            if (d)
+                len = d > 0 ? len | LP_ACC : len & ~LP_ACC;
+            v = (len & LP_ACC) != 0u;
+        } else if (f == 2u) {
+            v = sy_clampi((int32_t)LP_CHN(len) + d, 0, 7);
+            len = (len & ~(7u << 2)) | ((uint32_t)v << 2);
+        } else {
+            v = sy_clampi((int32_t)LP_RAT(len) + d, 0, 3);
+            len = (len & ~3u) | (uint32_t)v;
+        }
+        lp_ev[k].len = (uint16_t)len;
+    }
+    LP_UNLOCK(fl);
+    if (d && k != LP_END)
+        lpx.seq++;
+    return v;
+}
+
 /* ------------------------------------------------------------------------------------------ defaults --- */
 static void lp_trk_defaults(uint32_t t)
 {
@@ -1199,6 +1445,7 @@ static void lp_project_clear(void)
         lps[t].play = lps[t].next = LP_NOSCN;
     }
     lp_song_defaults();
+    dk_defaults();                               /* (V0.85: the kit as a project starts) */
     lpp.sel = 0;
     lpp.scn = 0;
     memset(&lpr.open, 0, sizeof lpr.open);
@@ -1211,6 +1458,7 @@ static void lp_boot(void)                       /* power-on (before the flash's 
     uint32_t i;
     lp_project_clear();
     lpr.touch = lpr.mv_id = 0xFFFFu;
+    lpx.rnd = 0x9E3779B9u;                       /* (V0.85: CHANCE's dice, never 0) */
     for (i = 0; i < 27u; i++)
         lpx.keynote[i] = 0xFF;
     lpx.bar = lpx.beat = -1;
@@ -1219,10 +1467,12 @@ static void lp_boot(void)                       /* power-on (before the flash's 
 /* ------------------------------------------------------------------------------------------- flash --- */
 /* a project as the flash keeps it (sy_app.c): a stream over LP_NOBJ objects of SS_PAYLOAD_MAX each: "LP", a version,
  * the selected track and scene, SONG; each track (16 bytes) and its chords (sy_chord.c ch_d_t); each clip's length
- * and count of events; then the events in clip order (time, length or parameter, two bytes: 6 each) */
+ * and count of events; (version 2, V0.85: the drum kit, sy_drum.c dk_kit_t;) then the events in clip order (time,
+ * length or parameter, two bytes: 6 each). Version 1's read too: the kit as a project starts */
 #define LP_NOBJ 4u
 #define LP_STREAM (LP_NOBJ * SS_PAYLOAD_MAX)
-#define LP_HEAD (8u + 2u * LP_NSONG + LP_NTRK * (sizeof(lp_trk_t) + sizeof(ch_d_t)) + LP_NTRK * LP_NSCN * 4u)
+#define LP_HEAD1 (8u + 2u * LP_NSONG + LP_NTRK * (sizeof(lp_trk_t) + sizeof(ch_d_t)) + LP_NTRK * LP_NSCN * 4u)
+#define LP_HEAD (LP_HEAD1 + sizeof(dk_kit_t))
 _Static_assert(LP_HEAD + 6u * LP_NEV <= LP_STREAM, "a project fits its objects");
 static uint8_t *lp_wb;                           /* the window being written (or read) */
 static uint32_t lp_wlo, lp_wpos;                 /* .. its first byte's place in the stream; the place now */
@@ -1247,7 +1497,7 @@ static uint32_t lp_pack(uint32_t o)
     lp_wlo = o * SS_PAYLOAD_MAX;
     lp_wpos = 0;
     fl = LP_LOCK();
-    lp_put('L'), lp_put('P'), lp_put(1), lp_put(lpp.sel), lp_put(lpp.scn), lp_put(lpp.song_on);
+    lp_put('L'), lp_put('P'), lp_put(2), lp_put(lpp.sel), lp_put(lpp.scn), lp_put(lpp.song_on);
     {                                            /* (the stream's length) */
         uint32_t n = LP_HEAD, t2, s2;
         for (t2 = 0; t2 < LP_NTRK; t2++)
@@ -1266,6 +1516,7 @@ static uint32_t lp_pack(uint32_t o)
             lp_put16(lpp.clip[t][s].len);
             lp_put16(lpp.clip[t][s].n);
         }
+    lp_puts(&dkk, sizeof dkk);                   /* (V0.85: the kit) */
     for (t = 0; t < LP_NTRK; t++)
         for (s = 0; s < LP_NSCN; s++)
             for (k = lpp.clip[t][s].head; k != LP_END; k = lp_ev[k].next) {
@@ -1289,6 +1540,7 @@ static struct {
     uint32_t pos, t, s, left;                    /* the stream's place; the clip being read, its events still to come */
     uint32_t end;                                /* the stream's length (its head's) */
     uint32_t total, got;                         /* the events the head says, those read */
+    uint32_t hlen;                               /* the head's length (its version's: LP_HEAD1, LP_HEAD) */
     uint8_t ev[6], ne;                           /* an event's bytes so far */
     uint8_t bad;
 } lpt;
@@ -1296,15 +1548,20 @@ static void lp_load_begin(void)
 {
     lp_project_clear();
     memset(&lpt, 0, sizeof lpt);
+    lpt.hlen = LP_HEAD;
 }
 static void lp_load_head(void)                   /* the head read: the tracks, chords, SONG and the clips' sizes */
 {
     const uint8_t *b = lp_tk;
     uint32_t t, s, i, cl = 8u + 2u * LP_NSONG + LP_NTRK * (sizeof(lp_trk_t) + sizeof(ch_d_t));
     lpt.end = b[6] | (uint32_t)b[7] << 8;
-    if (b[0] != 'L' || b[1] != 'P' || b[2] != 1u || lpt.end < LP_HEAD || lpt.end > LP_STREAM) {
+    if (b[0] != 'L' || b[1] != 'P' || (b[2] != 1u && b[2] != 2u) || lpt.end < lpt.hlen || lpt.end > LP_STREAM) {
         lpt.bad = 1;
         return;
+    }
+    if (b[2] == 2u) {                            /* (V0.85: the kit, every value in its range) */
+        memcpy(&dkk, b + LP_HEAD1, sizeof dkk);
+        dk_sane();
     }
     lpp.sel = (uint8_t)(b[3] % LP_NTRK);
     lpp.scn = (uint8_t)(b[4] % LP_NSCN);
@@ -1376,9 +1633,11 @@ static void lp_load(uint32_t o, const uint8_t *b, uint32_t n)
     if (lpt.bad || lpt.pos != o * SS_PAYLOAD_MAX || (lpt.end && lpt.pos >= lpt.end))
         return;
     for (i = 0; i < n && !lpt.bad && (!lpt.end || lpt.pos < lpt.end); i++, lpt.pos++) {
-        if (lpt.pos < LP_HEAD) {
+        if (lpt.pos < lpt.hlen) {
             lp_tk[lpt.pos] = b[i];
-            if (lpt.pos + 1u == LP_HEAD)
+            if (lpt.pos == 2u)                   /* (the version: its head's length) */
+                lpt.hlen = b[i] == 1u ? LP_HEAD1 : LP_HEAD;
+            if (lpt.pos + 1u == lpt.hlen)
                 lp_load_head();
             continue;
         }
@@ -1397,7 +1656,7 @@ static int lp_load_end(void)
     for (t = 0; t < LP_NTRK; t++)
         for (s = 0; s < LP_NSCN; s++)
             lpp.clip[t][s].rsv = 0;
-    if (lpt.bad || lpt.pos < LP_HEAD || lpt.pos != lpt.end || lpt.got != lpt.total) {
+    if (lpt.bad || lpt.pos < lpt.hlen || lpt.pos != lpt.end || lpt.got != lpt.total) {
         lp_project_clear();
         return 0;
     }

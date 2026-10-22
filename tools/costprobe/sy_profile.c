@@ -21,6 +21,7 @@ typedef struct {
     uint8_t voices;
     int16_t kv[24][2];                     /* parameter, value pairs (-1 ends) */
     int8_t sound;                          /* V0.81: a starter sound under them (sy_sounds.h; -1 none) */
+    uint8_t drums;                         /* V0.85: 1 every lane hit each 64 blocks (~46 ms), 2 and the duck each 32 */
 } prof_t;
 
 #define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}, {SP_EQ_ON, 1},   \
@@ -43,6 +44,8 @@ static const prof_t PROF[] = {
     {"SUPERSAW, 8 notes", 8, {{-1, 0}}, 0},
     {"PLUCK, 8 notes", 8, {{-1, 0}}, 1},
     {"PAD, 8 notes", 8, {{-1, 0}}, 2},
+    {"drums: the eight lanes sounding", 0, {{-1, 0}}, -1, 1},   /* (V0.85: sy_drum.c) */
+    {"SUPERSAW, 8 notes, the drums, the duck", 8, {{-1, 0}}, 0, 2},
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 
@@ -74,13 +77,19 @@ int main(int argc, char **argv)
     sy_tables_now();
     for (i = 0; i < p->voices; i++)
         sy_note_on(48 + 4 * i, 100);
-    for (i = 0; i < PROF_WARM; i++) {
+    for (i = 0; i < PROF_WARM + PROF_BLOCKS; i++) {
+        uint32_t l;
+        if (i == PROF_WARM)
+            __gcov_reset();
+        if (p->drums && i % 64u == 0u)           /* (the drums: every lane, then (2) the duck, as a beat would) */
+            for (l = 0; l < DK_N; l++)
+                sy_drum_hit(l, 0, 100, (int)(l & 1u));
+        if (p->drums == 2u && i % 32u == 0u)
+            sy_drum_hit(DK_DUCK, 0, 100, 0);
         sy_block(out);
-        sy_service();
+        if (i < PROF_WARM)
+            sy_service();
     }
-    __gcov_reset();
-    for (i = 0; i < PROF_BLOCKS; i++)
-        sy_block(out);
     __gcov_dump();                                 /* (once: at exit gcov would merge a second dump into it) */
     printf("%u blocks: %s (oscillator instances %u)\n", PROF_BLOCKS, p->name, sy_instances());
     fflush(stdout);

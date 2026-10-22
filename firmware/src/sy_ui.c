@@ -121,7 +121,11 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_LBARS, UI_LQAPP, UI_LMOVE, UI_LMCLR,
        UI_LSLOT, UI_LSSCN, UI_LSREP, UI_LSON,
        UI_LPRJ, UI_LLOAD, UI_LNEW,
-       UI_C2ON, UI_C2RUN, UI_C2LOAD };                /* (V0.8 BENCH, CORE 2's: ON, TEST, LOAD: sy_c2.c) */
+       UI_C2ON, UI_C2RUN, UI_C2LOAD,                  /* (V0.8 BENCH, CORE 2's: ON, TEST, LOAD: sy_c2.c) */
+       UI_KLANE, UI_KTUNE, UI_KDEC, UI_KTONE,         /* (V0.85, the drums' (sy_drum.c, sy_ui_drum.c): KIT's DRUM, */
+       UI_KCHR, UI_KLVL, UI_KPAN, UI_KACC, UI_KVSN,   /* MORE, ACCENT, DUCK; the grid's GRID, HIT) */
+       UI_DAMT, UI_DATT, UI_DREL, UI_DSHP,
+       UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC, UI_GCHN, UI_GRAT };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -135,12 +139,15 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_LTRK (SEC_COUNT + 10)                   /* TRACK (TRACK, RECORD, CLICK), */
 #define SEC_LCLIP (SEC_COUNT + 11)                  /* CLIP (NOTES, EDIT, CLIP), */
 #define SEC_LSONG (SEC_COUNT + 12)                  /* SONG (SONG, PROJECT)) */
-#define SEC_N (SEC_COUNT + 13)                      /* every section, the UI's own too (ui.spage) */
+#define SEC_KIT (SEC_COUNT + 13)                    /* (V0.85: EDIT's on a drum track, the kit: DRUM, MORE, ACCENT, */
+#define SEC_LGRID (SEC_COUNT + 14)                  /* DUCK; SEQ's CLIP on a drum track: GRID, HIT, CLIP) */
+#define SEC_N (SEC_COUNT + 15)                      /* every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
-       G_LCLIPS, G_LMIX, G_LTRK, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2, G_N };
+       G_LCLIPS, G_LMIX, G_LTRK, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
+       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -306,6 +313,13 @@ static const ui_page_t UI_PG[] = {
     {SEC_LCLIP, G_LCLIP, "CLIP", {UI_LBARS, UI_LQAPP, UI_LMOVE, UI_LMCLR}},
     {SEC_LSONG, G_LSONG, "SONG", {UI_LSLOT, UI_LSSCN, UI_LSREP, UI_LSON}},
     {SEC_LSONG, G_LPRJ, "PROJECT", {UI_LPRJ, UI_LLOAD, UI_LNEW, -1}},
+    {SEC_KIT, G_KDRUM, "DRUM", {UI_KLANE, UI_KTUNE, UI_KDEC, UI_KTONE}},    /* (V0.85, the drums: sy_ui_drum.c) */
+    {SEC_KIT, G_KMORE, "MORE", {UI_KLANE, UI_KCHR, UI_KLVL, UI_KPAN}},
+    {SEC_KIT, G_KACC, "ACCENT", {UI_KACC, UI_KVSN, -1, -1}},
+    {SEC_KIT, G_KDUCK, "DUCK", {UI_DAMT, UI_DATT, UI_DREL, UI_DSHP}},
+    {SEC_LGRID, G_LGRID, "GRID", {UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC}},
+    {SEC_LGRID, G_LHIT, "HIT", {UI_GSTEP, UI_GROW, UI_GCHN, UI_GRAT}},
+    {SEC_LGRID, G_LCLIP, "CLIP", {UI_LBARS, UI_LQAPP, UI_LMOVE, UI_LMCLR}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
@@ -449,6 +463,8 @@ static struct {
     uint8_t astep;                                  /* ARP's STEPS, RATCHET: the step picked (0 .. 15) */
     uint8_t lnote, lgrid, lmv;                      /* V0.8, the looper: NOTES' note picked, GRID, CLIP's MOTION */
     uint8_t lslot, lprj;                            /* .. SONG's slot picked, PROJECT's */
+    uint8_t krow, grow;                             /* V0.85, the drums: KIT's drum picked; the grid's row picked */
+    uint16_t gstep;                                 /* .. the grid's step picked (a sixteenth of the clip) */
     uint32_t lnew_t;                                /* .. NEW turned once (a second within 2 s clears); 0 none */
     uint8_t lastmode;                               /* SCL + OCT+: the chords' MODE back on (KEY, FREE) */
     uint8_t lay_lock;                               /* GLO + OCT+: PERFORM's layer latched (a tap, GLO + OCT-: let go) */
@@ -539,7 +555,7 @@ static const char *ui_sec_name(uint32_t s)
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
            : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD" : s == SEC_CMID ? "MIDI"
            : s == SEC_STEPS ? "STEPS" : s == SEC_SEQ ? "LOOP" : s == SEC_LTRK ? "TRACK" : s == SEC_LCLIP ? "CLIP"
-           : s == SEC_LSONG ? "SONG"
+           : s == SEC_LSONG ? "SONG" : s == SEC_KIT ? "KIT" : s == SEC_LGRID ? "CLIP"
            : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
@@ -567,11 +583,16 @@ static int32_t ui_sec_power(uint32_t s)            /* a section's ON (its header
 static int32_t ui_fx_inst(void) { return ui_is_fx(UI_PG[ui.page].sec) ? (int32_t)(UI_PG[ui.page].sec - SEC_DRIVE) : -1; }
 static uint32_t ui_fx_off(void) { return ui_fx_inst() >= 0 ? FXI_OFF((uint32_t)ui_fx_inst()) : 0u; }
 
+static int ui_drums(void) { return lpp.trk[lpp.sel % LP_NTRK].type == LT_DRUM; }   /* (V0.85: the track selected) */
 static uint32_t ui_fam_of(uint32_t sec)
 {
     uint32_t f, k;
     if (ui_is_fx(sec))
         return FAM_FX;
+    if (sec == SEC_LGRID)                           /* (V0.85: the drum track's CLIP, SEQ's; its KIT, EDIT's) */
+        return FAM_SEQ;
+    if (sec == SEC_KIT)
+        return FAM_EDIT;
     for (f = 0; f < FAM_N; f++)
         for (k = 0; FAM_SECS[f][k] != 0xFF; k++)
             if (FAM_SECS[f][k] == sec)
@@ -701,6 +722,10 @@ static const char *ui_hint(uint32_t sec)
         return "REC: A TAKE; ON A CLIP: OVERDUB";
     if (sec == SEC_LSONG)
         return "SONG ON: ITS SCENES IN TURN";
+    if (sec == SEC_KIT)                             /* (V0.85) */
+        return "THE KEYS: 8 DRUMS, ACCENTED, DUCK";
+    if (sec == SEC_LGRID)
+        return "WHITE KEYS: STEPS \xB7 BLACK: ROWS";
     return 0;
 }
 
@@ -733,9 +758,22 @@ static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
             sec[nc++] = SEC_CHAIN;
         return nc;
     }
+    if (f == FAM_EDIT && ui_drums()) {              /* (V0.85: a drum track's EDIT is its kit; its CLIP the grid) */
+        sec[0] = SEC_KIT;
+        return 1;
+    }
     for (n = 0; FAM_SECS[f][n] != 0xFF; n++)
-        sec[n] = FAM_SECS[f][n];
+        sec[n] = FAM_SECS[f][n] == SEC_LCLIP && ui_drums() ? (uint8_t)SEC_LGRID : FAM_SECS[f][n];
     return n;
+}
+static int ui_fam_has(uint32_t f, uint32_t s)       /* section s is one family f shows now */
+{
+    uint8_t secs[NFXC];
+    uint32_t n = ui_fam_secs(f, secs), i;
+    for (i = 0; i < n; i++)
+        if (secs[i] == s)
+            return 1;
+    return 0;
 }
 
 /* s pages on, round: the family's (SELECT, a family button's tap: its sections in their order, each one's pages),
@@ -773,7 +811,7 @@ static void ui_family_tap(uint32_t f)
 {
     uint8_t secs[NFXC];
     if (ui.fam != f)
-        ui_go(ui_in_fam(ui.fpage[f], f) && ui_page_live(ui.fpage[f]) ? ui.fpage[f]
+        ui_go(ui_in_fam(ui.fpage[f], f) && ui_page_live(ui.fpage[f]) && ui_fam_has(f, UI_PG[ui.fpage[f]].sec) ? ui.fpage[f]
               : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)
                                                                   : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
     else if (ui_sec() != SEC_CHAIN)
@@ -784,10 +822,14 @@ static void ui_family_tap(uint32_t f)
 static void ui_step_section(int32_t s)
 {
     uint8_t secs[NFXC];
-    uint32_t n = ui_fam_secs(ui.fam, secs), k = 0, i, sec = ui_sec(), next;
+    uint32_t n = ui_fam_secs(ui.fam, secs), k = 0, i, sec = ui_sec(), next, in = 0;
     for (i = 0; i < n; i++)
         if (secs[i] == sec)
-            k = i;
+            k = i, in = 1;
+    if (!in && n && ui.fam != FAM_FX) {             /* (V0.85: a section the family no longer shows, a synth's on a */
+        ui_go(UI_PG[ui.spage[secs[0]]].sec == secs[0] ? ui.spage[secs[0]] : ui_first_page(secs[0]));   /* drum track: */
+        return;                                                                                       /* its first) */
+    }
     if (n < 2u) {                                   /* (one section: its pages, as ALGORITHM) */
         ui_step_pages(s, 1, 0);
         return;
@@ -1474,6 +1516,10 @@ static void ui_chord_turn(int32_t item, int32_t s)
 
 static void ui_loop_turn(int32_t item, int32_t s, uint32_t e);   /* sy_ui_loop.c (V0.8) */
 static int ui_loop_key(uint32_t k);
+static void ui_drum_turn(int32_t item, int32_t s, uint32_t e);   /* sy_ui_drum.c (V0.85): the kit's knobs, the grid's */
+static int ui_grid_keys(void);                      /* .. the grid's pages take the keys */
+static int ui_grid_key(uint32_t k);                 /* .. a key there (a step, a row) */
+static void ui_l_follow(void);                      /* sy_ui_loop.c: the page as the selected track's TYPE wants it */
 static void lp_select(uint32_t t);
 static char *ui_l_trk(char *b, uint32_t t);
 static char ui_l_scn(uint32_t s);
@@ -1519,6 +1565,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui_chord_turn(item, s);
     } else if (item >= UI_LTRK && item <= UI_LNEW) {   /* the looper's (V0.8: sy_ui_loop.c) */
         ui_loop_turn(item, s, e);
+    } else if (item >= UI_KLANE && item <= UI_GRAT) {   /* the drums' (V0.85: sy_ui_drum.c) */
+        ui_drum_turn(item, s, e);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
         ch_clock = s > 0;
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
@@ -1873,8 +1921,10 @@ static void ui_reset(uint32_t b)
     } else if (sec == SEC_STEPS) {
         ch_steps_clear();
         ui.astep = 0;
-    } else if (sec == SEC_SEQ || sec == SEC_LCLIP) {   /* (V0.8: the clip shown, the selected track's in the scene */
-        lp_clip_clear(lpp.sel, lpp.scn);            /* picked: gone) */
+    } else if (sec == SEC_KIT) {                    /* (V0.85: the kit as a project starts) */
+        dk_defaults();
+    } else if (sec == SEC_SEQ || sec == SEC_LCLIP || sec == SEC_LGRID) {   /* (V0.8: the clip shown, the selected */
+        lp_clip_clear(lpp.sel, lpp.scn);            /* track's in the scene picked: gone) */
         ui.lnote = ui.lmv = 0;
         sp_put(sp_put(sp_put(sp_fix(sp_put(t, "CLIP T"), (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0), " "),
                       (char[2]){ui_l_scn(lpp.scn), 0}), " CLEARED");
@@ -1884,8 +1934,9 @@ static void ui_reset(uint32_t b)
     } else if (sec == SEC_LTRK) {                   /* (its TYPE, CHANNEL, IN, the mix; RECORD's, CLICK's) */
         lp_trk_t *k = &lpp.trk[lpp.sel % LP_NTRK];
         uint8_t sc = k->scale, rt = k->root, ft = k->fit, kv = k->kvel;
-        lp_out_off_all(lpp.sel);
+        lp_type_set(lpp.sel, LT_SYNTH, 0u);         /* (a drum track's hits back to notes first: V0.85) */
         lp_trk_defaults(lpp.sel);
+        ui_l_follow();
         k->scale = sc, k->root = rt, k->fit = ft, k->kvel = kv;
         lpg.quant = LQ_OFF, lpg.cin = 1, lpg.launch = LL_BAR, lpg.click = LC_REC, lpg.clvl = 6;
     } else if (sec == SEC_LSONG) {
@@ -2143,7 +2194,7 @@ static uint32_t sy_ui_key_vel(void) { return ui.kvel ? ui.kvel : 100u; }
  * (its own state read: the main loop's may be a frame old). sy_main.c reads the keys between a redraw's strips then */
 static int sy_ui_keys_plain(void)
 {
-    return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
+    return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !ui_grid_keys() && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
 }
 
 /* the keys in REC's MOD layer: a white key picks its source, no key plays; 1 = taken (no note). (ENV's layer:
@@ -2170,6 +2221,8 @@ static int sy_ui_key(uint32_t k)
     }
     if (ui.lay == LAY_PAD)                          /* the launch pad (V0.8): clips, scenes, MUTE, STOP, SOLO, UNDO */
         return ui_loop_key(k);
+    if (ui_grid_keys())                             /* the drum grid (V0.85): white keys its steps, black its rows */
+        return ui_grid_key(k);
     if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section (a chain slot's: */
         uint32_t sec = UI_KEY_JUMP[k];                                /* its module) */
         if (sec >= UI_JUMP_FX) {

@@ -56,6 +56,14 @@ static void ui_p_lprj(void);
 static void ui_p_pad(void);
 static const char *ui_loop_nv(uint32_t id, char *v);
 static int32_t ui_pad_of(uint32_t k);
+static void ui_p_kdrum(void);                       /* sy_ui_drum.c: the drums' pages (V0.85), their keys' LEDs */
+static void ui_p_kmore(void);
+static void ui_p_kacc(void);
+static void ui_p_kduck(void);
+static void ui_p_lgrid(void);
+static void ui_p_lhit(void);
+static const char *ui_drum_nv(uint32_t id, char *v);
+static int ui_drum_leds(uint32_t k);
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
@@ -289,6 +297,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
         n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
     } else if (id >= UI_LTRK && id <= UI_LNEW) {
         n = ui_loop_nv((uint32_t)id, v);            /* (the looper's, V0.8) */
+    } else if (id >= UI_KLANE && id <= UI_GRAT) {
+        n = ui_drum_nv((uint32_t)id, v);            /* (the drums', V0.85) */
     } else if (id >= UI_SCUR && id <= UI_BBANK) {
         return 0;                                   /* (SAVE's, the browser's: ui_save_flag) */
     }
@@ -2333,7 +2343,8 @@ static void (*const UI_PAGE[])(void) = {
     [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_LCLIPS] = ui_p_lclips, [G_LMIX] = ui_p_lmix,
     [G_LTRK] = ui_p_ltrk, [G_LREC] = ui_p_lrec, [G_LCLICK] = ui_p_lclick, [G_LNOTES] = ui_p_lnotes,
     [G_LEDIT] = ui_p_ledit, [G_LCLIP] = ui_p_lclip, [G_LSONG] = ui_p_lsong, [G_LPRJ] = ui_p_lprj,
-    [G_CORE2] = ui_p_core2,
+    [G_CORE2] = ui_p_core2, [G_KDRUM] = ui_p_kdrum, [G_KMORE] = ui_p_kmore, [G_KACC] = ui_p_kacc,
+    [G_KDUCK] = ui_p_kduck, [G_LGRID] = ui_p_lgrid, [G_LHIT] = ui_p_lhit,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
@@ -2580,6 +2591,7 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led, 14u + k);
             else if (dim)
                 ui_led(fm1_led_dim, 14u + k);
+        } else if (ui_drum_leds(k)) {               /* (V0.85: the grid's steps and rows; a drum track's keys) */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
         } else if (ui.scale && ui_sec() != SEC_SAVE) {   /* a scale (not CHROM): its keys glow, the root's at the */

@@ -60,7 +60,15 @@ the bench build no longer measures flash reads.
 
 - **Stage 0, V0.8 BENCH**: built 2026-10-21 (commit "V0.8 BENCH"), not installed.
 - **Stage 1, V0.8 LOOPER**: built 2026-10-21, not installed; CONTROLS.md "The looper", FLASHING.md steps 26-29.
-  Every synth track plays the one sound (a sound a track: V0.9). The defaults above are as built.
+  Every synth track plays the one sound (a sound a track: V0.9). The defaults above are as built. V0.81 (its fixes,
+  less work) the same day, not installed.
+- **Stage 2, V0.85 DRUMS**: built 2026-10-21, not installed; CONTROLS.md "The drums", FLASHING.md steps 33-37. As
+  built, with these defaults (change them at the renders): the drum track is TYPE DRUMS (any track; one kit a project,
+  shared); the keys: white 1-8 the drums, 9-16 accented, the first black DUCK; MIDI in by GM's drum numbers, DUCK C1;
+  the WT lanes play OSC A's and OSC B's tables (the shared bank is V0.9's); the drums add in after the effects (V0.9's
+  sends put them through the rack) and the duck takes the synth after its effects; a hit's RATCHET spreads over its
+  sixteenth; CHANCE in eighths; GRID and HIT show sixteen steps, the white keys the steps and the black keys the
+  rows; the kit's knobs are not recorded as moves (moves are the sound's parameters).
 
 ## Stages
 

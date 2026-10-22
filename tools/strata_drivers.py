@@ -26,7 +26,7 @@ from size_fns import isr_reach  # noqa: E402  (Felucca's: the interrupts' roots 
 DRIVER_FILES = ("usb.c", "midi_uart.c", "ota.c")
 SIZE_FILES = ("sy_ui.c", "sy_ui_draw.c", "sy_ui_fx.c", "sy_ui_save.c", "sy_text.c", "sy_console.c", "sy_store.c",
               "sy_app.c", "sy_main.c", "sy_hw.c", "sy_chord.c", "sy_ui_chord.c",   # (V0.7: the chords'; V0.8, the
-              "sy_loop.c", "sy_ui_loop.c")   # sequencer's; their interrupt side stays -O2: isr_reach)
+              "sy_loop.c", "sy_ui_loop.c", "sy_ui_drum.c")   # sequencer's; their interrupt side stays -O2: isr_reach)
 DEFINE = re.compile(r"^(define [^\n]*?@\"?([\w.]+)\"?\([^\n]*\)(?: unnamed_addr| local_unnamed_addr)?)( #(\d+)[^\n]*\{)$",
                     re.M)
 BODY = re.compile(r"^define [^\n]*?@\"?([\w.]+)\"?\((.*?)^\}", re.M | re.S)

@@ -1,8 +1,8 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.81`, V0.8 LOOPER's fixes: the STRATA UI of V0.67,
-SCL's chords, the ARP, the 8-track looper and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Chords",
-"The ARP", "The looper", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.85 DRUMS`: the STRATA UI of V0.67, SCL's
+chords, the ARP, the 8-track looper with V0.81's fixes, its drum synth and sidechain, and CORE 2, the second core
+measured: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP", "The looper", "The drums", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -51,6 +51,16 @@ firmwares run); the keys played from the scan's timer while they only play, so d
 up; the USB audio 1.45 ms deeper; VOWEL PAD's hiss down (its noise was 6.6 dB under the pad); BENCH counts late halves
 after flash work apart and keeps an event log (the console's `bench`); the undo history and the FX lines in the spare
 SRAM V0.65 found untouched.
+
+**New in V0.85 DRUMS** (stage 2 of [LOOPER.md](LOOPER.md); [CONTROLS.md](CONTROLS.md) "The drums"): a track's TYPE
+can be DRUMS: it plays the project's drum kit, eight drums of their own models (KICK, SNARE, CLAP, HAT CL, HAT OP, CYM,
+and WT 1 and WT 2 on the oscillators' wavetables), each with TUNE, DECAY, TONE, its own, LEVEL and PAN on EDIT's KIT
+pages. Its keys play the drums (white keys 9-16 accented, the first black key DUCK). Its clips are hits with ACCENT,
+CHANCE and RATCHET, recorded as played or put in on SEQ > CLIP's GRID (the white keys the sixteen steps, the black keys
+the rows, their LEDs showing them). The DUCK row's silent hits duck the synth (KIT > DUCK: AMOUNT, ATTACK, RELEASE,
+SHAPE): the sidechain. The kit is kept in the project; projects V0.8 or V0.81 saved load with a new kit. Package
+`build/strata.fwsc`, 610,090 bytes, sha256 `f52c25b848f4c572a3d1272f5d43d7957b0d1178120fa9622dff3dc487e71ded`. It has
+V0.81's fixes (below).
 
 **New in V0.81** (V0.8 LOOPER debugged and trimmed before its test; nothing on the panel changes): USB MIDI out no
 longer leaves a note on: when its queue fills (a computer reads the port only while an app has it open) and a note is
@@ -377,6 +387,26 @@ New in V0.81:
 32. **The load.** HOME's CPU figure in silence and with a chord of SUPERSAW: a little under what V0.8 would show (the
     model says 1-8 % of the engine's work); note both.
 
+New in V0.85 DRUMS (the test page's rows "drums", "grid", "duck"; [CONTROLS.md](CONTROLS.md) "The drums"):
+
+33. **A drum track.** SEQ > TRACK: track 1, TYPE DRUMS. The white keys 1-8: KICK, SNARE, CLAP, HAT CL, HAT OP, CYM,
+    WT 1, WT 2; 9-16 the same, louder (accented); the first black key DUCK (no sound). EDIT: KIT. DRUM: each drum's
+    TUNE, DECAY and TONE by ear (stopped, the drum you play is the one picked); MORE: its own (PUNCH, SNAP, SPREAD,
+    METAL, BEND), LEVEL, PAN. A HAT CL cuts a ringing HAT OP (DECAY long). No clicks at a hit's start or end.
+34. **The grid.** SEQ > CLIP on the drum track: GRID. Black keys pick the row (1 KICK .. 9 DUCK), white keys put the
+    sixteen steps in and out (stopped, each heard as it goes in); the keys' LEDs show the row's steps. PLAY: the beat
+    in time over a few minutes, the playhead's LED walking; GRID's VELOCITY and ACCENT, HIT's CHANCE (a step that plays
+    sometimes) and RATCHET (2-4 quick hits in its sixteenth) by ear.
+35. **The duck.** Track 2 SYNTH with a clip of long chords (or hold a chord on it while the drums play); the drum
+    track's DUCK row on the beats: the chord dips on each and comes back. KIT > DUCK: AMOUNT, ATTACK, RELEASE and SHAPE
+    (PUMP: the pumping one) by ear; the drums themselves never dip.
+36. **Recording and TYPE.** REC on the drum track's empty clip in another scene: play drums for a bar or two (accented
+    ones too), REC: it loops as played. TRACK's TYPE SYNTH and back to DRUMS: the beat as it was (its accents, chances,
+    ratchets kept).
+37. **The load with drums.** HOME's CPU figure with a full beat playing (all eight drums), then with SUPERSAW chords
+    over it: note both (the model: the eight drums sounding at once 11-15 % of a core, a beat's usual two or three
+    much less).
+
 ## 5. The report
 
 On the flasher page, step 3: **Read the device report** opens Strata's USB serial console (Chrome asks for the port:
@@ -445,6 +475,19 @@ marked.
 
 ## 8. What was checked, and where
 
+- **V0.85 DRUMS**: built and checked by the build: the image 438,124 bytes (+20,940 on V0.81), RAM 62,228 of 73,728
+  bytes (+1,568: the drum voices, the kit, the ratchets), the pool 361,860 bytes, the interrupt stack ~2.7 KB of 4, the
+  main stack ~4.8 KB, register access in `hal/` only; the flasher rebuilt (sha256 `f52c25b8...87e71ded`). **Verified
+  on host**: the drums' 18 checks (TESTING.md §2.7: every lane's level and end, DECAY's time, TUNE, the bursts, the
+  choke, ACCENT, VELOCITY, PAN, the duck's curves and that it takes the synth only, 40 random kits, golden renders),
+  the engine's 94 with its golden renders unchanged (and as WebAssembly), USB MIDI out's 9, the stress test's 24 seeds
+  x 3,000 steps with the drums in (ASan, UBSan), the cost model (BUDGET.md §15: the eight drums at once 11-15 % of a
+  core). **Verified in the emulator**: 140 checks (the drums' 8: the pages and keys, the grid by its keys and LEDs, a
+  beat's hits counted over two bars, the duck's depth, RATCHET and CHANCE from HIT's knobs over eight bars, a take, TYPE
+  there and back, the kit's knobs, a power cycle), 138 screens checked, 611 knob turns, the flasher's 26 and the test
+  page's 21 (three rows more for V0.85, one for V0.81). **Needs a hardware test**: the drums by ear, their timing over
+  minutes, the duck by ear, the load (steps 33-37). **Unverified**: how the drums sound on the FM-1's output (levels,
+  the click of a hit's start), the load a beat adds on a unit.
 - **V0.81**: built and checked by the build: the image 417,184 bytes (−1,176), RAM 60,660 of 73,728 bytes (−1,024),
   the pool 361,788 bytes (+1,024: the generator's harmonics where they belong), the interrupt stack ~2.5 KB, the main
   stack ~4.8 KB, register access in `hal/` only; the flasher rebuilt (sha256 `c370d0a7...5bd792220`). **Verified on
