@@ -326,6 +326,7 @@ static void sy_sound_load(uint32_t k)
     sy_patch_load(&p);
     sy_sound = k;
     sy_sound_want = -1;
+    ui.edited = 0;                               /* (V0.86: a sound just loaded: nothing unsaved) */
     sy_ui_touch();
 }
 
@@ -429,6 +430,7 @@ static void sy_app_entry_load(uint32_t id)
     ui.edit_t = 0;
     sy_patch_load(&p);
     sy_slot = (int16_t)(id - SY_USER);
+    ui.edited = 0;
     sy_ui_touch();
 }
 

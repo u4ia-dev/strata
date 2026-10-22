@@ -300,7 +300,31 @@ enum {                           /* units: the display and the DSP's reading of 
     SP_CRU(X, CR, SEC_CRUSH) SP_CRU(X, CR2, SEC_CRUSH2)                                                   \
     SP_TRM(X, TR, SEC_TREM) SP_TRM(X, TR2, SEC_TREM2)                                                     \
     SP_RNG(X, RG, SEC_RING) SP_RNG(X, RG2, SEC_RING2)                                                     \
-    SP_TAP(X, TP, SEC_TAPE) SP_TAP(X, TP2, SEC_TAPE2)
+    SP_TAP(X, TP, SEC_TAPE) SP_TAP(X, TP2, SEC_TAPE2)                                                     \
+    SP_XTRA_ROWS(X)
+
+/* V0.86: the effects' rows added after the table's instances (a second instance's no longer its first's moved by
+ * FXI_OFF: sp_fx_id, SP_XTRA). CHORUS's SPREAD (the right side's sweep against the left's: 100 % opposite, as before),
+ * the FX FILTER's FOLLOW (the cutoff follows the input's level, up or down), TAPE's HISS, TREMOLO's SPREAD (the right
+ * side's phase later, up to half a cycle); the EQ's bands' types (LOW: SHELF, PASS, PEAK; MID: PEAK, NOTCH, BAND; HIGH:
+ * SHELF, PASS, PEAK) and SHAPES' pick (0 CUSTOM). Each at its default sounds as V0.85 did */
+#define SP_XTRA_ROWS(X)                                                                                   \
+    X(CH_SPREAD, "SPREAD", SEC_CHORUS, 0, 1000, 1000, U_PCT, 0, 0)                                        \
+    X(CH2_SPREAD, "SPREAD", SEC_CHORUS2, 0, 1000, 1000, U_PCT, 0, 0)                                      \
+    X(FF_FOLLOW, "FOLLOW", SEC_FFILT, -1000, 1000, 0, U_BIPCT, FMG, 0)                                    \
+    X(FF2_FOLLOW, "FOLLOW", SEC_FFILT2, -1000, 1000, 0, U_BIPCT, FMG, 0)                                  \
+    X(TP_HISS, "HISS", SEC_TAPE, 0, 1000, 0, U_PCT, FMG, 0)                                               \
+    X(TP2_HISS, "HISS", SEC_TAPE2, 0, 1000, 0, U_PCT, FMG, 0)                                             \
+    X(TR_SPREAD, "SPREAD", SEC_TREM, 0, 1000, 0, U_PCT, 0, 0)                                             \
+    X(TR2_SPREAD, "SPREAD", SEC_TREM2, 0, 1000, 0, U_PCT, 0, 0)                                           \
+    X(EQ_LTYPE, "LO TYPE", SEC_EQ, 0, 2, 0, U_LIST, 0, 0)                                                 \
+    X(EQ_MTYPE, "MID TYPE", SEC_EQ, 0, 2, 0, U_LIST, 0, 0)                                                \
+    X(EQ_HTYPE, "HI TYPE", SEC_EQ, 0, 2, 0, U_LIST, 0, 0)                                                 \
+    X(EQ_SHAPE, "SHAPE", SEC_EQ, 0, 9, 0, U_LIST, 0, 0)                                                   \
+    X(EQ2_LTYPE, "LO TYPE", SEC_EQ2, 0, 2, 0, U_LIST, 0, 0)                                               \
+    X(EQ2_MTYPE, "MID TYPE", SEC_EQ2, 0, 2, 0, U_LIST, 0, 0)                                              \
+    X(EQ2_HTYPE, "HI TYPE", SEC_EQ2, 0, 2, 0, U_LIST, 0, 0)                                               \
+    X(EQ2_SHAPE, "SHAPE", SEC_EQ2, 0, 9, 0, U_LIST, 0, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
@@ -601,7 +625,7 @@ enum { FXI_DRIVE, FXI_CHORUS, FXI_DELAY, FXI_REVERB, FXI_OTT, FXI_EQ, FXI_DRIVE2
 enum { FXT_DRIVE, FXT_CHORUS, FXT_DELAY, FXT_REVERB, FXT_OTT, FXT_EQ, FXT_FLANGER, FXT_PHASER, FXT_FFILT, FXT_CRUSH,
        FXT_TREM, FXT_RING, FXT_TAPE, FXT_N };
 #define NFXC 8u                                      /* the chain's slots */
-#define SP_FX_MAXP 10u                               /* an instance's parameters at most */
+#define SP_FX_MAXP 14u                               /* an instance's parameters at most (V0.86: the EQ's 14) */
 _Static_assert(SEC_DRIVE + FXI_N == SEC_CHAIN, "an instance a section, in order");
 _Static_assert(SP_FXC8 - SP_FXC1 == NFXC - 1u, "the chain's slots in a row");
 static const uint8_t FXI_TYPE[FXI_N] = {FXT_DRIVE, FXT_CHORUS, FXT_DELAY, FXT_REVERB, FXT_OTT, FXT_EQ, FXT_DRIVE,
@@ -633,11 +657,35 @@ static int32_t sp_inst_of(uint32_t id)
     uint32_t s = id < SP_COUNT ? SP[id].sec : 0u;
     return s >= SEC_DRIVE && s < SEC_CHAIN && !(SP[id].flags & F_OLD) ? (int32_t)(s - SEC_DRIVE) : -1;
 }
+/* V0.86: the rows added after the instances (SP_XTRA_ROWS), the type's first instance's and its second's */
+static const uint16_t SP_XTRA[][2] = {
+    {SP_CH_SPREAD, SP_CH2_SPREAD}, {SP_FF_FOLLOW, SP_FF2_FOLLOW}, {SP_TP_HISS, SP_TP2_HISS},
+    {SP_TR_SPREAD, SP_TR2_SPREAD}, {SP_EQ_LTYPE, SP_EQ2_LTYPE},   {SP_EQ_MTYPE, SP_EQ2_MTYPE},
+    {SP_EQ_HTYPE, SP_EQ2_HTYPE},   {SP_EQ_SHAPE, SP_EQ2_SHAPE}};
+#define SP_NXTRA (sizeof SP_XTRA / sizeof SP_XTRA[0])
 /* .. as its type's first instance has it (a second instance's moved back; anything else as it is) */
 static uint32_t sp_fx_base(uint32_t id)
 {
     int32_t i = sp_inst_of(id);
+    uint32_t k;
+    if (id >= SP_CH_SPREAD) {
+        for (k = 0; k < SP_NXTRA; k++)
+            if (SP_XTRA[k][1] == id)
+                return SP_XTRA[k][0];
+        return id;
+    }
     return i < 0 ? id : id - FXI_OFF((uint32_t)i);
+}
+/* the type's first instance's parameter base as instance i has it */
+static uint32_t sp_fx_id(uint32_t base, uint32_t i)
+{
+    uint32_t k;
+    if (base < SP_CH_SPREAD)
+        return base + FXI_OFF(i);
+    for (k = 0; k < SP_NXTRA; k++)
+        if (SP_XTRA[k][0] == base)
+            return SP_XTRA[k][FXT_INST[FXI_TYPE[i]][0] != i];
+    return base;
 }
 /* instance i's parameter ids in id order (ON first), into ids (SP_FX_MAXP); their count */
 static uint32_t sp_inst_ids(uint32_t i, uint16_t *ids)
@@ -712,7 +760,57 @@ static void sp_chain_from_old(sy_patch_t *pt)
 #define SP_ISOLD(id, nm, sc, l, h, d, u, f, c) +(((f) & F_OLD) != 0)
 enum { SP_NFXP = 0 SY_PARAMS(SP_ISFX), SP_NOLD = 0 SY_PARAMS(SP_ISOLD) };
 #define SP_NCORE (SP_COUNT - SP_NFXP - SP_NOLD)
-#define SP_PACK_MAX (6u + 2u * SP_NCORE + 16u + 1u + 32u + 1u + 2u * (1u + 6u * SP_NPT) + 2u + NFXC * (2u + 2u * SP_FX_MAXP))
+/* V0.86: the chain's part at its largest, from each type's count of values (a second instance's as its first's; the
+ * delay's NOTE twice: sp_inst_ids): the two EQs at SP_FX_MAXP, the six other modules at SP_FX_REST at most (asserted
+ * a type at a time). Before V0.86 every module was taken at SP_FX_MAXP (then 10): 14 for all eight overran the slot
+ * though no chain can hold eight EQs */
+#define SP_IN(id, nm, sc, l, h, d, u, f, c) +((sc) == SP_IN_S && !((f) & F_OLD))
+#define SP_FX_REST 10u
+#define SP_IN_S SEC_EQ
+enum { SP_NP_EQ = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_DELAY
+enum { SP_NP_DL = 1 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_PHASER
+enum { SP_NP_PH = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_FLANGER
+enum { SP_NP_FL = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_REVERB
+enum { SP_NP_RV = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_OTT
+enum { SP_NP_OT = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_TREM
+enum { SP_NP_TR = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_CHORUS
+enum { SP_NP_CH = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_FFILT
+enum { SP_NP_FF = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_TAPE
+enum { SP_NP_TP = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_DRIVE
+enum { SP_NP_DR = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_RING
+enum { SP_NP_RG = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+#define SP_IN_S SEC_CRUSH
+enum { SP_NP_CR = 0 SY_PARAMS(SP_IN) };
+#undef SP_IN_S
+_Static_assert(SP_NP_EQ <= SP_FX_MAXP && SP_NP_DL <= SP_FX_REST && SP_NP_PH <= SP_FX_REST && SP_NP_FL <= SP_FX_REST &&
+               SP_NP_RV <= SP_FX_REST && SP_NP_OT <= SP_FX_REST && SP_NP_TR <= SP_FX_REST && SP_NP_CH <= SP_FX_REST &&
+               SP_NP_FF <= SP_FX_REST && SP_NP_TP <= SP_FX_REST && SP_NP_DR <= SP_FX_REST && SP_NP_RG <= SP_FX_REST &&
+               SP_NP_CR <= SP_FX_REST && FXT_N == 13u, "every type but the EQ within SP_FX_REST values");
+#define SP_PACK_MAX (6u + 2u * SP_NCORE + 16u + 1u + 32u + 1u + 2u * (1u + 6u * SP_NPT) + 2u + NFXC * 2u + \
+                     2u * (2u * SP_FX_MAXP + (NFXC - 2u) * SP_FX_REST))
 _Static_assert(SP_PACK_MAX <= 766u, "a packed patch fits a user slot (sy_store.c: SS_SLOT_BYTES less its length)");
 static int sp_core(uint32_t id) { return !(SP[id].flags & F_OLD) && sp_inst_of(id) < 0; }
 

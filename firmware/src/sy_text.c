@@ -30,6 +30,13 @@ static const char *const LFOM_NAMES[3] = {"FREE", "RETRIG", "ENV"};
 static const char *const SYNCM_NAMES[2] = {"FREE", "FIXED"};
 static const char *const VMODE_NAMES[3] = {"POLY", "MONO", "LEGATO"};
 static const char *const GLMODE_NAMES[2] = {"ALWAYS", "LEGATO"};
+/* V0.86: the EQ's bands' types (LOW: a shelf, a high pass, a peak; MID: a peak, a notch, a band pass; HIGH: a shelf,
+ * a low pass, a peak), SHAPES' shapes */
+static const char *const EQ_LTYPES[3] = {"SHELF", "PASS", "PEAK"};
+static const char *const EQ_MTYPES[3] = {"PEAK", "NOTCH", "BAND"};
+#define EQ_NSHAPE 10u
+static const char *const EQ_SHAPES[EQ_NSHAPE] = {"CUSTOM", "FLAT", "HIGH PASS", "LOW PASS", "BAND PASS", "NOTCH",
+                                                 "TWO PEAKS", "SMILE", "TELEPHONE", "AIR"};
 
 /* a list parameter's names and their count (0: not a list); an effect's second instance as its first */
 static const char *const *sp_list(uint32_t id, uint32_t *n)
@@ -56,6 +63,9 @@ static const char *const *sp_list(uint32_t id, uint32_t *n)
     case SP_DR_TYPE: *n = 4u; return DRV_NAMES;
     case SP_DL_MODE: *n = 2u; return DLY_NAMES;
     case SP_RV_TYPE: *n = 2u; return RV_NAMES;
+    case SP_EQ_LTYPE: case SP_EQ_HTYPE: *n = 3u; return EQ_LTYPES;
+    case SP_EQ_MTYPE: *n = 3u; return EQ_MTYPES;
+    case SP_EQ_SHAPE: *n = EQ_NSHAPE; return EQ_SHAPES;
     default: *n = 0; return 0;
     }
 }

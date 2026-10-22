@@ -125,7 +125,11 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_KLANE, UI_KTUNE, UI_KDEC, UI_KTONE,         /* (V0.85, the drums' (sy_drum.c, sy_ui_drum.c): KIT's DRUM, */
        UI_KCHR, UI_KLVL, UI_KPAN, UI_KACC, UI_KVSN,   /* MORE, ACCENT, DUCK; the grid's GRID, HIT) */
        UI_DAMT, UI_DATT, UI_DREL, UI_DSHP,
-       UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC, UI_GCHN, UI_GRAT };
+       UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC, UI_GCHN, UI_GRAT,
+       UI_EQSHP, UI_EQSF, UI_EQSA,                    /* (V0.86: the EQ's SHAPES: SHAPE, FREQ, AMOUNT; */
+       UI_HM1, UI_HM2, UI_HM3, UI_HM4,                /* HOME's SOUND: MACRO 1-4, a drum track's the kit's TUNE, */
+       UI_DKTUNE, UI_DKDEC, UI_DKTONE, UI_DKDUCK,     /* DECAY, TONE, the duck's AMOUNT (ui_virt); MIX 1-4, 5-8: */
+       UI_HV1, UI_HV2, UI_HV3, UI_HV4, UI_HV5, UI_HV6, UI_HV7, UI_HV8 };   /* the tracks' VOLUME) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -147,7 +151,7 @@ enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
        G_LCLIPS, G_LMIX, G_LTRK, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
-       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_N };
+       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -160,13 +164,13 @@ typedef struct {
 #define UI_V(S, A, B, C, D) {S, G_VALUES, "VALUES", {A, B, C, D}},
 #define UI_OSC(O, S)                                                                                      \
     {S, G_WAVE, "WAVE", {SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT}},                     \
-    {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH}},                \
-    {S, G_SPREAD, "SPREAD", {SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},           \
+    {S, G_UNI, "UNISON", {SP_##O##_UNI, SP_##O##_UMODE, SP_##O##_DETUNE, SP_##O##_BLEND}},                \
+    {S, G_SPREAD, "SPREAD", {SP_##O##_WIDTH, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND}},           \
     {S, G_PITCH, "PITCH", {SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE}},                 \
     {S, G_OUT, "OUTPUT", {SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1}},                             \
     UI_V(S, SP_##O##_POS, SP_##O##_TABLE, SP_##O##_WARP, SP_##O##_WAMT)                                    \
-    UI_V(S, SP_##O##_UNI, SP_##O##_DETUNE, SP_##O##_BLEND, SP_##O##_WIDTH)                                 \
-    UI_V(S, SP_##O##_UMODE, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND)                                \
+    UI_V(S, SP_##O##_UNI, SP_##O##_UMODE, SP_##O##_DETUNE, SP_##O##_BLEND)                                 \
+    UI_V(S, SP_##O##_WIDTH, SP_##O##_SPREAD, SP_##O##_PHASE, SP_##O##_RAND)                                \
     UI_V(S, SP_##O##_OCT, SP_##O##_SEMI, SP_##O##_FINE, SP_##O##_PHMODE)                                   \
     UI_V(S, SP_##O##_LEVEL, SP_##O##_PAN, SP_##O##_ROUTE, -1)
 #define UI_ENV(E, S)                                                                                      \
@@ -186,63 +190,66 @@ typedef struct {
 #define UI_DRVP(S, O)                                                                                     \
     {S, G_DRIVE, "DRIVE", {SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O}},                \
     UI_V(S, SP_DR_TYPE + O, SP_DR_AMT + O, SP_DR_TONE + O, SP_DR_MIX + O)
-#define UI_CHOP(S, O)                                                                                     \
-    {S, G_CHORUS, "CHORUS", {SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O}},           \
-    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, -1, -1, -1}},                                                  \
-    UI_V(S, SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O)                              \
-    UI_V(S, SP_CH_FDBK + O, -1, -1, -1)
-#define UI_OTTP(S, O)                                                                                     \
-    {S, G_OTT, "OTT", {SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O}},                   \
-    {S, G_OTT, "BANDS", {SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1}},                              \
-    UI_V(S, SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O)                                \
+#define UI_CHOP(S, O, X)                                                                              \
+    {S, G_CHORUS, "CHORUS", {SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O}},       \
+    {S, G_CHORUS, "MORE", {SP_CH_FDBK + O, X, -1, -1}},                                               \
+    UI_V(S, SP_CH_RATE + O, SP_CH_DEPTH + O, SP_CH_DELAY + O, SP_CH_MIX + O)                          \
+    UI_V(S, SP_CH_FDBK + O, X, -1, -1)
+#define UI_OTTP(S, O)                                                                                 \
+    {S, G_OTT, "OTT", {SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O}},               \
+    {S, G_OTT, "BANDS", {SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1}},                          \
+    UI_V(S, SP_OT_DEPTH + O, SP_OT_TIME + O, SP_OT_UP + O, SP_OT_DOWN + O)                            \
     UI_V(S, SP_OT_LOW + O, SP_OT_MID + O, SP_OT_HIGH + O, -1)
-#define UI_EQP(S, O)                                                                                      \
-    {S, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},                                               \
-    {S, G_EQ, "GAINS", {SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1}},                               \
-    UI_V(S, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ)                                                              \
-    UI_V(S, SP_EQ_LOW + O, SP_EQ_MID + O, SP_EQ_HIGH + O, -1)
-#define UI_FLGP(S, O)                                                                                     \
-    {S, G_FLANGER, "FLANGER", {SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_DELAY + O, SP_FL_MIX + O}},         \
-    {S, G_FLANGER, "MORE", {SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1}},                       \
-    UI_V(S, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_DELAY + O, SP_FL_MIX + O)                              \
-    UI_V(S, SP_FL_FDBK + O, SP_FL_SPREAD + O, SP_FL_SYNC + O, -1)
-#define UI_PHSP(S, O)                                                                                     \
-    {S, G_PHASER, "PHASER", {SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_CENTER + O, SP_PH_MIX + O}},          \
-    {S, G_PHASER, "MORE", {SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O}},          \
-    UI_V(S, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_CENTER + O, SP_PH_MIX + O)                             \
-    UI_V(S, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O, SP_PH_SYNC + O)
-#define UI_FFXP(S, O)                                                                                     \
-    {S, G_FFILT, "FILTER", {SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O}},                \
-    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, -1, -1, -1}},                                                  \
-    UI_V(S, SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O)                                  \
-    UI_V(S, SP_FF_DRIVE + O, -1, -1, -1)
-#define UI_CRUP(S, O)                                                                                     \
-    {S, G_CRUSH, "CRUSH", {SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1}},                           \
+/* V0.86: the EQ's GAINS (POINTS' gains again) gone; SHAPES picks a shape for the three points (its bands' types,
+ * places, gains, widths), FREQ moves it along, AMOUNT makes it more or less; VALUES 2 its bands' types */
+#define UI_EQP(S, O, T1, T2, T3)                                                                      \
+    {S, G_EQ, "POINTS", {UI_EQPT, UI_EQF, UI_EQG, UI_EQQ}},                                           \
+    {S, G_EQ, "SHAPES", {UI_EQSHP, UI_EQSF, UI_EQSA, -1}},                                            \
+    UI_V(S, UI_EQPT, UI_EQF, UI_EQG, UI_EQQ)                                                          \
+    UI_V(S, T1, T2, T3, -1)
+/* V0.86: SYNC beside RATE on the first page (it makes RATE a note value) */
+#define UI_FLGP(S, O)                                                                                 \
+    {S, G_FLANGER, "FLANGER", {SP_FL_SYNC + O, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_MIX + O}},      \
+    {S, G_FLANGER, "MORE", {SP_FL_DELAY + O, SP_FL_FDBK + O, SP_FL_SPREAD + O, -1}},                  \
+    UI_V(S, SP_FL_SYNC + O, SP_FL_RATE + O, SP_FL_DEPTH + O, SP_FL_MIX + O)                           \
+    UI_V(S, SP_FL_DELAY + O, SP_FL_FDBK + O, SP_FL_SPREAD + O, -1)
+#define UI_PHSP(S, O)                                                                                 \
+    {S, G_PHASER, "PHASER", {SP_PH_SYNC + O, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_MIX + O}},        \
+    {S, G_PHASER, "MORE", {SP_PH_CENTER + O, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O}},    \
+    UI_V(S, SP_PH_SYNC + O, SP_PH_RATE + O, SP_PH_DEPTH + O, SP_PH_MIX + O)                           \
+    UI_V(S, SP_PH_CENTER + O, SP_PH_FDBK + O, SP_PH_STAGES + O, SP_PH_SPREAD + O)
+#define UI_FFXP(S, O, X)                                                                              \
+    {S, G_FFILT, "FILTER", {SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O}},            \
+    {S, G_FFILT, "MORE", {SP_FF_DRIVE + O, X, -1, -1}},                                               \
+    UI_V(S, SP_FF_TYPE + O, SP_FF_CUT + O, SP_FF_RES + O, SP_FF_MIX + O)                              \
+    UI_V(S, SP_FF_DRIVE + O, X, -1, -1)
+#define UI_CRUP(S, O)                                                                                 \
+    {S, G_CRUSH, "CRUSH", {SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1}},                       \
     UI_V(S, SP_CR_BITS + O, SP_CR_RATE + O, SP_CR_MIX + O, -1)
-#define UI_TRMP(S, O)                                                                                     \
-    {S, G_TREM, "TREMOLO", {SP_TR_MODE + O, SP_TR_SHAPE + O, SP_TR_RATE + O, SP_TR_DEPTH + O}},           \
-    {S, G_TREM, "MORE", {SP_TR_SYNC + O, -1, -1, -1}},                                                    \
-    UI_V(S, SP_TR_MODE + O, SP_TR_SHAPE + O, SP_TR_RATE + O, SP_TR_DEPTH + O)                             \
-    UI_V(S, SP_TR_SYNC + O, -1, -1, -1)
-#define UI_RNGP(S, O)                                                                                     \
-    {S, G_RING, "RING MOD", {SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O}},          \
+#define UI_TRMP(S, O, X)                                                                              \
+    {S, G_TREM, "TREMOLO", {SP_TR_MODE + O, SP_TR_SYNC + O, SP_TR_RATE + O, SP_TR_DEPTH + O}},        \
+    {S, G_TREM, "MORE", {SP_TR_SHAPE + O, X, -1, -1}},                                                \
+    UI_V(S, SP_TR_MODE + O, SP_TR_SYNC + O, SP_TR_RATE + O, SP_TR_DEPTH + O)                          \
+    UI_V(S, SP_TR_SHAPE + O, X, -1, -1)
+#define UI_RNGP(S, O)                                                                                 \
+    {S, G_RING, "RING MOD", {SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O}},      \
     UI_V(S, SP_RG_FREQ + O, SP_RG_SHAPE + O, SP_RG_SPREAD + O, SP_RG_MIX + O)
-#define UI_TAPP(S, O)                                                                                     \
-    {S, G_TAPE, "TAPE", {SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O}},                   \
-    {S, G_TAPE, "TONE", {SP_TP_TONE + O, -1, -1, -1}},                                                    \
-    UI_V(S, SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O)                                  \
-    UI_V(S, SP_TP_TONE + O, -1, -1, -1)
+#define UI_TAPP(S, O, X)                                                                              \
+    {S, G_TAPE, "TAPE", {SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O}},               \
+    {S, G_TAPE, "TONE", {SP_TP_TONE + O, X, -1, -1}},                                                 \
+    UI_V(S, SP_TP_WOW + O, SP_TP_FLUT + O, SP_TP_SAT + O, SP_TP_MIX + O)                              \
+    UI_V(S, SP_TP_TONE + O, X, -1, -1)
 static const ui_page_t UI_PG[] = {
     UI_OSC(A, SEC_OSCA)
     UI_OSC(B, SEC_OSCB)
-    {SEC_SUB, G_SUB, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW}},
-    {SEC_SUB, G_OUT, "OUTPUT", {SP_SUB_PAN, SP_SUB_ROUTE, -1, -1}},
-    UI_V(SEC_SUB, SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_LEVEL, SP_SUB_PW)
-    UI_V(SEC_SUB, SP_SUB_PAN, SP_SUB_ROUTE, -1, -1)
-    {SEC_NOISE, G_NOISE, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL}},
-    {SEC_NOISE, G_OUT, "OUTPUT", {SP_NZ_PAN, SP_NZ_ROUTE, -1, -1}},
-    UI_V(SEC_NOISE, SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, SP_NZ_LEVEL)
-    UI_V(SEC_NOISE, SP_NZ_PAN, SP_NZ_ROUTE, -1, -1)
+    {SEC_SUB, G_SUB, "MAIN", {SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_PW, -1}},    /* (V0.86: every source's LEVEL on OUTPUT) */
+    {SEC_SUB, G_OUT, "OUTPUT", {SP_SUB_LEVEL, SP_SUB_PAN, SP_SUB_ROUTE, -1}},
+    UI_V(SEC_SUB, SP_SUB_SHAPE, SP_SUB_OCT, SP_SUB_PW, -1)
+    UI_V(SEC_SUB, SP_SUB_LEVEL, SP_SUB_PAN, SP_SUB_ROUTE, -1)
+    {SEC_NOISE, G_NOISE, "MAIN", {SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, -1}},
+    {SEC_NOISE, G_OUT, "OUTPUT", {SP_NZ_LEVEL, SP_NZ_PAN, SP_NZ_ROUTE, -1}},
+    UI_V(SEC_NOISE, SP_NZ_TYPE, SP_NZ_COLOR, SP_NZ_STEREO, -1)
+    UI_V(SEC_NOISE, SP_NZ_LEVEL, SP_NZ_PAN, SP_NZ_ROUTE, -1)
     {SEC_FILTER, G_FILTER, "TONE", {SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE}},
     {SEC_FILTER, G_FILTER, "MORE", {SP_F_KEY, SP_F_VAR, SP_F_MIX, -1}},
     UI_V(SEC_FILTER, SP_F_TYPE, SP_F_CUT, SP_F_RES, SP_F_DRIVE)
@@ -256,39 +263,41 @@ static const ui_page_t UI_PG[] = {
     UI_V(SEC_VOICE, SP_V_MODE, SP_V_POLY, SP_V_GLIDE, SP_V_GLMODE)
     UI_V(SEC_VOICE, SP_V_BUP, SP_V_BDN, SP_V_VEL, SP_V_VOL)
     {SEC_GLOBAL, G_TEMPO, "TEMPO", {UI_BPM, UI_TSB, UI_TSN, UI_CLOCK}},
-    {SEC_MACRO, G_HOME, "HOME", {SP_MAC1, SP_MAC2, SP_MAC3, SP_MAC4}},
+    {SEC_MACRO, G_HOME, "SOUND", {UI_HM1, UI_HM2, UI_HM3, UI_HM4}},      /* (V0.86, H2: SOUND, MIX 1-4, MIX 5-8) */
+    {SEC_MACRO, G_HMIX, "MIX 1-4", {UI_HV1, UI_HV2, UI_HV3, UI_HV4}},
+    {SEC_MACRO, G_HMIX, "MIX 5-8", {UI_HV5, UI_HV6, UI_HV7, UI_HV8}},
     {SEC_MATRIX, G_MATRIX, "SLOTS", {UI_MSLOT, UI_MSRC, UI_MDST, UI_MAMT}},
     {SEC_CHAIN, G_CHAIN, "CHAIN", {UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX}},
     UI_DRVP(SEC_DRIVE, 0)
-    UI_CHOP(SEC_CHORUS, 0)
-    {SEC_DELAY, G_DELAY, "DELAY", {SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK}},
-    {SEC_DELAY, G_DELAY, "TONE", {SP_DL_LP, SP_DL_HP, SP_DL_MIX, -1}},
-    UI_V(SEC_DELAY, SP_DL_MODE, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK)
-    UI_V(SEC_DELAY, SP_DL_LP, SP_DL_HP, SP_DL_MIX, -1)
-    {SEC_REVERB, G_REVERB, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX}},
-    {SEC_REVERB, G_REVERB, "TONE", {SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT}},
-    UI_V(SEC_REVERB, SP_RV_TYPE, SP_RV_SIZE, SP_RV_DECAY, SP_RV_MIX)
-    UI_V(SEC_REVERB, SP_RV_DAMP, SP_RV_PRE, SP_RV_WIDTH, SP_RV_LOCUT)
+    UI_CHOP(SEC_CHORUS, 0, SP_CH_SPREAD)
+    {SEC_DELAY, G_DELAY, "DELAY", {SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK, SP_DL_MIX}},   /* (V0.86: MIX on page 1 as */
+    {SEC_DELAY, G_DELAY, "TONE", {SP_DL_MODE, SP_DL_LP, SP_DL_HP, -1}},               /* every effect has it) */
+    UI_V(SEC_DELAY, SP_DL_SYNC, SP_DL_TIME, SP_DL_FDBK, SP_DL_MIX)
+    UI_V(SEC_DELAY, SP_DL_MODE, SP_DL_LP, SP_DL_HP, -1)
+    {SEC_REVERB, G_REVERB, "REVERB", {SP_RV_TYPE, SP_RV_SIZE, SP_RV_PRE, SP_RV_MIX}},      /* (V0.86: the room and */
+    {SEC_REVERB, G_REVERB, "TONE", {SP_RV_DECAY, SP_RV_DAMP, SP_RV_LOCUT, SP_RV_WIDTH}},   /* when it starts; then */
+    UI_V(SEC_REVERB, SP_RV_TYPE, SP_RV_SIZE, SP_RV_PRE, SP_RV_MIX)                          /* the tail) */
+    UI_V(SEC_REVERB, SP_RV_DECAY, SP_RV_DAMP, SP_RV_LOCUT, SP_RV_WIDTH)
     UI_OTTP(SEC_OTT, 0)
-    UI_EQP(SEC_EQ, 0)
+    UI_EQP(SEC_EQ, 0, SP_EQ_LTYPE, SP_EQ_MTYPE, SP_EQ_HTYPE)
     UI_DRVP(SEC_DRIVE2, SP_DR2_ON - SP_DR_ON)
-    UI_CHOP(SEC_CHORUS2, SP_CH2_ON - SP_CH_ON)
+    UI_CHOP(SEC_CHORUS2, SP_CH2_ON - SP_CH_ON, SP_CH2_SPREAD)
     UI_OTTP(SEC_OTT2, SP_OT2_ON - SP_OT_ON)
-    UI_EQP(SEC_EQ2, SP_EQ2_ON - SP_EQ_ON)
+    UI_EQP(SEC_EQ2, SP_EQ2_ON - SP_EQ_ON, SP_EQ2_LTYPE, SP_EQ2_MTYPE, SP_EQ2_HTYPE)
     UI_FLGP(SEC_FLANGER, 0)
     UI_FLGP(SEC_FLANGER2, SP_FL2_ON - SP_FL_ON)
     UI_PHSP(SEC_PHASER, 0)
     UI_PHSP(SEC_PHASER2, SP_PH2_ON - SP_PH_ON)
-    UI_FFXP(SEC_FFILT, 0)
-    UI_FFXP(SEC_FFILT2, SP_FF2_ON - SP_FF_ON)
+    UI_FFXP(SEC_FFILT, 0, SP_FF_FOLLOW)
+    UI_FFXP(SEC_FFILT2, SP_FF2_ON - SP_FF_ON, SP_FF2_FOLLOW)
     UI_CRUP(SEC_CRUSH, 0)
     UI_CRUP(SEC_CRUSH2, SP_CR2_ON - SP_CR_ON)
-    UI_TRMP(SEC_TREM, 0)
-    UI_TRMP(SEC_TREM2, SP_TR2_ON - SP_TR_ON)
+    UI_TRMP(SEC_TREM, 0, SP_TR_SPREAD)
+    UI_TRMP(SEC_TREM2, SP_TR2_ON - SP_TR_ON, SP_TR2_SPREAD)
     UI_RNGP(SEC_RING, 0)
     UI_RNGP(SEC_RING2, SP_RG2_ON - SP_RG_ON)
-    UI_TAPP(SEC_TAPE, 0)
-    UI_TAPP(SEC_TAPE2, SP_TP2_ON - SP_TP_ON)
+    UI_TAPP(SEC_TAPE, 0, SP_TP_HISS)
+    UI_TAPP(SEC_TAPE2, SP_TP2_ON - SP_TP_ON, SP_TP2_HISS)
     {SEC_MENU, G_COLOR, "SCREEN", {UI_COLOR, UI_HELP, UI_GLOW, -1}},
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
@@ -498,7 +507,20 @@ static struct {
     uint32_t ub_t0;                                 /* OCT- + OCT+ held (sy_main.c): its countdown from then; 0 none */
     uint8_t safe;                                   /* SAFE START shown (1 a crash before, 2 HOME held), until safe_t */
     uint32_t safe_t;
+    uint8_t sgrp;                                   /* V0.86: SEQ's group shown: 0 LOOP and CLIP (SEQ once), 1 TRACK and
+                                                     * SONG (SEQ twice) */
+    uint8_t boot;                                   /* .. the splash still shown (until UI_BOOT_MS: the main loop runs, USB
+                                                     * and MIDI served, while it holds) */
+    uint8_t edited;                                 /* .. (F25) the sound edited since it was loaded or saved: HOME's dot */
+    uint8_t pl_open, pl_guard, pl_hist, pl_edited;  /* .. (H4, F28) PRESETS' list open; its first detent held (edits);
+                                                     * a sound loaded from it (the one before on the history), edited */
+    uint16_t pl_pos, pl_load;                       /* .. the preset turned to, the one loaded (their places in it) */
+    uint8_t pl_back;                                /* .. the history's state of the sound before it */
+    uint32_t pl_t;                                  /* .. its last detent, or load */
 } ui;
+#define UI_PL_LOAD_MS 400u                          /* PRESETS' list: a preset loads this long after the last detent */
+#define UI_PL_CLOSE_MS 1800u                        /* .. the list closes this long after its last load */
+#define UI_BOOT_MS 2000u                            /* (P4: the splash 2 s; fm1_ms counts from just after it is drawn) */
 
 static void ui_toast(const char *s)
 {
@@ -632,6 +654,8 @@ static int32_t ui_virt(int32_t id)
     uint32_t p = ui.eqpt < 3u ? ui.eqpt : 0u, m = 3u * (ui.mslot < NSLOT ? ui.mslot : 0u), o = ui_fx_off();
     if (id >= UI_MSRC && id <= UI_MAMT)
         return (int32_t)(SP_M1_SRC + m) + (id - UI_MSRC);
+    if (id >= UI_HM1 && id <= UI_HM4)               /* (V0.86: HOME's knobs, as the selected track's TYPE has them) */
+        return ui_drums() ? (int32_t)UI_DKTUNE + (id - UI_HM1) : (int32_t)SP_MAC1 + (id - UI_HM1);
     if (id == UI_CMIX)
         return ui_cmix();
     return id == UI_EQF ? (int32_t)(F[p] + o) : id == UI_EQG ? (int32_t)(G[p] + o) : id == UI_EQQ ? (int32_t)(Q[p] + o)
@@ -762,6 +786,10 @@ static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
         sec[0] = SEC_KIT;
         return 1;
     }
+    if (f == FAM_SAVE) {                            /* (V0.86: NAME IT and the browser each a screen of its own) */
+        sec[0] = ui_sec() == SEC_SAVE ? (uint8_t)SEC_SAVE : (uint8_t)SEC_BROWSE;
+        return 1;
+    }
     for (n = 0; FAM_SECS[f][n] != 0xFF; n++)
         sec[n] = FAM_SECS[f][n] == SEC_LCLIP && ui_drums() ? (uint8_t)SEC_LGRID : FAM_SECS[f][n];
     return n;
@@ -776,9 +804,8 @@ static int ui_fam_has(uint32_t f, uint32_t s)       /* section s is one family f
     return 0;
 }
 
-/* s pages on, round: the family's (SELECT, a family button's tap: its sections in their order, each one's pages),
- * the section's (sec: EDIT's tap, OCT- / OCT+ with a family button held); graphs: the drawings only (a family
- * button's tap: ALGORITHM and OCT reach the VALUES pages) */
+/* s pages on: the family's (its sections in their order, each one's pages), the section's (sec: ALGORITHM); graphs:
+ * the drawings only (VALUES left out). V0.86 (L7): at the first or the last page it stops, never round */
 static void ui_step_pages(int32_t s, int sec, int graphs)
 {
     uint16_t pg[UI_NPG];
@@ -795,8 +822,8 @@ static void ui_step_pages(int32_t s, int sec, int graphs)
                     cur = n;
                 pg[n++] = (uint16_t)i;
             }
-    if (n)
-        ui_go(pg[(uint32_t)(((int32_t)cur + s % (int32_t)n + (int32_t)n) % (int32_t)n)]);
+    if (n && pg[(uint32_t)sy_clampi((int32_t)cur + s, 0, (int32_t)n - 1)] != ui.page)
+        ui_go(pg[(uint32_t)sy_clampi((int32_t)cur + s, 0, (int32_t)n - 1)]);
 }
 
 /* a module's page shown, its module still in the chain (or not a module's page) */
@@ -818,7 +845,8 @@ static void ui_family_tap(uint32_t f)
         ui_step_pages(1, 0, 1);
 }
 
-/* SELECT: the family's sections in their order (each on the page it showed last) */
+/* SELECT: the family's sections in their order (each on the page it showed last). V0.86: modules only (L8: a menu of
+ * one module, nothing; its pages are ALGORITHM's), stopping at the first and the last (L7) */
 static void ui_step_section(int32_t s)
 {
     uint8_t secs[NFXC];
@@ -830,13 +858,12 @@ static void ui_step_section(int32_t s)
         ui_go(UI_PG[ui.spage[secs[0]]].sec == secs[0] ? ui.spage[secs[0]] : ui_first_page(secs[0]));   /* drum track: */
         return;                                                                                       /* its first) */
     }
-    if (n < 2u) {                                   /* (one section: its pages, as ALGORITHM) */
-        ui_step_pages(s, 1, 0);
+    if (n < 2u)
         return;
-    }
-    k = (uint32_t)(((int32_t)k + s % (int32_t)n + (int32_t)n) % (int32_t)n);
+    k = (uint32_t)sy_clampi((int32_t)k + s, 0, (int32_t)n - 1);
     next = secs[k];
-    ui_go(UI_PG[ui.spage[next]].sec == next ? ui.spage[next] : ui_first_page(next));
+    if (next != sec)
+        ui_go(UI_PG[ui.spage[next]].sec == next ? ui.spage[next] : ui_first_page(next));
 }
 
 /* --------------------------------------------------------------------------------------- the chain --- */
@@ -975,6 +1002,111 @@ static void ui_chain_flip(void)
     }
 }
 
+/* ------------------------------------------------------------------------------------- EQ › SHAPES --- */
+/* V0.86: each shape's three points (LOW, MID, HIGH): their types (EQ_LTYPES, EQ_MTYPES), places (Hz), gains (0.1 dB),
+ * widths (Q x 100); its main point (FREQ shows it, moves the three with it) */
+typedef struct {
+    uint8_t ty[3];
+    uint16_t hz[3];
+    int16_t db[3];
+    uint16_t q[3];
+    uint8_t main;
+} ui_eqs_t;
+static const ui_eqs_t UI_EQS[EQ_NSHAPE] = {
+    {{0, 0, 0}, {120, 1000, 6000}, {0, 0, 0}, {71, 140, 71}, 1},      /* (CUSTOM: as POINTS set it) */
+    {{0, 0, 0}, {120, 1000, 6000}, {0, 0, 0}, {71, 140, 71}, 1},      /* FLAT */
+    {{1, 0, 0}, {120, 1000, 6000}, {0, 0, 0}, {71, 140, 71}, 0},      /* HIGH PASS: LOW a pass */
+    {{0, 0, 1}, {120, 1000, 6000}, {0, 0, 0}, {71, 140, 71}, 2},      /* LOW PASS: HIGH a pass */
+    {{0, 2, 0}, {120, 1000, 6000}, {0, 0, 0}, {71, 140, 71}, 1},      /* BAND PASS: MID a band */
+    {{0, 1, 0}, {120, 1000, 6000}, {0, 0, 0}, {71, 400, 71}, 1},      /* NOTCH */
+    {{2, 0, 2}, {400, 1000, 2500}, {90, 0, 90}, {400, 140, 400}, 1},  /* TWO PEAKS */
+    {{0, 0, 0}, {120, 1000, 6000}, {60, -30, 60}, {71, 100, 71}, 1},  /* SMILE */
+    {{1, 0, 1}, {400, 1500, 3000}, {0, 60, 0}, {90, 120, 90}, 1},     /* TELEPHONE */
+    {{0, 0, 0}, {120, 1000, 10000}, {0, 0, 60}, {71, 140, 71}, 2}};   /* AIR */
+static const uint16_t UI_EQ_G[3] = {SP_EQ_LOW, SP_EQ_MID, SP_EQ_HIGH}, UI_EQ_F[3] = {SP_EQ_LFREQ, SP_EQ_MFREQ, SP_EQ_HFREQ};
+static const uint16_t UI_EQ_Q[3] = {SP_EQ_LQ, SP_EQ_Q, SP_EQ_HQ}, UI_EQ_T[3] = {SP_EQ_LTYPE, SP_EQ_MTYPE, SP_EQ_HTYPE};
+static int32_t ui_accel(uint32_t e, int32_t s, int32_t range);   /* (below) */
+static uint32_t ui_eq_inst(void) { return ui_fx_inst() >= 0 ? (uint32_t)ui_fx_inst() : FXI_EQ; }   /* the EQ shown */
+static uint32_t ui_eq_shape(void) { return (uint32_t)sy_patch.p[sp_fx_id(SP_EQ_SHAPE, ui_eq_inst())] % EQ_NSHAPE; }
+static uint32_t ui_eq_main(void) { return UI_EQS[ui_eq_shape()].main; }
+static int ui_eq_gainb(uint32_t b)                  /* point b's type has a gain (a shelf, a peak) */
+{
+    return fx_eq_gains(fx_eq_type(b, sy_patch.p[sp_fx_id(UI_EQ_T[b], ui_eq_inst())]));
+}
+/* shape sh into the EQ shown: its points' types, places, gains, widths (an edit: undo takes it back) */
+static void ui_eq_apply(uint32_t sh)
+{
+    const ui_eqs_t *e = &UI_EQS[sh % EQ_NSHAPE];
+    uint32_t i = ui_eq_inst(), o = FXI_OFF(i), b;
+    for (b = 0; b < 3u; b++) {
+        sy_patch.p[sp_fx_id(UI_EQ_T[b], i)] = e->ty[b];
+        sy_patch.p[UI_EQ_F[b] + o] = sp_clamp(UI_EQ_F[b], sy_floori(sy_log2f((float)e->hz[b] * 0.05f) * (1000.0f / 9.96578f) + 0.5f));
+        sy_patch.p[UI_EQ_G[b] + o] = e->db[b];
+        sy_patch.p[UI_EQ_Q[b] + o] = sp_clamp(UI_EQ_Q[b], sy_floori(sy_log2f((float)e->q[b] * 0.04f) * 200.0f + 0.5f));
+    }
+    sy_patch.p[sp_fx_id(SP_EQ_SHAPE, i)] = (int16_t)(sh % EQ_NSHAPE);
+}
+/* AMOUNT's value: the strongest gain ("+9.0 dB"); a shape of passes, notches and bands only, the main point's Q */
+static void ui_eq_amount(char *t)
+{
+    uint32_t o = FXI_OFF(ui_eq_inst()), b, mb = 3u, m = ui_eq_main();
+    int32_t mx = 0;
+    for (b = 0; b < 3u; b++)
+        if (ui_eq_gainb(b) && (sy_patch.p[UI_EQ_G[b] + o] > mx || -sy_patch.p[UI_EQ_G[b] + o] > mx))
+            mx = sy_patch.p[UI_EQ_G[b] + o] < 0 ? -sy_patch.p[UI_EQ_G[b] + o] : sy_patch.p[UI_EQ_G[b] + o], mb = b;
+    if (mb < 3u) {
+        sp_text(UI_EQ_G[mb] + o, sy_patch.p[UI_EQ_G[mb] + o], t);
+        return;
+    }
+    for (b = 0; b < 3u && ui_eq_gainb(b); b++)
+        ;
+    if (b == 3u) {
+        sp_put(t, "FLAT");
+        return;
+    }
+    if (!ui_eq_gainb(m))
+        b = m;
+    sp_put(t, "Q ");
+    sp_text(UI_EQ_Q[b] + o, sy_patch.p[UI_EQ_Q[b] + o], t + 2);
+}
+/* SHAPES' knobs: SHAPE (the next one, written at once), FREQ (the three points along together, their spacing kept),
+ * AMOUNT (the gains together, from the strongest; a shape without gains: its passes' and bands' Q) */
+static void ui_eqs_turn(int32_t item, int32_t s, uint32_t e)
+{
+    uint32_t i = ui_eq_inst(), o = FXI_OFF(i), b;
+    ui_edit();
+    if (item == UI_EQSHP) {
+        int32_t sh = sy_clampi((int32_t)ui_eq_shape() + s, 1, (int32_t)EQ_NSHAPE - 1);
+        ui_eq_apply((uint32_t)sh);
+    } else if (item == UI_EQSF) {
+        int32_t d = ui_accel(e, s, 1000), lo = -1000, hi = 1000;
+        for (b = 0; b < 3u; b++) {                  /* (as far as the first to reach an end) */
+            lo = sy_maxi(lo, SP[UI_EQ_F[b]].lo - sy_patch.p[UI_EQ_F[b] + o]);
+            hi = sy_mini(hi, SP[UI_EQ_F[b]].hi - sy_patch.p[UI_EQ_F[b] + o]);
+        }
+        d = sy_clampi(d, lo, hi);
+        for (b = 0; b < 3u; b++)
+            sy_patch.p[UI_EQ_F[b] + o] = (int16_t)(sy_patch.p[UI_EQ_F[b] + o] + d);
+    } else {
+        int32_t mx = 0, nm, d = ui_accel(e, s, 360);
+        for (b = 0; b < 3u; b++)
+            if (ui_eq_gainb(b))
+                mx = sy_maxi(mx, sy_patch.p[UI_EQ_G[b] + o] < 0 ? -sy_patch.p[UI_EQ_G[b] + o] : sy_patch.p[UI_EQ_G[b] + o]);
+        if (mx) {
+            nm = sy_clampi(mx + 5 * d, 5, 180);
+            for (b = 0; b < 3u; b++)
+                if (ui_eq_gainb(b))
+                    sy_patch.p[UI_EQ_G[b] + o] = (int16_t)sy_floori((float)sy_patch.p[UI_EQ_G[b] + o] * (float)nm / (float)mx +
+                                                                    (sy_patch.p[UI_EQ_G[b] + o] < 0 ? -0.5f : 0.5f));
+        } else {
+            for (b = 0; b < 3u; b++)
+                if (!ui_eq_gainb(b))
+                    sy_patch.p[UI_EQ_Q[b] + o] = sp_clamp(UI_EQ_Q[b], sy_patch.p[UI_EQ_Q[b] + o] + 10 * d);
+        }
+    }
+    ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+}
+
 /* ------------------------------------------------------------------------------------------- knobs --- */
 /* steps s of encoder e on a range of `range` values: speed-sensitive by the time between detents (a new turn,
  * and a slow one, one step of 0.1 %; quick ones up to 50); ACCEL OFF, 1 % a detent; a short range (lists,
@@ -1022,9 +1154,12 @@ static void ui_hist_drop(void)                      /* (full: the oldest goes) *
     ui.h_cnt--;
     ui.h_at--;
 }
-/* the patch as it is, on the history (any redo's go) */
+/* the patch as it is, on the history (any redo's go). V0.86: PRESETS' list keeps one state, the sound before it,
+ * however many it loads */
 static void ui_hist_push(void)
 {
+    if (ui.pl_open && ui.pl_hist)
+        return;
     ui.undel = 0;                                   /* (a delete is put back only straight after it) */
     ui.h_cnt = ui.h_at;
     if (ui.h_cnt == UI_NHIST)
@@ -1038,6 +1173,9 @@ static void ui_edit(void)                           /* an edit: the first of a g
     if (!ui.edit_t || fm1_ms - ui.edit_t > UI_GESTURE_MS)
         ui_hist_push();
     ui.edit_t = fm1_ms | 1u;
+    if (!ui.edited)                                 /* (V0.86: HOME's dot) */
+        ui.dirty |= D_DISP;
+    ui.edited = 1;
 }
 static void ui_edit_step(void)                      /* .. an edit a step of its own (a module added, taken out, */
 {                                                   /* bypassed: each undone alone) */
@@ -1089,6 +1227,113 @@ static void ui_undo(int redo)
     sy_app_entry_mark(ui_hist_id[ui_hist_ix(ui.h_at)]);
     ui.edit_t = 0;                                  /* (the next edit: a gesture of its own) */
     ui_toast(redo ? "REDO" : "UNDO");
+}
+
+/* ----------------------------------------------------------------------------------------- PRESETS --- */
+/* V0.86: PRESETS by the page: SEQ's pages the track (C1, S4), a drum track the drum (K1, D3: the one EDIT's kit and
+ * HOME show), else the sounds through a short list (H4): the one turned to loads UI_PL_LOAD_MS after the last detent
+ * (a quick flick loads one, not twenty); SAVE held while it is open, back to the sound before it (the history keeps
+ * that one state: ui_hist_push); with edits not saved, the first detent only opens it on them (F28) */
+static void lp_select(uint32_t t);
+static char *ui_l_trk(char *b, uint32_t t);
+static void ui_pl_close(void)
+{
+    if (!ui.pl_open)
+        return;
+    ui.pl_open = 0;
+    ui.dirty = D_ALL;
+}
+static void ui_pl_turn(int32_t s)
+{
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids), now = sy_app_entry_now(), k;
+    if (!n)
+        return;
+    if (!ui.pl_open) {
+        for (k = 0; k < n && ids[k] != now; k++)
+            ;
+        ui.pl_pos = ui.pl_load = (uint16_t)(k < n ? k : 0u);
+        ui.pl_open = 1;
+        ui.pl_hist = 0;
+        ui.pl_edited = ui.edited;
+        ui.pl_t = fm1_ms;
+        ui.dirty = D_ALL;
+        if (ui.edited) {                            /* (F28: edits not saved: this detent opens it, nothing more) */
+            ui.pl_guard = 1;
+            return;
+        }
+    }
+    ui.pl_guard = 0;
+    ui.pl_pos = (uint16_t)sy_clampi((int32_t)ui.pl_pos + s, 0, (int32_t)n - 1);
+    ui.pl_t = fm1_ms;
+    ui.dirty = D_ALL;
+}
+/* every millisecond: the preset turned to loaded once the turning stops; the list gone a moment after */
+static void ui_pl_ms(void)
+{
+    static uint32_t anim;
+    if (!ui.pl_open)
+        return;
+    if (ui.pl_pos != ui.pl_load) {
+        if (fm1_ms - ui.pl_t >= UI_PL_LOAD_MS && !sy_next_st) {
+            uint16_t ids[SY_NFACT + SS_NUSER];
+            uint32_t n = sy_app_list(0, 0, ids);
+            if (ui.pl_pos < n) {
+                int first = !ui.pl_hist;
+                sy_app_entry_load(ids[ui.pl_pos]);  /* (the first: the sound before goes on the history; the */
+                if (first && ui.h_at) {             /* next ones keep it there) */
+                    ui.pl_back = (uint8_t)(ui.h_at - 1u);
+                    ui.pl_hist = 1;
+                }
+            }
+            ui.pl_load = ui.pl_pos;
+            ui.pl_t = fm1_ms;
+            ui.dirty = D_ALL;
+        } else if (fm1_ms - anim >= 40u) {          /* (the bar under the row filling as it waits) */
+            anim = fm1_ms;
+            ui.dirty |= D_DISP;
+        }
+    } else if (fm1_ms - ui.pl_t >= UI_PL_CLOSE_MS && !ui.pl_guard) {
+        ui_pl_close();
+    } else if (ui.pl_guard && fm1_ms - ui.pl_t >= 2u * UI_PL_CLOSE_MS) {
+        ui_pl_close();
+    }
+}
+/* SAVE held with the list open: the sound before it back (as undo takes a state back), the list closed */
+static void ui_pl_back(void)
+{
+    char t[32];
+    if (ui.pl_hist) {
+        ui_hist_take(ui_hist_at(ui.pl_back));
+        sy_app_entry_mark(ui_hist_id[ui_hist_ix(ui.pl_back)]);
+        ui.edited = ui.pl_edited;
+        ui.edit_t = 0;
+        sp_put(sp_put(t, "BACK: "), sy_patch.name);
+        ui_toast(t);
+    }
+    ui_pl_close();
+}
+static void ui_presets(int32_t s)
+{
+    char t[32];
+    if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE)
+        return;                                     /* (their own lists, on their knobs) */
+    if (ui.fam == FAM_SEQ || ui.lay == LAY_PAD) {   /* (C1: the track, on every SEQ page; at the first or last, there) */
+        int32_t to = sy_clampi((int32_t)(lpp.sel % LP_NTRK) + s, 0, LP_NTRK - 1);
+        if (to != (int32_t)(lpp.sel % LP_NTRK)) {
+            lp_select((uint32_t)to);
+            ui_l_trk(t, lpp.sel);
+            ui_toast(t);
+        }
+        return;
+    }
+    if (ui_drums()) {                               /* (K1, D3: the drum) */
+        ui.krow = (uint8_t)sy_clampi((int32_t)(ui.krow % DK_N) + s, 0, DK_N - 1);
+        ui_toast(DK_NAME[ui.krow]);
+        ui.dirty |= D_DISP | D_KNOBS | D_HEAD;
+        return;
+    }
+    ui_pl_turn(s);
 }
 
 /* ------------------------------------------------------------------------------------ LFO points --- */
@@ -1549,6 +1794,23 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (ui.mod) {
         return;
+    } else if (item >= UI_EQSHP && item <= UI_EQSA) {   /* (V0.86: the EQ's SHAPES) */
+        ui_eqs_turn(item, s, e);
+    } else if (item >= UI_HV1 && item <= UI_HV8) {   /* (V0.86: HOME's MIX: a track's VOLUME, as SEQ's MIXER sets it) */
+        lp_trk_t *k = &lpp.trk[(uint32_t)(item - UI_HV1) % LP_NTRK];
+        k->vol = (uint8_t)sy_clampi(k->vol + ui_accel(e, s, 127), 0, 127);
+        lpx.seq++;
+        ui.dirty |= D_KNOBS | D_DISP;
+    } else if (item >= UI_DKTUNE && item <= UI_DKDUCK) {   /* (V0.86: HOME on a drum track: the whole kit's) */
+        if (item == UI_DKTUNE)
+            dkk.ktune = (int8_t)sy_clampi(dkk.ktune + s, -24, 24);
+        else if (item == UI_DKDEC)
+            dkk.kdecay = (uint8_t)sy_clampi(dkk.kdecay + ui_accel(e, s, 100), 0, 100);
+        else if (item == UI_DKTONE)
+            dkk.ktone = (int8_t)sy_clampi(dkk.ktone + ui_accel(e, s, 100), -50, 50);
+        else
+            dkk.amount = (uint8_t)sy_clampi(dkk.amount + ui_accel(e, s, 100), 0, 100);
+        ui.dirty |= D_KNOBS | D_DISP;
     } else if (item >= UI_CTYPE && item <= UI_CMOVE) {   /* the FX chain view's */
         ui_chain_turn(item, s);
     } else if (item >= UI_SCALE && item <= UI_KVEL) {   /* SCL: the scale, the root (round), the fit, the velocity */
@@ -1705,6 +1967,7 @@ static void ui_knob(uint32_t k, int32_t s)
     int32_t id = ui_virt(UI_PG[ui.page].id[k]);     /* (the EQ's POINTS: the picked point's own) */
     const sp_desc_t *d;
     ui_safe_end();
+    ui_pl_close();
     ui_cd_stop();
     if (ui.lay == LAY_PERF || ui.lay == LAY_MAC) {
         ui_lay_knob(k, s, EN_K1 + k);
@@ -1756,6 +2019,11 @@ static void ui_knob(uint32_t k, int32_t s)
         ui_edit();
     }
     sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
+    if (ui_fx_inst() >= 0 && FXI_TYPE[ui_fx_inst()] == FXT_EQ && ui.lay != LAY_MOM) {   /* (V0.86: a point moved or a */
+        uint32_t b = sp_fx_base((uint32_t)id);                                         /* type set: no shape now) */
+        if (b != SP_EQ_SHAPE && ((b >= SP_EQ_LOW && b <= SP_EQ_HQ) || (b >= SP_EQ_LTYPE && b <= SP_EQ_HTYPE)))
+            sy_patch.p[sp_fx_id(SP_EQ_SHAPE, (uint32_t)ui_fx_inst())] = 0;
+    }
     if (ui.lay != LAY_MOM)                          /* (V0.8: the looper's moves of it let go while it turns; a synth */
         lp_knob((uint32_t)id);                      /* track recording: written) */
     ui.dirty |= D_KNOB(k) | D_DISP;                 /* (the page's body: sy_ui_draw.c redraws rows 16 .. 221) */
@@ -1953,6 +2221,8 @@ static void ui_reset(uint32_t b)
 static void ui_press(uint32_t b)
 {
     ui_safe_end();
+    if (b != B_SAVE)                                /* (PRESETS' list: any other button closes it) */
+        ui_pl_close();
     if (b != ui.cd_btn)
         ui_cd_stop();
     if ((b == B_OCTDN || b == B_OCTUP) && ui_sec() == SEC_SAVE) {   /* SAVE's screen: OCT+ the symbols, OCT- deletes */
@@ -2005,6 +2275,11 @@ static void ui_press(uint32_t b)
 
 static void ui_hold(uint32_t b)
 {
+    if (b == B_SAVE && ui.pl_open) {                /* (V0.86: PRESETS' list: back to the sound before it) */
+        ui.bt_chord |= (uint16_t)(1u << B_SAVE);
+        ui_pl_back();
+        return;
+    }
     if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
         if (b == B_HOME)
             ui_cd_arm(B_HOME);
@@ -2050,6 +2325,10 @@ static void ui_release(uint32_t b, int held)
         if (b == B_SAVE && !(ui.bt_chord & (1u << B_SAVE)) && !ui.mod && sy_app_slot() < 0 &&
             ui_sec() != SEC_SAVE && ui_sec() != SEC_BROWSE)
             ui_toast("NOTHING TO SAVE OVER: TAP SAVE");
+        return;
+    }
+    if (b == B_SAVE && ui.pl_open) {                /* (PRESETS' list open: SAVE's tap closes it, nothing saved) */
+        ui_pl_close();
         return;
     }
     if (b == B_SAVE) {                              /* SAVE: on NAME IT, written; else once (no second tap within */
@@ -2281,6 +2560,10 @@ static void sy_ui_ms(void)
         at_t = fm1_ms;
         ui.dirty |= D_DISP;
     }
+    if (ui.boot && (int32_t)(fm1_ms - UI_BOOT_MS) >= 0) {   /* (V0.86: the splash's hold over: HOME) */
+        ui.boot = 0;
+        ui.dirty = D_ALL;
+    }
     sy_ui_loop_ms();                                /* (V0.8: the looper's: what it did, the transport, its pages) */
     if (sy_app_clock_lost()) {                      /* (MIDI's clock gone: the panel's tempo again) */
         sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
@@ -2294,6 +2577,7 @@ static void sy_ui_ms(void)
             ui_knob(k, s);
     if ((s = panel_enc(EN_SELECT)) != 0) {          /* SELECT: the section (the chain view: the slot) */
         ui_cd_stop();
+        ui_pl_close();
         if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
             ui_chain_turn(UI_CSLOT, s);
         else
@@ -2301,10 +2585,12 @@ static void sy_ui_ms(void)
     }
     if ((s = panel_enc(EN_ALGO)) != 0) {            /* ALGORITHM: the section's pages (V0.75: everywhere) */
         ui_cd_stop();
+        ui_pl_close();
         ui_step_pages(s, 1, 0);
     }
     if ((s = panel_enc(EN_PRESET)) != 0)
-        sy_app_sound_step(s);
+        ui_presets(s);                              /* (V0.86: the sound, the drum or the track, by the page) */
+    ui_pl_ms();
     ui_save_ms();
     ui_learn_ms();
     if (ui.toast[0] && (int32_t)(fm1_ms - ui.toast_t) >= 0) {
@@ -2485,5 +2771,6 @@ static void sy_ui_boot(void)
     ui.tsn = 2;
     sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
     sy_palette(ui.pal);
-    ui_go(ui_first_page(SEC_OSCA));
+    ui.boot = 1;                                    /* (V0.86: the splash 2 s, then HOME: H1, P4) */
+    ui_go(ui_first_page(SEC_MACRO));
 }

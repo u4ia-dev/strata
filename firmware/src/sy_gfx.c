@@ -808,36 +808,72 @@ static float lk_chip(float x, float y, const char *s, int cur)
 static void lk_label(float x, float y, const char *s, int32_t ls) { lk_text(x, y, T9, s, sk.lab, sk.ground, ls, 0); }
 
 /* the zones' row at the bottom (rows 223 .. 238): each zone's name, 10 px bold, the one shown inverted; where they do
- * not fit across 224 px, the others by their first three letters (then their first); five or more spread across */
+ * not fit across 224 px, the one shown in full and the others by their short names (zs; V0.86, L5: the current page
+ * in full, the others short); still too long, a window round the one shown, a < or > where it is cut; five or more
+ * spread across */
 #define LK_ZY 223.0f
-static void lk_zones(const char *const *z, uint32_t n, uint32_t cur)
+#define LK_NZ 12u
+static void lk_zones(const char *const *z, const char *const *zs, uint32_t n, uint32_t cur)
 {
-    float w[8], sum = 0.0f, gap, x = 8.0f;
-    uint32_t i, cut = 0, k;
-    char ab[8][4];
+    float w[LK_NZ], sum = 0.0f, gap, x = 8.0f;
+    uint32_t i, a = 0, b, k;
+    int cut = 0;
     if (!lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
         return;
-    for (k = 0; k < 3u; k++) {                      /* (k: whole names, three letters, one) */
+    n = n < LK_NZ ? n : LK_NZ;
+    for (k = 0; k < 2u; k++) {                      /* (k: whole names, the others short) */
         sum = 0.0f;
-        cut = k == 0u ? 0u : k == 1u ? 3u : 1u;
-        for (i = 0; i < n && i < 8u; i++) {
-            uint32_t j;
-            for (j = 0; j < 3u && z[i][j]; j++)
-                ab[i][j] = z[i][j];
-            ab[i][cut < j ? cut : j] = 0;
-            sum += w[i] = lk_tw(T10B, i == cur || !cut ? z[i] : ab[i], 20) + 8.0f;
-        }
+        cut = (int)k;
+        for (i = 0; i < n; i++)
+            sum += w[i] = lk_tw(T10B, i == cur || !cut ? z[i] : zs[i], 20) + 8.0f;
         if (sum + 6.0f * (float)(n - 1u) <= 224.0f)
             break;
     }
-    gap = n >= 5u ? (224.0f - sum) / (float)(n - 1u) : 8.0f;
-    for (i = 0; i < n && i < 8u; i++) {
+    b = n;
+    if (sum + 6.0f * (float)(n - 1u) > 224.0f) {    /* (a window: from the one shown out, while there is room) */
+        float room = 224.0f - 2.0f * 12.0f, used = w[cur];
+        a = cur;
+        b = cur + 1u;
+        for (;;) {
+            int grew = 0;
+            if (b < n && used + 6.0f + w[b] <= room)
+                used += 6.0f + w[b++], grew = 1;
+            if (a > 0u && used + 6.0f + w[a - 1u] <= room)
+                used += 6.0f + w[--a], grew = 1;
+            if (!grew)
+                break;
+        }
+        sum = used - 6.0f * (float)(b - a - 1u);
+        if (a > 0u) {
+            lk_text(x, LK_ZY + 1.5f, T10B, "<", sk.mid, sk.ground, 0, 12);
+            x += 12.0f;
+        }
+    }
+    gap = b - a >= 5u ? (224.0f - (a > 0u ? 12.0f : 0.0f) - (b < n ? 12.0f : 0.0f) - sum) / (float)(b - a - 1u) : 8.0f;
+    for (i = a; i < b; i++) {
         if (i == cur)
             lk_box(x, LK_ZY, x + w[i], LK_ZY + 15.0f, sk.ink);
-        lk_text(x + 4.0f, LK_ZY + 1.5f, T10B, i == cur || !cut ? z[i] : ab[i], i == cur ? sk.ground : sk.lab,
+        lk_text(x + 4.0f, LK_ZY + 1.5f, T10B, i == cur || !cut ? z[i] : zs[i], i == cur ? sk.ground : sk.lab,
                 i == cur ? sk.ink : sk.ground, 20, 12);
         x += w[i] + gap;
     }
+    if (b < n)
+        lk_text(232.0f - lk_tw(T10B, ">", 0), LK_ZY + 1.5f, T10B, ">", sk.mid, sk.ground, 0, 12);
+}
+/* V0.86: what PRESETS turns on this page (a sound, a drum, the track): a P in a square, as a knob's handle is a
+ * number in a ring; its box's corner (x, y), hot (turning) filled */
+static void lk_ptag(float x, float y, int hot)
+{
+    lk_box(x - 2.0f, y - 2.0f, x + 12.0f, y + 12.0f, hot ? sk.hot : sk.ink);
+    if (!hot)
+        lk_box(x - 0.8f, y - 0.8f, x + 10.8f, y + 10.8f, sk.ground);
+#ifdef LK_LINT
+    lk_lint_part = 1;
+#endif
+    lk_text_c(x + 5.5f, y - 1.0f, T9B, "P", hot ? sk.ground : sk.ink, hot ? sk.hot : sk.ground, 0, 12);
+#ifdef LK_LINT
+    lk_lint_part = 0;
+#endif
 }
 /* a word for a moment in the zones' place: a HOT dot, then the word (10 px bold) */
 static void lk_toast(const char *s)
@@ -849,10 +885,12 @@ static void lk_toast(const char *s)
     lk_text(19.0f, LK_ZY + 1.5f, T10B, lk_fit(t, sizeof t, s, T10B, 0, 216.0f), sk.ink, sk.ground, 0, 12);
 }
 /* the top line: the label (on: -1 no dot, 0 off, 1 on: its dot before it), LAB, 10 px bold; at the right n module
- * dots (cur filled) or nothing; a right-aligned word */
-static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const char *right)
+ * dots (cur filled; V0.86: one for a menu of one module; dim, a bit each: the other group's, in MID, a gap of 6 after
+ * the first gap of them (0: no gap): SEQ's two groups) or nothing; a right-aligned word left of them */
+static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const char *right, uint32_t dim, uint32_t gap)
 {
     uint32_t i;
+    float w = (float)(n * 8u) + (gap && gap < n ? 6.0f : 0.0f);
     if (!lk_vis(0.0f, 0.0f, 240.0f, 16.0f))
         return;
     if (on > 0)
@@ -862,14 +900,15 @@ static void lk_top(const char *label, int on, uint32_t n, uint32_t cur, const ch
     if (label)
         lk_text(on >= 0 ? 18.0f : 8.0f, 2.0f, T10B, label, sk.lab, sk.ground, 30, 13);
     for (i = 0; i < n; i++) {
-        float x = 236.0f - (float)(n * 8u) + (float)(i * 8u) + 2.5f;
+        float x = 236.0f - w + (float)(i * 8u) + (gap && i >= gap ? 6.0f : 0.0f) + 2.5f;
+        uint16_t c = (dim >> i) & 1u ? sk.mid : i == cur ? sk.ink : sk.lab;
         if (i == cur)
-            lk_disc(x, 9.0f, 3.0f, sk.ink);
+            lk_disc(x, 9.0f, 3.0f, c);
         else
-            lk_ring(x, 9.0f, 2.5f, 1.0f, sk.lab);
+            lk_ring(x, 9.0f, 2.5f, 1.0f, c);
     }
     if (right)                                      /* (left of the dots, if any) */
-        lk_text_r(n ? 232.0f - (float)(n * 8u) - 4.0f : 232.0f, 2.0f, T10B, right, sk.lab, sk.ground, 30, 13);
+        lk_text_r(n ? 232.0f - w - 4.0f : 232.0f, 2.0f, T10B, right, sk.lab, sk.ground, 30, 13);
 }
 /* the chain's eight squares at the top right: the module shown filled, the others in the chain outlined (bypassed:
  * dashed), the places after LINE */

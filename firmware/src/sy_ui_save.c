@@ -213,6 +213,7 @@ static void sy_ui_saved(int rc, uint32_t s)
         sp_put(e, u);
     }
     ui_toast(t);
+    ui.edited = 0;                                  /* (V0.86: saved, nothing unsaved: HOME's dot gone) */
     if (ui_sec() == SEC_SAVE)
         ui_go(ui_first_page(SEC_BROWSE));
     ui.dirty |= D_HEAD | D_DISP;

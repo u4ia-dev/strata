@@ -34,6 +34,12 @@ typedef struct {
     uint8_t level, pan;                            /* LEVEL 0 .. 127; PAN 1 .. 127 (64 the centre) */
     uint8_t rsv[2];
 } dk_lane_t;
+typedef struct {                                   /* V0.86: a drum's effects (DRIVE, EQ, SHAPE: V0.86 step 2) */
+    uint8_t dtype, drive, dmix;                    /* DRIVE: SOFT HARD FOLD CRUSH, its amount, its mix */
+    uint8_t lo, mid, hi, freq;                     /* EQ: three gains (50 flat), the middle's place */
+    uint8_t att, sus;                              /* SHAPE: the hit's start and its body (50 as played) */
+    uint8_t rsv;
+} dk_fx_t;
 typedef struct {
     dk_lane_t l[DK_N];
     uint8_t accent, vsens;                         /* ACCENT: an accented hit's lift (100: +6 dB); VELOCITY: how much it
@@ -41,8 +47,20 @@ typedef struct {
     uint8_t amount, attack, release, shape;        /* DUCK: AMOUNT %, ATTACK ms (0 .. 50), RELEASE (0 .. 100: 20 ms ..
                                                     * 1 s), SHAPE */
     uint8_t rsv[2];
+    /* V0.86 (the project's stream version 3; versions 1 and 2 take these as a kit starts): */
+    int8_t ktune;                                  /* HOME's on a drum track: every drum's TUNE moved, -24 .. 24 */
+    uint8_t kdecay;                                /* .. every drum's DECAY time x 2^((kdecay - 50) / 50): 0 .. 100 */
+    int8_t ktone;                                  /* .. every drum's TONE moved, -50 .. 50 */
+    uint8_t dsrc, dhold, atone;                    /* DUCK's SOURCE and HOLD, ACCENT's TONE (step 2) */
+    uint8_t comp[4];                               /* the kit's COMP: AMOUNT, ATTACK, RELEASE, MIX (step 2) */
+    char name[13];                                 /* the kit's name (HOME shows it; the factory kits': step 2) */
+    uint8_t kit;                                   /* .. the factory kit it came from (0xFF none) */
+    dk_fx_t fx[DK_N];
+    uint8_t rsv3[6];
 } dk_kit_t;
-_Static_assert(sizeof(dk_lane_t) == 8u && sizeof(dk_kit_t) == 72u, "the kit's bytes (a project's)");
+#define DK_KIT2 72u                                /* (version 2's kit: the bytes before ktune) */
+_Static_assert(sizeof(dk_lane_t) == 8u && sizeof(dk_fx_t) == 10u && sizeof(dk_kit_t) == 182u &&
+               __builtin_offsetof(dk_kit_t, ktune) == DK_KIT2, "the kit's bytes (a project's)");
 static dk_kit_t dkk;
 
 /* DECAY's range a model, s to -60 dB (0 .. 100: exponential between) */
@@ -50,6 +68,29 @@ static const float DK_T60[DK_N][2] = {{0.08f, 2.0f}, {0.06f, 1.0f}, {0.06f, 1.2f
                                       {0.15f, 2.0f}, {0.4f, 6.0f},  {0.05f, 3.0f}, {0.05f, 3.0f}};
 #define DK_GAIN 0.5f                               /* a lane's peak at LEVEL 127, velocity 127 (-6 dB: room to add) */
 
+static void dk_defaults3(void)                     /* V0.86's: as a kit starts (a version 1 or 2 project's too) */
+{
+    static const char NM[] = "DRUM KIT";
+    uint32_t i;
+    dkk.ktune = 0;
+    dkk.kdecay = 50;
+    dkk.ktone = 0;
+    dkk.dsrc = 0;
+    dkk.dhold = 0;
+    dkk.atone = 0;
+    dkk.comp[0] = 0, dkk.comp[1] = 20, dkk.comp[2] = 40, dkk.comp[3] = 100;
+    memset(dkk.name, 0, sizeof dkk.name);
+    memcpy(dkk.name, NM, sizeof NM);
+    dkk.kit = 0xFF;
+    for (i = 0; i < DK_N; i++) {
+        dk_fx_t *f = &dkk.fx[i];
+        f->dtype = 0, f->drive = 0, f->dmix = 100;
+        f->lo = f->mid = f->hi = 50, f->freq = 50;
+        f->att = f->sus = 50;
+        f->rsv = 0;
+    }
+    memset(dkk.rsv3, 0, sizeof dkk.rsv3);
+}
 static void dk_defaults(void)                      /* the kit as a project starts */
 {
     static const dk_lane_t D[DK_N] = {
@@ -65,6 +106,7 @@ static void dk_defaults(void)                      /* the kit as a project start
     dkk.release = 45;
     dkk.shape = DS_EXP;
     dkk.rsv[0] = dkk.rsv[1] = 0;
+    dk_defaults3();
 }
 static void dk_sane(void)                          /* a kit read back: every value in its range */
 {
@@ -84,6 +126,30 @@ static void dk_sane(void)                          /* a kit read back: every val
     dkk.attack = (uint8_t)(dkk.attack > 50u ? 50u : dkk.attack);
     dkk.release = (uint8_t)(dkk.release > 100u ? 100u : dkk.release);
     dkk.shape = (uint8_t)(dkk.shape % DS_N);
+    dkk.ktune = (int8_t)sy_clampi(dkk.ktune, -24, 24);   /* (V0.86's) */
+    dkk.kdecay = (uint8_t)(dkk.kdecay > 100u ? 100u : dkk.kdecay);
+    dkk.ktone = (int8_t)sy_clampi(dkk.ktone, -50, 50);
+    dkk.dsrc = (uint8_t)(dkk.dsrc % 3u);
+    dkk.dhold = (uint8_t)(dkk.dhold > 100u ? 100u : dkk.dhold);
+    dkk.atone = (uint8_t)(dkk.atone > 100u ? 100u : dkk.atone);
+    for (i = 0; i < 4u; i++)
+        dkk.comp[i] = (uint8_t)(dkk.comp[i] > 100u ? 100u : dkk.comp[i]);
+    dkk.name[12] = 0;
+    for (i = 0; i < 12u; i++)
+        if (dkk.name[i] && (dkk.name[i] < 32 || dkk.name[i] > 126))
+            dkk.name[i] = ' ';
+    for (i = 0; i < DK_N; i++) {
+        dk_fx_t *f = &dkk.fx[i];
+        f->dtype = (uint8_t)(f->dtype % 4u);
+        f->drive = (uint8_t)(f->drive > 100u ? 100u : f->drive);
+        f->dmix = (uint8_t)(f->dmix > 100u ? 100u : f->dmix);
+        f->lo = (uint8_t)(f->lo > 100u ? 100u : f->lo);
+        f->mid = (uint8_t)(f->mid > 100u ? 100u : f->mid);
+        f->hi = (uint8_t)(f->hi > 100u ? 100u : f->hi);
+        f->freq = (uint8_t)(f->freq > 100u ? 100u : f->freq);
+        f->att = (uint8_t)(f->att > 100u ? 100u : f->att);
+        f->sus = (uint8_t)(f->sus > 100u ? 100u : f->sus);
+    }
 }
 static float dk_t60(uint32_t lane, uint32_t d)     /* DECAY d's time to -60 dB, s */
 {
@@ -141,8 +207,8 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     static const float M[6] = {205.3f, 304.4f, 369.6f, 522.7f, 540.0f, 800.0f};   /* the TR-808's six */
     const dk_lane_t *k;
     dk_voice_t *v;
-    float g, m, p, x, s;
-    uint32_t i;
+    float g, m, p, x, s, t60;
+    uint32_t i, tone;
     if (lane >= DK_ROWS)
         return;
     dk_nhit[lane]++;
@@ -158,14 +224,18 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     if (acc)
         g *= 1.0f + (float)dkk.accent * 0.01f;
     p = sy_clampf(((float)k->pan - 64.0f) * (1.0f / 63.0f), -1.0f, 1.0f);
-    m = sy_exp2f((float)k->tune * (1.0f / 12.0f));
+    m = sy_exp2f((float)(k->tune + dkk.ktune) * (1.0f / 12.0f));   /* (V0.86: the kit's TUNE, DECAY, TONE on its own) */
+    tone = (uint32_t)sy_clampi((int32_t)k->tone + dkk.ktone, 0, 100);
+    t60 = dk_t60(lane, k->decay);
+    if (dkk.kdecay != 50u)
+        t60 *= sy_exp2f(((float)dkk.kdecay - 50.0f) * 0.02f);
     if (lane == DK_WT1 || lane == DK_WT2) {        /* (its table first: none, or being built, no hit) */
         const wt_table_t *t = &wt_tab[lane - DK_WT1];
         uint32_t fr, lv;
         float top = sy_exp2f(3.0f * (float)k->chr * 0.01f), f = 130.81f * m;
         if (!t->n || t->busy)
             return;
-        fr = (uint32_t)sy_floori((float)k->tone * 0.01f * (float)(t->n - 1u) + 0.5f);
+        fr = (uint32_t)sy_floori((float)tone * 0.01f * (float)(t->n - 1u) + 0.5f);
         lv = wt_level((uint32_t)sy_minf(f * top / SY_FS * 4294967296.0f, 4.0e9f));
         lv = lv < WT_NLEV ? lv : WT_NLEV - 1u;
         v->wf = wt_frame(t, fr < t->n ? fr : t->n - 1u, lv);
@@ -185,7 +255,7 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     v->trk = (uint8_t)(trk % (SY_NOTRK + 1u));
     v->n = v->hold = 0;
     v->a = 1.0f;
-    v->ka = dk_kdec(dk_t60(lane, k->decay));
+    v->ka = dk_kdec(t60);
     v->rnd = (dk_seed += 0x9E3779B9u) | 1u;
     v->s1 = v->s2 = 0.0f;
     switch (lane) {
@@ -195,22 +265,22 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
         v->p0 = 1.0f + 6.0f * (float)k->chr * 0.01f;   /* (the sweep's height: up to x7) */
         v->b = 1.0f;
         v->kb = dk_kdec(0.2f);
-        v->p1 = 1.0f + 3.0f * (float)k->tone * 0.01f;  /* (the drive) */
-        v->f2 = (float)k->tone * 0.004f;              /* (the click's level) */
+        v->p1 = 1.0f + 3.0f * (float)tone * 0.01f;  /* (the drive) */
+        v->f2 = (float)tone * 0.004f;              /* (the click's level) */
         break;
     case DK_SNARE:
         v->ph = v->ph2 = 0.0f;
         v->f = 185.0f * m / SY_FS;
         v->f2 = 330.0f * m / SY_FS;
         v->b = 1.0f;
-        v->kb = dk_kdec(0.05f + 0.35f * dk_t60(lane, k->decay));
-        v->c1 = 1.0f - sy_exp2f(-9.0647f * 1000.0f * sy_exp2f(3.0f * (float)k->tone * 0.01f) / SY_FS);   /* (the
+        v->kb = dk_kdec(0.05f + 0.35f * t60);
+        v->c1 = 1.0f - sy_exp2f(-9.0647f * 1000.0f * sy_exp2f(3.0f * (float)tone * 0.01f) / SY_FS);   /* (the
                                                        * high-pass's one-pole, 1 .. 8 kHz) */
         v->p0 = 0.25f + 0.75f * (float)k->chr * 0.01f;   /* (the noise) */
         v->p1 = 1.0f - 0.5f * (float)k->chr * 0.01f;     /* (the body) */
         break;
     case DK_CLAP:
-        dk_svf(v, 1100.0f * m, 1.6f - 1.4f * (float)k->tone * 0.01f);
+        dk_svf(v, 1100.0f * m, 1.6f - 1.4f * (float)tone * 0.01f);
         v->p0 = (0.004f + 0.016f * (float)k->chr * 0.01f) * SY_FS;   /* (SPREAD: 4 .. 20 ms) */
         v->next = (uint32_t)v->p0;
         v->hold = 3u * (uint32_t)v->p0 + 1u;     /* (the fourth burst at 3 SPREAD, then the tail) */
@@ -219,7 +289,7 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     default:                                       /* HAT CL, HAT OP, CYM */
         if (lane <= DK_CYM) {
             float sc = lane == DK_CYM ? 0.85f : 1.0f, hz = (lane == DK_CYM ? 3000.0f : 5500.0f) *
-                                                            sy_exp2f(1.2f * ((float)k->tone - 50.0f) * 0.02f);
+                                                            sy_exp2f(1.2f * ((float)tone - 50.0f) * 0.02f);
             for (i = 0; i < 6u; i++)
                 v->minc[i] = (uint32_t)(M[i] * sc * m / SY_FS * 4294967296.0f);
             v->p0 = (float)k->chr * 0.01f * (1.0f / 3.0f);   /* (the squares, -6 .. 6, as -2 .. 2 x METAL) */

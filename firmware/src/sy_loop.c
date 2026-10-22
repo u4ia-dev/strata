@@ -61,6 +61,7 @@ enum { LR_OFF, LR_COUNT, LR_WAIT, LR_TAKE, LR_DUB };   /* recording: off, counti
 enum { LL_BAR, LL_BEAT, LL_NOW, LL_N };          /* LAUNCH: when a launch plays */
 enum { LC_OFF, LC_REC, LC_ON, LC_N };            /* CLICK */
 enum { LQ_OFF, LQ_32, LQ_16, LQ_8, LQ_4, LQ_N }; /* QUANTIZE: the grid */
+enum { LS_1, LS_HALF, LS_2, LS_N };              /* V0.86, a clip's SPEED: as recorded, half as fast, twice */
 static const char *const LT_NAME[LT_N] = {"SYNTH", "MIDI", "DRUMS"};
 static const char *const LL_NAME[LL_N] = {"BAR", "BEAT", "NOW"};
 static const char *const LC_NAME[LC_N] = {"OFF", "REC", "ON"};
@@ -98,6 +99,7 @@ static struct {
     uint8_t song[LP_NSONG], srep[LP_NSONG];      /* SONG: a slot's scene (LP_NOSCN: the song ends before it), its
                                                   * repeats (1 .. 16) */
     uint8_t song_on;
+    uint8_t speed[LP_NTRK][LP_NSCN];             /* V0.86: each clip's SPEED (LS_*: x1, x1/2, x2) */
     volatile uint8_t sel;                        /* the track selected: the panel's keys play it, the menus edit it */
     volatile uint8_t scn;                        /* the scene picked (CLIPS' cursor): REC records there, the pages
                                                   * show its clip */
@@ -1440,6 +1442,7 @@ static void lp_project_clear(void)
         for (s = 0; s < LP_NSCN; s++) {
             lpp.clip[t][s].head = LP_END;
             lpp.clip[t][s].len = lpp.clip[t][s].n = lpp.clip[t][s].rsv = 0;
+            lpp.speed[t][s] = LS_1;
         }
         memset(&lps[t], 0, sizeof lps[t]);
         lps[t].play = lps[t].next = LP_NOSCN;
@@ -1467,12 +1470,14 @@ static void lp_boot(void)                       /* power-on (before the flash's 
 /* ------------------------------------------------------------------------------------------- flash --- */
 /* a project as the flash keeps it (sy_app.c): a stream over LP_NOBJ objects of SS_PAYLOAD_MAX each: "LP", a version,
  * the selected track and scene, SONG; each track (16 bytes) and its chords (sy_chord.c ch_d_t); each clip's length
- * and count of events; (version 2, V0.85: the drum kit, sy_drum.c dk_kit_t;) then the events in clip order (time,
- * length or parameter, two bytes: 6 each). Version 1's read too: the kit as a project starts */
+ * and count of events; (version 2, V0.85: the drum kit, sy_drum.c dk_kit_t; version 3, V0.86: the kit grown to its
+ * V0.86 bytes, then each clip's SPEED, a byte;) then the events in clip order (time, length or parameter, two bytes: 6
+ * each). Versions 1 and 2 read too: what they lack as a project starts */
 #define LP_NOBJ 4u
 #define LP_STREAM (LP_NOBJ * SS_PAYLOAD_MAX)
 #define LP_HEAD1 (8u + 2u * LP_NSONG + LP_NTRK * (sizeof(lp_trk_t) + sizeof(ch_d_t)) + LP_NTRK * LP_NSCN * 4u)
-#define LP_HEAD (LP_HEAD1 + sizeof(dk_kit_t))
+#define LP_HEAD2 (LP_HEAD1 + DK_KIT2)
+#define LP_HEAD (LP_HEAD1 + sizeof(dk_kit_t) + LP_NTRK * LP_NSCN)
 _Static_assert(LP_HEAD + 6u * LP_NEV <= LP_STREAM, "a project fits its objects");
 static uint8_t *lp_wb;                           /* the window being written (or read) */
 static uint32_t lp_wlo, lp_wpos;                 /* .. its first byte's place in the stream; the place now */
@@ -1497,7 +1502,7 @@ static uint32_t lp_pack(uint32_t o)
     lp_wlo = o * SS_PAYLOAD_MAX;
     lp_wpos = 0;
     fl = LP_LOCK();
-    lp_put('L'), lp_put('P'), lp_put(2), lp_put(lpp.sel), lp_put(lpp.scn), lp_put(lpp.song_on);
+    lp_put('L'), lp_put('P'), lp_put(3), lp_put(lpp.sel), lp_put(lpp.scn), lp_put(lpp.song_on);
     {                                            /* (the stream's length) */
         uint32_t n = LP_HEAD, t2, s2;
         for (t2 = 0; t2 < LP_NTRK; t2++)
@@ -1516,7 +1521,8 @@ static uint32_t lp_pack(uint32_t o)
             lp_put16(lpp.clip[t][s].len);
             lp_put16(lpp.clip[t][s].n);
         }
-    lp_puts(&dkk, sizeof dkk);                   /* (V0.85: the kit) */
+    lp_puts(&dkk, sizeof dkk);                   /* (V0.85: the kit; V0.86 its grown bytes) */
+    lp_puts(lpp.speed, sizeof lpp.speed);        /* (V0.86: the clips' SPEED) */
     for (t = 0; t < LP_NTRK; t++)
         for (s = 0; s < LP_NSCN; s++)
             for (k = lpp.clip[t][s].head; k != LP_END; k = lp_ev[k].next) {
@@ -1555,14 +1561,20 @@ static void lp_load_head(void)                   /* the head read: the tracks, c
     const uint8_t *b = lp_tk;
     uint32_t t, s, i, cl = 8u + 2u * LP_NSONG + LP_NTRK * (sizeof(lp_trk_t) + sizeof(ch_d_t));
     lpt.end = b[6] | (uint32_t)b[7] << 8;
-    if (b[0] != 'L' || b[1] != 'P' || (b[2] != 1u && b[2] != 2u) || lpt.end < lpt.hlen || lpt.end > LP_STREAM) {
+    if (b[0] != 'L' || b[1] != 'P' || b[2] < 1u || b[2] > 3u || lpt.end < lpt.hlen || lpt.end > LP_STREAM) {
         lpt.bad = 1;
         return;
     }
-    if (b[2] == 2u) {                            /* (V0.85: the kit, every value in its range) */
-        memcpy(&dkk, b + LP_HEAD1, sizeof dkk);
+    if (b[2] >= 2u) {                            /* (V0.85: the kit, every value in its range; version 2's: the V0.85 */
+        memcpy(&dkk, b + LP_HEAD1, b[2] == 2u ? DK_KIT2 : sizeof dkk);   /* part, the rest as a kit starts) */
+        if (b[2] == 2u)
+            dk_defaults3();
         dk_sane();
     }
+    if (b[2] >= 3u)                              /* (V0.86: the clips' SPEED) */
+        for (t = 0; t < LP_NTRK; t++)
+            for (s = 0; s < LP_NSCN; s++)
+                lpp.speed[t][s] = (uint8_t)(b[LP_HEAD1 + sizeof(dk_kit_t) + t * LP_NSCN + s] % LS_N);
     lpp.sel = (uint8_t)(b[3] % LP_NTRK);
     lpp.scn = (uint8_t)(b[4] % LP_NSCN);
     lpp.song_on = b[5] != 0;
@@ -1636,7 +1648,7 @@ static void lp_load(uint32_t o, const uint8_t *b, uint32_t n)
         if (lpt.pos < lpt.hlen) {
             lp_tk[lpt.pos] = b[i];
             if (lpt.pos == 2u)                   /* (the version: its head's length) */
-                lpt.hlen = b[i] == 1u ? LP_HEAD1 : LP_HEAD;
+                lpt.hlen = b[i] == 1u ? LP_HEAD1 : b[i] == 2u ? LP_HEAD2 : LP_HEAD;
             if (lpt.pos + 1u == lpt.hlen)
                 lp_load_head();
             continue;

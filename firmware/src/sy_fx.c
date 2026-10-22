@@ -104,10 +104,13 @@ typedef struct {                          /* the FX filter */
     float hold[2], hph, d;                /* LO-FI's held samples and its phase; COMB's delay (samples) */
     uint32_t w, rph;                      /* COMB's write index; RING's carrier phase */
     uint8_t type, fresh, out;             /* the type playing; its coefficients from rest; faded out for a new one */
+    float env;                            /* V0.86 FOLLOW: the input's level, 0 (-48 dBFS and under) .. 1 (0 dBFS) */
 } fx_ff_t;
 typedef struct {                          /* TAPE */
     uint32_t w, wph, fph, fph2;
     float d, lp[2];                       /* the tap (samples) at the end of the last block; the head's loss */
+    float env;                            /* V0.86 HISS: the input's level it follows (silence: none) */
+    uint32_t rnd;                         /* .. its noise */
 } fx_tap_t;
 
 static struct {
@@ -341,6 +344,8 @@ static void fx_chorus(float *l, float *r, uint32_t fi)
     float depth = 3.0f * mod_get(sy_goff, SP_CH_DEPTH + o) * 0.001f * SY_FS, fb = 0.9f * mod_get(sy_goff, SP_CH_FDBK + o);
     uint32_t inc = (uint32_t)(int32_t)(sp_lfo_hz(mod_get(sy_goff, SP_CH_RATE + o)) / SY_FS * 4294967296.0f);
     float bm1 = base + 0.5f * depth, hd1 = 0.5f * depth, bm, hd, dbm, dhd, sn, cs, sr, cr, m, dm;
+    float sp = 1.0f - 0.002f * (float)sy_patch.p[sp_fx_id(SP_CH_SPREAD, fi)];   /* (V0.86 SPREAD: the right's taps, -1
+                                                                                   * opposite the left's .. 1 with them) */
     if (!fx_mixes(fi, SP_CH_ON + o, mod_get(sy_goff, SP_CH_MIX + o), &m0))
         return;
     if (m0 <= 0.0f)                                     /* (switched on: no ramp from long ago) */
@@ -360,8 +365,8 @@ static void fx_chorus(float *l, float *r, uint32_t fi)
     dm = (fx.mix[fi] - m0) * (1.0f / (float)SY_BLK);
     for (i = 0; i < SY_BLK; i++, m += dm) {
         float hs = hd * sn, hc = hd * cs, wf = (float)(w + FX_CHO_N), t;
-        float d[2][2] = {{bm + hs, bm + hc}, {bm - hs, bm - hc}};      /* two taps a side, a quarter cycle apart; */
-        for (c = 0; c < 2u; c++) {                                      /* the right opposite the left */
+        float d[2][2] = {{bm + hs, bm + hc}, {bm + sp * hs, bm + sp * hc}};   /* two taps a side, a quarter cycle */
+        for (c = 0; c < 2u; c++) {                                            /* apart; the right SPREAD from the left */
             float acc = 0.0f;
             uint32_t k;
             for (k = 0; k < 2u; k++) {
@@ -658,11 +663,27 @@ static void fx_ott(float *l, float *r, uint32_t fi)
  * shelves and peak). With A = 10^(dB / 40) (A^2 the gain at a shelf's far side, at the peak's centre): LOW SHELF 1,
  * k (A - 1), A^2 - 1, its corner g / sqrt A; PEAK 1, k (A^2 - 1), 0 with k = 1 / (Q A); HIGH SHELF A^2, k (1 - A) A,
  * 1 - A^2, its corner g sqrt A; a shelf's k = 1 / Q (LO Q, HI Q: 0.707 none over or under, more a bump at the corner
- * and a dip before it). FREQ is where a shelf's slope is halfway in dB */
-enum { EQ_LS, EQ_PK, EQ_HS };
+ * and a dip before it). FREQ is where a shelf's slope is halfway in dB. V0.86, the bands' types: a HIGH PASS 1, -k, -1;
+ * a LOW PASS 0, 0, 1; a NOTCH 1, -k, 0; a BAND PASS 0, k, 0 (1 at its centre): no gain, Q their resonance (the same
+ * work as a shelf's, mixed otherwise) */
+enum { EQ_LS, EQ_PK, EQ_HS, EQ_HP, EQ_LP, EQ_NOTCH, EQ_BP };
+static uint32_t fx_eq_type(uint32_t b, int32_t t)   /* band b's (LOW, MID, HIGH) as its TYPE (0 .. 2) sets it */
+{
+    static const uint8_t T[3][3] = {{EQ_LS, EQ_HP, EQ_PK}, {EQ_PK, EQ_NOTCH, EQ_BP}, {EQ_HS, EQ_LP, EQ_PK}};
+    return T[b % 3u][(uint32_t)sy_clampi(t, 0, 2)];
+}
+static int fx_eq_gains(uint32_t type) { return type <= EQ_HS; }   /* a type its gain shapes (0 dB: flat, skipped) */
 static void fx_eq_shape(uint32_t type, float hz, float db, float q, float *gk, float *m)   /* g, k; m0 m1 m2 */
 {
     float a = sy_exp2f(db * 0.08304820f), s = sy_exp2f(db * 0.04152410f), g = flt_g(hz), k = 1.0f / q;
+    if (type >= EQ_HP) {
+        gk[0] = g;
+        gk[1] = k;
+        m[0] = type == EQ_HP || type == EQ_NOTCH ? 1.0f : 0.0f;
+        m[1] = type == EQ_HP || type == EQ_NOTCH ? -k : type == EQ_BP ? k : 0.0f;
+        m[2] = type == EQ_HP ? -1.0f : type == EQ_LP ? 1.0f : 0.0f;
+        return;
+    }
     if (type == EQ_LS)
         g /= s;
     else if (type == EQ_HS)
@@ -695,7 +716,7 @@ static float fx_eq_db(uint32_t type, float hz, float db, float q, float f)
     di = gk[1] * w;
     nr = m[0] * dr + m[2];
     ni = (m[0] * gk[1] + m[1]) * w;
-    return 3.0103f * sy_log2f((nr * nr + ni * ni) / (dr * dr + di * di));
+    return 3.0103f * sy_log2f((nr * nr + ni * ni + 1e-12f) / (dr * dr + di * di + 1e-12f));   /* (a pass's zero) */
 }
 
 /* one band over a block of one channel, in place, the state st (ic1 ic2), the coefficients ramping c0 -> c1 (a1 a2
@@ -759,10 +780,12 @@ static void fx_eq(float *l, float *r, uint32_t fi)
             sy_copyf(wet[c], ch[c], SY_BLK);
     }
     for (b = 0; b < 3u; b++) {
+        static const uint16_t TY[3] = {SP_EQ_LTYPE, SP_EQ_MTYPE, SP_EQ_HTYPE};
         float db = sp_lin(DB[b], mod_get(sy_goff, DB[b] + o)) * 0.1f, c1[6];
-        if (sy_absf(db) < 0.01f)
+        uint32_t ty = fx_eq_type(b, sy_patch.p[sp_fx_id(TY[b], fi)]);
+        if (fx_eq_gains(ty) && sy_absf(db) < 0.01f)
             continue;
-        fx_eq_coef(b, sp_cut_hz(mod_get(sy_goff, HZ[b] + o)), db, sp_q(mod_get(sy_goff, Q[b] + o)), c1);
+        fx_eq_coef(ty, sp_cut_hz(mod_get(sy_goff, HZ[b] + o)), db, sp_q(mod_get(sy_goff, Q[b] + o)), c1);
         if (!((st->run >> b) & 1u)) {
             sy_copyf(st->c[b], c1, 3u);
             st->c[b][3] = 1.0f;
@@ -916,8 +939,17 @@ static void fx_ffilt(float *l, float *r, uint32_t fi)
     uint32_t o = FXI_OFF(fi), q = fx_nth(fi), i, c, t = (uint32_t)sy_clampi(sy_patch.p[SP_FF_TYPE + o], 0, FF_COUNT - 1);
     fx_ff_t *st = &fx.ff[q];
     float m0, m1, wet[2][SY_BLK], *ch[2] = {l, r};
-    float cn = mod_get(sy_goff, SP_FF_CUT + o), hz = sp_cut_hz(cn), res = mod_get(sy_goff, SP_FF_RES + o);
-    float drv = mod_get(sy_goff, SP_FF_DRIVE + o);
+    float cn = mod_get(sy_goff, SP_FF_CUT + o), hz, res = mod_get(sy_goff, SP_FF_RES + o);
+    float drv = mod_get(sy_goff, SP_FF_DRIVE + o), fol = sp_lin(SP_FF_FOLLOW, mod_get(sy_goff, sp_fx_id(SP_FF_FOLLOW, fi)));
+    if (fol > 0.5f || fol < -0.5f) {                    /* (V0.86 FOLLOW: the cutoff moved by the input's level, up to */
+        float pk = 0.0f, e;                             /* half its range (five octaves) either way: an auto-wah) */
+        for (i = 0; i < SY_BLK; i++)
+            pk = sy_maxf(pk, sy_maxf(sy_absf(l[i]), sy_absf(r[i])));
+        e = pk > 0.00398f ? sy_clampf(1.0f + sy_log2f(pk) * (6.0206f / 48.0f), 0.0f, 1.0f) : 0.0f;
+        st->env += (e - st->env) * (e > st->env ? 0.5f : 0.03f);   /* (quick up, ~70 ms down) */
+        cn = sy_clampf(cn + 0.0005f * fol * st->env, 0.0f, 1.0f);
+    }
+    hz = sp_cut_hz(cn);
     m1 = mod_get(sy_goff, SP_FF_MIX + o);
     if (t != st->type) {                                /* a new type: out over a block, then from rest */
         if (st->type != 0xFF && !st->out && fx.mix[fi] > 0.0f) {
@@ -1088,7 +1120,12 @@ static void fx_trem(float *l, float *r, uint32_t fi)
         g1[0] = 1.4142f * sy_sin2pi(0.25f * (1.0f - pan));
         g1[1] = 1.4142f * sy_sin2pi(0.25f * pan);
     } else {
+        int32_t spr = sy_patch.p[sp_fx_id(SP_TR_SPREAD, fi)];
         g1[0] = g1[1] = 1.0f - dep * (0.5f - 0.5f * v);
+        if (spr > 0) {                                  /* (V0.86 SPREAD: the right side's LFO later, to half a cycle) */
+            float v2 = fx_trm_lfo(shape, fx_ph01(ph1 + (uint32_t)spr * 2147483u));
+            g1[1] = 1.0f - dep * (0.5f - 0.5f * v2);
+        }
     }
     if (m0 <= 0.0f)
         fx.trm_g[q][0] = g1[0], fx.trm_g[q][1] = g1[1];
@@ -1134,6 +1171,7 @@ static void fx_tape(float *l, float *r, uint32_t fi)
     float wow = mod_get(sy_goff, SP_TP_WOW + o) * 0.0025f * SY_FS, flt = mod_get(sy_goff, SP_TP_FLUT + o) * 0.0004f * SY_FS;
     float sat = mod_get(sy_goff, SP_TP_SAT + o), g = 1.0f + 7.0f * sat, mk = sy_exp2f(-0.5f * sy_log2f(g));
     float kl = sy_minf(1.0f, 6.2831853f * 20000.0f * sy_exp2f(-3.0f * mod_get(sy_goff, SP_TP_TONE + o)) / SY_FS);
+    float hiss = mod_get(sy_goff, sp_fx_id(SP_TP_HISS, fi));
     uint32_t w1 = st->wph + FX_PHI(0.6f) * SY_BLK, f1 = st->fph + FX_PHI(9.0f) * SY_BLK, f2 = st->fph2 + FX_PHI(13.0f) * SY_BLK;
     float d1 = FX_TAP_D0 + wow * sy_sin2pi(fx_ph01(w1)) +
                flt * (0.67f * sy_sin2pi(fx_ph01(f1)) + 0.33f * sy_sin2pi(fx_ph01(f2))), d, dd;
@@ -1143,11 +1181,25 @@ static void fx_tape(float *l, float *r, uint32_t fi)
         st->d = d1;
     d = st->d;
     dd = (d1 - d) * (1.0f / (float)SY_BLK);
+    if (hiss > 0.0005f) {                               /* (V0.86 HISS: noise at the head, under its loss, as loud as */
+        float pk = 0.0f;                                /* the sound asks: none in silence, so the quiet saves wait */
+        for (i = 0; i < SY_BLK; i++)                    /* for nothing; -34 dB under full scale at the most) */
+            pk = sy_maxf(pk, sy_maxf(sy_absf(l[i]), sy_absf(r[i])));
+        pk = sy_minf(pk * 4.0f, 1.0f);
+        st->env += (pk - st->env) * (pk > st->env ? 0.3f : 0.004f);
+        hiss *= 0.02f * st->env;
+        if (!st->rnd)
+            st->rnd = 0x2545F491u + q;
+    } else {
+        hiss = 0.0f;
+    }
     for (i = 0; i < SY_BLK; i++, d += dd) {
         for (c = 0; c < 2u; c++) {
             float y;
             fx_tap[q][c][st->w] = fx_q(sat > 0.0f ? sy_softclip(ch[c][i] * g) * mk : ch[c][i]);
             y = fx_tap_at(fx_tap[q][c], FX_LN, st->w, d);
+            if (hiss > 0.0f)
+                y += hiss * (float)(int32_t)sy_rand(&st->rnd) * (1.0f / 2147483648.0f);
             st->lp[c] += (y - st->lp[c]) * kl;
             wet[c][i] = st->lp[c];
         }

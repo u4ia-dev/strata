@@ -117,7 +117,9 @@ static void lcd_init(void)
 {
     uint32_t r, x;
     fm1_lcd_hw_init();
-    lcd_spin(2000000u);
+    lcd_spin(3250000u);                              /* (~130 ms: on battery the panel can ignore commands for up to
+                                                      * 120 ms after its supply comes up (a report from another FM-1
+                                                      * firmware, not seen here); Strata V0.86, ~80 ms before) */
     for (r = 0; r < sizeof LCD_SEQ; r += 2u + LCD_SEQ[r + 1u]) {
         if (LCD_SEQ[r] == 0x00u) {                       /* pseudo command: wait */
             lcd_spin(LCD_SEQ[r + 2u] * 25000u);          /* ~1 ms per unit (lcd_spin(3000000) ~ 120 ms) */

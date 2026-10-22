@@ -242,11 +242,12 @@ static float ui_drv_out(uint32_t type, float amt, float mix, float x)
     }
     return x + (y * sy_exp2f(-0.3f * sy_log2f(g)) - x) * mix;
 }
-/* the mix row, its handle (knob k) on its knob */
-static void ui_mix_row(const int16_t *p, uint32_t id, uint32_t k)
+/* the mix row (MIX id of values p: the module shown's, moved to its type's first's), its handle on it where a knob of
+ * the page sets it (V0.86: by its parameter, the pages regrouped) */
+static void ui_mix_row(const int16_t *p, uint32_t id)
 {
     float x = lk_mix(ui_v(p, id));
-    ui_H(k, x - 5.0f, 184.0f);
+    ui_Hp((int32_t)(id + ui_fx_off()), x - 5.0f, 184.0f);
 }
 
 /* DRIVE: the transfer curve in its box (straight through dashed), a sine through it, TONE's tilt, MIX */
@@ -276,7 +277,7 @@ static void ui_p_drive(void)
     lk_curve(116, ys, 111u, 2.2f, ui_ink(ui_hot(1)), 0);
     lk_seg(116.0f, 152.0f + 6.0f * tn, 226.0f, 152.0f - 6.0f * tn, 1.5f, ui_ink(ui_hot(2)));   /* TONE's tilt */
     lk_hollow(171.0f, 152.0f, 2.5f);
-    ui_mix_row(p, SP_DR_MIX, 3);
+    ui_mix_row(p, SP_DR_MIX);
     ui_title_p(DRV_NAMES[type], UI_TITLE_X, (int32_t)(SP_DR_TYPE + ui_fx_off()));
     lk_text(52.0f, 137.0f, T9, "IN", sk.lab, sk.ground, 60, 0);
     lk_text(116.0f, 164.0f, T9, "TONE", sk.lab, sk.ground, 60, 0);
@@ -288,12 +289,13 @@ static void ui_p_drive(void)
 /* ---------------------------------------------------------------------------------------- CHORUS --- */
 static float ui_cho_wave(float u) { return 0.75f * sy_sin2pi(u) + 0.25f * sy_sin2pi(3.0f * u + 0.2f); }
 /* CHORUS: the sound and its two copies (DEPTH apart), the taps on their line (DELAY: where; DEPTH: their swing), the
- * rate's small wave; MORE: the feedback's loop */
+ * rate's small wave (V0.86: the right side's under it, dashed, as SPREAD sets it); MORE: the feedback's loop */
 static void ui_p_chorus(void)
 {
-    uint32_t o = ui_fx_off(), i, k;
+    uint32_t o = ui_fx_off(), i, k, spi = sp_fx_id(SP_CH_SPREAD, (uint32_t)ui_fx_inst());
     const int16_t *p = sy_patch.p + o;
     int more = UI_PG[ui.page].id[0] == (int16_t)(SP_CH_FDBK + o);
+    float spr = 1.0f - 0.002f * (float)sy_patch.p[spi];
     float dep = ui_v(p, SP_CH_DEPTH), base = 2.0f + 13.0f * ui_v(p, SP_CH_DELAY), sw = 3.0f * dep, ys[195];
     float hz = sp_lfo_hz(ui_v(p, SP_CH_RATE)), cyc = sy_clampf(hz * 3.0f, 1.0f, 8.0f);
 #define UI_TX(ms) (20.0f + (ms) * (110.0f / 20.0f))
@@ -308,9 +310,10 @@ static void ui_p_chorus(void)
     lk_curve(20, ys, 195u, 2.2f, sk.ink, 0);
     lk_seg(20.0f, 146.0f, 130.0f, 146.0f, 1.0f, sk.line);  /* the line: the sound at 0, the taps */
     lk_seg(20.0f, 140.0f, 20.0f, 152.0f, 1.0f, sk.ink);
-    lk_seg(UI_TX(base), 140.0f, UI_TX(base), 152.0f, 1.5f, ui_ink(ui_hot(2)));
-    lk_seg(UI_TX(base + sw), 140.0f, UI_TX(base + sw), 152.0f, 1.5f, ui_ink(ui_hot(2)));
-    lk_seg(UI_TX(base) - 8.0f, 134.0f, UI_TX(base + sw) + 8.0f, 134.0f, 1.0f, ui_hot(1) ? sk.hot : sk.mid);
+    lk_seg(UI_TX(base), 140.0f, UI_TX(base), 152.0f, 1.5f, ui_ink(ui_hotp((int32_t)(SP_CH_DELAY + o))));
+    lk_seg(UI_TX(base + sw), 140.0f, UI_TX(base + sw), 152.0f, 1.5f, ui_ink(ui_hotp((int32_t)(SP_CH_DELAY + o))));
+    lk_seg(UI_TX(base) - 8.0f, 134.0f, UI_TX(base + sw) + 8.0f, 134.0f, 1.0f,
+           ui_hotp((int32_t)(SP_CH_DEPTH + o)) ? sk.hot : sk.mid);
     lk_seg(UI_TX(base) - 8.0f, 131.0f, UI_TX(base) - 8.0f, 137.0f, 1.0f, sk.mid);
     lk_seg(UI_TX(base + sw) + 8.0f, 131.0f, UI_TX(base + sw) + 8.0f, 137.0f, 1.0f, sk.mid);
     {                                               /* the feedback: from the taps back to the start */
@@ -320,20 +323,24 @@ static void ui_p_chorus(void)
             lp[2u * i] = xs + (20.0f - xs) * u;
             lp[2u * i + 1u] = 160.0f + 12.0f * sy_sin2pi(0.5f * u);
         }
-        lk_poly_dash(lp, 11u, fb > 0.01f ? 1.5f : 1.0f, more && ui_hot(0) ? sk.hot : fb > 0.01f ? sk.ink : sk.mid, 2.0f, 2.0f);
+        lk_poly_dash(lp, 11u, fb > 0.01f ? 1.5f : 1.0f, ui_hotp((int32_t)(SP_CH_FDBK + o)) ? sk.hot : fb > 0.01f ? sk.ink : sk.mid,
+                     2.0f, 2.0f);
         lk_arrow(20.0f, 164.0f, 20.0f, 156.0f, 3.0f, 1.0f, sk.mid);
     }
-    for (i = 0; i < 77u; i++)                       /* RATE: the taps' swing */
+    for (i = 0; i < 77u; i++)                       /* RATE: the taps' swing; the right side's, dashed (SPREAD) */
         ys[i] = 146.0f - 7.0f * sy_sin2pi(cyc * (float)i / 76.0f);
-    lk_curve(150, ys, 77u, 1.0f, ui_hot(0) && !more ? sk.hot : sk.mid, 0);
-    ui_mix_row(p, SP_CH_MIX, 3);
-    if (more) {
-        ui_H(0, 48.0f, 174.0f);
-    } else {
-        ui_H(0, 183.0f, 124.0f);
-        ui_H(1, UI_TX(base + 0.5f * sw) - 5.0f, 118.0f);
-        ui_H(2, UI_TX(base) - 22.0f, 130.0f);
-    }
+    lk_curve(150, ys, 77u, 1.0f, ui_hotp((int32_t)(SP_CH_RATE + o)) ? sk.hot : sk.mid, 0);
+    for (i = 0; i < 77u; i++)
+        ys[i] = 146.0f - 7.0f * spr * sy_sin2pi(cyc * (float)i / 76.0f);
+    lk_curve(150, ys, 77u, 1.0f, ui_hotp((int32_t)spi) ? sk.hot : sk.line, LK_DASH(2, 2));
+    lk_text(150.0f, 158.0f, T9, "R: DASHED", sk.lab, sk.ground, 0, 0);
+    ui_mix_row(p, SP_CH_MIX);
+    ui_Hp((int32_t)(SP_CH_FDBK + o), 48.0f, 174.0f);
+    ui_Hp((int32_t)(SP_CH_RATE + o), 183.0f, 124.0f);
+    ui_Hp((int32_t)spi, 183.0f, 124.0f);
+    ui_Hp((int32_t)(SP_CH_DEPTH + o), UI_TX(base + 0.5f * sw) - 5.0f, 118.0f);
+    ui_Hp((int32_t)(SP_CH_DELAY + o), UI_TX(base) - 22.0f, 130.0f);
+    (void)more;
 #undef UI_TX
 }
 
@@ -343,14 +350,15 @@ static float ui_dly_secs(const int16_t *p)         /* the echo's distance as fx_
     float s = p[SP_DL_SYNC] ? sy_note_q((uint32_t)p[SP_DL_NOTE]) * 60.0f / sy_tempo : sp_dly_s(ui_v(p, SP_DL_TIME));
     return sy_clampf(s, 2.0f / (0.5f * SY_FS), (float)(FX_DLY_N - 4u) / (0.5f * SY_FS));
 }
-/* DELAY: the echoes falling by FEEDBACK (ping-pong: left up, right down), the time between them; TONE: the band the
- * loop's filters leave (HP at the left, LP at the right) */
+/* DELAY: the echoes falling by FEEDBACK (ping-pong: left up, right down), the time between them (SYNC: a note value,
+ * or FREE), MIX; TONE: MODE, the band the loop's filters leave (HP at the left, LP at the right). V0.86: MIX on the
+ * first page, MODE on TONE */
 static void ui_p_delay(void)
 {
     const int16_t *p = sy_patch.p;
     float fb = 0.95f * ui_v(p, SP_DL_FDBK), secs = ui_dly_secs(p), sp = 8.0f + 44.0f * sy_minf(secs / 0.75f, 1.0f);
     float top[24], bot[24], xl, xh;
-    int pp = p[SP_DL_MODE] != 0, tone = UI_PG[ui.page].id[0] == SP_DL_LP;
+    int pp = p[SP_DL_MODE] != 0, tone = ui_kof(SP_DL_LP) >= 0;
     uint32_t n = 0, nt = 0, nb = 0;
     char w[24];
     lk_seg(20.0f, 120.0f, 226.0f, 120.0f, 1.0f, sk.line);
@@ -361,7 +369,7 @@ static void ui_p_delay(void)
             break;
         if (h >= 0.5f)
             lk_seg(x, 120.0f, x, up ? 120.0f - h : 120.0f + h, n ? 1.5f : 3.0f,
-                   !tone && (ui_hot(3) || (ui_hot(2) && n == 1u)) ? sk.hot : sk.ink);
+                   ui_hotp(SP_DL_FDBK) || (ui_hotp(SP_DL_TIME) && n == 1u) ? sk.hot : sk.ink);
         if (up) {
             top[2u * nt] = x;
             top[2u * nt++ + 1u] = 120.0f - h;
@@ -373,31 +381,30 @@ static void ui_p_delay(void)
     lk_poly_dash(top, nt, 1.0f, sk.mid, 2.0f, 2.0f);
     lk_poly_dash(bot, nb, 1.0f, sk.mid, 2.0f, 2.0f);
     lk_seg(28.0f, 168.0f, 28.0f, 176.0f, 1.0f, sk.mid);     /* TIME: one echo's distance */
-    lk_seg(28.0f, 172.0f, 28.0f + sp, 172.0f, 1.0f, !tone && ui_hot(2) ? sk.hot : sk.mid);
+    lk_seg(28.0f, 172.0f, 28.0f + sp, 172.0f, 1.0f, ui_hotp(SP_DL_TIME) ? sk.hot : sk.mid);
     lk_seg(28.0f + sp, 168.0f, 28.0f + sp, 176.0f, 1.0f, sk.mid);
     xh = sy_clampf(ui_fx_x(sp_cut_hz(ui_v(p, SP_DL_HP)), 130.0f, 90.0f), 150.0f, 196.0f);   /* the band */
     xl = sy_clampf(ui_fx_x(sp_cut_hz(ui_v(p, SP_DL_LP)), 130.0f, 90.0f), xh + 4.0f, 200.0f);
     {
         float b[8] = {xh - 20.0f, 186.0f, xh, 166.0f, xl, 166.0f, xl + 20.0f, 186.0f};
-        lk_poly(b, 4u, 1.5f, tone && (ui_hot(0) || ui_hot(1)) ? sk.hot : sk.ink);
+        lk_poly(b, 4u, 1.5f, ui_hotp(SP_DL_LP) || ui_hotp(SP_DL_HP) ? sk.hot : sk.ink);
     }
-    if (tone)                                       /* (V0.81: TIME's page has no knob on MIX: no handle there. It was */
-        ui_mix_row(p, SP_DL_MIX, 2u);               /* knob "4", a write past pg.hx[3] into pg.hy[0], found by UBSan) */
+    ui_mix_row(p, SP_DL_MIX);                       /* (its handle where a knob sets it: V0.81 found knob "4" written past
+                                                     * pg.hx[3] when TIME's page had none) */
     ui_title_p(DLY_NAMES[pp], UI_TITLE_X, SP_DL_MODE);
+    sp_put(w, p[SP_DL_SYNC] ? "FIXED \xB7 " : "FREE \xB7 ");
     if (p[SP_DL_SYNC])
-        sp_put(w, NOTE_NAMES[p[SP_DL_NOTE] < (int16_t)SY_NNOTE ? p[SP_DL_NOTE] : 0]);
+        sp_put(w + 8, NOTE_NAMES[p[SP_DL_NOTE] < (int16_t)SY_NNOTE ? p[SP_DL_NOTE] : 0]);
     else
-        sp_real(w, secs * 1000.0f, 0u, " MS");
-    lk_text(UI_TITLE_X, 42.0f, T10, w, sk.lab, sk.ground, 20, 0);
-    if (tone) {
-        ui_H(0, xl + 6.0f, 150.0f);
-        ui_H(1, xh - 16.0f, 150.0f);
-    } else {
-        ui_H(0, 8.0f, 27.0f);
-        ui_H(1, 8.0f, 43.0f);
-        ui_H(2, 28.0f + 0.5f * sp - 5.0f, 176.0f);
-        ui_H(3, 28.0f + 2.0f * sp + 4.0f, 120.0f - 52.0f * fb * fb - 14.0f);
-    }
+        sp_real(w + 7, secs * 1000.0f, 0u, " MS");
+    lk_text(UI_TITLE_X, 42.0f, T10, w, ui_hotp(SP_DL_SYNC) ? sk.hot : sk.lab, sk.ground, 20, 0);
+    ui_Hp(SP_DL_MODE, 8.0f, 27.0f);
+    ui_Hp(SP_DL_SYNC, 8.0f, 43.0f);
+    ui_Hp(SP_DL_LP, xl + 6.0f, 150.0f);
+    ui_Hp(SP_DL_HP, xh - 16.0f, 150.0f);
+    ui_Hp(SP_DL_TIME, 28.0f + 0.5f * sp - 5.0f, 176.0f);
+    ui_Hp(SP_DL_FDBK, 28.0f + 2.0f * sp + 4.0f, 120.0f - 52.0f * fb * fb - 14.0f);
+    (void)tone;
 }
 
 /* ---------------------------------------------------------------------------------------- REVERB --- */
@@ -411,8 +418,7 @@ static void ui_p_reverb(void)
     float damp = ui_v(p, SP_RV_DAMP), lc = ui_v(p, SP_RV_LOCUT), s = 0.6f + 0.4f * size, x0 = 136.0f + 10.0f * pre, x;
     float tau = 6.0f + 60.0f * sy_minf(rt / 12.0f, 1.0f), ys[78], up[42], dn[42];
     uint32_t i, seed = 5u, n = 0;
-    int tone = UI_PG[ui.page].id[0] == SP_RV_DAMP;
-    lk_frame(70.0f - 50.0f * s, 101.0f - 49.0f * s, 100.0f * s, 98.0f * s, 1.0f, ui_ink(!tone && ui_hot(1)));
+    lk_frame(70.0f - 50.0f * s, 101.0f - 49.0f * s, 100.0f * s, 98.0f * s, 1.0f, ui_ink(ui_hotp(SP_RV_SIZE)));
     lk_frame(70.0f - 36.0f * s, 101.0f - 35.0f * s, 72.0f * s, 70.0f * s, 1.0f, sk.mid);
     lk_frame(70.0f - 22.0f * s, 101.0f - 21.0f * s, 44.0f * s, 42.0f * s, 1.0f, sk.line);
     lk_disc(70.0f, 101.0f, 3.0f, sk.ink);
@@ -423,11 +429,11 @@ static void ui_p_reverb(void)
             continue;
         lk_disc(rx, ry, 0.9f, sk.mid);
     }
-    lk_seg(132.0f, 60.0f, 132.0f, 140.0f, 1.5f, ui_ink(tone && ui_hot(1)));
+    lk_seg(132.0f, 60.0f, 132.0f, 140.0f, 1.5f, ui_ink(ui_hotp(SP_RV_PRE)));
     for (x = x0 + 8.0f; x <= 226.0f; x += 2.0f) {   /* the tail */
         float e = sy_exp2f(-(x - x0 - 8.0f) / tau * 1.4427f), h;
         h = e * 40.0f * (0.4f + 0.6f * (1.0f - 0.7f * damp) * (float)(sy_rand(&seed) >> 8) * (1.0f / 16777216.0f) + 0.42f * damp);
-        lk_seg(x, 100.0f - h, x, 100.0f + h, 1.0f, !tone && ui_hot(2) ? sk.hot : sk.mid);
+        lk_seg(x, 100.0f - h, x, 100.0f + h, 1.0f, ui_hotp(SP_RV_DECAY) ? sk.hot : sk.mid);
         if (n < 21u && sy_floori(x - x0 - 8.0f) % 4 == 0) {
             up[2u * n] = dn[2u * n] = x;
             up[2u * n + 1u] = 100.0f - 40.0f * e;
@@ -435,29 +441,24 @@ static void ui_p_reverb(void)
             n++;
         }
     }
-    lk_poly_dash(up, n, 1.0f, ui_ink(tone && ui_hot(0)), 2.0f, 2.0f);
-    lk_poly_dash(dn, n, 1.0f, ui_ink(tone && ui_hot(0)), 2.0f, 2.0f);
-    lk_arrow(66.0f, 166.0f, 56.0f - 20.0f * wid, 166.0f, 3.0f, 1.0f, ui_ink(tone && ui_hot(2)));   /* WIDTH */
-    lk_arrow(74.0f, 166.0f, 84.0f + 20.0f * wid, 166.0f, 3.0f, 1.0f, ui_ink(tone && ui_hot(2)));
+    lk_poly_dash(up, n, 1.0f, ui_ink(ui_hotp(SP_RV_DAMP)), 2.0f, 2.0f);
+    lk_poly_dash(dn, n, 1.0f, ui_ink(ui_hotp(SP_RV_DAMP)), 2.0f, 2.0f);
+    lk_arrow(66.0f, 166.0f, 56.0f - 20.0f * wid, 166.0f, 3.0f, 1.0f, ui_ink(ui_hotp(SP_RV_WIDTH)));   /* WIDTH */
+    lk_arrow(74.0f, 166.0f, 84.0f + 20.0f * wid, 166.0f, 3.0f, 1.0f, ui_ink(ui_hotp(SP_RV_WIDTH)));
     for (i = 0; i < 77u; i++) {                     /* LOW CUT: the lows let through, from its corner */
         float u = (float)i / 76.0f - 0.6f * lc;
         ys[i] = 178.0f - 18.0f * sy_minf(1.0f, u > 0.0f ? u * u * 6.76f : 0.0f);
     }
-    lk_curve(150, ys, 77u, 1.5f, ui_ink(tone && ui_hot(3)), 0);
-    ui_mix_row(p, SP_RV_MIX, 3);
-    if (tone)
-        pg.has &= (uint8_t)~8u;
+    lk_curve(150, ys, 77u, 1.5f, ui_ink(ui_hotp(SP_RV_LOCUT)), 0);
+    ui_mix_row(p, SP_RV_MIX);
     ui_title_p(RV_NAMES[p[SP_RV_TYPE] ? 1 : 0], UI_TITLE_X, SP_RV_TYPE);
-    if (tone) {
-        ui_H(0, 172.0f, 62.0f);
-        ui_H(1, 127.0f, 146.0f);
-        ui_H(2, 64.0f, 172.0f);
-        ui_H(3, 138.0f, 166.0f);
-    } else {
-        ui_H(0, 8.0f, 27.0f);
-        ui_H(1, 70.0f + 50.0f * s - 2.0f, 101.0f - 49.0f * s - 12.0f);
-        ui_H(2, 214.0f, 62.0f);
-    }
+    ui_Hp(SP_RV_TYPE, 8.0f, 27.0f);                 /* (V0.86: REVERB the room and when it starts, TONE the tail) */
+    ui_Hp(SP_RV_SIZE, 70.0f + 50.0f * s - 2.0f, 101.0f - 49.0f * s - 12.0f);
+    ui_Hp(SP_RV_PRE, 127.0f, 146.0f);
+    ui_Hp(SP_RV_DECAY, 214.0f, 62.0f);
+    ui_Hp(SP_RV_DAMP, 172.0f, 62.0f);
+    ui_Hp(SP_RV_WIDTH, 64.0f, 172.0f);
+    ui_Hp(SP_RV_LOCUT, 138.0f, 166.0f);
 }
 
 /* ------------------------------------------------------------------------------------------- OTT --- */
@@ -515,15 +516,23 @@ static void ui_eq_vals(const int16_t *p, int live, float *v)
         v[k] = live ? mod_get(sy_goff, UI_EQ_ID[k] + ui_fx_off()) : ui_v(p, UI_EQ_ID[k]);
 }
 static float ui_eq_gain(const float *v, uint32_t b) { return sp_lin(UI_EQ_ID[b], v[b]) * 0.1f; }   /* a point's dB */
-/* the EQ's gain at f in dB for the nine values v: each point's band, as fx_eq plays it (fx_eq_db) */
-static float ui_eq_db(const float *v, float f)
+/* V0.86: the bands' types (fx_eq_type's) of the EQ shown, as patch pt has them */
+static void ui_eq_types(const int16_t *pt, uint32_t *ty)
+{
+    static const uint16_t TY[3] = {SP_EQ_LTYPE, SP_EQ_MTYPE, SP_EQ_HTYPE};
+    uint32_t b;
+    for (b = 0; b < 3u; b++)
+        ty[b] = fx_eq_type(b, pt[sp_fx_id(TY[b], (uint32_t)(ui_fx_inst() >= 0 ? ui_fx_inst() : FXI_EQ))]);
+}
+/* the EQ's gain at f in dB for the nine values v and the types ty: each point's band, as fx_eq plays it (fx_eq_db) */
+static float ui_eq_db(const float *v, const uint32_t *ty, float f)
 {
     float db = 0.0f;
     uint32_t b;
     for (b = 0; b < 3u; b++) {
         float g = ui_eq_gain(v, b);
-        if (sy_absf(g) >= 0.01f)
-            db += fx_eq_db(b, sp_cut_hz(v[3u + b]), g, sp_q(v[6u + b]), f);
+        if (!fx_eq_gains(ty[b]) || sy_absf(g) >= 0.01f)
+            db += fx_eq_db(ty[b], sp_cut_hz(v[3u + b]), g, sp_q(v[6u + b]), f);
     }
     return db;
 }
@@ -537,24 +546,29 @@ static int ui_eq_modded(void)
             return 1;
     return 0;
 }
-/* EQ: its curve hatched to 0 dB, its three points (on POINTS the one picked filled, its moves as arrows and Q's width
- * as a bracket); while sound plays and something modulates it, where the modulation has it now */
+/* EQ: its curve hatched to 0 dB, its three points (a pass's, a notch's, a band's on the 0 dB line: no gain; on POINTS
+ * the one picked filled, its moves as arrows and Q's width as a bracket; V0.86, on SHAPES: the shape's name, FREQ on
+ * its main point, AMOUNT beside it); while sound plays and something modulates it, where the modulation has it now */
+static uint32_t ui_eq_main(void);                   /* sy_ui.c: SHAPES' main point (the one FREQ shows) */
+static void ui_eq_amount(char *t);                  /* .. AMOUNT's value */
 static void ui_p_eq(void)
 {
-    uint32_t o = ui_fx_off(), k, i;
+    uint32_t o = ui_fx_off(), k, i, ty[3], gty[3], mn = ui_eq_main();
     const int16_t *p = sy_patch.p + o;
     int points = UI_PG[ui.page].id[0] == UI_EQPT, live = ui_sounding() && ui_eq_modded();
-    uint32_t pick = ui.eqpt < 3u ? ui.eqpt : 1u;
+    uint32_t pick = ui.eqpt < 3u ? ui.eqpt : 1u, shp = (uint32_t)sy_patch.p[sp_fx_id(SP_EQ_SHAPE, (uint32_t)ui_fx_inst())];
     const sy_patch_t *gh = ui_gh(ui_turning() >= 0);
     float v[9], *ys, px[3], py[3];
+    char t[24];
     int fresh;
 #define UI_EQY(db) sy_clampf(110.0f - (db) * 3.0f, 52.0f, 192.0f)
     if (live)
         ui_live(40.0f, 196.0f);                     /* (the curve where the modulation has it now) */
     ui_eq_vals(p, live, v);
+    ui_eq_types(sy_patch.p, ty);
     ys = ui_curve(0, &fresh);
     for (i = 0; fresh && i <= 216u; i++)
-        ys[i] = UI_EQY(ui_eq_db(v, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
+        ys[i] = UI_EQY(ui_eq_db(v, ty, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
     lk_seg_dash(12.0f, 110.0f, 228.0f, 110.0f, sk.line, 1.0f, 3.0f);
     for (i = 0; i <= 216u; i += 4u)
         if (sy_absf(ys[i] - 110.0f) > 1.0f)
@@ -562,26 +576,27 @@ static void ui_p_eq(void)
     if (gh) {
         float g[9], *y2 = ui_curve(1, &fresh);
         ui_eq_vals(gh->p + o, 0, g);
+        ui_eq_types(gh->p, gty);
         for (i = 0; fresh && i <= 216u; i++)
-            y2[i] = UI_EQY(ui_eq_db(g, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
+            y2[i] = UI_EQY(ui_eq_db(g, gty, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
         lk_curve(12, y2, 217u, 1.0f, sk.mid, LK_DASH(2, 2));
     }
-    lk_curve(12, ys, 217u, 2.2f, sk.ink, 0);
+    lk_curve(12, ys, 217u, 2.2f, points ? sk.ink : ui_ink(ui_hotp(UI_EQSA)), 0);
     for (k = 0; k < 3u; k++) {
         px[k] = sy_clampf(ui_fx_x(sp_cut_hz(v[3u + k]), 12.0f, 216.0f), 14.0f, 226.0f);
-        py[k] = UI_EQY(ui_eq_gain(v, k));
-        if (points && k == pick)
-            lk_box(px[k] - 3.5f, py[k] - 3.5f, px[k] + 3.5f, py[k] + 3.5f, ui_ink(ui_turning() >= 1));
+        py[k] = UI_EQY(fx_eq_gains(ty[k]) ? ui_eq_gain(v, k) : 0.0f);
+        if ((points && k == pick) || (!points && k == mn))
+            lk_box(px[k] - 3.5f, py[k] - 3.5f, px[k] + 3.5f, py[k] + 3.5f,
+                   ui_ink(points ? ui_turning() >= 1 : ui_hotp(UI_EQSF)));
         else
             lk_hollow_sq(px[k], py[k], 2.5f);
-        if (!points)
-            ui_H(k, px[k] - 5.0f, k == 1u ? py[k] + 10.0f : py[k] - 16.0f);
     }
     if (points) {                                   /* the point picked: FREQ, GAIN, Q */
         float x = px[pick], qw = 8.0f + 24.0f * (1.0f - v[6u + pick]);
         lk_arrow(x - 4.0f, 150.0f, x - 24.0f, 150.0f, 3.0f, 1.0f, ui_hot(1) ? sk.hot : sk.mid);
         lk_arrow(x + 4.0f, 150.0f, x + 24.0f, 150.0f, 3.0f, 1.0f, ui_hot(1) ? sk.hot : sk.mid);
-        lk_arrow(x + 14.0f, 124.0f, x + 14.0f, 104.0f, 3.0f, 1.0f, ui_hot(2) ? sk.hot : sk.mid);
+        if (fx_eq_gains(ty[pick]))
+            lk_arrow(x + 14.0f, 124.0f, x + 14.0f, 104.0f, 3.0f, 1.0f, ui_hot(2) ? sk.hot : sk.mid);
         lk_seg(x - qw, 162.0f, x - qw, 170.0f, 1.0f, sk.mid);
         lk_seg(x - qw, 166.0f, x + qw, 166.0f, 1.0f, ui_hot(3) ? sk.hot : sk.mid);
         lk_seg(x + qw, 162.0f, x + qw, 170.0f, 1.0f, sk.mid);
@@ -589,6 +604,23 @@ static void ui_p_eq(void)
         ui_H(1, x + 27.0f, 145.0f);
         ui_H(2, x + 20.0f, 96.0f);
         ui_H(3, x + qw + 4.0f, 161.0f);
+    } else {                                        /* SHAPES: its name, FREQ on the main point, AMOUNT */
+        float x = px[mn];
+        ui_title_p(EQ_SHAPES[shp < EQ_NSHAPE ? shp : 0], UI_TITLE_X, UI_EQSHP);
+        ui_H(0, 8.0f, 27.0f);
+        if (shp)
+            sp_put(sp_fix(sp_put(sp_fix(sp_put(t, "SHAPE "), (int32_t)shp, 0u, 0), " OF "), EQ_NSHAPE - 1, 0u, 0), "");
+        else
+            sp_put(t, "CUSTOM: AS POINTS SET IT");
+        lk_text(UI_TITLE_X, 42.0f, T10, t, sk.lab, sk.ground, 20, 0);
+        lk_arrow(x - 4.0f, 150.0f, x - 24.0f, 150.0f, 3.0f, 1.0f, ui_hotp(UI_EQSF) ? sk.hot : sk.mid);
+        lk_arrow(x + 4.0f, 150.0f, x + 24.0f, 150.0f, 3.0f, 1.0f, ui_hotp(UI_EQSF) ? sk.hot : sk.mid);
+        ui_Hp(UI_EQSF, x + 27.0f, 145.0f);
+        ui_eq_amount(t);
+        lk_text_r(228.0f, 60.0f, T10B, t, ui_ink(ui_hotp(UI_EQSA)), sk.ground, 0, 0);
+        lk_label(sy_minf(228.0f - lk_tw(T10B, t, 0) - 50.0f, 178.0f), 61.0f, "AMOUNT", 20);
+        ui_Hp(UI_EQSA, 214.0f, 77.0f);
+        pg.figs |= 0x5u;
     }
     ui_fx_freqs(12.0f, 216.0f, 200.0f);
 #undef UI_EQY
@@ -717,37 +749,34 @@ static void ui_p_flanger(void)
     char w[16];
 #define UI_CY(db) (166.0f - 48.0f * sy_minf(sy_exp2f((db) * 0.1660964f), 2.0f))   /* (its magnitude, linear: round */
                                                                                       /* teeth, sharp notches) */
-    ui_fx_in(!more && ui_hot(0));
+    ui_fx_in(ui_hotp((int32_t)(SP_FL_RATE + o)));
     dw = 6.0f + 34.0f * ui_v(p, SP_FL_DEPTH);
-    lk_arrow(150.0f, 52.0f, 150.0f - dw, 52.0f, 3.0f, 1.0f, ui_ink(!more && ui_hot(1)));
-    lk_arrow(160.0f, 52.0f, 160.0f + dw, 52.0f, 3.0f, 1.0f, ui_ink(!more && ui_hot(1)));
+    lk_arrow(150.0f, 52.0f, 150.0f - dw, 52.0f, 3.0f, 1.0f, ui_ink(ui_hotp((int32_t)(SP_FL_DEPTH + o))));
+    lk_arrow(160.0f, 52.0f, 160.0f + dw, 52.0f, 3.0f, 1.0f, ui_ink(ui_hotp((int32_t)(SP_FL_DEPTH + o))));
     ys = ui_curve(0, &fresh);
     for (i = 0; fresh && i <= 216u; i++)
         ys[i] = UI_CY(ui_comb_db(lo + 0.5f * sw * (1.0f + spr * 0.6f), fb, m, UI_FLF(i)));
-    lk_curve(12, ys, 217u, 1.0f, more && ui_hot(1) ? sk.hot : sk.mid, LK_DASH(2, 2));
+    lk_curve(12, ys, 217u, 1.0f, ui_hotp((int32_t)(SP_FL_SPREAD + o)) ? sk.hot : sk.mid, LK_DASH(2, 2));
     ys = ui_curve(1, &fresh);
     for (i = 0; fresh && i <= 216u; i++)
         ys[i] = UI_CY(ui_comb_db(lo + 0.5f * sw, fb, m, UI_FLF(i)));
     for (i = 0; i <= 216u; i += 4u)
         lk_seg(12.0f + (float)i, ys[i], 12.0f + (float)i, 166.0f, 1.0f, sk.line);
-    lk_curve(12, ys, 217u, 2.2f, more && ui_hot(0) ? sk.hot : sk.ink, 0);
+    lk_curve(12, ys, 217u, 2.2f, ui_hotp((int32_t)(SP_FL_FDBK + o)) ? sk.hot : sk.ink, 0);
     dw = 10.0f + 26.0f * ui_v(p, SP_FL_DELAY);
     lk_seg(30.0f, 168.0f, 30.0f, 176.0f, 1.0f, sk.mid);
-    lk_seg(30.0f, 172.0f, 30.0f + dw, 172.0f, 1.0f, !more && ui_hot(2) ? sk.hot : sk.mid);
+    lk_seg(30.0f, 172.0f, 30.0f + dw, 172.0f, 1.0f, ui_hotp((int32_t)(SP_FL_DELAY + o)) ? sk.hot : sk.mid);
     lk_seg(30.0f + dw, 168.0f, 30.0f + dw, 176.0f, 1.0f, sk.mid);
-    ui_mix_row(p, SP_FL_MIX, 3);
+    ui_mix_row(p, SP_FL_MIX);
     sp_put(w, NOTE_NAMES[p[SP_FL_NOTE] < (int16_t)SY_NNOTE ? p[SP_FL_NOTE] : 0]);
     lk_chip(lk_chip(150.0f, 22.0f, "FREE", !p[SP_FL_SYNC]), 22.0f, w, p[SP_FL_SYNC] != 0);
-    if (more) {
-        pg.has &= (uint8_t)~8u;
-        ui_H(0, 43.0f, ys[0] - 16.0f > 60.0f ? 52.0f : 52.0f);
-        ui_H(1, 176.0f, 54.0f);
-        ui_H(2, 136.0f, 23.0f);
-    } else {
-        ui_H(0, 94.0f, 29.0f);
-        ui_H(1, 160.0f + dw * 0.0f + 6.0f + 34.0f * ui_v(p, SP_FL_DEPTH) + 4.0f, 47.0f);
-        ui_H(2, 30.0f + 0.5f * dw - 5.0f, 178.0f);
-    }
+    ui_Hp((int32_t)(SP_FL_SYNC + o), 136.0f, 23.0f);          /* (V0.86: SYNC beside RATE, the comb's on MORE) */
+    ui_Hp((int32_t)(SP_FL_RATE + o), 94.0f, 29.0f);
+    ui_Hp((int32_t)(SP_FL_DEPTH + o), 170.0f + 34.0f * ui_v(p, SP_FL_DEPTH), 47.0f);
+    ui_Hp((int32_t)(SP_FL_DELAY + o), 30.0f + 0.5f * dw - 5.0f, 178.0f);
+    ui_Hp((int32_t)(SP_FL_FDBK + o), 43.0f, 52.0f);
+    ui_Hp((int32_t)(SP_FL_SPREAD + o), 176.0f, 54.0f);
+    (void)more;
 #undef UI_CY
 }
 
@@ -780,46 +809,45 @@ static void ui_p_phaser(void)
     int fresh;
     char w[16];
 #define UI_PY(db) sy_clampf(120.0f - (db) * 2.4f, 66.0f, 166.0f)
-    ui_fx_in(!more && ui_hot(0));
+    ui_fx_in(ui_hotp((int32_t)(SP_PH_RATE + o)));
     for (i = 0; i < 12u; i++) {                     /* the stages */
         float dx = 134.0f + (float)(i * 7u);
         if (i < ns)
-            lk_disc(dx, 27.0f, 2.0f, ui_ink(more && ui_hot(1)));
+            lk_disc(dx, 27.0f, 2.0f, ui_ink(ui_hotp((int32_t)(SP_PH_STAGES + o))));
         else
             lk_ring(dx, 27.0f, 2.0f, 1.0f, sk.mid);
     }
     ys = ui_curve(0, &fresh);
     for (i = 0; fresh && i <= 216u; i++)
         ys[i] = UI_PY(ui_phs_db(cen * sy_exp2f(spr * 0.7f), ns, fb, m, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
-    lk_curve(12, ys, 217u, 1.0f, more && ui_hot(2) ? sk.hot : sk.mid, LK_DASH(2, 2));
+    lk_curve(12, ys, 217u, 1.0f, ui_hotp((int32_t)(SP_PH_SPREAD + o)) ? sk.hot : sk.mid, LK_DASH(2, 2));
     ys = ui_curve(1, &fresh);
     for (i = 0; fresh && i <= 216u; i++)
         ys[i] = UI_PY(ui_phs_db(cen, ns, fb, m, ui_fx_f(12.0f + (float)i, 12.0f, 216.0f)));
     for (i = 0; i <= 216u; i += 4u)
         lk_seg(12.0f + (float)i, ys[i] + 3.0f, 12.0f + (float)i, 166.0f, 1.0f, sk.line);
-    lk_curve(12, ys, 217u, 2.2f, more && ui_hot(0) ? sk.hot : sk.ink, 0);
+    lk_curve(12, ys, 217u, 2.2f, ui_hotp((int32_t)(SP_PH_FDBK + o)) ? sk.hot : sk.ink, 0);
     cx = sy_clampf(ui_fx_x(cen, 12.0f, 216.0f), 14.0f, 226.0f);
-    lk_seg_dash(cx, 54.0f, cx, 160.0f, ui_ink(!more && ui_hot(2)), 2.0f, 2.0f);
+    lk_seg_dash(cx, 54.0f, cx, 160.0f, ui_ink(ui_hotp((int32_t)(SP_PH_CENTER + o))), 2.0f, 2.0f);
     x0 = sy_clampf(ui_fx_x(cen * sy_exp2f(-oct), 12.0f, 216.0f), 12.0f, 228.0f);
     x1 = sy_clampf(ui_fx_x(cen * sy_exp2f(oct), 12.0f, 216.0f), 12.0f, 228.0f);
     lk_seg(x0, 164.0f, x0, 172.0f, 1.0f, sk.mid);
-    lk_seg(x0, 168.0f, x1, 168.0f, 1.0f, !more && ui_hot(1) ? sk.hot : sk.mid);
+    lk_seg(x0, 168.0f, x1, 168.0f, 1.0f, ui_hotp((int32_t)(SP_PH_DEPTH + o)) ? sk.hot : sk.mid);
     lk_seg(x1, 164.0f, x1, 172.0f, 1.0f, sk.mid);
-    ui_mix_row(p, SP_PH_MIX, 3);
+    ui_mix_row(p, SP_PH_MIX);
     sp_put(w, NOTE_NAMES[p[SP_PH_NOTE] < (int16_t)SY_NNOTE ? p[SP_PH_NOTE] : 0]);
     lk_chip(lk_chip(26.0f, 48.0f, "FREE", !p[SP_PH_SYNC]), 48.0f, w, p[SP_PH_SYNC] != 0);
-    if (more) {
+    {                                               /* (V0.86: SYNC beside RATE; CENTER with the sweep's shape on MORE) */
         uint32_t t = ui_peak(ys, 217u);
-        pg.has &= (uint8_t)~8u;
-        ui_H(0, 12.0f + (float)t - 5.0f, ys[t] - 16.0f);
-        ui_H(1, 118.0f, 22.0f);
-        ui_H(2, 12.0f + 216.0f * 0.71f - 5.0f, 150.0f);
-        ui_H(3, 8.0f, 49.0f);
-    } else {
-        ui_H(0, 94.0f, 29.0f);
-        ui_H(1, x1 + 4.0f, 163.0f);
-        ui_H(2, cx - 5.0f, 40.0f);
+        ui_Hp((int32_t)(SP_PH_SYNC + o), 8.0f, 49.0f);
+        ui_Hp((int32_t)(SP_PH_RATE + o), 94.0f, 29.0f);
+        ui_Hp((int32_t)(SP_PH_DEPTH + o), x1 + 4.0f, 163.0f);
+        ui_Hp((int32_t)(SP_PH_CENTER + o), cx - 5.0f, 40.0f);
+        ui_Hp((int32_t)(SP_PH_FDBK + o), 12.0f + (float)t - 5.0f, ys[t] - 16.0f);
+        ui_Hp((int32_t)(SP_PH_STAGES + o), 118.0f, 22.0f);
+        ui_Hp((int32_t)(SP_PH_SPREAD + o), 12.0f + 216.0f * 0.71f - 5.0f, 150.0f);
     }
+    (void)more;
 #undef UI_PY
 }
 
@@ -866,19 +894,21 @@ static float ui_ffx_db(uint32_t t, float hz, float res, float mix, float f)
     h.i *= mix;
     return 3.0103f * sy_log2f(h.r * h.r + h.i * h.i + 1e-12f);
 }
-/* FX FILTER: its type on a ruler (FF_COUNT of them), its response stippled under, the cutoff's post, DRIVE, MIX */
+/* FX FILTER: its type on a ruler (FF_COUNT of them), its response stippled under, the cutoff's post, DRIVE, MIX;
+ * V0.86, FOLLOW: an arrow from the post, the way the level moves the cutoff and how far at full scale */
 static void ui_p_ffilt(void)
 {
     uint32_t o = ui_fx_off(), i, t = (uint32_t)sy_clampi(sy_patch.p[SP_FF_TYPE + o], 0, FF_COUNT - 1), pk;
+    uint32_t fid = sp_fx_id(SP_FF_FOLLOW, (uint32_t)ui_fx_inst());
     const int16_t *p = sy_patch.p + o;
     int more = UI_PG[ui.page].id[0] == (int16_t)(SP_FF_DRIVE + o);
-    float hz = sp_cut_hz(ui_v(p, SP_FF_CUT)), res = ui_v(p, SP_FF_RES), mix = ui_v(p, SP_FF_MIX), *ys, xc;
+    float hz = sp_cut_hz(ui_v(p, SP_FF_CUT)), res = ui_v(p, SP_FF_RES), mix = ui_v(p, SP_FF_MIX), *ys, xc, fx1;
     const sy_patch_t *gh = ui_gh(!more && (ui_hot(0) || ui_hot(1) || ui_hot(2)));
     int fresh;
     for (i = 0; i < FF_COUNT && i < 22u; i++) {
         float x = 100.0f + (float)(i * 6u);
         if (i == t)
-            lk_seg(x, 24.0f, x, 40.0f, 1.5f, ui_ink(!more && ui_hot(0)));
+            lk_seg(x, 24.0f, x, 40.0f, 1.5f, ui_ink(ui_hotp((int32_t)(SP_FF_TYPE + o))));
         else
             lk_seg(x, 28.0f, x, 36.0f, 1.0f, sk.line);
     }
@@ -895,21 +925,23 @@ static void ui_p_ffilt(void)
     for (i = 0; fresh && i < UI_FC; i++)
         ys[i] = UI_FY2(t == FF_RING ? 0.0f : ui_ffx_db(t, hz, res, mix, ui_fx_f(12.0f + (float)i, 12.0f, 196.0f)));
     lk_stip_under(12, ys, UI_FC, 180.0f, 6);
-    lk_curve(12, ys, UI_FC, 2.2f, !more && (ui_hot(1) || ui_hot(2)) ? sk.hot : sk.ink, 0);
+    lk_curve(12, ys, UI_FC, 2.2f, ui_hotp((int32_t)(SP_FF_CUT + o)) || ui_hotp((int32_t)(SP_FF_RES + o)) ? sk.hot : sk.ink, 0);
     pk = ui_peak(ys, UI_FC);
     xc = sy_clampf(ui_fx_x(hz, 12.0f, 196.0f), 12.0f, 208.0f);
     lk_seg_dash(xc, ys[(uint32_t)sy_clampi(sy_floori(xc - 12.0f), 0, UI_FC - 1)] + 6.0f, xc, 170.0f, sk.ink, 2.0f, 2.0f);
-    ui_drive_meter(ui_v(p, SP_FF_DRIVE), more && ui_hot(0));
-    ui_mix_row(p, SP_FF_MIX, 3);
+    fx1 = sy_clampf(xc + 0.098f * (float)sy_patch.p[fid], 14.0f, 206.0f);   /* (FOLLOW: half the range at the most) */
+    if (sy_absf(fx1 - xc) >= 3.0f)
+        lk_arrow(xc, 176.0f, fx1, 176.0f, 3.0f, 1.0f, ui_ink(ui_hotp((int32_t)fid)));
+    else
+        lk_seg(xc - 3.0f, 176.0f, xc + 3.0f, 176.0f, 1.0f, ui_hotp((int32_t)fid) ? sk.hot : sk.mid);
+    ui_drive_meter(ui_v(p, SP_FF_DRIVE), ui_hotp((int32_t)(SP_FF_DRIVE + o)));
+    ui_mix_row(p, SP_FF_MIX);
     ui_title_p(FF_NAMES[t], UI_TITLE_X, (int32_t)(SP_FF_TYPE + ui_fx_off()));
-    if (more) {
-        pg.has &= (uint8_t)~8u;
-        ui_H(0, 198.0f, 118.0f);
-    } else {
-        ui_H(0, 8.0f, 27.0f);
-        ui_H(1, xc - 15.0f, 160.0f);
-        ui_H(2, 12.0f + (float)pk - 5.0f, ys[pk] - 16.0f);
-    }
+    ui_Hp((int32_t)(SP_FF_TYPE + o), 8.0f, 27.0f);
+    ui_Hp((int32_t)(SP_FF_CUT + o), xc - 15.0f, 160.0f);
+    ui_Hp((int32_t)(SP_FF_RES + o), 12.0f + (float)pk - 5.0f, ys[pk] - 16.0f);
+    ui_Hp((int32_t)(SP_FF_DRIVE + o), 198.0f, 118.0f);
+    ui_Hp((int32_t)fid, fx1 + (fx1 >= xc ? 3.0f : -13.0f), 168.0f);
 #undef UI_FY2
 }
 
@@ -943,18 +975,20 @@ static void ui_p_crush(void)
         float y = 110.0f - 56.0f * (2.0f * (float)i / nl - 1.0f);
         lk_seg(230.0f, y, 234.0f, y, 1.0f, ui_hot(0) ? sk.hot : sk.mid);
     }
-    ui_mix_row(p, SP_CR_MIX, 2);
+    ui_mix_row(p, SP_CR_MIX);
     ui_H(0, 216.0f, 36.0f);
     ui_H(1, 20.0f, 183.0f);
 }
 
-/* TREMOLO: each side's level over the rate's cycles (AUTOPAN: L and R against each other), a cycle bracketed */
+/* TREMOLO: each side's level over the rate's cycles (AUTOPAN: L and R against each other; V0.86 SPREAD: the right
+ * side's later), a cycle bracketed, the SHAPE named */
 static void ui_p_trem(void)
 {
     uint32_t o = ui_fx_off(), i, c, shape = (uint32_t)sy_clampi(sy_patch.p[SP_TR_SHAPE + o], 0, 3);
+    uint32_t sid = sp_fx_id(SP_TR_SPREAD, (uint32_t)ui_fx_inst());
     const int16_t *p = sy_patch.p + o;
-    int pan = p[SP_TR_MODE] != 0, more = UI_PG[ui.page].id[0] == (int16_t)(SP_TR_SYNC + o);
-    float dep = ui_v(p, SP_TR_DEPTH), hz, cyc, ys[207], e1[207], e2[207];
+    int pan = p[SP_TR_MODE] != 0;
+    float dep = ui_v(p, SP_TR_DEPTH), hz, cyc, ys[207], e1[207], e2[207], off = pan ? 0.0f : 0.0005f * (float)sy_patch.p[sid];
     char w[16];
     {
         float s = p[SP_TR_SYNC] ? sy_note_q((uint32_t)p[SP_TR_NOTE]) * 60.0f / sy_tempo : 1.0f / sp_lfo_hz(ui_v(p, SP_TR_RATE));
@@ -964,36 +998,36 @@ static void ui_p_trem(void)
     for (c = 0; c < 2u; c++) {
         float y0 = c ? 150.0f : 84.0f, l = c && pan ? -1.0f : 1.0f;
         for (i = 0; i < 207u; i++) {
-            float u = (float)i / 206.0f, v = fx_trm_lfo(shape, cyc * u - (float)sy_floori(cyc * u)), a;
+            float u = (float)i / 206.0f, x = cyc * u + (c ? off : 0.0f), v = fx_trm_lfo(shape, x - (float)sy_floori(x)), a;
             a = 1.0f - dep * (0.5f + 0.5f * l * v);
             ys[i] = y0 - 22.0f * a * sy_sin2pi(24.0f * u);
             e1[i] = y0 - 22.0f * a;
             e2[i] = y0 + 22.0f * a;
         }
-        lk_curve(20, e1, 207u, 1.0f, sk.mid, LK_DASH(2, 2));
-        lk_curve(20, e2, 207u, 1.0f, sk.mid, LK_DASH(2, 2));
-        lk_curve(20, ys, 207u, 1.5f, ui_ink(ui_hot(3)), 0);
+        lk_curve(20, e1, 207u, 1.0f, c && ui_hotp((int32_t)sid) ? sk.hot : sk.mid, LK_DASH(2, 2));
+        lk_curve(20, e2, 207u, 1.0f, c && ui_hotp((int32_t)sid) ? sk.hot : sk.mid, LK_DASH(2, 2));
+        lk_curve(20, ys, 207u, 1.5f, ui_ink(ui_hotp((int32_t)(SP_TR_DEPTH + o)) || ui_hotp((int32_t)(SP_TR_SHAPE + o))), 0);
     }
     lk_text(8.0f, 80.0f, T9, "L", sk.lab, sk.ground, 0, 0);
     lk_text(8.0f, 146.0f, T9, "R", sk.lab, sk.ground, 0, 0);
     {
         float x1 = 20.0f + 206.0f / cyc;
         lk_seg(20.0f, 113.0f, 20.0f, 121.0f, 1.0f, sk.mid);
-        lk_seg(20.0f, 117.0f, x1, 117.0f, 1.0f, ui_hot(2) && !more ? sk.hot : sk.mid);
+        lk_seg(20.0f, 117.0f, x1, 117.0f, 1.0f, ui_hotp((int32_t)(SP_TR_RATE + o)) ? sk.hot : sk.mid);
         lk_seg(x1, 113.0f, x1, 121.0f, 1.0f, sk.mid);
-        if (!more)
-            ui_H(2, x1 + 4.0f, 112.0f);
+        ui_Hp((int32_t)(SP_TR_RATE + o), x1 + 4.0f, 112.0f);
     }
     ui_title_p(TRM_MODES[pan], UI_TITLE_X, (int32_t)(SP_TR_MODE + ui_fx_off()));
+    lk_text(UI_TITLE_X, 42.0f, T10B, TRM_SHAPES[shape], ui_ink(ui_hotp((int32_t)(SP_TR_SHAPE + o))), sk.ground, 20, 0);
     sp_put(w, NOTE_NAMES[p[SP_TR_NOTE] < (int16_t)SY_NNOTE ? p[SP_TR_NOTE] : 0]);
     lk_chip(lk_chip(150.0f, 24.0f, "FREE", !p[SP_TR_SYNC]), 24.0f, w, p[SP_TR_SYNC] != 0);
-    if (more) {
-        ui_H(0, 136.0f, 25.0f);
-    } else {
-        ui_H(0, 8.0f, 27.0f);
-        ui_H(1, 92.0f, 46.0f);
-        ui_H(3, 40.0f, 46.0f);
-    }
+    ui_Hp((int32_t)(SP_TR_MODE + o), 8.0f, 27.0f);           /* (V0.86: SYNC beside RATE; SHAPE and SPREAD on MORE) */
+    ui_Hp((int32_t)(SP_TR_SYNC + o), 136.0f, 25.0f);
+    ui_Hp((int32_t)(SP_TR_DEPTH + o), 214.0f, 46.0f);
+    ui_Hp((int32_t)(SP_TR_SHAPE + o), 8.0f, 43.0f);
+    ui_Hp((int32_t)sid, 8.0f, 164.0f);
+    if (ui_kof((int32_t)(SP_TR_SHAPE + o)) >= 0)
+        pg.figs |= (uint8_t)(1u << ui_kof((int32_t)(SP_TR_SHAPE + o)));
 }
 
 /* RING MOD: the sound in, times the carrier (FREQ: its cycles, SHAPE sine to square, SPREAD: the right side's
@@ -1019,7 +1053,7 @@ static void ui_p_ring(void)
 #undef UI_CAR
     lk_text(11.0f, 94.0f, T12B, "\xD7", sk.lab, sk.ground, 0, 0);
     lk_text(11.0f, 144.0f, T12B, "=", sk.lab, sk.ground, 0, 0);
-    ui_mix_row(p, SP_RG_MIX, 3);
+    ui_mix_row(p, SP_RG_MIX);
     ui_H(0, 214.0f, 95.0f);
     ui_H(1, 100.0f, 73.0f);
     ui_H(2, 160.0f, 116.0f);
@@ -1051,15 +1085,21 @@ static void ui_tape_seg(float xa, float ya, float xb, float yb, float ph, float 
 }
 static void ui_p_tape(void)
 {
-    uint32_t o = ui_fx_off(), i;
+    uint32_t o = ui_fx_off(), i, hid = sp_fx_id(SP_TP_HISS, (uint32_t)ui_fx_inst()), seed = 9u;
     const int16_t *p = sy_patch.p + o;
-    int tone = UI_PG[ui.page].id[0] == (int16_t)(SP_TP_TONE + o);
+    int wf = ui_hotp((int32_t)(SP_TP_WOW + o)) || ui_hotp((int32_t)(SP_TP_FLUT + o));
     float wow = ui_v(p, SP_TP_WOW), flt = ui_v(p, SP_TP_FLUT), sat = ui_v(p, SP_TP_SAT), tn = ui_v(p, SP_TP_TONE), ys[27];
+    float hs = (float)sy_patch.p[hid] * 0.001f;
     ui_reel(56.0f, 74.0f, ui_reel_a);
     ui_reel(184.0f, 74.0f, ui_reel_a);
-    ui_tape_seg(56.0f, 102.0f, 96.0f, 138.0f, 0.0f, wow, flt, ui_ink(!tone && (ui_hot(0) || ui_hot(1))));
+    ui_tape_seg(56.0f, 102.0f, 96.0f, 138.0f, 0.0f, wow, flt, ui_ink(wf));
     lk_seg(96.0f, 142.0f, 144.0f, 142.0f, 1.5f, sk.ink);
-    ui_tape_seg(144.0f, 138.0f, 184.0f, 102.0f, 0.3f, wow, flt, ui_ink(!tone && (ui_hot(0) || ui_hot(1))));
+    ui_tape_seg(144.0f, 138.0f, 184.0f, 102.0f, 0.3f, wow, flt, ui_ink(wf));
+    for (i = 0; i < (uint32_t)(hs * 40.0f + 0.5f); i++) {   /* (V0.86 HISS: grain under the heads, as much as it is) */
+        float x = 98.0f + (float)(sy_rand(&seed) >> 8) * (44.0f / 16777216.0f);
+        float y = 156.0f + (float)(sy_rand(&seed) >> 8) * (14.0f / 16777216.0f);
+        lk_disc(x, y, 0.8f, ui_hotp((int32_t)hid) ? sk.hot : sk.mid);
+    }
     lk_ring(96.0f, 138.0f, 4.0f, 1.0f, sk.mid);
     lk_ring(144.0f, 138.0f, 4.0f, 1.0f, sk.mid);
     lk_frame(112.0f, 144.0f, 16.0f, 8.0f, 1.0f, sk.ink);
@@ -1068,18 +1108,17 @@ static void ui_p_tape(void)
         float x = 2.0f * (float)i / 26.0f - 1.0f, g = 0.6f + 4.0f * sat;
         ys[i] = 155.0f - 13.0f * lk_tanh(g * x) / lk_tanh(g);
     }
-    lk_curve(198, ys, 27u, 1.5f, ui_ink(!tone && ui_hot(2)), 0);
-    lk_seg(20.0f, 160.0f + 6.0f * (1.0f - 2.0f * tn), 70.0f, 160.0f - 6.0f * (1.0f - 2.0f * tn), 1.5f, ui_ink(tone && ui_hot(0)));
+    lk_curve(198, ys, 27u, 1.5f, ui_ink(ui_hotp((int32_t)(SP_TP_SAT + o))), 0);
+    lk_seg(20.0f, 160.0f + 6.0f * (1.0f - 2.0f * tn), 70.0f, 160.0f - 6.0f * (1.0f - 2.0f * tn), 1.5f,
+           ui_ink(ui_hotp((int32_t)(SP_TP_TONE + o))));
     lk_hollow(45.0f, 160.0f, 2.5f);
-    ui_mix_row(p, SP_TP_MIX, 3);
-    if (tone) {
-        pg.has &= (uint8_t)~8u;
-        ui_H(0, 74.0f, 150.0f);
-    } else {
-        ui_H(0, 62.0f, 124.0f);
-        ui_H(1, 168.0f, 124.0f);
-        ui_H(2, 182.0f, 146.0f);
-    }
+    lk_label(110.0f, 172.0f, "HISS", 20);
+    ui_mix_row(p, SP_TP_MIX);
+    ui_Hp((int32_t)(SP_TP_WOW + o), 62.0f, 124.0f);
+    ui_Hp((int32_t)(SP_TP_FLUT + o), 168.0f, 124.0f);
+    ui_Hp((int32_t)(SP_TP_SAT + o), 182.0f, 146.0f);
+    ui_Hp((int32_t)(SP_TP_TONE + o), 74.0f, 150.0f);
+    ui_Hp((int32_t)hid, 140.0f, 168.0f);
 }
 /* the reels turning: each one's box redrawn, a turn in 5 s */
 static void ui_tape_wins(void)

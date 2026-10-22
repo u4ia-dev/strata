@@ -32,6 +32,8 @@ static inline float sy_minf(float a, float b) { return a < b ? a : b; }
 static inline float sy_maxf(float a, float b) { return a > b ? a : b; }
 static inline float sy_clampf(float x, float lo, float hi) { return x < lo ? lo : x > hi ? hi : x; }
 static inline int32_t sy_clampi(int32_t x, int32_t lo, int32_t hi) { return x < lo ? lo : x > hi ? hi : x; }
+static inline int32_t sy_maxi(int32_t a, int32_t b) { return a > b ? a : b; }
+static inline int32_t sy_mini(int32_t a, int32_t b) { return a < b ? a : b; }
 static inline float sy_lerpf(float a, float b, float t) { return a + (b - a) * t; }
 
 /* a kernel kept whole wherever it is called (one copy in the image, for the instruction cache; tools/costprobe
