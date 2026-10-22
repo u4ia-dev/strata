@@ -99,9 +99,9 @@ function shot(id) {
 rmSync(out, { recursive: true, force: true });       // (no shot left from a build before)
 mkdirSync(`${out}/lint`, { recursive: true });
 run(0.6);
-ex.web_test_screen(3);
-shot("Boot");
-run(0.2);
+shot("Boot");                                   // (V0.86, P4: the splash held 2 s, then HOME)
+run(1.6);
+shot("Home");
 
 // ---- EDIT: OSC A, OSC B, SUB, NOISE, FILTER
 go(SEC.OSCA, "WAVE");
@@ -229,7 +229,7 @@ const MODS = [
   [15, ["REVERB", "Reverb"], ["TONE", "ReverbTone"]], [16, ["OTT", "Ott"], ["BANDS", "OttBands"]],
 ];
 const MODS2 = [
-  [17, ["POINTS", "Eq"], ["GAINS", "EqGains"]], [22, ["FLANGER", "Flanger"], ["MORE", "FlangerMore"]],
+  [17, ["POINTS", "Eq"], ["SHAPES", "EqShapes"]], [22, ["FLANGER", "Flanger"], ["MORE", "FlangerMore"]],
   [24, ["PHASER", "Phaser"], ["MORE", "PhaserMore"]], [26, ["FILTER", "FxFilter"], ["MORE", "FxFilterMore"]],
   [28, ["CRUSH", "Crush"]], [30, ["TREMOLO", "Tremolo"], ["MORE", "TremoloMore"]], [32, ["RING MOD", "Ring"]],
   [34, ["TAPE", "Tape"], ["TONE", "TapeTone"]],
@@ -237,8 +237,10 @@ const MODS2 = [
 chain([0, 1, 2, 3, 4]);
 for (const [sec, ...pages] of MODS) for (const [nm, id] of pages) { go(sec, nm); shot(id); }
 chain([5, 10, 12, 14, 16, 18, 20, 22]);
-go(17, "GAINS");                                // the EQ: a low shelf up, the middle down, the highs up
-[40, -60, 30].forEach((v, k) => ex.web_test_set(ex.web_test_page_param(k), v));
+go(17, "SHAPES");                               // the EQ (V0.86): SMILE, a little up the range
+turn(0, 7);
+turn(1, 3);
+rest();
 for (const [sec, ...pages] of MODS2) for (const [nm, id] of pages) { go(sec, nm); shot(id); }
 chain([0, 1, 2, 3]);
 
@@ -412,14 +414,21 @@ turn(0, -1);
 rest();
 
 // ---- the SETTINGS (HOME held 5 s: its countdown first)
-go(SEC.MACRO, "HOME");
+go(SEC.MACRO, "SOUND");
 ex.web_buttons(1 << B.HOME);
 run(2.4);
-shot("SettingsHold");
+shot("SettingsHold");                           // (V0.86, B17: the help map, the bar toward the SETTINGS)
 ex.web_buttons(0);
 run(0.1);
+go(SEC.FILTER, "TONE");
+ex.web_buttons(1 << B.HOME);
+run(1.2);
+shot("HelpMap");
+ex.web_buttons(0);
+run(0.1);
+ex.web_test_power(575, 0);                      // (V0.86: the battery 3 of 4 on POWER)
 for (const [nm, id] of [["SCREEN", "SetScreen"], ["PANEL", "SetPanel"], ["MIDI", "SetMidi"], ["BENCH", "SetBench"],
-                        ["CORE 2", "SetCore2"]]) {
+                        ["CORE 2", "SetCore2"], ["KEY SCAN", "SetKeyScan"], ["POWER", "SetPower"]]) {
   go(SEC.MENU, nm);
   shot(id);
 }
@@ -482,6 +491,10 @@ run(0.7);
 shot("Jump");
 ex.web_buttons(0);
 run(0.3);
+for (let i = 0; i < 2; i++) { ex.web_buttons(1 << B.EDIT); run(0.03); ex.web_buttons(0); run(0.08); }   // (V0.86:
+run(0.3);                                                                                               // twice:
+shot("JumpLatched");                                                                                    // latched)
+ex.web_buttons(1 << B.EDIT); run(0.03); ex.web_buttons(0); run(0.3);
 
 // ---- SAVE, the browser, NAME IT, undo
 go(SEC.FILTER, "TONE");
@@ -501,7 +514,7 @@ shot("FilterValuesMod");
 go(SEC.LFO1, "VALUES");
 shot("LfoValues");
 run(1.6);
-go(SEC.MACRO, "HOME");
+go(SEC.MACRO, "SOUND");
 tap(B.SAVE);                                    // SAVE once: a new version, in the first free slot
 run(0.6);
 shot("Saved");
@@ -568,7 +581,7 @@ ex.web_test_screen(1);
 run(0.1);
 shot("SafeStart");
 tap(B.HOME);
-go(SEC.MACRO, "HOME");
+go(SEC.MACRO, "SOUND");
 ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4));
 run(0.6);
 shot("Main");
@@ -583,7 +596,7 @@ go(SEC.FILTER, "TONE");
 shot("Filter-paper");
 for (const [i, nm] of [[8, "moss"], [9, "dusk"], [10, "sand"], [11, "neon"]]) {   // V0.67's four themes
   ex.web_test_palette(i);
-  go(SEC.MACRO, "HOME");
+  go(SEC.MACRO, "SOUND");
   ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4));
   run(0.6);
   shot(`Main-${nm}`);
@@ -593,6 +606,27 @@ for (const [i, nm] of [[8, "moss"], [9, "dusk"], [10, "sand"], [11, "neon"]]) { 
   shot(`Filter-${nm}`);
 }
 ex.web_test_palette(0);
+
+// ---- V0.86: HOME's MIX pages, PRESETS' list (and its guard on an edited sound)
+go(SEC.MACRO, "MIX 1-4");
+run(0.1);
+shot("HomeMix");
+go(SEC.MACRO, "SOUND");
+run(0.1);
+ex.web_enc(2, 1);                               // (PRESETS: the list, one on)
+run(0.15);
+shot("PresetsList");
+run(2.5);
+go(SEC.FILTER, "TONE");
+turn(1, 3);
+rest();
+go(SEC.MACRO, "SOUND");
+run(0.1);
+shot("HomeEdited");                             // (the unsaved dot)
+ex.web_enc(2, 1);                               // (edited: the first detent opens it alone)
+run(0.15);
+shot("PresetsGuard");
+run(2.5);
 
 // ---- V0.8: the looper (a project: T1 chords, T2 a MIDI bass line, T3 an arpeggio with the cutoff moving, clips in
 // other scenes; SONG A A B C)
@@ -650,12 +684,15 @@ ex.web_test_palette(0);
   go(SEC.SEQ, "MIXER");
   run(0.1);
   shot("LoopMixer");
-  turn(1, -3);                                  // T2's VOLUME turning
+  turn(0, -3);                                  // T2's VOLUME turning (V0.86: KNOB 1)
   shot("LoopMixerTurn");
   rest();
-  go(SEC.LTRK, "TRACK");
-  run(0.1);
-  shot("LoopTrack");
+  go(SEC.SEQ, "CLIPS");                         // (V0.86, C6: TYPE turned, waiting for the turning to stop)
+  turn(0, 1);
+  shot("LoopType");
+  run(0.6);
+  shot("LoopTypeAsk");
+  run(2.2);
   lp(2, 2);
   go(SEC.LTRK, "RECORD");
   run(0.1);
@@ -673,13 +710,28 @@ ex.web_test_palette(0);
   shot("LoopNotesTurn");
   turn(1, -2);
   rest();
-  go(SEC.LCLIP, "EDIT");
+  go(SEC.LCLIP, "NOTE+");
   run(0.1);
   shot("LoopEdit");
   lp(0, 2); lp(1, 0);
   go(SEC.LCLIP, "CLIP");
   run(0.1);
   shot("LoopClip");
+  turn(1, 1);                                   // (V0.86, S8: SPEED x2)
+  shot("LoopClipSpeed");
+  turn(1, -1);
+  rest();
+  lp(0, 0); lp(1, 0);
+  go(SEC.LCLIP, "TOOLS");
+  run(0.1);
+  turn(0, 1);                                   // COPY: T1 A
+  rest();
+  lp(1, 1);
+  run(0.1);
+  turn(1, 1);                                   // PASTE into T1 B: asked
+  shot("LoopTools");
+  run(2.2);
+  lp(0, 2); lp(1, 0);
   lp(8, 1);
   go(SEC.LSONG, "SONG");
   run(0.1);
@@ -714,7 +766,7 @@ ex.web_test_palette(0);
   if (lp(15)) { ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0); run(0.2); }
   lp(0, 7); lp(1, 0);
   tr(7, 0, 2);
-  go(SEC.LTRK, "TRACK");
+  go(SEC.SEQ, "CLIPS");
   run(0.1);
   shot("DrumTrack");
   g(0, [0, 4, 8, 10, 12], [120, 100, 110, 70, 100]);   // KICK
@@ -739,6 +791,13 @@ ex.web_test_palette(0);
   shot("DrumGrid");
   turn(2, -8);                                  // VELOCITY turning
   shot("DrumGridTurn");
+  rest();
+  ex.web_keys(1 << 9);                          // (V0.86, S7: step 6 held, CHANCE turning)
+  run(0.1);
+  turn(2, 2);
+  shot("DrumGridHeld");
+  ex.web_keys(0);
+  run(0.1);
   rest();
   go(SEC.LGRID, "HIT");
   turn(1, 6);                                   // (WT 2's ratcheted step)
@@ -768,6 +827,10 @@ ex.web_test_palette(0);
   turn(3, 1);                                   // SHAPE turning: PUMP
   shot("DrumDuckTurn");
   rest();
+  go(SEC.MACRO, "SOUND");                       // (V0.86, D1-D3: HOME on a drum track, its drums lit as they sound)
+  for (const l of [0, 3, 1]) ex.web_test_drum_hit(l, 7, 110, 0);
+  run(0.12);
+  shot("DrumHome");
 }
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
 writeFileSync(`${out}/lint.txt`, lints.join("\n"));

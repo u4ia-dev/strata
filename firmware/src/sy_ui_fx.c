@@ -559,7 +559,7 @@ static void ui_p_eq(void)
     uint32_t pick = ui.eqpt < 3u ? ui.eqpt : 1u, shp = (uint32_t)sy_patch.p[sp_fx_id(SP_EQ_SHAPE, (uint32_t)ui_fx_inst())];
     const sy_patch_t *gh = ui_gh(ui_turning() >= 0);
     float v[9], *ys, px[3], py[3];
-    char t[24];
+    char t[32];                                     /* (V0.86: "CUSTOM: AS POINTS SET IT" and its end) */
     int fresh;
 #define UI_EQY(db) sy_clampf(110.0f - (db) * 3.0f, 52.0f, 192.0f)
     if (live)

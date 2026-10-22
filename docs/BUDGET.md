@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,37 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 16. V0.86 step 1 (the interface)
+
+From the build (2026-10-22): the image **464,480 B** (+26,356 on V0.85: the pages regrouped and drawn by parameter,
+HOME's MIX pages and its drum kit's view, PRESETS' list, the EQ's SHAPES and the effects' new parameters, SEQ's
+TOOLS, SPEED and TYPE's guard, the buttons' second press, the help map, SETTINGS' POWER and KEY SCAN, the screen's
+sleep, the centre detents); `.data` + `.bss` **62,820 B** (+592: the UI's new state, ~140 B; PRESETS' list and its
+copy of the sound before, the tools' clipboard and asks; the clips' SPEEDs, 64 B; the battery's reading); the pool
+362,036 B (+176); the interrupt stack ~2,716 B (+4) of 4,096 allowed; the main stack ~5,620 B (+816: the help map's
+page, 2 x 96 B strings) of 8,192 allowed. Left: **117,084 B** of the app slot, **10,908 B** of `.data` + `.bss`,
+**18,892 B** of the pool (4 KiB of each the build's margin). HOME's picture stays inside the V0.67 rule: the drum
+kit's view reuses the bloom's code and buffers (the bloom smaller, placed by three variables), nothing new kept for
+it. The flash: a project's stream is version 3 (the clips' SPEEDs, 64 B, and the kit's step-2 fields, 110 B, in the
+four objects as before); versions 1 and 2 load (every clip at x1, the kit's new fields at their defaults). The
+settings record is 4 B longer (SHOW BATTERY, SCREEN OFF AFTER, two spare): a record from before loads, these two
+OFF.
+
+The engine (`tools/costprobe/sy_dyn.sh`; `tests/sy_golden.txt` unchanged: the effects' new parameters at their
+defaults leave every render bit for bit as before):
+
+| Scenario | V0.85 | V0.86 |
+| --- | ---: | ---: |
+| idle | 156 | 158 |
+| SUPERSAW, 8 notes | 4,301 | 4,304 |
+| the eight drums sounding at once | 675 | 676 |
+| SUPERSAW, 8 notes, the drums, the duck | 4,832 | 4,834 |
+
+What the new parameters cost when used (from the code, not measured on the FM-1): the chorus's SPREAD and the
+tremolo's a multiply each; the FX filter's FOLLOW a block's peak (128 compares) and a coefficient's update a block;
+the tape's HISS a noise sample and a gate's level a sample; the EQ's PASS, NOTCH and BAND types the same biquad as a
+PEAK (a point at 0 dB is skipped only when it is a gain type).
 
 ## 15. V0.85 (the drums)
 

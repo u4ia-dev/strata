@@ -33,8 +33,8 @@
 #endif
 #define FM1_CPU1_USED STRATA_CPU2   /* (hal/fm1_sys.h: every reset holds it first) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.85 DRUMS"              /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums); build.py
-                                                   * --strata --release X.Y */
+#define STRATA_VERSION "V0.86 UI"                 /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums;
+                                                   * V0.86 the interface); build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"

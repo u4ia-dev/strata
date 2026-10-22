@@ -411,7 +411,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 140 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 159 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -529,6 +529,31 @@ and back: the hits as they were, the pages following (GRID, NOTES, GRID). The ki
 is the drum picked, its TUNE +5, LEVEL 80, the duck's AMOUNT 50. A power cycle: all of it back. Screens: 11 more
 (the TRACK page with DRUMS, GRID and its VELOCITY turning, HIT on a ratchet, the KIT's DRUM, MORE, ACCENT and DUCK),
 the check clean; the knob sweep 611 turns (583 before), none with findings.
+
+V0.86 step 1 (19 checks more; 159 in all). The checks before were brought to V0.86's grammar where it changed what
+they press (none dropped): the splash held 2 s, then HOME's SOUND, EDIT to OSC A's WAVE; PRESETS through its list (an
+edited sound's first detent opens it alone, the next moves, the preset loads 0.4 s after); HOME held is the help map
+over its countdown; the delay's SYNC on KNOB 1 and TIME on KNOB 2; GLO and ARP once in their menu go to its first
+page, twice toggles (the ARP off, on); ENV twice ENV 1 <-> 2; the EQ's SHAPES; FX once on a module, the chain view
+with it picked; SELECT in a menu of one module does nothing; NOTE+'s DELETE on KNOB 3; a drum take on MIXER (CLIPS'
+keys launch). New: EDIT once its page left, in its menu its first, twice JUMP latched, a key opens SCALE and closes
+it; LFO twice MOMENTARY latched on the page before (a knob there, LFO: back); GLO twice PERFORM, GLO closes it; SCL
+and ARP twice on and off; SEQ once (CLIPS; the page left in LOOP and CLIP from another menu; CLIPS in its own), twice
+TRACK's RECORD; ENV twice from ENV 1 and from ENV 2; REC twice: the second press nothing; HOME twice the browser;
+HELP on: "AGAIN: ENV 2"; HOME held 5 s through the help map to the SETTINGS. TOOLS: COPY, PASTE into an empty clip at
+once, into a full one asked then done; DOUBLE (4 bars, 8 notes), HALVE asked then done; COPY on to BAR 1, PASTE into a
+clip with no bar 1 ("T1 C HAS NO BAR 1"), into one asked then done; CLEAR asked then done. SPEED x1 -> x2: two bars at
+x2 pass twice in two bars of time; down to x1/2. TYPE: an empty track's at the turn's end, one with clips asks, the
+asked detent sets it, an ask unanswered keeps it ("TYPE KEPT"). CLIPS' keys: white 1 launches T1 A (no note of its
+own), black 2 scene B. The grid: a step held, CHANCE and RATCHET turned, kept at the release; held again with no turn,
+out; a tap on an empty step, in. A power cycle: SPEED x2 and a pasted clip's length back. A centre detent: PAN from -1
+through the middle holds four detents at 0, then moves; a new gesture from the middle does not hold. The battery's
+bars at 520, 540, 570, 600 (0 .. 3), USB power 4. SCREEN OFF AFTER 1 MIN: on at 59 s, dark after (nothing drawn),
+EDIT wakes it and does nothing else; SHOW BATTERY and SCREEN OFF AFTER back after a power cycle. Screens: 152 (21 more:
+HOME, its MIX, PRESETS' list and its guard, the unsaved dot, the help map, JUMP latched, the EQ's SHAPES, TYPE
+turning and asking, CLIP's SPEED, TOOLS asking, the drum grid with a step held, a drum track's HOME, KEY SCAN,
+POWER), the check clean; the knob sweep 639 turns, none with findings (it found CLIPS' "SYNTH+MIDI" over SCENE's
+handle: the knob's value is "SYN+MIDI" now).
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
@@ -674,7 +699,12 @@ each clip (sorted, its count, inside its length; events in a clip of no length o
 track's scenes and next event, the recording's lists, the chords' side in use the selected track's, the voices'
 tracks, the parameters held; V0.85: the ratchets to come (their rows, tracks, counts), the kit in its ranges, the
 duck's state and gain, each drum voice's track. 24 seeds of 3,000 steps (~15 minutes of play each) run clean on V0.81
-and on V0.85.
+and on V0.85. V0.86: TOOLS' paste (a clip or a bar, from any clip to any other), DOUBLE, HALVE, CLEAR's notes and
+SPEED called straight (never on the clip recording, as the UI keeps it), and now and then SCREEN OFF AFTER 1 MIN with
+a rest past it; every clip's SPEED checked in range. Its first run found three bugs in the new screens, fixed: the
+EQ's SHAPES wrote "CUSTOM: AS POINTS SET IT" into 24 bytes and the latched MOMENTARY's banner "A KNOB · TAP LFO:
+CLOSES" into 24 (each a byte past its buffer, on the stack), and the help map read a knob's name that can be none.
+The 24 seeds run clean on V0.86 since.
 
     cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_fuzz web/emu/strata_fuzz.c -lm
     for s in $(seq 1 24); do build/emu/strata_fuzz $s 3000 || echo "seed $s failed"; done

@@ -59,6 +59,8 @@ static void check(void)
             lp_clip_t *c = &lpp.clip[t][s];
             uint32_t last = 0;
             n = 0;
+            if (lpp.speed[t][s] >= LS_N)          /* (V0.86: a clip's SPEED one of three) */
+                fail("a clip's SPEED out of range", (int)(t * 8 + s), lpp.speed[t][s]);
             for (k = c->head; k != LP_END; k = lp_ev[k].next) {
                 if (k >= LP_NEV)
                     fail("a clip: an index out of range", (int)(t * 8 + s), (int)k);
@@ -201,7 +203,7 @@ static void act(void)
             }
         }
     } else if (r < 70) {                          /* the looper's own (V0.85: the drums' too) */
-        uint32_t q = rn(11), t = rn(8), s = rn(8);
+        uint32_t q = rn(16), t = rn(8), s = rn(8);
         TRACE("%u looper %u t%u s%u\n", step_no, q, t, s);
         if (q == 0)
             web_test_lp_launch(t, rn(5) == 0 ? LP_STOP : s);
@@ -227,8 +229,30 @@ static void act(void)
             web_test_grid(f, rn(9), rn(40), f ? (int32_t)rn(9) - 4 : (int32_t)rn(128));
         } else if (q == 9) {                      /* (the kit: any value, kept in range) */
             web_test_kit(rn(8), rn(16), (int32_t)rn(140));
-        } else {                                  /* (a hit straight in: any row, the duck's too) */
+        } else if (q == 10) {                     /* (a hit straight in: any row, the duck's too) */
             web_test_drum_hit(rn(10), rn(9), rn(128), rn(2));
+        } else if (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s) {
+            ;                                     /* (V0.86's tools: never on the clip recording, as the UI keeps it) */
+        } else if (q == 11) {                     /* (V0.86: TOOLS' PASTE, a clip or a bar of it, from another) */
+            uint32_t st = rn(8), ss = rn(8);
+            TRACE("%u copy t%u s%u -> t%u s%u\n", step_no, st, ss, t, s);
+            if (!(lpr.st != LR_OFF && lpr.trk == st && lpr.scn == ss))
+                lp_clip_copy(st, ss, t, s, rn(3) ? -1 : (int32_t)rn(4));
+        } else if (q == 12) {                     /* (DOUBLE, HALVE) */
+            if (rn(2))
+                lp_clip_double(t, s);
+            else
+                lp_clip_halve(t, s, 1);
+        } else if (q == 13) {                     /* (CLEAR's notes) */
+            lp_notes_clear(t, s);
+        } else if (q == 14) {                     /* (SPEED) */
+            lp_speed_set(t, s, rn(LS_N));
+        } else {                                  /* (the screen: SCREEN OFF AFTER 1 MIN, a rest past it) */
+            if (rn(20) == 0) {
+                ui.scr_off = 1;
+                run_ms(61000);
+                ui.scr_off = 0;
+            }
         }
         run_ms(rn(100));
     } else if (r < 76) {                          /* a page */

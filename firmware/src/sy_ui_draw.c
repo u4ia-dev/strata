@@ -45,7 +45,6 @@ static void ui_p_ratch(void);
 static void ui_p_groove(void);
 static void ui_p_lclips(void);                      /* sy_ui_loop.c: the looper's pages (V0.8), the launch pad */
 static void ui_p_lmix(void);
-static void ui_p_ltrk(void);
 static void ui_p_lrec(void);
 static void ui_p_lclick(void);
 static void ui_p_lnotes(void);
@@ -53,6 +52,9 @@ static void ui_p_ledit(void);
 static void ui_p_lclip(void);
 static void ui_p_lsong(void);
 static void ui_p_lprj(void);
+static void ui_p_ltools(void);
+static void ui_p_power(void);
+static void ui_p_kscan(void);
 static void ui_p_pad(void);
 static const char *ui_loop_nv(uint32_t id, char *v);
 static int32_t ui_pad_of(uint32_t k);
@@ -65,6 +67,7 @@ static void ui_p_lgrid(void);
 static void ui_p_lhit(void);
 static const char *ui_drum_nv(uint32_t id, char *v);
 static int ui_drum_leds(uint32_t k);
+static int ui_clips_leds(uint32_t k);                /* sy_ui_loop.c (V0.86): CLIPS' keys */
 static void ui_p_save(void);                        /* sy_ui_save.c: NAME IT, the browser */
 static void ui_p_browse(void);
 static void ui_save_flag(int32_t id, char *t);
@@ -268,6 +271,16 @@ static const char *ui_knob_nv(uint32_t k, char *v)
     } else if (id == UI_HELP || id == UI_LEARN || id == UI_MPC || id == UI_ACCEL) {
         n = id == UI_HELP ? "HELP" : id == UI_LEARN ? "LEARN" : id == UI_MPC ? "PROGRAM" : "ACCEL";
         sp_put(v, (id == UI_HELP ? ui.help : id == UI_LEARN ? ui.learn : id == UI_MPC ? ui.mpc : ui.accel) ? "ON" : "OFF");
+    } else if (id == UI_PBATT) {                    /* (V0.86: POWER's) */
+        static const char *const SB[3] = {"OFF", "HOME", "EVERY SCREEN"};
+        n = "SHOW BATTERY";
+        sp_put(v, SB[ui.batt_show % 3u]);
+    } else if (id == UI_PSCR) {
+        n = "SCREEN OFF";
+        if (ui.scr_off)
+            sp_put(sp_fix(v, UI_SCR_MIN[ui.scr_off & 3u], 0u, 0), " MIN");
+        else
+            sp_put(v, "OFF");
     } else if (id == UI_GLOW) {
         n = "GLOW";
         sp_put(v, ui.glow ? "LOW" : "HIGH");
@@ -313,7 +326,7 @@ static const char *ui_knob_nv(uint32_t k, char *v)
             sp_put(v, "THE END");
     } else if (id >= UI_HMODE && id <= UI_SSLD) {
         n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
-    } else if (id >= UI_LTRK && id <= UI_LNEW) {
+    } else if ((id >= UI_LTRK && id <= UI_LNEW) || (id >= UI_LSPEED && id <= UI_LCLR)) {
         n = ui_loop_nv((uint32_t)id, v);            /* (the looper's, V0.8) */
     } else if (id >= UI_KLANE && id <= UI_GRAT) {
         n = ui_drum_nv((uint32_t)id, v);            /* (the drums', V0.85) */
@@ -665,15 +678,15 @@ static void ui_p_hmix(void)
         int on = t >= w0 && t < w0 + 4u, hot = on && ui_hot(t - w0), me = t == lpp.sel % LP_NTRK;
         uint16_t c = hot ? sk.hot : on ? (lp_muted(t) ? sk.mid : sk.ink) : sk.line;
         sp_fix(sp_put(n, "T"), (int32_t)t + 1, 0u, 0);
-        lk_text_c(cx, 60.0f, me ? T9B : T9, n, on || me ? sk.ink : sk.mid, sk.ground, 0, 0);
-        lk_text_c(cx, 72.0f, T9, TY[ui_l_type3(t)], on ? sk.lab : sk.mid, sk.ground, 0, 0);
+        lk_text_c(cx, 60.0f, me ? T9B : T9, n, on || me ? sk.ink : sk.lab, sk.ground, 0, 0);   /* (the other four: */
+        lk_text_c(cx, 72.0f, T9, TY[ui_l_type3(t)], sk.lab, sk.ground, 0, 0);                   /* their words LAB) */
         lk_seg(cx, top, cx, bot, 3.0f, sk.line);
         lk_seg(cx, y, cx, bot, 3.0f, c);
         lk_box(cx - 5.0f, y - 2.0f, cx + 5.0f, y + 2.0f, c);
         sp_fix(n, k->vol, 0u, 0);
-        lk_text_c(cx, 165.0f, T9B, n, hot ? sk.hot : on ? sk.ink : sk.mid, sk.ground, 0, 0);
+        lk_text_c(cx, 165.0f, T9B, n, hot ? sk.hot : on ? sk.ink : sk.lab, sk.ground, 0, 0);
         if (k->mute || k->solo)
-            lk_text_c(cx, 199.0f, T9B, k->solo ? "S" : "M", k->solo ? sk.hot : sk.mid, sk.ground, 0, 0);
+            lk_text_c(cx, 199.0f, T9B, k->solo ? "S" : "M", k->solo ? sk.hot : sk.lab, sk.ground, 0, 0);
         if (on)
             ui_H(t - w0, cx - 5.0f, 178.0f);
     }
@@ -2237,6 +2250,146 @@ static void ui_p_countdown(void)
         lk_text_c(120.0f, 180.0f, T9, sub2, sk.lab, sk.ground, 40, 0);
 }
 
+/* HOME held (V0.86, B17): the help map of the screen shown: what SELECT, ALGORITHM, PRESETS and the knobs do here,
+ * every button once and twice; held on, the SETTINGS at 5 s (the bar at the bottom filling toward them) */
+static void ui_p_help(void)
+{
+    static const char *const TW[12] = {
+        "HOME \xD7" "2 BROWSER", "EDIT \xD7" "2 JUMP", "ENV \xD7" "2 ENV 1/2", "LFO \xD7" "2 MOMENTARY",
+        "FX \xD7" "2 CHAIN/MODULE", "GLO \xD7" "2 PERFORM", "SCL \xD7" "2 CHORDS", "ARP \xD7" "2 ARP ON/OFF",
+        "SEQ \xD7" "2 TRACK/SONG", "SAVE \xD7" "2 BROWSER", "REC: RECORDS", "PLAY: PLAY/STOP"};
+    static const char *const LB[5] = {"SELECT", "ALGORITHM", "PRESETS", "KNOBS", ""};
+    uint8_t secs[NFXC];
+    uint32_t n, i, sec = ui_sec(), held = fm1_ms - ui.bt_t[B_HOME];
+    char t[160], v[40], f[96], *e;                  /* (t: eight modules' names, 13 characters each at most) */
+    float w = 224.0f * sy_clampf((float)held / (float)UI_LONG_MS, 0.0f, 1.0f);
+    lk_banner("HELP", "HOLD ON: SETTINGS AT 5 S");
+    sp_put(sp_put(sp_put(t, sec == SEC_MACRO ? "HOME" : ui_sec_name(sec)), " > "), UI_PG[ui.page].name);
+    lk_text(8.0f, 24.0f, T12B, lk_fit(f, sizeof f, t, T12B, 20, 224.0f), sk.ink, sk.ground, 20, 11);
+    for (i = 0; i < 5u; i++) {
+        float y = 44.0f + 13.0f * (float)i;
+        e = t;
+        t[0] = 0;
+        if (i == 0u) {                              /* (SELECT: the modules, two or more; L8) */
+            n = ui.fam < FAM_N ? ui_fam_secs(ui.fam, secs) : 0u;
+            if (n < 2u) {
+                sp_put(t, "NOTHING HERE");
+            } else {
+                uint32_t k;
+                for (k = 0; k < n; k++)
+                    e = sp_put(sp_put(e, k ? ", " : ""), ui_sec_name(secs[k]));
+            }
+        } else if (i == 1u) {                       /* (ALGORITHM: the module's pages) */
+            uint32_t p, k = 0, q = UI_NPG;
+            for (p = 0; p < UI_NPG; p++)            /* (VALUES once, however many pages it has) */
+                if (UI_PG[p].sec == sec && !(q < UI_NPG && UI_PG[q].graph == G_VALUES && UI_PG[p].graph == G_VALUES)) {
+                    e = sp_put(sp_put(e, k++ ? ", " : ""), UI_PG[p].name);
+                    q = p;
+                }
+            if (k < 2u)
+                sp_put(t, "NOTHING HERE");
+        } else if (i == 2u) {                       /* (PRESETS: as ui_presets) */
+            sp_put(t, sec == SEC_SAVE || sec == SEC_BROWSE ? "NOTHING HERE" : ui.fam == FAM_SEQ ? "THE TRACK"
+                      : ui_drums() ? "THE DRUM" : "THE SOUNDS, A LIST");
+        } else {                                    /* (the knobs, two a row) */
+            uint32_t k;
+            for (k = 2u * (i - 3u); k < 2u * (i - 2u); k++) {
+                const char *nm = UI_PG[ui.page].id[k] >= 0 ? ui_knob_nv(k, v) : "";
+                e = sp_put(sp_put(sp_fix(sp_put(e, k & 1u ? "  " : ""), (int32_t)k + 1, 0u, 0), " "), nm && nm[0] ? nm : "\x97");
+            }
+        }
+        lk_text(8.0f, y, T9, LB[i], sk.lab, sk.ground, 20, 0);
+        lk_text(70.0f, y, T9, lk_fit(f, sizeof f, t, T9, 20, 162.0f), sk.ink, sk.ground, 20, 0);
+    }
+    lk_seg(8.0f, 112.5f, 232.0f, 112.5f, 1.0f, sk.line);
+    lk_text(8.0f, 118.0f, T9, "ONCE: THE PAGE LEFT; IN ITS MENU: FIRST", sk.lab, sk.ground, 20, 0);
+    for (i = 0; i < 12u; i++)
+        lk_text(i & 1u ? 124.0f : 8.0f, 134.0f + 12.0f * (float)(i / 2u), T9, TW[i], sk.ink, sk.ground, 20, 0);
+    lk_frame(8.5f, 212.5f, 223.0f, 7.0f, 1.0f, sk.line);
+    if (w > 1.0f)
+        lk_box(10.0f, 214.0f, 8.0f + sy_minf(w, 222.0f), 218.0f, sk.hot);
+}
+
+/* SETTINGS > POWER (V0.86, F31, F34): the battery (its bars, the stock firmware's levels; the raw reading), SHOW
+ * BATTERY, SCREEN OFF AFTER, what wakes it */
+static void ui_p_power(void)
+{
+    int32_t lvl = ui_batt();
+    uint32_t i;
+    char t[40];
+    ui_title("POWER", 8.0f);
+    lk_frame(8.5f, 52.5f, 26.0f, 13.0f, 1.0f, lvl == 0 ? sk.hot : sk.ink);
+    lk_box(35.0f, 56.0f, 37.5f, 62.0f, sk.ink);
+    for (i = 0; i < 4u; i++)
+        lk_box(11.0f + 6.0f * (float)i, 55.0f, 15.5f + 6.0f * (float)i, 63.0f,
+               lvl >= 0 && lvl < 4 && (int32_t)i <= lvl ? (lvl == 0 ? sk.hot : sk.ink) : sk.line);
+    if (lvl == 4)
+        sp_put(t, "USB POWER");
+    else if (lvl < 0)
+        sp_put(t, "NOT READ YET");
+    else
+        sp_put(sp_fix(sp_put(t, "BATTERY "), lvl + 1, 0u, 0), " OF 4");
+    lk_text(44.0f, 52.0f, T10B, t, sk.ink, sk.ground, 20, 0);
+    sp_fix(sp_put(t, "THE STOCK LEVELS \xB7 RAW "), sy_batt_raw, 0u, 0);
+    lk_text(44.0f, 66.0f, T9, t, sk.lab, sk.ground, 20, 0);
+    lk_label(UI_TITLE_X, 92.0f, "SHOW BATTERY", 20);
+    lk_text(UI_TITLE_X, 104.0f, T14B, ui.batt_show == 2u ? "EVERY SCREEN" : ui.batt_show ? "HOME" : "OFF",
+            ui_ink(ui_hot(0)), sk.ground, 0, 17);
+    lk_label(UI_TITLE_X, 132.0f, "SCREEN OFF AFTER", 20);
+    if (ui.scr_off)
+        sp_put(sp_fix(t, UI_SCR_MIN[ui.scr_off & 3u], 0u, 0), " MIN");
+    else
+        sp_put(t, "OFF");
+    lk_text(UI_TITLE_X, 144.0f, T14B, t, ui_ink(ui_hot(1)), sk.ground, 0, 17);
+    lk_text(UI_TITLE_X, 172.0f, T9, "ANY CONTROL WAKES IT. THE", sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 184.0f, T9, "BACKLIGHT STAYS LIT: ITS PIN", sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 196.0f, T9, "ALSO RUNS THE KEY SCAN", sk.lab, sk.ground, 20, 0);
+    ui_H(0, 8.0f, 107.0f);
+    ui_H(1, 8.0f, 147.0f);
+    pg.figs = 0xFu;
+}
+/* BENCH > KEY SCAN (V0.86, P3: read-only): the panel's matrix as scanned, live (11 columns, 6 rows: a cell closed
+ * filled; a key's or a button's framed, an encoder's pin a ring, one of none dotted); a cell of none ever closed since
+ * this page opened HOT: a second contact, such as a key's velocity would need */
+static void ui_p_kscan(void)
+{
+    static const char *const ROW[6] = {"PA0", "PA5", "PA6", "PA7", "PA8", "PB7"};
+    uint32_t r, c, seen = 0;
+    char t[48], *e;
+    ui_title("KEY SCAN", 8.0f);
+    lk_text(8.0f, 42.0f, T9, "THE MATRIX AS SCANNED, LIVE", sk.lab, sk.ground, 20, 0);
+    for (r = 0; r < 6u; r++) {
+        float y = 58.0f + 17.0f * (float)r;
+        lk_text(8.0f, y + 3.0f, T9, ROW[r], sk.lab, sk.ground, 0, 0);
+        for (c = 0; c < FM1_NCOL; c++) {
+            float x = 36.0f + 18.0f * (float)c;
+            int on = (fm1_in.raw[c] >> r) & 1u, key = FM1_KEYMAP[r][c] >= 0, enc = r == 0u || r == 5u;
+            int hit = !key && !enc && ((ui.ks_seen[r] >> c) & 1u);
+            seen += (uint32_t)hit;
+            if (on)
+                lk_box(x, y, x + 14.0f, y + 14.0f, hit ? sk.hot : sk.ink);
+            else if (key)
+                lk_frame(x + 0.5f, y + 0.5f, 13.0f, 13.0f, 1.0f, sk.mid);
+            else if (enc)
+                lk_ring(x + 7.0f, y + 7.0f, 3.0f, 1.0f, sk.mid);
+            else
+                lk_frame_dash(x + 0.5f, y + 0.5f, 13.0f, 13.0f, 2.0f, 2.0f, hit ? sk.hot : sk.line);
+        }
+    }
+    lk_text(8.0f, 166.0f, T9, "A DOTTED CELL CLOSING WITH A KEY", sk.lab, sk.ground, 20, 0);
+    lk_text(8.0f, 178.0f, T9, "WOULD BE A SECOND CONTACT (VELOCITY)", sk.lab, sk.ground, 20, 0);
+    e = sp_put(t, "SEEN CLOSED: ");
+    if (!seen)
+        sp_put(e, "NONE");
+    else
+        for (r = 0; r < 6u; r++)
+            for (c = 0; c < FM1_NCOL; c++)
+                if (FM1_KEYMAP[r][c] < 0 && r && r < 5u && ((ui.ks_seen[r] >> c) & 1u))
+                    e = sp_fix(sp_put(sp_put(e, ROW[r]), ":"), (int32_t)c + 1, 0u, 0), e = sp_put(e, " ");
+    lk_text(8.0f, 194.0f, T10B, t, seen ? sk.hot : sk.ink, sk.ground, 20, 0);
+    pg.figs = 0xFu;
+}
+
 /* SAFE START: the sound before was not brought back (a crash, a hang or a failed boot came before; or HOME was held
  * at power-on), until a button, a knob or a key, or 6 s */
 /* PRESETS' list (V0.86, H4, F28): six rows round the one turned to, each its number and name (the one playing a dot at
@@ -2339,6 +2492,38 @@ static void ui_p_boot(void)
 /* ------------------------------------------------------------------------------------------ chrome --- */
 /* the section's top line: its name (an LFO's rate and mode with it; the chain view's and a module's place), its dot,
  * its family's dots or the chain's squares, the right word */
+/* V0.86 (F31): the battery, 16 x 8 at (x, y): its bars as cells (the lowest alone HOT), USB power a bolt */
+static void ui_batt_glyph(float x, float y, int32_t lvl)
+{
+    uint32_t i;
+    lk_frame(x + 0.5f, y + 0.5f, 14.0f, 7.0f, 1.0f, lvl == 0 ? sk.hot : sk.lab);
+    lk_box(x + 15.0f, y + 2.0f, x + 16.5f, y + 6.0f, sk.lab);
+    if (lvl == 4) {
+        lk_seg(x + 9.0f, y + 1.5f, x + 6.0f, y + 4.0f, 1.0f, sk.ink);
+        lk_seg(x + 6.0f, y + 4.0f, x + 9.0f, y + 4.0f, 1.0f, sk.ink);
+        lk_seg(x + 9.0f, y + 4.0f, x + 6.0f, y + 6.5f, 1.0f, sk.ink);
+        return;
+    }
+    for (i = 0; i <= (uint32_t)lvl && i < 4u; i++)
+        lk_box(x + 2.0f + 3.0f * (float)i, y + 2.0f, x + 4.0f + 3.0f * (float)i, y + 6.0f, lvl == 0 ? sk.hot : sk.ink);
+}
+/* .. on the top line (SHOW BATTERY: HOME's, or every screen's), after the label where it fits before what is at the
+ * right (fx: the chain's squares there, the words left of them) */
+static void ui_batt_top(const char *label, int on, uint32_t n, uint32_t gap, const char *right, int fx)
+{
+    int32_t lvl = ui.batt_show == 2u || (ui.batt_show == 1u && ui_sec() == SEC_MACRO) ? ui_batt() : -1;
+    float w = (float)(n * 8u) + (gap && gap < n ? 6.0f : 0.0f), lx, rx;
+    if (lvl < 0 || !lk_vis(0.0f, 0.0f, 240.0f, 16.0f))
+        return;
+    lx = (on >= 0 ? 18.0f : 8.0f) + lk_tw(T10B, label, 30) + 8.0f;
+    rx = fx ? 166.0f : n ? 232.0f - w - 4.0f : 232.0f;
+    if (right)
+        rx -= lk_tw(T10B, right, 30) + 6.0f;
+    if (ui_sec() == SEC_MACRO)
+        rx = sy_minf(rx, ui_pulse_x() - 8.0f);
+    if (rx - lx >= 18.0f)
+        ui_batt_glyph(lx, 5.0f, lvl);
+}
 static void ui_top(void)
 {
     uint32_t sec = ui_sec(), f = ui_fam_of(sec), n = 0, cur = 0, i;
@@ -2410,6 +2595,7 @@ static void ui_top(void)
             if (S[i] == sec || (S[i] == SEC_LCLIP && sec == SEC_LGRID))
                 cur = i;
         lk_top(t, -1, 4u, cur, right, dim, 2u);
+        ui_batt_top(t, -1, 4u, 2u, right, 0);
         return;
     }
     if (f != FAM_FX) {
@@ -2421,6 +2607,7 @@ static void ui_top(void)
             n = 1;
     }
     lk_top(t, pw >= 0 ? sy_patch.p[pw] != 0 : -1, n, cur, sec == SEC_CHAIN ? 0 : right, 0u, 0u);
+    ui_batt_top(t, pw >= 0 ? 1 : -1, n, 0u, sec == SEC_CHAIN ? r : right, ui_is_fx(sec) || sec == SEC_CHAIN);
     if (sec == SEC_CHAIN && lk_vis(0.0f, 0.0f, 240.0f, 16.0f))   /* (left of the squares) */
         lk_text_r(166.0f, 2.0f, T10B, r, sk.lab, sk.ground, 30, 13);
     if (sec == SEC_MACRO)
@@ -2473,7 +2660,8 @@ static const char *ui_short(const char *nm, char *b)
         {"UNISON", "UNI"},  {"SPREAD", "SPR"}, {"PITCH", "PIT"},   {"OUTPUT", "OUT"}, {"VALUES", "VAL"},
         {"MIXER", "MIX"},   {"NOTES", "NTS"},  {"NOTE+", "NT+"},   {"CLIPS", "CLP"},  {"TEMPO", "TMP"},
         {"SLOTS", "SLT"},   {"VOICE", "VCE"},  {"CHORD", "CHD"},   {"STYLE", "STY"},  {"BANDS", "BND"},
-        {"POWER", "PWR"},   {"BENCH", "BEN"},  {"MOTION", "MOT"},  {"BROWSE", "BRW"}, {"NAME IT", "NAME"}};
+        {"POWER", "PWR"},   {"BENCH", "BEN"},  {"MOTION", "MOT"},  {"BROWSE", "BRW"}, {"NAME IT", "NAME"},
+        {"KEY SCAN", "SCAN"}};
     uint32_t i, j;
     for (i = 0; nm[i] && i < 5u; i++)
         ;
@@ -2606,19 +2794,22 @@ static void (*const UI_PAGE[])(void) = {
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
     [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
     [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_LCLIPS] = ui_p_lclips, [G_LMIX] = ui_p_lmix,
-    [G_LTRK] = ui_p_ltrk, [G_LREC] = ui_p_lrec, [G_LCLICK] = ui_p_lclick, [G_LNOTES] = ui_p_lnotes,
+    [G_LREC] = ui_p_lrec, [G_LCLICK] = ui_p_lclick, [G_LNOTES] = ui_p_lnotes,
     [G_LEDIT] = ui_p_ledit, [G_LCLIP] = ui_p_lclip, [G_LSONG] = ui_p_lsong, [G_LPRJ] = ui_p_lprj,
     [G_CORE2] = ui_p_core2, [G_KDRUM] = ui_p_kdrum, [G_KMORE] = ui_p_kmore, [G_KACC] = ui_p_kacc,
-    [G_KDUCK] = ui_p_kduck, [G_LGRID] = ui_p_lgrid, [G_LHIT] = ui_p_lhit, [G_HMIX] = ui_p_hmix,
+    [G_KDUCK] = ui_p_kduck, [G_LGRID] = ui_p_lgrid, [G_LHIT] = ui_p_lhit, [G_HMIX] = ui_p_hmix, [G_LTOOLS] = ui_p_ltools,
+    [G_POWER] = ui_p_power, [G_KSCAN] = ui_p_kscan,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 
 /* what the screen shows now: a countdown, SAFE START, a layer, or the page */
-enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP, V_PAD, V_BOOT, V_LIST };
+enum { V_PAGE, V_CD, V_SAFE, V_MOD, V_PERF, V_MAC, V_JUMP, V_PAD, V_BOOT, V_LIST, V_HELP };
 static uint32_t ui_view(void)
 {
     if (ui.boot)                                    /* (V0.86, P4: the splash held to UI_BOOT_MS) */
         return V_BOOT;
+    if (!ui.ub_t0 && ui.cd_btn == B_HOME && ui_sec() != SEC_SAVE && ui_sec() != SEC_BROWSE)   /* (V0.86, B17: HOME held, */
+        return V_HELP;                                                                         /* the help map) */
     if (ui.ub_t0 || (ui.cd_btn != NB && fm1_ms - ui.bt_t[ui.cd_btn] >= (ui_cd_quiet(ui.cd_btn) ? UI_CD_SHOW_MS
                                                                                                  : HOLD_MS[settings_hold % 4u])))
         return V_CD;
@@ -2637,7 +2828,7 @@ static uint32_t ui_view(void)
 static SY_NOINLINE void ui_page_mom(uint32_t g)
 {
     sy_patch_t mom;
-    char t[24];
+    char t[32];                                     /* (V0.86: "A KNOB · TAP LFO: CLOSES" and its end) */
     if (ui.mom_n) {
         uint32_t i;
         mom = sy_patch;
@@ -2645,9 +2836,10 @@ static SY_NOINLINE void ui_page_mom(uint32_t g)
             mom.p[ui.mom_id[i]] = ui.mom_v[i];
         pg.gh = &mom;
         pg.mom = 1;
-        sp_put(sp_put(sp_fix(sp_put(t, "LET GO: "), ui.mom_n, 0u, 0), ui.mom_n == 1u ? " GOES" : " GO"), " BACK");
+        sp_put(sp_put(sp_fix(sp_put(t, ui.lay_lock ? "TAP LFO: " : "LET GO: "), ui.mom_n, 0u, 0),
+                      ui.mom_n == 1u ? " GOES" : " GO"), " BACK");
     } else {
-        sp_put(t, "A KNOB: FOR NOW");
+        sp_put(t, ui.lay_lock ? "A KNOB \xB7 TAP LFO: CLOSES" : "A KNOB: FOR NOW");
     }
     lk_banner("MOMENTARY", t);
     UI_PAGE[g < G_N ? g : G_LIST]();
@@ -2678,9 +2870,10 @@ static void ui_page(void)
         ui_p_mod();
         break;
     }
-    case V_PERF: lk_banner("PERFORM", "LET GO: BEND RETURNS"); ui_p_perf(); break;
+    case V_HELP: ui_p_help(); return;
+    case V_PERF: lk_banner("PERFORM", ui.lay_lock ? "TAP GLO: CLOSES" : "LET GO: BEND RETURNS"); ui_p_perf(); break;
     case V_MAC: lk_banner("MACROS", "LET GO: CLOSES"); ui_p_mac(); break;
-    case V_JUMP: lk_banner("JUMP", "A KEY OPENS IT"); ui_p_jump(); break;
+    case V_JUMP: lk_banner("JUMP", ui.lay_lock ? "A KEY \xB7 TAP EDIT: CLOSES" : "A KEY OPENS IT"); ui_p_jump(); break;
     case V_PAD: lk_banner("LAUNCH PAD", cht.run ? "A KEY: AT THE BAR" : "A KEY STARTS IT"); ui_p_pad(); break;
     default:
         if (ui.lay == LAY_MOM) {
@@ -2862,6 +3055,7 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led, 14u + k);
             else if (dim)
                 ui_led(fm1_led_dim, 14u + k);
+        } else if (ui_clips_leds(k)) {              /* (V0.86: CLIPS' clips and scenes) */
         } else if (ui_drum_leds(k)) {               /* (V0.85: the grid's steps and rows; a drum track's keys) */
         } else if (sy_app_held(k)) {
             ui_led(fm1_led, 14u + k);
@@ -2915,6 +3109,10 @@ static void sy_ui_frame(void)
     int snd = ui_sounding();
     static uint8_t was_live, was_busy, was_nv, was_view, pulse, bloom, band;
     static uint32_t load_t, orbit_t, swing_t, cd_t, reel_t, beat;
+    if (!ui_scr_frame()) {                          /* (V0.86, F34: dark or waking: nothing drawn, the LEDs as ever) */
+        sy_ui_leds();
+        return;
+    }
     if ((ui.dirty & D_ALL) == D_ALL)                /* (everything redrawn: everything sent, whatever the panel had) */
         memset(ui_rowh, 0, sizeof ui_rowh);
     if (ui.act_k < 4u && fm1_ms - ui.act_t >= UI_GESTURE_MS) {   /* (the handle, the shape as it rests; the zones */
@@ -2929,8 +3127,8 @@ static void sy_ui_frame(void)
         was_view = (uint8_t)v;
         ui.dirty |= D_DISP;
     }
-    if (v == V_CD) {                                /* a countdown: its ring as it empties, its seconds */
-        if (fm1_ms - cd_t >= 40u) {
+    if (v == V_CD || v == V_HELP) {                 /* a countdown: its ring as it empties, its seconds (the help */
+        if (fm1_ms - cd_t >= (v == V_HELP ? 100u : 40u)) {   /* map's bar) */
             cd_t = fm1_ms;
             ui.dirty |= D_LIVE;
         }
@@ -3055,6 +3253,8 @@ static void sy_ui_frame(void)
         ui.dirty &= (uint8_t)~D_LIVE;
         if (v == V_CD) {
             ui_win(76, 56, 89, 89, 0);              /* (the ring and its seconds) */
+        } else if (v == V_HELP) {
+            ui_win(8, 212, 225, 9, 0);              /* (the help map's bar) */
         } else if (g == G_HOME) {
             if (bloom)
                 ui_win(sy_floori(UI_BX - UI_BLOOM_R) - 1, sy_floori(UI_BY - UI_BLOOM_R) - 1, sy_floori(2.0f * UI_BLOOM_R) + 3,
@@ -3077,5 +3277,6 @@ static void sy_ui_frame(void)
             ui_tape_wins();
         }
     }
+    ui_scr_shown();
     sy_ui_leds();
 }

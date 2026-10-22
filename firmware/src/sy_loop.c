@@ -263,6 +263,9 @@ static uint32_t lp_max_bars(void)                /* a clip's bars at most at thi
     return m < 1u ? 1u : m > LP_MAXBAR ? LP_MAXBAR : m;
 }
 static float lp_tick_smp(void) { return SY_FS * 60.0f / ((sy_tempo > 1.0f ? sy_tempo : 120.0f) * (float)LP_PPQ); }
+/* V0.86: clip (t, s)'s SPEED as a factor on its ticks a quarter note (x1, x1/2, x2) */
+static const float LS_K[LS_N] = {1.0f, 0.5f, 2.0f};
+static float lp_speed(uint32_t t, uint32_t sc) { return sc < LP_NSCN ? LS_K[lpp.speed[t % LP_NTRK][sc] % LS_N] : 1.0f; }
 static int lp_any_solo(void)
 {
     uint32_t t;
@@ -368,7 +371,7 @@ static void lp_drum_play(uint32_t t, uint32_t row, uint32_t vel, int acc, uint32
     lpx.rat[i].vel = (uint8_t)vel;
     lpx.rat[i].acc = (uint8_t)(acc != 0);
     lpx.rat[i].left = (uint8_t)rat;
-    lpx.rat[i].step = (uint32_t)((float)LP_STEP / (float)(rat + 1u) * lp_tick_smp());
+    lpx.rat[i].step = (uint32_t)((float)LP_STEP / (float)(rat + 1u) * lp_tick_smp() / lp_speed(t, lps[t].play));
     lpx.rat[i].at = cht.t + lpx.rat[i].step;
 }
 static void lp_ratchets(void)                    /* a block: the ratchets' hits due */
@@ -493,7 +496,7 @@ static void lp_fire(uint32_t t, lp_ev_t *e)
         return;
     }
     {
-        float s = (float)(e->len & LP_HIT ? LP_STEP : e->len ? e->len : 1u) * lp_tick_smp();
+        float s = (float)(e->len & LP_HIT ? LP_STEP : e->len ? e->len : 1u) * lp_tick_smp() / lp_speed(t, lps[t].play);
         uint32_t n = s < (float)SY_BLK ? SY_BLK : s > 2.0e9f ? 2000000000u : (uint32_t)s;
         lp_note_on(t, e->a, e->b, cht.t + n);
     }
@@ -525,9 +528,9 @@ static void lp_pass_wrap(uint32_t t, lp_clip_t *c)
         lpr.npass = 0;
     }
 }
-static uint32_t lp_tick_now(uint32_t t, const lp_clip_t *c)   /* the clip's tick now */
+static uint32_t lp_tick_now(uint32_t t, const lp_clip_t *c)   /* the clip's tick now (V0.86: at its SPEED) */
 {
-    float q = cht.tq - lps[t].start;
+    float q = (cht.tq - lps[t].start) * lp_speed(t, lps[t].play);
     uint32_t k = q > 0.0f ? (uint32_t)(q * (float)LP_PPQ) : 0u;
     return c->len ? k % c->len : 0u;
 }
@@ -757,6 +760,8 @@ static void lp_rec_tap(void)
     lpr.trk = (uint8_t)t;
     lpr.scn = (uint8_t)s;
     lpr.dub = c->len != 0u;
+    if (!lpr.dub)
+        lpp.speed[t][s] = LS_1;                  /* (V0.86: a first take as played, its SPEED x1) */
     lp_pass_begin();
     if (lpr.dub && cht.run && lps[t].play == s) {
         lpr.st = LR_DUB;
@@ -878,8 +883,9 @@ static void lp_rec_moves(void)
 static uint32_t lp_scene_bars(uint32_t s)       /* a scene's length: its longest clip's bars (1 at least) */
 {
     uint32_t t, m = 1, bt = lp_bar_ticks();
-    for (t = 0; t < LP_NTRK; t++) {
-        uint32_t b = (lpp.clip[t][s % LP_NSCN].len + bt - 1u) / bt;
+    for (t = 0; t < LP_NTRK; t++) {             /* (V0.86: at half speed twice its bars, at double half) */
+        float k = lp_speed(t, s % LP_NSCN);
+        uint32_t b = (uint32_t)sy_floori((float)lpp.clip[t][s % LP_NSCN].len / ((float)bt * k) + 0.999f);
         m = b > m ? b : m;
     }
     return m;
@@ -1408,6 +1414,184 @@ static int32_t lp_grid_attr(uint32_t row, uint32_t s, uint32_t f, int32_t d)
     if (d && k != LP_END)
         lpx.seq++;
     return v;
+}
+
+/* V0.86: clip (t, s)'s SPEED (the one playing goes on from where it is) */
+static void lp_speed_set(uint32_t t, uint32_t s, uint32_t sp)
+{
+    uint32_t fl = LP_LOCK();
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    t %= LP_NTRK, s %= LP_NSCN;
+    if (cht.run && lps[t].play == s && c->len) {
+        float k = (float)lp_tick_now(t, c);
+        lpp.speed[t][s] = (uint8_t)(sp % LS_N);
+        lps[t].start = cht.tq - k / ((float)LP_PPQ * lp_speed(t, s));
+        lps[t].resync = 1;
+    } else {
+        lpp.speed[t][s] = (uint8_t)(sp % LS_N);
+    }
+    LP_UNLOCK(fl);
+    lpx.seq++;
+}
+/* V0.86, CLIP > TOOLS: clip (st, ss) into (dt, ds), whole (bar < 0: its length and SPEED with it, what was there
+ * gone) or its bar `bar` into the same bar there (that bar's notes and moves replaced). 0 done; -1 the events ran out
+ * (nothing changed); -2 no such bar in one of them */
+static int32_t lp_clip_copy(uint32_t st, uint32_t ss, uint32_t dt, uint32_t ds, int32_t bar)
+{
+    lp_clip_t *src = &lpp.clip[st % LP_NTRK][ss % LP_NSCN], *dst = &lpp.clip[dt % LP_NTRK][ds % LP_NSCN];
+    uint32_t bt = lp_bar_ticks(), a = bar < 0 ? 0u : (uint32_t)bar * bt, b = bar < 0 ? src->len : a + bt, need = 0, back = 0;
+    uint32_t k, fl;
+    if (src == dst)
+        return 0;
+    if (bar >= 0 && (a >= src->len || a >= dst->len))
+        return -2;
+    for (k = src->head; k != LP_END; k = lp_ev[k].next)
+        need += lp_et(k) >= a && lp_et(k) < b;
+    for (k = dst->head; k != LP_END; k = lp_ev[k].next)
+        back += bar < 0 || (lp_et(k) >= a && lp_et(k) < b);
+    if (need > lp_nfree + back)
+        return -1;
+    fl = LP_LOCK();
+    dt %= LP_NTRK, ds %= LP_NSCN;
+    if (lps[dt].play == ds)
+        lp_notes_off(dt);
+    if (lpr.nundo && lpr.utrk == dt && lpr.uscn == ds)   /* (what UNDO PASS kept of it: gone, as its pass lists) */
+        lp_undo_drop();
+    if (lpr.trk == dt && lpr.scn == ds)
+        lpr.npass = lpr.nlast = 0;
+    if (bar < 0) {
+        uint16_t len = src->len;
+        lp_clip_empty(dst);
+        dst->len = len;
+        lpp.speed[dt][ds] = lpp.speed[st % LP_NTRK][ss % LP_NSCN];
+    } else {
+        uint32_t prev = LP_END;
+        for (k = dst->head; k != LP_END;) {
+            uint32_t nx = lp_ev[k].next;
+            if (lp_et(k) >= a && lp_et(k) < b) {
+                if (prev == LP_END)
+                    dst->head = (uint16_t)nx;
+                else
+                    lp_ev[prev].next = (uint16_t)nx;
+                dst->n--;
+                lp_forget(k);
+                lp_release(k);
+            } else {
+                prev = k;
+            }
+            k = nx;
+        }
+    }
+    for (k = src->head; k != LP_END; k = lp_ev[k].next) {
+        uint32_t e;
+        if (lp_et(k) < a || lp_et(k) >= b)
+            continue;
+        e = lp_alloc();
+        lp_ev[e] = lp_ev[k];
+        if (!(lp_ev[e].t & LP_MOVE))
+            lp_ev[e].b &= (uint8_t)~LP_FRESH;
+        lp_insert(dst, e);
+    }
+    lps[dt].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return 0;
+}
+/* .. clip (t, s) twice as long, its notes and moves again in the second half (0; -1 the events ran out; -2 longer
+ * than LP_MAXBAR bars) */
+static int32_t lp_clip_double(uint32_t t, uint32_t s)
+{
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint32_t len = c->len, n = c->n, k, i, fl;
+    if (!len || 2u * len > lp_max_bars() * lp_bar_ticks())
+        return -2;
+    if (n > lp_nfree)
+        return -1;
+    fl = LP_LOCK();
+    for (k = c->head, i = 0; k != LP_END && i < n; k = lp_ev[k].next, i++) {   /* (the copies go in after every one */
+        uint32_t e = lp_alloc();                                             /* of the first half: the walk stops at n) */
+        lp_ev[e] = lp_ev[k];
+        lp_ev[e].t = (uint16_t)((lp_ev[k].t & LP_MOVE) | (lp_et(k) + len));
+        if (!(lp_ev[e].t & LP_MOVE))
+            lp_ev[e].b &= (uint8_t)~LP_FRESH;
+        lp_insert(c, e);
+    }
+    c->len = (uint16_t)(2u * len);
+    lps[t % LP_NTRK].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return 0;
+}
+/* .. clip (t, s) half as long (in whole bars, one at least): its events past the new end gone; count only (do 0):
+ * how many would go, -2 one bar already */
+static int32_t lp_clip_halve(uint32_t t, uint32_t s, int go)
+{
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint32_t bt = lp_bar_ticks(), bars = c->len / bt, nl, k, prev = LP_END, gone = 0, fl;
+    if (bars < 2u)
+        return -2;
+    nl = bars / 2u * bt;
+    for (k = c->head; k != LP_END; k = lp_ev[k].next)
+        gone += lp_et(k) >= nl;
+    if (!go)
+        return (int32_t)gone;
+    fl = LP_LOCK();
+    if (lpr.nundo && lpr.utrk == t % LP_NTRK && lpr.uscn == s % LP_NSCN)
+        lp_undo_drop();
+    for (k = c->head; k != LP_END;) {
+        uint32_t nx = lp_ev[k].next;
+        if (lp_et(k) >= nl) {
+            if (prev == LP_END)
+                c->head = (uint16_t)nx;
+            else
+                lp_ev[prev].next = (uint16_t)nx;
+            c->n--;
+            lp_forget(k);
+            lp_release(k);
+        } else {
+            prev = k;
+        }
+        k = nx;
+    }
+    c->len = (uint16_t)nl;
+    if (lps[t % LP_NTRK].play == s % LP_NSCN)
+        lp_notes_off(t % LP_NTRK);
+    lps[t % LP_NTRK].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return (int32_t)gone;
+}
+
+/* .. clip (t, s)'s notes (a drum track's hits) gone, its moves kept; how many went */
+static uint32_t lp_notes_clear(uint32_t t, uint32_t s)
+{
+    lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
+    uint32_t fl = LP_LOCK(), k, prev = LP_END, gone = 0;
+    t %= LP_NTRK, s %= LP_NSCN;
+    if (lpr.nundo && lpr.utrk == t && lpr.uscn == s)
+        lp_undo_drop();
+    for (k = c->head; k != LP_END;) {
+        uint32_t nx = lp_ev[k].next;
+        if (!(lp_ev[k].t & LP_MOVE)) {
+            if (prev == LP_END)
+                c->head = (uint16_t)nx;
+            else
+                lp_ev[prev].next = (uint16_t)nx;
+            c->n--;
+            lp_forget(k);
+            lp_release(k);
+            gone++;
+        } else {
+            prev = k;
+        }
+        k = nx;
+    }
+    if (lps[t].play == s)
+        lp_notes_off(t);
+    lps[t].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return gone;
 }
 
 /* ------------------------------------------------------------------------------------------ defaults --- */

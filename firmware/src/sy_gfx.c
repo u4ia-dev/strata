@@ -845,7 +845,7 @@ static void lk_zones(const char *const *z, const char *const *zs, uint32_t n, ui
         }
         sum = used - 6.0f * (float)(b - a - 1u);
         if (a > 0u) {
-            lk_text(x, LK_ZY + 1.5f, T10B, "<", sk.mid, sk.ground, 0, 12);
+            lk_text(x, LK_ZY + 1.5f, T10B, "<", sk.lab, sk.ground, 0, 12);
             x += 12.0f;
         }
     }
@@ -858,7 +858,7 @@ static void lk_zones(const char *const *z, const char *const *zs, uint32_t n, ui
         x += w[i] + gap;
     }
     if (b < n)
-        lk_text(232.0f - lk_tw(T10B, ">", 0), LK_ZY + 1.5f, T10B, ">", sk.mid, sk.ground, 0, 12);
+        lk_text(232.0f - lk_tw(T10B, ">", 0), LK_ZY + 1.5f, T10B, ">", sk.lab, sk.ground, 0, 12);
 }
 /* V0.86: what PRESETS turns on this page (a sound, a drum, the track): a P in a square, as a knob's handle is a
  * number in a ring; its box's corner (x, y), hot (turning) filled */

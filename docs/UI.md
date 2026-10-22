@@ -9,9 +9,12 @@ are V0.66's. [CONTROLS.md](CONTROLS.md) is the reference for the panel; this fil
 V0.7 added SCL's chord screens, V0.75 the ARP's (STYLE, GROOVE, STEPS, RATCHET), CHORD's rework and STRUM, GLOBAL's
 CLOCK IN (§4), the knob turning's value in place or in the bottom row in the flag's stead, and a plainer bloom. V0.8
 added the looper's (CLIPS, MIXER, TRACK, RECORD, CLICK, NOTES, EDIT, CLIP, SONG, PROJECT) and the launch pad (§4),
-in place of V0.8's sequencer pages (never installed).
+in place of V0.8's sequencer pages (never installed). V0.86 (step 1 of its plan, the interface) laid every menu screen
+out one way (§1), regrouped the pages, gave HOME three pages and a drum kit's view, PRESETS a list, SEQ two groups
+with SPEED and TOOLS, the buttons a second press, HOME held a help map, SETTINGS POWER and KEY SCAN, and wrote the
+LEDs' rules down (§1).
 
-Status: verified in the emulator (130 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
+Status: verified in the emulator (159 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
 overlaps, `web/emu/strata_ui_shots.mjs`; every knob on every page turned and checked, `web/emu/strata_knob_sweep.mjs`;
 the bloom's motion, `web/emu/strata_bloom_study.mjs`). **Needs a hardware
 test**: legibility at the panel's size and distance, the drawing's time on the FM-1 (BENCH's SCREEN row), the new
@@ -21,15 +24,25 @@ themes on the panel, the bloom's motion.
 
 - **One screen a module.** A page is one 240 × 240 picture: a top line, a body that draws what the module does with
   the four knobs' numbered handles on what each moves, and a bottom row.
-- **Top line.** The section's name in LAB, 10 px bold; its dot before it (filled: on; hollow: off, EDIT + OCT turns
-  it on); at the right the family's module dots (EDIT 5, ENV 2, LFO 2, GLO 3), or a module's place in the FX chain as
-  eight squares (filled: this one, outlined: in the chain, dashed: bypassed), or a word (HOME's tempo with its dot,
-  KEYS' octave). An LFO's line names its rate and mode, the matrix the slots in use, the chain view its count and its
-  CPU cost.
-- **Bottom row.** The section's pages as zones, 10 px bold (ALGORITHM steps them; the one shown inverted; where they
-  do not fit, the others by three letters, then one), or a toast (a HOT dot and a word for 1.5 s) in their place.
-  HOME, the browser and NAME IT have no zones. A module's VALUES pages show as one zone, "VALUES 2/5" ("VAL 2/5"
-  among six).
+- **One layout on every menu screen** (V0.86, L1-L8): HOME, the modules, SEQ's pages, the SETTINGS, the browser and
+  NAME IT alike; the layers (MOD, PERFORM, MACROS, MOMENTARY, JUMP, the launch pad, the help map) and the dialogs (the
+  countdowns, SAFE START, PRESETS' list) keep their own look.
+- **Top line.** The module's name in LAB, 10 px bold; its dot before it (filled: on; hollow: off, EDIT + OCT turns
+  it on); a word of status left of the dots (HOME's tempo with its dot, SCL's octave or chord, SEQ's track, scene and
+  bar); at the right the menu's module dots, SELECT's (EDIT 5, ENV 2, LFO 2, GLO 3; one for a menu of one module;
+  SEQ's four in two groups, LOOP and CLIP, TRACK and SONG, the group not shown dimmed), or a module's place in the FX
+  chain as eight squares (filled: this one, outlined: in the chain, dashed: bypassed). An LFO's line names its rate
+  and mode, the matrix the slots in use, the chain view its count and its CPU cost. SETTINGS > POWER > SHOW BATTERY:
+  the battery after the name (16 x 8: its cells, the lowest alone HOT; USB power a bolt), where it fits.
+- **Bottom row.** The module's pages as zones, 10 px bold, on every screen even with one page (ALGORITHM steps them;
+  SELECT and ALGORITHM stop at the ends): the one shown in full and inverted, the others whole where all fit, else by
+  their short names (UNI, SPR, PIT, OUT, VAL; three letters by default), and past twelve or so a window round the one
+  shown with a < or > where the row goes on (in LAB). A module's VALUES pages show as one zone, always the last,
+  "VALUES 2/5" ("VAL 2/5" short). A toast (a HOT dot and a word for 1.5 s) takes the row's place.
+- **A P in a square** (V0.86): what PRESETS turns on the page shown, beside it as a knob's handle is beside its value:
+  the sound (HOME), the drum (a drum track's HOME), the track (every SEQ page's title).
+- **Unsaved** (F25): a small HOT dot after the sound's or kit's name on HOME, in PRESETS' list and in the browser, while
+  it is edited since it was loaded or saved. Nowhere else.
 - **A knob turning.** Its handle goes HOT, the shape before the turn stays dashed behind, for a second after the last
   detent. Its value (V0.75, in the flag's stead): where the page shows it (a chip, a figure, a title, a row's value),
   that goes HOT; else the bottom row shows its name and value ("CUTOFF 998 Hz", the value HOT) in the zones' place. No
@@ -49,7 +62,12 @@ themes on the panel, the bloom's motion.
   rows), 14 px bold (a module's word, NAME IT's letters), 18 px bold (a name on HOME, VALUES' figures) and 26 px bold
   (a short name, the tempo, a countdown). V0.66 UI's were 7, 8, 9 and 12 px (and 18, 26).
 - **Words.** The screens say what things are, not how to use them: the hints that were on the chain view, MOD, JUMP,
-  the browser, NAME IT, MIDI and PERFORM went (HELP's toasts and [CONTROLS.md](CONTROLS.md) keep them).
+  the browser, NAME IT, MIDI and PERFORM went (HELP's toasts, the help map and [CONTROLS.md](CONTROLS.md) keep them).
+- **LEDs** (V0.86, F32: kept everywhere): **off**, nothing there; **glowing** (the dim level), there (a clip, a module
+  in the chain, a scale's note, a drum); **mid**, in use (the root, an accented drum, the playhead's step); **lit**,
+  active (a key held, a clip playing, the family shown, the transport's beat); **blinking** (a quarter second), waiting
+  (a launched clip, a count-in, REC waiting for the bar); **breathing**, recording or a latched layer (a layer's
+  button). A new light takes one of these, by what it means.
 
 ## 2. The parts (`firmware/src/sy_gfx.c`)
 
@@ -111,7 +129,7 @@ sample is the one HOT seed.
 
 | Family | Screens (zones) |
 |---|---|
-| HOME | the name (26, 18 or 14 px by its length), its category and bank, TABLE, UNISON, FILTER (a label over each value); the bloom; MACRO 1-4 as dials |
+| HOME | SOUND: the name (26, 18 or 14 px by its length; the unsaved dot), its category and bank, TABLE, UNISON, FILTER (a label over each value); the bloom; MACRO 1-4 as dials. On a drum track (V0.86): the kit's name, "P T8 DRUMS · KICK", the eight drums as a 2 x 4 grid of 28 x 38 cells (each its four-letter name and its LEVEL as a bar, lit by its envelope as it sounds, the one PRESETS picked framed), the bloom smaller at the right; TUNE, DECAY, TONE, DUCK as dials. MIX 1-4, MIX 5-8 (V0.86): MIXER, the eight tracks as faders (number, type, VOLUME), the page's four with handles, the others in LAB and LINE |
 | EDIT | OSC A, OSC B: WAVE, UNISON, SPREAD (WT SPREAD's value under the mode), PITCH (FREE and RETRIG named under their boxes), OUTPUT, VALUES · SUB: MAIN (OCT under the shape's name), OUTPUT, VALUES · NOISE: MAIN, OUTPUT, VALUES · FILTER: TONE, MORE, VALUES |
 | ENV | ENV 1, ENV 2: ADSR, SHAPE, VALUES |
 | LFO | LFO 1, LFO 2: POINTS, SHAPE, TIME, VALUES; a dial turning at the LFO's phase |
@@ -119,18 +137,19 @@ sample is the one HOT seed.
 | GLO | VOICE: VOICE, PLAY, VALUES · MATRIX: SLOTS (four slots at a time, the four of the one picked: source → destination at 10 px, the amount's bar and figure; the picked one's source and destination at 12 px with its dial) · GLOBAL: TEMPO (V0.75: CLOCK IN's chips, INT and MIDI; "BPM: MIDI" and MIDI's tempo while it follows the clock) |
 | SCL | SCALE (the scale on the 27 keys, FIT's chips, VELOCITY's bar and figure) · CHORD: CHORD (V0.75: the chord named at 26 px, a row a knob: MODE's chips, TYPE's (KEY: SHAPE's) strip from the one before the current with its place in the list, VOICING's AUTO chip and ruler, SPREAD's chips; the notes and the bass on three octaves of keys), STRUM (V0.75: the chord as it strums, a row a note from its start, as bright as its level; DIRECTION, HUMAN, TAPER in a row), BASS (on, the octave, the chord and the bass on four octaves, an arrow from the root, LEVEL) · MIDI (the keys and MIDI in into the chords, into the sound and out over USB, the channels); the top line names the chord playing |
 | ARP | ARP (V0.75): STYLE (the style at 14 px, ARP's state, a bar of sixteen steps of what it plays: a row a note, its time across, ties long, ratchets split, the level as brightness, a CHANCE under 100 % hollow, SWING's steps late, LENGTH's end dotted, the step playing marked under it; HARP: the note each key plays) · STEPS: STEPS and RATCHET (the step picked as the title; sixteen columns: OCTAVE a tick over the 0 line, LEVEL a bar, RATCHET's hits side by side, TIE carried across, REST a stub, SLIDE a slope, the steps past LENGTH dim, the one picked framed, the one playing marked over it; RATCHET's: each step's CHANCE a meter under it), GROOVE (two beats of notes where SWING puts them, an arrow from each late one's straight place, as long as GATE makes them; LENGTH's sixteen cells; LATCH's chip). Their values are figures in a row under the drawing (KNOB 1's the title), HOT while they turn |
-| SEQ | The looper (V0.8). CLIPS: the selected track as the title (KNOB 1) and what runs as a chip (PLAYING, STOPPED, COUNT-IN, REC: NEXT BAR, REC, OVERDUB); the tracks' numbers (the selected one boxed, a muted one underlined) over an 8 × 8 grid of 25 × 13 cells, the scenes' letters at the left (the one picked bold): a clip playing filled with a line along its foot for its place (stopped but on: MID), a clip there framed, an empty cell a dot, one launched framed HOT, one recording filled HOT, one stopping at the bar a notch; the selected track's cell in the scene picked framed. MIXER: a strip a track (PAN's dot on a short line, a fader of VOLUME with a tick at 100, M and S under; the selected one framed). TRACK, RECORD, CLICK: words and chips (TYPE, QUANTIZE, COUNT-IN, LAUNCH, CLICK; CHANNEL and MIDI IN as 12 px values; LEVEL ten cells; the bar's beats as rings, the one now HOT). NOTES, EDIT: "NOTE 5 OF 12" as the title, the track, scene and bar under it, a piano roll a bar at a time round the note picked (the range its notes span, an octave at least, the Cs dotted and named at the left; each note a bar as bright as its velocity; the one picked framed, HOT while it moves; the playhead marked over the bar playing; EDIT: a lane of velocities under it). CLIP: LENGTH as the title and sixteen cells, the clip's notes at a glance, the parameter picked's moves as a step line. SONG: the sixteen slots in two rows (a scene's letter and its repeats each, END after the last, the slot picked framed, the one playing marked), SONG's chip. PROJECT: four boxes (the one loaded filled; EMPTY, KEPT or PRESETS THERE), the events in use. Their values in a row under the drawing or in place, HOT while they turn; the top line: the track, the scene, the bar and beat while running, REC or DUB ("T3 A 2.2 REC") |
-| SETTINGS | SCREEN (the twelve themes, HELP, GLOW), PANEL, MIDI (the channel grid, LEARN, the CCs learned, PROGRAM, the CCs every sound answers as a table), BENCH (eight rows, wider figures) |
+| SEQ | The looper (V0.8; V0.86: the title the track with its P (PRESETS'), KNOB 1 no longer the track; CLIPS: TYPE and SCENE, "THE KEYS / LAUNCH" in the third column, the selected track's column lit in LINE, a launched clip blinking; TYPE turned shows the type it goes to, with a ? while it asks; RECORD: QUANTIZE's chips, CHANNEL and MIDI IN; CLICK: four rows, CLICK, LEVEL with the bar's beats beside it, COUNT-IN, LAUNCH; NOTE+ (was EDIT): VELOCITY on KNOB 1; CLIP: LENGTH, SPEED (x1/2, x1, x2), QUANTIZE, MOTION; TOOLS: four rows, each what its knob does and what it would do now, an ask HOT. A drum track's GRID with a step held: "STEP 6 HELD", its column lit, the four knobs two by two under the grid, its rows 11 px). CLIPS: the selected track as the title (KNOB 1) and what runs as a chip (PLAYING, STOPPED, COUNT-IN, REC: NEXT BAR, REC, OVERDUB); the tracks' numbers (the selected one boxed, a muted one underlined) over an 8 × 8 grid of 25 × 13 cells, the scenes' letters at the left (the one picked bold): a clip playing filled with a line along its foot for its place (stopped but on: MID), a clip there framed, an empty cell a dot, one launched framed HOT, one recording filled HOT, one stopping at the bar a notch; the selected track's cell in the scene picked framed. MIXER: a strip a track (PAN's dot on a short line, a fader of VOLUME with a tick at 100, M and S under; the selected one framed). TRACK, RECORD, CLICK: words and chips (TYPE, QUANTIZE, COUNT-IN, LAUNCH, CLICK; CHANNEL and MIDI IN as 12 px values; LEVEL ten cells; the bar's beats as rings, the one now HOT). NOTES, EDIT: "NOTE 5 OF 12" as the title, the track, scene and bar under it, a piano roll a bar at a time round the note picked (the range its notes span, an octave at least, the Cs dotted and named at the left; each note a bar as bright as its velocity; the one picked framed, HOT while it moves; the playhead marked over the bar playing; EDIT: a lane of velocities under it). CLIP: LENGTH as the title and sixteen cells, the clip's notes at a glance, the parameter picked's moves as a step line. SONG: the sixteen slots in two rows (a scene's letter and its repeats each, END after the last, the slot picked framed, the one playing marked), SONG's chip. PROJECT: four boxes (the one loaded filled; EMPTY, KEPT or PRESETS THERE), the events in use. Their values in a row under the drawing or in place, HOT while they turn; the top line: the track, the scene, the bar and beat while running, REC or DUB ("T3 A 2.2 REC") |
+| SETTINGS | SCREEN (the twelve themes, HELP, GLOW), PANEL, MIDI (the channel grid, LEARN, the CCs learned, PROGRAM, the CCs every sound answers as a table), BENCH (eight rows, wider figures), KEY SCAN (V0.86: the 11 x 6 matrix live, a cell a key's, an encoder pin's or none's; one of none seen closed HOT), CORE 2, POWER (V0.86: the battery 26 x 13 with four cells, "BATTERY 3 OF 4" or "USB POWER", the raw reading; SHOW BATTERY, SCREEN OFF AFTER at 14 px; what wakes it) |
 | SAVE | NAME IT (sixteen cells, the category and the slot, ABC / 123, each key's letter over or under it), the browser (the bank's chips, the category at 14 px with its count, five presets at 12 px, the one playing outlined with a small bloom) |
-| Layers | MOD (the page's four parameters with the source's depth, each white key's source under it), PERFORM, MACROS, MOMENTARY, JUMP (the keys' sections over and under them, the section shown named at 14 px), LAUNCH PAD (V0.8: the keys, 1 to 8 and A to H under the white ones, 1 to 8 over the black ones (a muted track's HOT), ST, SO, UN over the last three; a track's clip in the scene picked a disc while it plays, a HOT ring launched, a ring there, HOT recording; the scene picked a disc; the selected track and scene named at 14 px) |
-| System | the countdowns, SAFE START, MIDI LEARN's banner, power-on |
+| PRESETS' list | V0.86: PRESETS and "2 OF 10" on the top line; six rows of 31 px round the one turned to (its number, its name at 12 px, the one playing a dot at the right, the unsaved dot after a name), the one turned to inverted with a HOT bar under it filling until it loads; the bottom row what to do ("STOP: IT LOADS · HOLD SAVE: BACK", or HOT "EDITED: TURN ON TO LEAVE IT") |
+| Layers | MOD (the page's four parameters with the source's depth, each white key's source under it), PERFORM, MACROS, MOMENTARY, JUMP (the keys' sections over and under them, the section shown named at 14 px; a latched layer's banner says its button closes it), the help map (V0.86: HOME held; "HELP" banner; the screen's module and page; SELECT, ALGORITHM, PRESETS and the knobs on it; the buttons' twice in two columns; a bar filling toward the SETTINGS at 5 s), LAUNCH PAD (V0.8: the keys, 1 to 8 and A to H under the white ones, 1 to 8 over the black ones (a muted track's HOT), ST, SO, UN over the last three; a track's clip in the scene picked a disc while it plays, a HOT ring launched, a ring there, HOT recording; the scene picked a disc; the selected track and scene named at 14 px) |
+| System | the countdowns, SAFE START, MIDI LEARN's banner, power-on (V0.86: the splash held 2 s, then HOME), the screen dark (SCREEN OFF AFTER: nothing drawn; the page redrawn whole as it wakes) |
 
 **VALUES** (V0.67): every module's last zone (OSC A and B, SUB, NOISE, FILTER, ENV 1 and 2, LFO 1 and 2, VOICE, each
 FX module): its pages' knobs again, a page each in the same order ("VALUES 1/5" is WAVE's knobs, "2/5" UNISON's, ..),
 each knob a row: its name (10 px bold), its value large (18 px bold, HOT while it turns), its place on its range (a
 bipolar one's bar from the middle), the range its modulation takes it, and the source's word ("ENV 2 +45.0%"). A knob
-on VALUES steps the parameter's finest unit (0.1 % of its range) a detent at any speed; lists still step one entry. A
-family button's tap steps the drawings only; ALGORITHM and OCT with a family button reach VALUES.
+on VALUES steps the parameter's finest unit (0.1 % of its range) a detent at any speed; lists still step one entry.
+ALGORITHM and OCT with a family button reach VALUES, always a module's last page.
 
 ## 5. Budget against V0.66 UI
 
@@ -162,15 +181,15 @@ HOME in silence: 5 µs more over 2 s (0.04 µs a frame; nothing drawn or sent in
 ## 6. Building and checking
 
 - `./build.sh --strata` builds the UI (its fonts: `gen_aa_font.py --preset space-mono`).
-- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (130 checks) and
+- `web/emu/build_strata.sh`, then `node web/emu/strata_emu_test.mjs` (159 checks) and
   `node web/emu/strata_ui_shots.mjs` (every screen as PNG, named after the design's boards, in
   `build/emu_strata/ui_shots`; each checked as it is taken).
 - **The screens' check** (`web_lint`, `web/emu/strata_web.c`): the screen drawn twice into buffers of its own, with
   its text and without; every pixel the text changed is checked against what lies under it and its neighbours (only
   the ground, the text's own ground or a blend of the two may be there), the texts' ink boxes against each other, a
   text past the screen's edges, a text in MID or LINE, and two knobs' handles on one place. The emulator's tests run
-  it on all 163 pages; the shots script on its 120 screens (findings in `lint.txt`, marked PNGs in `lint/`);
-  `node web/emu/strata_knob_sweep.mjs` on every knob of every page as it turns (570 turns).
+  it on all 180 pages; the shots script on its 152 screens (findings in `lint.txt`, marked PNGs in `lint/`);
+  `node web/emu/strata_knob_sweep.mjs` on every knob of every page as it turns (639 turns).
 - `node web/emu/strata_bloom_study.mjs`: the bloom over time (a note's swirl, a second note, the release, a chord) as
   one sheet, `build/emu_strata/bloom_study.png`.
 - `cc -O2 -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_bench web/emu/strata_bench.c -lm`, then

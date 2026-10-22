@@ -129,7 +129,9 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_EQSHP, UI_EQSF, UI_EQSA,                    /* (V0.86: the EQ's SHAPES: SHAPE, FREQ, AMOUNT; */
        UI_HM1, UI_HM2, UI_HM3, UI_HM4,                /* HOME's SOUND: MACRO 1-4, a drum track's the kit's TUNE, */
        UI_DKTUNE, UI_DKDEC, UI_DKTONE, UI_DKDUCK,     /* DECAY, TONE, the duck's AMOUNT (ui_virt); MIX 1-4, 5-8: */
-       UI_HV1, UI_HV2, UI_HV3, UI_HV4, UI_HV5, UI_HV6, UI_HV7, UI_HV8 };   /* the tracks' VOLUME) */
+       UI_HV1, UI_HV2, UI_HV3, UI_HV4, UI_HV5, UI_HV6, UI_HV7, UI_HV8,   /* the tracks' VOLUME; CLIP's SPEED, */
+       UI_LSPEED, UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR,     /* TOOLS': COPY, PASTE, DOUBLE / HALVE, CLEAR; */
+       UI_PBATT, UI_PSCR };                           /* SETTINGS > POWER: SHOW BATTERY, SCREEN OFF AFTER) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -150,8 +152,8 @@ enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
-       G_LCLIPS, G_LMIX, G_LTRK, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
-       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_N };
+       G_LCLIPS, G_LMIX, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
+       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -302,7 +304,9 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},
+    {SEC_MENU, G_KSCAN, "KEY SCAN", {-1, -1, -1, -1}},   /* (V0.86, P3: BENCH's, read-only) */
     {SEC_MENU, G_CORE2, "CORE 2", {UI_C2ON, UI_C2RUN, UI_C2LOAD, -1}},   /* (V0.8 BENCH) */
+    {SEC_MENU, G_POWER, "POWER", {UI_PBATT, UI_PSCR, -1, -1}},   /* (V0.86: F31, F34) */
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_CHORD, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR}},   /* (V0.7: sy_ui_chord.c) */
     {SEC_CHORD, G_STRUM, "STRUM", {UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP}},
@@ -312,14 +316,17 @@ static const ui_page_t UI_PG[] = {
     {SEC_ARP, G_GROOVE, "GROOVE", {UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH}},
     {SEC_STEPS, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
     {SEC_STEPS, G_RATCH, "RATCHET", {UI_SSTEP, UI_SRAT, UI_SCHN, UI_SSLD}},
-    {SEC_SEQ, G_LCLIPS, "CLIPS", {UI_LTRK, UI_LSCN, UI_LLNCH, UI_LSLNCH}},    /* (V0.8, the looper: sy_ui_loop.c) */
-    {SEC_SEQ, G_LMIX, "MIXER", {UI_LTRK, UI_LVOL, UI_LPAN, UI_LMS}},
-    {SEC_LTRK, G_LTRK, "TRACK", {UI_LTRK, UI_LTYPE, UI_LCH, UI_LCIN}},
-    {SEC_LTRK, G_LREC, "RECORD", {UI_LQNT, UI_LCNT, UI_LLAUNCH, -1}},
-    {SEC_LTRK, G_LCLICK, "CLICK", {UI_LCLK, UI_LCLVL, -1, -1}},
+    /* (V0.8, the looper: sy_ui_loop.c. V0.86, S1 and C1-C6: PRESETS the track on every page; CLIPS' keys launch,
+     * TYPE there; the TRACK page gone: MIDI's on RECORD, COUNT-IN and LAUNCH on CLICK; NOTES and NOTE+; CLIP's
+     * SPEED; TOOLS) */
+    {SEC_SEQ, G_LCLIPS, "CLIPS", {UI_LTYPE, UI_LSCN, -1, -1}},
+    {SEC_SEQ, G_LMIX, "MIXER", {UI_LVOL, UI_LPAN, UI_LMS, -1}},
+    {SEC_LTRK, G_LREC, "RECORD", {UI_LQNT, UI_LCH, UI_LCIN, -1}},
+    {SEC_LTRK, G_LCLICK, "CLICK", {UI_LCLK, UI_LCLVL, UI_LCNT, UI_LLAUNCH}},
     {SEC_LCLIP, G_LNOTES, "NOTES", {UI_LNOTE, UI_LPITCH, UI_LSTART, UI_LLEN}},
-    {SEC_LCLIP, G_LEDIT, "EDIT", {UI_LNOTE, UI_LVEL, UI_LGRID, UI_LDEL}},
-    {SEC_LCLIP, G_LCLIP, "CLIP", {UI_LBARS, UI_LQAPP, UI_LMOVE, UI_LMCLR}},
+    {SEC_LCLIP, G_LEDIT, "NOTE+", {UI_LVEL, UI_LGRID, UI_LDEL, -1}},
+    {SEC_LCLIP, G_LCLIP, "CLIP", {UI_LBARS, UI_LSPEED, UI_LQAPP, UI_LMOVE}},
+    {SEC_LCLIP, G_LTOOLS, "TOOLS", {UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR}},
     {SEC_LSONG, G_LSONG, "SONG", {UI_LSLOT, UI_LSSCN, UI_LSREP, UI_LSON}},
     {SEC_LSONG, G_LPRJ, "PROJECT", {UI_LPRJ, UI_LLOAD, UI_LNEW, -1}},
     {SEC_KIT, G_KDRUM, "DRUM", {UI_KLANE, UI_KTUNE, UI_KDEC, UI_KTONE}},    /* (V0.85, the drums: sy_ui_drum.c) */
@@ -328,7 +335,8 @@ static const ui_page_t UI_PG[] = {
     {SEC_KIT, G_KDUCK, "DUCK", {UI_DAMT, UI_DATT, UI_DREL, UI_DSHP}},
     {SEC_LGRID, G_LGRID, "GRID", {UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC}},
     {SEC_LGRID, G_LHIT, "HIT", {UI_GSTEP, UI_GROW, UI_GCHN, UI_GRAT}},
-    {SEC_LGRID, G_LCLIP, "CLIP", {UI_LBARS, UI_LQAPP, UI_LMOVE, UI_LMCLR}},
+    {SEC_LGRID, G_LCLIP, "CLIP", {UI_LBARS, UI_LSPEED, UI_LQAPP, UI_LMOVE}},
+    {SEC_LGRID, G_LTOOLS, "TOOLS", {UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
     {SEC_BROWSE, G_BROWSE, "BROWSE", {UI_BCAT, UI_BPRE, UI_BBANK, -1}},
 };
@@ -458,7 +466,6 @@ static struct {
     uint32_t bt_t[NB], tap_t[NB];                   /* a button's press, its last tap */
     uint16_t bt_down, bt_held;                      /* buttons down; held past HOLD (their layer on) */
     uint16_t bt_chord;                              /* .. held while OCT stepped the pages (no tap, no layer) */
-    uint16_t prev_page;                             /* the page before the last tap (a double tap puts it back) */
     uint8_t lpt[2];                                 /* the LFOs' points picked (POINTS) */
     uint8_t eqpt;                                   /* the EQ's point picked (POINTS): LOW, MID, HIGH */
     uint8_t mslot;                                  /* the matrix's slot picked (SEQ), 0 .. NSLOT - 1 */
@@ -517,6 +524,26 @@ static struct {
     uint16_t pl_pos, pl_load;                       /* .. the preset turned to, the one loaded (their places in it) */
     uint8_t pl_back;                                /* .. the history's state of the sound before it */
     uint32_t pl_t;                                  /* .. its last detent, or load */
+    uint8_t cb_on, cb_t, cb_s;                      /* .. (S8) TOOLS: a copy kept; its clip (track, scene), */
+    int8_t cb_bar;                                  /* .. the whole (-1) or a bar of it */
+    uint32_t paste_t, halve_t, clr_t2;              /* .. PASTE, HALVE, CLEAR turned once (a second within 2 s does it) */
+    uint8_t clr_dir;                                /* .. CLEAR's way: 1 the notes, 2 the motion */
+    uint16_t sgpage;                                /* .. (B12) SEQ's TRACK and SONG: the page left there */
+    uint8_t tap_from;                               /* .. (B15) the section shown before a menu button's first press, */
+    uint16_t tap_page;                              /* .. its page */
+    uint8_t batt_show, scr_off;                     /* .. (F31) SHOW BATTERY: OFF, HOME, EVERY SCREEN; (F34) SCREEN
+                                                     * OFF AFTER: OFF, 1, 5, 15 MIN */
+    uint8_t scr_st, scr_eat;                        /* .. the screen: SCR_*; the controls eaten (its waking) */
+    uint32_t scr_t, scr_idle, scr_eat_t;            /* .. its last step; the last control touched; the last eaten */
+    int16_t ctr_id;                                 /* .. (F26) the centre detent's: the knob's parameter or item, */
+    int8_t ctr_n, ctr_dir;                          /* .. detents it holds still, their way */
+    uint32_t ctr_t;                                 /* .. its last detent */
+    uint16_t ks_seen[6];                            /* .. (P3) KEY SCAN: the cells outside the keys seen closed */
+    int8_t lt_want;                                 /* .. (C6) TYPE turned on CLIPS: the type it goes to + 1 (0 none) */
+    uint8_t lt_ask;                                 /* .. its track has clips: one more detent asked for */
+    uint32_t lt_t;                                  /* .. its last detent */
+    uint8_t ghold, ghold_k, ghold_new, ghold_turn;  /* .. (S7) the grid's step held (+1, 0 none), its key, put in by
+                                                     * this press, a knob turned since (no taking out at the release) */
 } ui;
 #define UI_PL_LOAD_MS 400u                          /* PRESETS' list: a preset loads this long after the last detent */
 #define UI_PL_CLOSE_MS 1800u                        /* .. the list closes this long after its last load */
@@ -759,7 +786,14 @@ static void ui_go(uint32_t page)
     const char *h;
     ui.page = (uint16_t)page;
     ui.fam = (uint8_t)f;
-    ui.fpage[f] = (uint16_t)page;
+    if (f == FAM_SEQ)                               /* (V0.86: the group the page is in) */
+        ui.sgrp = UI_PG[page].sec == SEC_LTRK || UI_PG[page].sec == SEC_LSONG;
+    else
+        ui.fpage[f] = (uint16_t)page;
+    if (f == FAM_SEQ && !ui.sgrp)                   /* (SEQ once: back to LOOP and CLIP, where they were left: C4; */
+        ui.fpage[f] = (uint16_t)page;               /* twice: TRACK and SONG, where they were) */
+    else if (f == FAM_SEQ)
+        ui.sgpage = (uint16_t)page;
     if (UI_PG[page].sec < SEC_N)
         ui.spage[UI_PG[page].sec] = (uint16_t)page;
     ui.dirty = D_ALL;
@@ -789,6 +823,11 @@ static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
     if (f == FAM_SAVE) {                            /* (V0.86: NAME IT and the browser each a screen of its own) */
         sec[0] = ui_sec() == SEC_SAVE ? (uint8_t)SEC_SAVE : (uint8_t)SEC_BROWSE;
         return 1;
+    }
+    if (f == FAM_SEQ) {                             /* (V0.86, S1: SEQ's two groups, LOOP and CLIP, TRACK and SONG) */
+        sec[0] = ui.sgrp ? (uint8_t)SEC_LTRK : (uint8_t)SEC_SEQ;
+        sec[1] = ui.sgrp ? (uint8_t)SEC_LSONG : ui_drums() ? (uint8_t)SEC_LGRID : (uint8_t)SEC_LCLIP;
+        return 2;
     }
     for (n = 0; FAM_SECS[f][n] != 0xFF; n++)
         sec[n] = FAM_SECS[f][n] == SEC_LCLIP && ui_drums() ? (uint8_t)SEC_LGRID : FAM_SECS[f][n];
@@ -832,17 +871,73 @@ static int ui_page_live(uint32_t page)
     uint32_t s = UI_PG[page].sec;
     return !ui_is_fx(s) || sp_chain_find(sy_patch.p, s - SEC_DRIVE) >= 0;
 }
-/* a family button's tap: its page (another family; FX: the view it showed, the chain view if that module has gone),
- * else the next of the section (EDIT, FX's module) or of the family (the chain view: none) */
+static void ui_combo(uint32_t b, int up);
+static void ui_chain_flip(void);
+static void ui_lay_open(uint32_t lay, uint32_t b);
+static void ui_step_section(int32_t s);
+static void ui_browse_open(void);
+/* a family button once: from elsewhere its page (FX: the view it showed, the chain view if that module has gone);
+ * in its family its first page (FX: the chain view, the module shown picked) */
 static void ui_family_tap(uint32_t f)
 {
     uint8_t secs[NFXC];
-    if (ui.fam != f)
+    int from = ui.fam != f;
+    if (f == FAM_SEQ)                               /* (SEQ once: LOOP and CLIP, C4) */
+        ui.sgrp = 0;
+    if (from)                                       /* (V0.86, B1-B12: from elsewhere, the page left; in the family, */
         ui_go(ui_in_fam(ui.fpage[f], f) && ui_page_live(ui.fpage[f]) && ui_fam_has(f, UI_PG[ui.fpage[f]].sec) ? ui.fpage[f]
-              : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)
+              : f == FAM_FX                                       ? ui_first_page(SEC_CHAIN)   /* its first page: C3) */
                                                                   : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
-    else if (ui_sec() != SEC_CHAIN)
-        ui_step_pages(1, 0, 1);
+    else if (f == FAM_FX && ui_sec() != SEC_CHAIN)  /* (FX: the chain view, the module shown picked) */
+        ui_chain_flip();
+    else
+        ui_go(f == FAM_FX ? ui_first_page(SEC_CHAIN) : (ui_fam_secs(f, secs), ui_first_page(secs[0])));
+    if (ui.help && from && !ui.mod && !ui.lay) {    /* (B16: HELP on, what twice does, a moment) */
+        char t[32];
+        const char *a = f == FAM_HOME ? "THE BROWSER" : f == FAM_EDIT ? "JUMP" : f == FAM_ENV ? (ui_sec() == SEC_ENV1 ? "ENV 2" : "ENV 1")
+                        : f == FAM_LFO ? "MOMENTARY" : f == FAM_FX ? (ui_sec() == SEC_CHAIN ? "THE MODULE" : "THE CHAIN")
+                        : f == FAM_GLO ? "PERFORM" : f == FAM_SCL ? (chd.mode == CH_OFF ? "CHORDS ON" : "CHORDS OFF")
+                        : f == FAM_ARP ? (chd.perf ? "ARP OFF" : "ARP ON") : f == FAM_SEQ ? "TRACK AND SONG" : 0;
+        if (a) {
+            sp_put(sp_put(t, "AGAIN: "), a);
+            ui_toast(t);
+            ui.toast_t = fm1_ms + 2000u;
+        }
+    }
+}
+/* .. twice (B15: the second within UI_DTAP_MS, on what the first opened): HOME the browser; EDIT JUMP latched; ENV the
+ * other envelope; LFO MOMENTARY latched; FX the chain view <-> the module picked; GLO PERFORM latched; SCL the chords
+ * on, off; ARP the ARP on, off; SEQ TRACK and SONG (where they were left). A latched layer's button closes it */
+static void ui_family_twice(uint32_t f)
+{
+    switch (f) {
+    case FAM_HOME: ui_browse_open(); break;
+    case FAM_EDIT: ui_lay_open(LAY_JUMP, B_EDIT); ui.lay_lock = 1; break;
+    case FAM_ENV: {                                 /* (the other envelope than the one shown before the first press; */
+        uint32_t from = ui.tap_from == SEC_ENV1 || ui.tap_from == SEC_ENV2 ? ui.tap_from : ui_sec(), to;   /* from */
+        to = from == SEC_ENV1 ? SEC_ENV2 : SEC_ENV1;                                                       /* else: */
+        ui_go(UI_PG[ui.spage[to]].sec == to ? ui.spage[to] : ui_first_page(to));                          /* the one */
+        break;                                                                                             /* opened's) */
+    }
+    case FAM_LFO:                                   /* (MOMENTARY on the page shown before the first press: its */
+        if (ui_fam_of(ui.tap_from) != FAM_LFO)      /* knobs for now, both hands free) */
+            ui_go(ui.tap_page);
+        ui_lay_open(LAY_MOM, B_LFO);
+        ui.lay_lock = 1;
+        break;
+    case FAM_FX:                                    /* (from a module the first press showed the chain: it stays) */
+        if (!ui_is_fx(ui.tap_from))
+            ui_chain_flip();
+        break;
+    case FAM_GLO: ui_lay_open(LAY_PERF, B_GLO); ui.lay_lock = 1; break;
+    case FAM_SCL: ui_combo(B_SCL, chd.mode == CH_OFF); break;
+    case FAM_ARP: ui_combo(B_ARP, !chd.perf); break;
+    case FAM_SEQ:
+        ui.sgrp = 1;
+        ui_go(UI_PG[ui.sgpage].sec == SEC_LTRK || UI_PG[ui.sgpage].sec == SEC_LSONG ? ui.sgpage : ui_first_page(SEC_LTRK));
+        break;
+    default: break;
+    }
 }
 
 /* SELECT: the family's sections in their order (each on the page it showed last). V0.86: modules only (L8: a menu of
@@ -1691,6 +1786,7 @@ static void ui_learn_ms(void)
 }
 
 /* the items: the MENU's; an LFO's points and GLOBAL's tempo (not in the MOD layer: nothing there to modulate) */
+static int32_t ui_centre(int32_t id, int32_t s, int32_t old, int32_t nv, int32_t c);   /* (V0.86, F26: below) */
 /* SCL's chords (V0.7, sy_chord.c chd): a turn of CHORD's, PERFORM's (the style shown's own), BASS's or MIDI's knobs;
  * the audio side takes them at its next block (chd.gen: the chord made again). V0.75, ARP's: PERFORM's RATE, MOVE
  * and FEEL, GROOVE's, a step's (the one picked) taken as they stand, from the next step (the arpeggio goes on) */
@@ -1763,6 +1859,8 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e);   /* sy_ui_loop.c
 static int ui_loop_key(uint32_t k);
 static void ui_drum_turn(int32_t item, int32_t s, uint32_t e);   /* sy_ui_drum.c (V0.85): the kit's knobs, the grid's */
 static int ui_grid_keys(void);                      /* .. the grid's pages take the keys */
+static int ui_clips_keys(void);                     /* sy_ui_loop.c (V0.86, S5): CLIPS takes the keys */
+static int ui_clips_key(uint32_t k);                /* .. a key there (a clip, a scene) */
 static int ui_grid_key(uint32_t k);                 /* .. a key there (a step, a row) */
 static void ui_l_follow(void);                      /* sy_ui_loop.c: the page as the selected track's TYPE wants it */
 static void lp_select(uint32_t t);
@@ -1780,6 +1878,12 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (item >= UI_HELP && item <= UI_MPC) {   /* the SETTINGS' others */
         ui_set_turn(item, s);
+    } else if (item == UI_PBATT || item == UI_PSCR) {   /* (V0.86: POWER's) */
+        if (item == UI_PBATT)
+            ui.batt_show = (uint8_t)sy_clampi(ui.batt_show + s, 0, 2);
+        else
+            ui.scr_off = (uint8_t)sy_clampi(ui.scr_off + s, 0, 3);
+        ui.dirty = D_ALL;
     } else if (item == UI_BRUN || item == UI_BCLR) {   /* BENCH's */
         ui_bench_turn(item);
     } else if (item >= UI_C2ON && item <= UI_C2LOAD) {   /* CORE 2's */
@@ -1803,11 +1907,11 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (item >= UI_DKTUNE && item <= UI_DKDUCK) {   /* (V0.86: HOME on a drum track: the whole kit's) */
         if (item == UI_DKTUNE)
-            dkk.ktune = (int8_t)sy_clampi(dkk.ktune + s, -24, 24);
+            dkk.ktune = (int8_t)ui_centre(item, s, dkk.ktune, sy_clampi(dkk.ktune + s, -24, 24), 0);
         else if (item == UI_DKDEC)
             dkk.kdecay = (uint8_t)sy_clampi(dkk.kdecay + ui_accel(e, s, 100), 0, 100);
         else if (item == UI_DKTONE)
-            dkk.ktone = (int8_t)sy_clampi(dkk.ktone + ui_accel(e, s, 100), -50, 50);
+            dkk.ktone = (int8_t)ui_centre(item, s, dkk.ktone, sy_clampi(dkk.ktone + ui_accel(e, s, 100), -50, 50), 0);
         else
             dkk.amount = (uint8_t)sy_clampi(dkk.amount + ui_accel(e, s, 100), 0, 100);
         ui.dirty |= D_KNOBS | D_DISP;
@@ -1825,8 +1929,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
     } else if (item >= UI_HMODE && item <= UI_STAP) {   /* SCL's chords, ARP's */
         ui_chord_turn(item, s);
-    } else if (item >= UI_LTRK && item <= UI_LNEW) {   /* the looper's (V0.8: sy_ui_loop.c) */
-        ui_loop_turn(item, s, e);
+    } else if ((item >= UI_LTRK && item <= UI_LNEW) || (item >= UI_LSPEED && item <= UI_LCLR)) {   /* the looper's */
+        ui_loop_turn(item, s, e);                                                                     /* (sy_ui_loop.c) */
     } else if (item >= UI_KLANE && item <= UI_GRAT) {   /* the drums' (V0.85: sy_ui_drum.c) */
         ui_drum_turn(item, s, e);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
@@ -1962,10 +2066,40 @@ static int ui_mom_keep(uint32_t id)
     return 1;
 }
 
+/* V0.86 (F26): a centre detent: a turn through a bipolar knob's middle c (or onto it) stops there and holds for three
+ * detents more the same way; a turn back leaves at once, and a new gesture from the middle holds nothing. id: the
+ * parameter or item; s: the detents; old, nv: its value before, after the turn. The value to set */
+#define UI_CTR_MS 600u
+static int32_t ui_centre(int32_t id, int32_t s, int32_t old, int32_t nv, int32_t c)
+{
+    int32_t dir = s > 0 ? 1 : -1, n = s > 0 ? s : -s;
+    if (ui.ctr_id != id || fm1_ms - ui.ctr_t > UI_CTR_MS)
+        ui.ctr_n = 0;
+    ui.ctr_id = (int16_t)id;
+    ui.ctr_t = fm1_ms;
+    if (ui.ctr_n && old == c) {                     /* (held: the detents spent, a turn back leaves) */
+        if (dir == ui.ctr_dir && n <= ui.ctr_n) {
+            ui.ctr_n = (int8_t)(ui.ctr_n - n);
+            return c;
+        }
+        ui.ctr_n = 0;
+        return nv;
+    }
+    if (old != c && (nv - c) * (old - c) <= 0) {    /* (through the middle, or onto it: there) */
+        ui.ctr_n = 3;
+        ui.ctr_dir = (int8_t)dir;
+        return c;
+    }
+    return nv;
+}
+
 static void ui_knob(uint32_t k, int32_t s)
 {
+    int32_t s0 = s;                                 /* (the detents, before ACCEL: F26) */
     int32_t id = ui_virt(UI_PG[ui.page].id[k]);     /* (the EQ's POINTS: the picked point's own) */
     const sp_desc_t *d;
+    if (ui.ghold && ui_grid_keys())                 /* (V0.86, S7: a step held on the grid: its hit's VELOCITY, */
+        id = UI_GVEL + (int32_t)k;                  /* ACCENT, CHANCE, RATCHET) */
     ui_safe_end();
     ui_pl_close();
     ui_cd_stop();
@@ -2018,7 +2152,12 @@ static void ui_knob(uint32_t k, int32_t s)
     } else {
         ui_edit();
     }
-    sy_patch.p[id] = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
+    {
+        int32_t nv = sp_clamp((uint32_t)id, sy_patch.p[id] + s);
+        if (d->lo < 0 && d->hi > 0 && d->hi - d->lo >= 40 && d->unit != U_DST && !ui_list((uint32_t)id))
+            nv = ui_centre(id, s0, sy_patch.p[id], nv, 0);   /* (F26: a bipolar knob's middle) */
+        sy_patch.p[id] = (int16_t)nv;
+    }
     if (ui_fx_inst() >= 0 && FXI_TYPE[ui_fx_inst()] == FXT_EQ && ui.lay != LAY_MOM) {   /* (V0.86: a point moved or a */
         uint32_t b = sp_fx_base((uint32_t)id);                                         /* type set: no shape now) */
         if (b != SP_EQ_SHAPE && ((b >= SP_EQ_LOW && b <= SP_EQ_HQ) || (b >= SP_EQ_LTYPE && b <= SP_EQ_HTYPE)))
@@ -2033,6 +2172,97 @@ static void ui_knob(uint32_t k, int32_t s)
 
 /* a parameter changed from elsewhere (MIDI, a sound): what shows it */
 static void sy_ui_touch(void) { ui.dirty |= D_KNOBS | D_DISP | D_HEAD | D_FOOT; }
+
+/* ---------------------------------------------------------------------------------------- the power --- */
+/* V0.86 (F31): the battery's ADC reading (channel 3), smoothed: sy_main.c reads it a frame at a time; 0 none yet. Its
+ * bars, as the stock firmware's thresholds give them (Felucca's ui_draw.c: 531, 561, 591; unverified on this unit):
+ * 0 .. 3; 4 a USB host powers it; -1 not read yet */
+static int32_t sy_batt_raw;
+static int sy_usb_power(void);                      /* sy_main.c (the emulator: strata_web.c) */
+static int32_t ui_batt(void)
+{
+    if (sy_usb_power())
+        return 4;
+    if (sy_batt_raw <= 0)
+        return -1;
+    return sy_batt_raw >= 591 ? 3 : sy_batt_raw >= 561 ? 2 : sy_batt_raw >= 531 ? 1 : 0;
+}
+/* V0.86 (F34): SETTINGS > POWER > SCREEN OFF AFTER (OFF, 1, 5, 15 MIN): no control touched that long, the panel goes
+ * dark (lcd.c lcd_power: DISPOFF, SLPIN). The backlight stays lit: its pin also enables the key and knob scan, so
+ * with it off nothing could wake the screen (Felucca's notes, found on its 1.1.5; unverified on this unit). Any
+ * control wakes it, and that press, turn or key does nothing else, nor does any other until all are let go and the
+ * knobs rest UI_SCR_EAT_MS. Waking a frame at a time: SLPOUT 120 ms after the SLPIN, 120 ms later a frame that
+ * redraws everything, then DISPON. Never dark under a countdown, a count-in, the splash */
+static void lcd_power(uint32_t s);
+enum { SCR_ON, SCR_OFF, SCR_WAKE, SCR_SLPOUT, SCR_SHOW };
+static const uint8_t UI_SCR_MIN[4] = {0, 1, 5, 15};
+#define UI_SCR_EAT_MS 300u
+static int ui_scr_touch(void)                       /* a control touched now; 1: eaten (dark, or waking) */
+{
+    ui.scr_idle = fm1_ms;
+    if (ui.scr_st == SCR_OFF) {
+        ui.scr_st = SCR_WAKE;
+        ui.scr_eat = 1;
+    }
+    if (ui.scr_eat)
+        ui.scr_eat_t = fm1_ms;
+    return ui.scr_eat;
+}
+static int32_t ui_enc(uint32_t e)                   /* an encoder's detents (none while eaten) */
+{
+    int32_t s = panel_enc(e);
+    return s && ui_scr_touch() ? 0 : s;
+}
+static void ui_scr_ms(void)                         /* every millisecond: held controls; the eating's end */
+{
+    if (fm1_in.buttons || fm1_in.notes)
+        ui_scr_touch();
+    if (ui.cd_btn != NB || ui.ub_t0 || ui.boot || lpr.st == LR_COUNT) {
+        ui.scr_idle = fm1_ms;
+        if (ui.scr_st == SCR_OFF)
+            ui.scr_st = SCR_WAKE;
+    }
+    if (ui.scr_eat && ui.scr_st == SCR_ON && fm1_ms - ui.scr_eat_t >= UI_SCR_EAT_MS)
+        ui.scr_eat = 0;
+}
+static int ui_scr_frame(void)                       /* a frame (sy_ui_draw.c): 1 drawn; its steps */
+{
+    uint32_t lim = UI_SCR_MIN[ui.scr_off & 3u] * 60000u;
+    switch (ui.scr_st) {
+    case SCR_ON:
+        if (!lim || (int32_t)(fm1_ms - ui.scr_idle) < (int32_t)lim)
+            return 1;
+        lcd_power(0);
+        ui.scr_st = SCR_OFF;
+        ui.scr_t = fm1_ms;
+        return 0;
+    case SCR_WAKE:
+        if (fm1_ms - ui.scr_t >= 120u) {
+            lcd_power(1);
+            ui.scr_st = SCR_SLPOUT;
+            ui.scr_t = fm1_ms;
+        }
+        return 0;
+    case SCR_SLPOUT:
+        if (fm1_ms - ui.scr_t < 120u)
+            return 0;
+        ui.scr_st = SCR_SHOW;
+        ui.dirty = D_ALL;
+        return 1;
+    case SCR_SHOW:
+        return 1;
+    default:
+        return 0;
+    }
+}
+static void ui_scr_shown(void)                      /* .. after it: the page redrawn, the panel on */
+{
+    if (ui.scr_st != SCR_SHOW)
+        return;
+    lcd_power(2);
+    ui.scr_st = SCR_ON;
+    ui.scr_idle = fm1_ms;
+}
 
 /* ---------------------------------------------------------------------------------------- buttons --- */
 #define UI_CHORD ((1u << B_HOME) | (1u << B_EDIT) | (1u << B_ENV) | (1u << B_LFO) | (1u << B_FX) | (1u << B_GLO) | \
@@ -2382,6 +2612,11 @@ static void ui_release(uint32_t b, int held)
     if (b == B_REC) {                               /* REC (V0.8): the looper's record on the selected track, the scene */
         if (ui.mod)                                 /* picked (sy_loop.c lp_rec_tap; held: its MOD layer, REC + OCT+ */
             return;                                 /* latches it); what it does, the audio side's (sy_ui_ms says) */
+        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS) {    /* (V0.86: twice is TAKE's, V0.87; till then nothing) */
+            ui.tap_t[b] = 0;
+            return;
+        }
+        ui.tap_t[b] = fm1_ms;
         lpr.req = LP_REQ_TAP;
         ui.dirty |= D_DISP | D_HEAD;
         return;
@@ -2389,26 +2624,22 @@ static void ui_release(uint32_t b, int held)
     f = ui_btn_fam(b);
     if (f == FAM_N)
         return;
-    if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS && ui.fam == f && !ui.mod && !ui.lay) {   /* twice: the next section */
-        if (ui_fam_of(UI_PG[ui.prev_page].sec) == f)   /* (the first tap's page step undone) */
-            ui_go(ui.prev_page);
-        if (f == FAM_FX)
-            ui_chain_flip();                        /* (FX: the chain view <-> the module picked) */
-        else if (f == FAM_HOME)
-            ui_browse_open();                       /* (HOME: the presets) */
-        else
-            ui_step_section(1);
-        ui.tap_t[b] = 0;
+    if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS && ui.fam == f && !ui.mod && !ui.lay) {   /* twice (V0.86: the first */
+        ui.tap_t[b] = 0;                                                                 /* acted, it stays) */
+        ui_family_twice(f);
         return;
     }
     ui.tap_t[b] = fm1_ms;
-    ui.prev_page = ui.page;
+    ui.tap_from = (uint8_t)ui_sec();
+    ui.tap_page = ui.page;
     ui_family_tap(f);
 }
 
 static void ui_buttons(void)
 {
     uint32_t rel, pr = fm1_input_edges(&rel), b, bit;
+    if ((pr || rel) && ui_scr_touch())              /* (V0.86, F34: the screen dark or waking: eaten) */
+        return;
     for (b = 0; b < NB; b++) {
         bit = 1u << b;
         if ((pr >> panel.btn[b]) & 1u) {
@@ -2473,13 +2704,16 @@ static uint32_t sy_ui_key_vel(void) { return ui.kvel ? ui.kvel : 100u; }
  * (its own state read: the main loop's may be a frame old). sy_main.c reads the keys between a redraw's strips then */
 static int sy_ui_keys_plain(void)
 {
-    return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !ui_grid_keys() && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
+    return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !ui_grid_keys() && !ui_clips_keys() &&
+           ui.scr_st == SCR_ON && !ui.scr_eat && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
 }
 
 /* the keys in REC's MOD layer: a white key picks its source, no key plays; 1 = taken (no note). (ENV's layer:
  * the keys play, to hear what ENV 2 does) */
 static int sy_ui_key(uint32_t k)
 {
+    if (ui_scr_touch())                             /* (V0.86, F34: the screen dark or waking: no note) */
+        return 1;
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
     if (ui.lay == LAY_MAC && k < 27u && UI_KEY_FX[k] >= 0) {   /* MACROS: a module bypassed or back in */
@@ -2502,6 +2736,8 @@ static int sy_ui_key(uint32_t k)
         return ui_loop_key(k);
     if (ui_grid_keys())                             /* the drum grid (V0.85): white keys its steps, black its rows */
         return ui_grid_key(k);
+    if (ui_clips_keys())                            /* CLIPS (V0.86): white keys the clips, black the scenes */
+        return ui_clips_key(k);
     if (ui.lay == LAY_JUMP && k < 27u && UI_KEY_JUMP[k] != 0xFF) {   /* JUMP: the key's section (a chain slot's: */
         uint32_t sec = UI_KEY_JUMP[k];                                /* its module) */
         if (sec >= UI_JUMP_FX) {
@@ -2512,6 +2748,8 @@ static int sy_ui_key(uint32_t k)
             }
             sec = SEC_DRIVE + (uint32_t)i;
         }
+        if (ui.lay_lock)                            /* (V0.86: latched by EDIT twice, the module opened closes it) */
+            ui_lay_close();
         ui_go(UI_PG[ui.spage[sec]].sec == sec ? ui.spage[sec] : ui_first_page(sec));
         return 1;
     }
@@ -2569,13 +2807,14 @@ static void sy_ui_ms(void)
         sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
         ui.dirty |= D_DISP | D_HEAD;
     }
+    ui_scr_ms();
     ui_buttons();
     if (ui.cd_btn != NB)
         ui_cd_tick();
     for (k = 0; k < 4u; k++)
-        if ((s = panel_enc(EN_K1 + k)) != 0)
+        if ((s = ui_enc(EN_K1 + k)) != 0)
             ui_knob(k, s);
-    if ((s = panel_enc(EN_SELECT)) != 0) {          /* SELECT: the section (the chain view: the slot) */
+    if ((s = ui_enc(EN_SELECT)) != 0) {          /* SELECT: the section (the chain view: the slot) */
         ui_cd_stop();
         ui_pl_close();
         if (ui_sec() == SEC_CHAIN && !ui.mod && !ui.lay)
@@ -2583,13 +2822,30 @@ static void sy_ui_ms(void)
         else
             ui_step_section(s);
     }
-    if ((s = panel_enc(EN_ALGO)) != 0) {            /* ALGORITHM: the section's pages (V0.75: everywhere) */
+    if ((s = ui_enc(EN_ALGO)) != 0) {               /* ALGORITHM: the section's pages (V0.75: everywhere) */
         ui_cd_stop();
         ui_pl_close();
         ui_step_pages(s, 1, 0);
     }
-    if ((s = panel_enc(EN_PRESET)) != 0)
+    if ((s = ui_enc(EN_PRESET)) != 0)
         ui_presets(s);                              /* (V0.86: the sound, the drum or the track, by the page) */
+    if (UI_PG[ui.page].graph == G_KSCAN) {          /* (V0.86, P3: KEY SCAN live) */
+        static uint32_t h, kt;
+        uint32_t r, c, x = 0;
+        for (c = 0; c < FM1_NCOL; c++) {
+            x = x * 31u + fm1_in.raw[c];
+            for (r = 1; r < 5u; r++)
+                if (FM1_KEYMAP[r][c] < 0 && ((fm1_in.raw[c] >> r) & 1u))
+                    ui.ks_seen[r] |= (uint16_t)(1u << c);
+        }
+        if (x != h && fm1_ms - kt >= 30u) {
+            h = x;
+            kt = fm1_ms;
+            ui.dirty |= D_DISP;
+        }
+    } else {
+        memset(ui.ks_seen, 0, sizeof ui.ks_seen);
+    }
     ui_pl_ms();
     ui_save_ms();
     ui_learn_ms();
@@ -2617,7 +2873,8 @@ static void settings_save(void) {}
 #define SS_SET_AR (SS_SET_ML + 32u)
 #define SS_SET_SQ (SS_SET_AR + 5u + 3u * AR_NSTEP)
 #define SS_SET_C2 (SS_SET_SQ + 8u)
-#define SS_SETTINGS_LEN (SS_SET_C2 + 4u)
+#define SS_SET_PW (SS_SET_C2 + 4u)                  /* (V0.86: SHOW BATTERY, SCREEN OFF AFTER, two spare) */
+#define SS_SETTINGS_LEN (SS_SET_PW + 4u)
 static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
 {
     if (!n) {
@@ -2669,6 +2926,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             q[6] = q[7] = 0;
         }
         b[SS_SET_C2] = c2.on, b[SS_SET_C2 + 1u] = c2.load, b[SS_SET_C2 + 2u] = b[SS_SET_C2 + 3u] = 0;
+        b[SS_SET_PW] = ui.batt_show, b[SS_SET_PW + 1u] = ui.scr_off, b[SS_SET_PW + 2u] = b[SS_SET_PW + 3u] = 0;
         return SS_SETTINGS_LEN;
     }
     if (n < 11u || n > SS_SETTINGS_LEN || b[0] != 'S' || b[1] != 'E' || b[2] != 'T' || b[3] != '1')
@@ -2730,9 +2988,13 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
         lpg.quant = (uint8_t)(q[0] % LQ_N), lpg.cin = q[1] != 0, lpg.click = (uint8_t)(q[2] % LC_N);
         lpg.clvl = (uint8_t)sy_clampi(q[3], 0, 10), lpg.launch = (uint8_t)(q[4] % LL_N), lpg.prj = (uint8_t)(q[5] % LP_NPRJ);
     }
-    if (n >= SS_SETTINGS_LEN) {                     /* (V0.8 BENCH's CORE 2) */
+    if (n >= SS_SET_PW) {                           /* (V0.8 BENCH's CORE 2) */
         c2.on = b[SS_SET_C2] != 0;
         c2.load = (uint8_t)(sy_clampi(b[SS_SET_C2 + 1u], 4, 32) & ~3);
+    }
+    if (n >= SS_SETTINGS_LEN) {                     /* (V0.86's POWER) */
+        ui.batt_show = (uint8_t)(b[SS_SET_PW] % 3u);
+        ui.scr_off = (uint8_t)(b[SS_SET_PW + 1u] % 4u);
     }
     if (n >= SS_SET_ML) {
         uint32_t i;

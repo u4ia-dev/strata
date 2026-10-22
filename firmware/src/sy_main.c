@@ -169,6 +169,15 @@ static void sy_master_poll(void)
         sy_master_q12 = sy_master_of((uint32_t)(sy_master_knob / 16));
     }
 }
+/* V0.86 (F31): the battery's divider on the ADC's channel 3, a frame at a time, smoothed (sy_ui.c ui_batt: its bars);
+ * USB power: a host has configured the USB and not suspended it (Felucca's ui_draw.c batt_shown) */
+static void sy_batt_poll(void)
+{
+    int32_t b = fm1_adc_read(FM1_ADC_BATT);
+    if (b > 0)
+        sy_batt_raw = sy_batt_raw ? sy_batt_raw + (b - sy_batt_raw) / 16 : b;
+}
+static int sy_usb_power(void) { return usb.config && !usb.suspended; }
 static void sy_master_boot(void)
 {
     uint32_t i;
@@ -518,6 +527,7 @@ static void fm1_main(void)
         if (fm1_ms - frame_t >= 15u) {           /* a frame: ~60 a second at most */
             frame_t = fm1_ms;
             sy_master_poll();
+            sy_batt_poll();
             t = fm1_ticks();
             sy_app_frame();
             sy_bench.frame_us = (fm1_ticks() - t) / FM1_TICKS_PER_US;

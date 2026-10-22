@@ -6,9 +6,10 @@
  *     VELOCITY's share: the gain by velocity drawn), DUCK (AMOUNT, ATTACK, RELEASE, SHAPE: the synth's level drawn
  *     over time from a ghost hit). Stopped, the drum played is the one picked;
  *   - CLIP on a drum track: GRID (the clip in sixteenths, a row a drum and the DUCK row; the step picked, its VELOCITY,
- *     ACCENT), HIT (its CHANCE, RATCHET), CLIP (as a synth track's). On GRID and HIT the white keys put in or take
- *     out the row's hits on the sixteen steps shown (stopped: heard as they go in), the black keys pick the row
- *     (1 KICK .. 9 DUCK); their LEDs show the steps and the rows.
+ *     ACCENT), HIT (its CHANCE, RATCHET), CLIP (as a synth track's), TOOLS. On GRID and HIT the white keys put in or
+ *     take out the row's hits on the sixteen steps shown (stopped: heard as they go in), the black keys pick the row
+ *     (1 KICK .. 9 DUCK); their LEDs show the steps and the rows. V0.86 (S7): a step's key held, the four knobs set
+ *     its hit's VELOCITY, ACCENT, CHANCE, RATCHET; a hit there taken out at the release only when no knob turned.
  * A drum track's keys elsewhere (sy_loop.c): white keys 1-8 the drums, 9-16 the same accented, the first black key
  * DUCK; they glow as such. Needs sy_ui.c, sy_ui_draw.c, sy_ui_loop.c (ui_l_head), sy_gfx.c. */
 
@@ -48,12 +49,12 @@ static void ui_drum_turn(int32_t item, int32_t s, uint32_t e)
     dk_lane_t *k = &dkk.l[ui_d_lane()];
     switch (item) {
     case UI_KLANE: ui.krow = (uint8_t)sy_clampi((int32_t)ui_d_lane() + s, 0, DK_N - 1); break;
-    case UI_KTUNE: k->tune = (int8_t)sy_clampi(k->tune + s, -24, 24); break;
+    case UI_KTUNE: k->tune = (int8_t)ui_centre(item, s, k->tune, sy_clampi(k->tune + s, -24, 24), 0); break;
     case UI_KDEC: k->decay = (uint8_t)sy_clampi(k->decay + ui_accel(e, s, 100), 0, 100); break;
     case UI_KTONE: k->tone = (uint8_t)sy_clampi(k->tone + ui_accel(e, s, 100), 0, 100); break;
     case UI_KCHR: k->chr = (uint8_t)sy_clampi(k->chr + ui_accel(e, s, 100), 0, 100); break;
     case UI_KLVL: k->level = (uint8_t)sy_clampi(k->level + ui_accel(e, s, 127), 0, 127); break;
-    case UI_KPAN: k->pan = (uint8_t)sy_clampi(k->pan + ui_accel(e, s, 126), 1, 127); break;
+    case UI_KPAN: k->pan = (uint8_t)ui_centre(item, s, k->pan, sy_clampi(k->pan + ui_accel(e, s, 126), 1, 127), 64); break;
     case UI_KACC: dkk.accent = (uint8_t)sy_clampi(dkk.accent + ui_accel(e, s, 100), 0, 100); break;
     case UI_KVSN: dkk.vsens = (uint8_t)sy_clampi(dkk.vsens + ui_accel(e, s, 100), 0, 100); break;
     case UI_DAMT: dkk.amount = (uint8_t)sy_clampi(dkk.amount + ui_accel(e, s, 100), 0, 100); break;
@@ -68,6 +69,7 @@ static void ui_drum_turn(int32_t item, int32_t s, uint32_t e)
             ui_toast("NO HIT: A WHITE KEY PUTS ONE");
             return;
         }
+        ui.ghold_turn = 1;                          /* (V0.86: held, the hit stays at the release) */
         break;
     }
     default: break;
@@ -86,6 +88,8 @@ static int ui_grid_key(uint32_t k)
     if (k >= 27u)
         return 1;
     w = ui_d_white(k, &black);
+    if (ui.ghold)                                   /* (V0.86: a step held: no other key till it goes) */
+        return 1;
     if (black) {
         if (w < DK_ROWS) {
             ui.grow = (uint8_t)w;
@@ -94,6 +98,13 @@ static int ui_grid_key(uint32_t k)
         return 1;
     }
     st = ui_d_page0() + w;
+    if (st < ui_d_steps() && lp_cur_clip()->len && lp_grid_at(lp_cur_clip(), ui_d_row(), st) != LP_END) {
+        ui.gstep = (uint16_t)st;                    /* (S7: a hit there held: the knobs its own; out at the release */
+        ui.ghold = 1, ui.ghold_k = (uint8_t)k;      /* unless one turned) */
+        ui.ghold_new = 0, ui.ghold_turn = 0;
+        ui.dirty = D_ALL;
+        return 1;
+    }
     r = lp_grid_toggle(ui_d_row(), st, sy_ui_key_vel());
     if (r < 0) {
         ui_toast(lp_cur_rec() && lpr.st == LR_TAKE ? "THE TAKE SETS THIS CLIP" : st >= ui_d_steps() ? "PAST THE CLIP'S END"
@@ -101,13 +112,32 @@ static int ui_grid_key(uint32_t k)
         return 1;
     }
     ui.gstep = (uint16_t)st;
+    if (r) {                                        /* (put in: held, the knobs its own) */
+        ui.ghold = 1, ui.ghold_k = (uint8_t)k;
+        ui.ghold_new = 1, ui.ghold_turn = 0;
+    }
     if (r && !cht.run && lpr.st == LR_OFF)
         sy_app_drum(DK_NOTE[ui_d_row()], sy_ui_key_vel());
     sp_put(sp_put(sp_fix(sp_put(sp_put(sp_put(m, DK_NAME[ui_d_row()]), " "), "STEP "), (int32_t)st + 1, 0u, 0), " "),
            r ? "IN" : "OUT");
     ui_toast(m);
-    ui.dirty |= D_KNOBS | D_DISP | D_HEAD;
+    ui.dirty = D_ALL;
     return 1;
+}
+/* .. the step held let go (or its page gone): a hit that was there, no knob turned, taken out (a tap's toggle) */
+static void ui_grid_ms(void)
+{
+    char m[40];
+    if (!ui.ghold || ((fm1_in.notes >> ui.ghold_k) & 1u && ui_grid_keys()))
+        return;
+    if (ui_grid_keys() && !ui.ghold_new && !ui.ghold_turn &&
+        lp_grid_toggle(ui_d_row(), ui.gstep % ui_d_steps(), sy_ui_key_vel()) == 0) {
+        sp_put(sp_fix(sp_put(sp_put(m, DK_NAME[ui_d_row()]), " STEP "), (int32_t)(ui.gstep % ui_d_steps()) + 1, 0u, 0),
+               " OUT");
+        ui_toast(m);
+    }
+    ui.ghold = 0;
+    ui.dirty = D_ALL;
 }
 
 /* the keys' LEDs (sy_ui_draw.c sy_ui_leds; 1: key k's set here). The grid: the row's hits on the steps shown lit, the
@@ -155,6 +185,7 @@ static int ui_drum_leds(uint32_t k)
 static void sy_ui_drum_ms(void)
 {
     uint8_t l = dk_last;
+    ui_grid_ms();
     if (cht.run) {                                  /* (running: the clips' hits are not the one played) */
         dk_last = 0xFF;
         return;
@@ -250,6 +281,20 @@ static void ui_d_knobs(uint32_t k0, const int32_t *ids)
         lk_text(CX[i], 188.0f, T10B, lk_fit(f, sizeof f, v, T10B, 0, i < 2u ? 74.0f : 50.0f), ui_ink(ui_hot(k0 + i)),
                 sk.ground, 0, 0);
         ui_H(k0 + i, CX[i] - 18.0f, 185.0f);
+    }
+    pg.figs = 0xFu;
+}
+/* V0.86 (S7): a step held, its hit's VELOCITY, ACCENT, CHANCE, RATCHET on the four knobs, two by two */
+static void ui_d_knobs4(void)
+{
+    char v[40], f[40];
+    uint32_t i;
+    for (i = 0; i < 4u; i++) {
+        float x = i & 1u ? 134.0f : 26.0f, y = i & 2u ? 192.0f : 168.0f;
+        const char *nm = ui_drum_nv(UI_GVEL + i, v);
+        lk_text(x, y, T9, nm, sk.lab, sk.ground, 20, 0);
+        lk_text(x, y + 11.0f, T10B, lk_fit(f, sizeof f, v, T10B, 0, 90.0f), ui_ink(ui_hot(i)), sk.ground, 0, 0);
+        ui_H(i, x - 18.0f, y + 8.0f);
     }
     pg.figs = 0xFu;
 }
@@ -402,20 +447,26 @@ static void ui_p_kduck(void)
 #define UI_GX0 48.0f
 #define UI_GDX 11.0f
 #define UI_GY0 60.0f
-#define UI_GDY 12.0f
+#define UI_GDY 11.0f
 static void ui_d_grid(int hit)
 {
     const lp_clip_t *c = lp_cur_clip();
     uint32_t t = lpp.sel % LP_NTRK, p0 = ui_d_page0(), n = ui_d_steps(), r, s, k, cur = ui.gstep % n;
     uint32_t bt = lp_bar_ticks() / LP_STEP, qt = (uint32_t)(sy_beat_q * 4.0f + 0.5f);
     char tx[48], *e;
-    int hot = ui_hot(0) || ui_hot(1);
+    int hot = ui.ghold ? ui_turning() >= 0 : ui_hot(0) || ui_hot(1);
+    if (ui.ghold && cur >= p0 && cur < p0 + 16u)   /* (S7: the step held, its column lit) */
+        lk_box(UI_GX0 + UI_GDX * (float)(cur - p0), UI_GY0 - 2.0f, UI_GX0 + UI_GDX * (float)(cur - p0 + 1u) - 1.0f,
+               UI_GY0 + UI_GDY * (float)DK_ROWS, sk.line);
     e = sp_put(sp_fix(sp_put(sp_put(sp_put(sp_fix(sp_put(tx, "T"), (int32_t)t + 1, 0u, 0), " \xB7 "),
                                     (char[2]){(char)('A' + lpp.scn % LP_NSCN), 0}), " \xB7 STEPS "),
                              (int32_t)p0 + 1, 0u, 0), "-");
     sp_fix(sp_put(sp_fix(e, (int32_t)(p0 + 16u < n ? p0 + 16u : n), 0u, 0), " OF "), (int32_t)n, 0u, 0);
     if (!c->len)
         sp_put(sp_put(tx, ""), "A WHITE KEY STARTS A BAR");
+    if (ui.ghold)                                   /* (held: the track, the clip, the row) */
+        sp_put(sp_put(sp_put(sp_put(sp_fix(sp_put(tx, "T"), (int32_t)t + 1, 0u, 0), " \xB7 "),
+                             (char[2]){(char)('A' + lpp.scn % LP_NSCN), 0}), " \xB7 "), DK_NAME[ui_d_row()]);
     lk_text(UI_TITLE_X, 40.0f, T10, tx, lp_cur_rec() ? sk.hot : sk.lab, sk.ground, 20, 12);
     for (r = 0; r < DK_ROWS; r++) {                 /* (the rows' names, the one picked bold) */
         float y = UI_GY0 + UI_GDY * (float)r;
@@ -439,9 +490,9 @@ static void ui_d_grid(int hit)
         ac = (len & LP_ACC) != 0u, ch = LP_CHN(len), ra = LP_RAT(len);
         x = UI_GX0 + UI_GDX * (float)(st - p0) + 1.0f;
         y = UI_GY0 + UI_GDY * (float)row + (ac ? 1.0f : 2.5f);
-        h = ac ? 10.0f : 7.0f;
+        h = ac ? 9.0f : 6.0f;
         col = row == DK_DUCK ? sk.mid : sy_mix565(sk.mid, sk.ink, (uint32_t)(lp_ev[k].b & 0x7F) * 2u);
-        if (st == cur && row == ui_d_row() && (ui_hot(2) || ui_hot(3)))
+        if (st == cur && row == ui_d_row() && (ui.ghold ? hot : ui_hot(2) || ui_hot(3)))
             col = sk.hot;                           /* (its VELOCITY, ACCENT, CHANCE or RATCHET turning) */
         if (row == DK_DUCK || ch) {
             lk_box(x, y, x + UI_GDX - 2.0f, y + h, sk.ground);   /* (over the empty step's dot) */
@@ -467,7 +518,10 @@ static void ui_d_grid(int hit)
             lk_tri(xp - 3.5f, UI_GY0 - 6.0f, xp + 3.5f, UI_GY0 - 6.0f, xp, UI_GY0 - 1.0f, sk.hot);
         }
     }
-    {                                               /* (KNOB 1: the step, in the title) */
+    if (ui.ghold) {                                 /* (S7: held, the step's words; the knobs under) */
+        sp_put(sp_fix(sp_put(tx, "STEP "), (int32_t)cur + 1, 0u, 0), " HELD");
+        lk_text(UI_TITLE_X, 22.0f, T14B, tx, sk.ink, sk.ground, 0, 17);
+    } else {                                        /* (KNOB 1: the step, in the title) */
         char v[24];
         ui_drum_nv(UI_GSTEP, v);
         sp_put(sp_put(tx, "STEP "), v);
@@ -479,11 +533,17 @@ static void ui_p_lgrid(void)
 {
     static const int32_t IDS[3] = {UI_GROW, UI_GVEL, UI_GACC};
     ui_d_grid(0);
-    ui_d_knobs(1u, IDS);
+    if (ui.ghold)
+        ui_d_knobs4();
+    else
+        ui_d_knobs(1u, IDS);
 }
 static void ui_p_lhit(void)
 {
     static const int32_t IDS[3] = {UI_GROW, UI_GCHN, UI_GRAT};
     ui_d_grid(1);
-    ui_d_knobs(1u, IDS);
+    if (ui.ghold)
+        ui_d_knobs4();
+    else
+        ui_d_knobs(1u, IDS);
 }

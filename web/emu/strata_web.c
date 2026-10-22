@@ -53,7 +53,7 @@ static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {      /* as hal/fm1_input.h: key 
     {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 };
 static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL], fm1_led_mid[FM1_NCOL];
-static struct { volatile uint32_t notes, buttons; } fm1_in;
+static struct { volatile uint32_t notes, buttons; uint8_t raw[FM1_NCOL]; } fm1_in;   /* (raw: the matrix, BENCH > KEY SCAN) */
 static uint32_t web_pressed, web_released;
 static int32_t web_enc_steps[7];
 static uint32_t fm1_input_edges(uint32_t *released)
@@ -84,6 +84,18 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
     web_px += w * h;
 }
 static void lcd_sync(void) {}
+static uint32_t web_lcd_off;                     /* (V0.86, F34: SCREEN OFF: the panel dark until it wakes) */
+static void lcd_power(uint32_t s)
+{
+    if (s == 0u) {
+        web_lcd_off = 1;
+        memset(web_fb, 0, sizeof web_fb);
+    } else if (s == 2u) {
+        web_lcd_off = 0;
+    }
+}
+static int32_t web_batt = 600, web_usb;          /* (V0.86, F31: the battery's reading, USB power, as the tests set them) */
+static int sy_usb_power(void) { return web_usb; }
 
 /* ------------------------------------------------------------------------------------------- the flash --- */
 /* storage_hw.c's hooks on the simulated NOR: an erase or a program only inside the firmware's allow-list
@@ -153,7 +165,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_loop.c"
 #include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.85 DRUMS"                     /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.86 UI"                        /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -347,7 +359,7 @@ EXPORT int32_t web_test_set_get(uint32_t f, int32_t v)
     if (f == 0u && v >= 0)
         ui.help = v != 0;
     return f == 0u ? ui.help : f == 1u ? ui.glow : f == 2u ? settings_hold : f == 3u ? ui.mch : f == 4u ? ui.mpc
-           : f == 5u ? ui.learn : f == 6u ? (int32_t)ml_count() : ui.ml_pick;
+           : f == 5u ? ui.learn : f == 6u ? (int32_t)ml_count() : f == 7u ? ui.batt_show : f == 8u ? ui.scr_off : ui.ml_pick;
 }
 EXPORT int32_t web_test_learned(uint32_t cc) { return sy_ui_learned(cc & 127u); }
 EXPORT uint32_t web_test_lfo_phase(uint32_t k) { return sy_glfo[k & 1u].ph >> 16; }
@@ -379,7 +391,10 @@ EXPORT const char *web_test_cd(void)
     float frac;
     const char *sub, *sub2, *label;
     t[0] = 0;
-    if (ui_view() == V_CD && ui_cd_view(&n, &frac, t, &sub, &sub2, &label))
+    if (ui_view() == V_HELP && ui_cd_view(&n, &frac, t + 6, &sub, &sub2, &label)) {   /* (V0.86: HOME's help map */
+        memcpy(t, "HELP: ", 6);                                                         /* over its countdown) */
+        sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
+    } else if (ui_view() == V_CD && ui_cd_view(&n, &frac, t, &sub, &sub2, &label))
         sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
     else
         t[0] = 0;
@@ -742,6 +757,17 @@ EXPORT int32_t web_test_voice_note(uint32_t i)
  * recording, 12 events free, 13 the UI's change count, 14 the click sounding (samples left), 15 the transport running,
  * 16 the bar it is in, 17 UNDO's events kept, 18 this pass's, 19 the pass before's, 20 SONG's slot playing; read
  * back */
+/* V0.86: the battery's reading and USB power (v < 0: as they are); the screen: 0 on .. 4 (SCR_*), 1 dark */
+EXPORT int32_t web_test_power(int32_t batt, int32_t usbp)
+{
+    if (batt >= 0)
+        sy_batt_raw = batt;
+    if (usbp >= 0)
+        web_usb = usbp;
+    return ui_batt();
+}
+EXPORT uint32_t web_test_scr(void) { return ui.scr_st; }
+EXPORT uint32_t web_test_lcd_off(void) { return web_lcd_off; }
 EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
 {
     if (v >= 0 && f <= 8u) {
@@ -806,7 +832,8 @@ EXPORT int32_t web_test_lp_trk(uint32_t t, uint32_t f, int32_t v)
            : f == 14u ? (int32_t)(sy_tgain[t][0] * 1000.0f + 0.5f) : f == 15u ? (int32_t)(sy_tgain[t][1] * 1000.0f + 0.5f)
            : -1;
 }
-/* clip t, s: f 0 its length in ticks (v >= 0 sets it), 1 its events, 2 its notes, 3 the parameters it moves; read */
+/* clip t, s: f 0 its length in ticks (v >= 0 sets it), 1 its events, 2 its notes, 3 the parameters it moves, 4 its
+ * SPEED (V0.86: LS_*, v >= 0 sets it); read */
 EXPORT int32_t web_test_lp_clip(uint32_t t, uint32_t s, uint32_t f, int32_t v)
 {
     lp_clip_t *c = &lpp.clip[t % LP_NTRK][s % LP_NSCN];
@@ -815,8 +842,10 @@ EXPORT int32_t web_test_lp_clip(uint32_t t, uint32_t s, uint32_t f, int32_t v)
         c->len = (uint16_t)v;
         lps[t % LP_NTRK].resync = 1;
     }
+    if (f == 4u && v >= 0)
+        lp_speed_set(t, s, (uint32_t)v);
     return f == 0u ? c->len : f == 1u ? c->n : f == 2u ? (int32_t)lp_note_n(c) : f == 3u ? (int32_t)lp_moves_of(c, ids, 8u)
-           : -1;
+           : f == 4u ? lpp.speed[t % LP_NTRK][s % LP_NSCN] : -1;
 }
 /* clip t, s's note i (in time): f 0 its note, 1 velocity (its FRESH bit too: + 128), 2 tick, 3 length; -1 none */
 EXPORT int32_t web_test_lp_note(uint32_t t, uint32_t s, uint32_t i, uint32_t f)
@@ -928,6 +957,17 @@ EXPORT int32_t web_test_grid(uint32_t f, uint32_t row, uint32_t s, int32_t v)
 }
 EXPORT int32_t web_test_ovr(uint32_t id) { return id < SP_COUNT && sp_ovr_on[id] ? sp_ovr_v[id] : -32768; }
 EXPORT int32_t web_test_voice_trk(uint32_t i) { return i < SY_NVOICE && sy_v[i].on ? sy_v[i].trk : -1; }
+EXPORT const char *web_test_knob_name(uint32_t k)   /* V0.86: knob k's name on the page shown ("" none; the docs' table) */
+{
+    static char n[40];
+    char v[SP_TEXT_N + 8];
+    const char *s = k < 4u && UI_PG[ui.page].id[k] >= 0 ? ui_knob_nv(k, v) : "";
+    uint32_t i;
+    for (i = 0; s && s[i] && i + 1u < sizeof n; i++)
+        n[i] = s[i];
+    n[i] = 0;
+    return n;
+}
 EXPORT void web_test_knob_touch(uint32_t id) { lp_knob(id); }   /* (sy_ui.c ui_knob's: a knob turned) */
 EXPORT int32_t web_test_follow(uint32_t id) { return id < SP_COUNT ? sp_last.v[id] : -1; }
 /* V0.8 BENCH, CORE 2 (sy_c2.c; the emulator has one core): f 0 the state, 1 ON, 2 LOAD, 3 TEST's figures as a unit

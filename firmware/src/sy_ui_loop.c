@@ -1,13 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 u4ia */
-/* The STRATA UI's looper (V0.8; the looper itself: sy_loop.c; docs/LOOPER.md), the SEQ button's menu:
+/* The STRATA UI's looper (V0.8; the looper itself: sy_loop.c; docs/LOOPER.md), the SEQ button's menu. SEQ once:
+ * LOOP and CLIP; twice: TRACK and SONG (V0.86, S1). PRESETS picks the track on every page (C1):
  *   - LOOP: CLIPS (the eight tracks' clips in the eight scenes: the one playing filled with its place, launched
- *     framed HOT, recording HOT; the track selected and the scene picked framed), MIXER (VOLUME, PAN, MUTE / SOLO);
- *   - TRACK: TRACK (TYPE: SYNTH, SYNTH + MIDI out, MIDI; its CHANNEL out, MIDI IN), RECORD (QUANTIZE, COUNT-IN,
- *     LAUNCH), CLICK (OFF, REC, ON; LEVEL);
+ *     blinking, recording HOT; the track selected's column lit, the scene picked framed; TYPE, SCENE; the keys launch:
+ *     white 1-8 this scene's clips, black 1-8 the scenes), MIXER (VOLUME, PAN, MUTE / SOLO);
+ *   - TRACK: RECORD (QUANTIZE; the track's CHANNEL out, MIDI IN), CLICK (OFF, REC, ON; LEVEL; COUNT-IN, LAUNCH);
  *   - CLIP (the selected track's clip in the scene picked): NOTES (a piano roll a bar at a time round the note
- *     picked: its PITCH, START, LENGTH), EDIT (VELOCITY, GRID, DELETE), CLIP (LENGTH in bars, QUANTIZE, its MOTION:
- *     a parameter's moves drawn, cleared);
+ *     picked: its PITCH, START, LENGTH), NOTE+ (VELOCITY, GRID, DELETE), CLIP (LENGTH in bars, SPEED, QUANTIZE, its
+ *     MOTION: a parameter's moves drawn), TOOLS (COPY, PASTE, DOUBLE / HALVE, CLEAR: V0.86, S8);
  *   - SONG: SONG (sixteen slots, a scene and its repeats each; ON), PROJECT (four, LOAD, NEW);
  *   - the launch pad (SEQ held): white keys 1-8 the tracks' clips in the scene picked (launch, again stop; an empty
  *     one: the track selected), 9-16 the scenes; black keys 1-8 MUTE, then STOP ALL, SOLO, UNDO PASS.
@@ -19,12 +20,21 @@
 static const char *const LG_NAME[LG_N] = {"FREE", "1/32", "1/16", "1/8", "1/4"};
 static const uint8_t LG_TICKS[LG_N] = {1, 12, 24, 48, 96};
 static const char *const LT_TYPE3[4] = {"SYNTH", "SYNTH+MIDI", "MIDI", "DRUMS"};   /* TYPE as the knob steps it */
+static const char *const LT_TYPE3S[4] = {"SYNTH", "SYN+MIDI", "MIDI", "DRUMS"};     /* .. on the knob (V0.86) */
 static uint32_t ui_l_type3(uint32_t t)              /* a track's TYPE: 0 SYNTH, 1 SYNTH with MIDI out, 2 MIDI, 3 DRUMS */
 {
     const lp_trk_t *k = &lpp.trk[t % LP_NTRK];
     return k->type == LT_DRUM ? 3u : k->type == LT_MIDI ? 2u : k->out ? 1u : 0u;
 }
 static void sy_ui_drum_ms(void);                    /* sy_ui_drum.c (V0.85) */
+#define UI_ASK_MS 2000u                             /* V0.86: a tool's second turn within this does it */
+#define UI_LT_MS 500u                               /* .. (C6) TYPE goes this long after its last detent */
+static void ui_l_asks_off(void)                     /* .. the tools' and TYPE's asks dropped (another clip, track) */
+{
+    ui.paste_t = ui.halve_t = ui.clr_t2 = 0;
+    ui.lt_want = 0;
+    ui.lt_ask = 0;
+}
 /* V0.85: the page shown as the selected track's TYPE wants it: a drum track's EDIT is its KIT, its CLIP the grid; a
  * synth's, the sound's and NOTES (the page of the same drawing where there is one) */
 static void ui_l_follow(void)
@@ -102,6 +112,7 @@ static void lp_select_to(uint32_t t, int keep)
     ui.fit = (uint8_t)(k->fit % UI_NFIT), ui.kvel = (uint8_t)sy_clampi(k->kvel, 1, 127);
     ch_use(t);
     ui.lnote = 0;
+    ui_l_asks_off();
     lpx.seq++;
     ui.dirty = D_ALL;
     ui_l_follow();                                  /* (V0.85: a drum track's pages, or a synth's) */
@@ -161,6 +172,196 @@ static void ui_l_scene(uint32_t s)                  /* a scene launched (the pad
     ui_toast(m);
     ui.dirty = D_ALL;
 }
+/* V0.86: clip (t, s) recording: no tool on it (a word why) */
+static int ui_l_busy(uint32_t t, uint32_t s)
+{
+    if (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s) {
+        ui_toast("RECORDING: REC ENDS IT");
+        return 1;
+    }
+    return 0;
+}
+static char *ui_l_clip(char *b, uint32_t t, uint32_t s)   /* "T2 B" */
+{
+    return sp_put(sp_put(sp_fix(sp_put(b, "T"), (int32_t)(t % LP_NTRK) + 1, 0u, 0), " "), (char[2]){ui_l_scn(s), 0});
+}
+static int ui_l_asked(uint32_t *t)                  /* a tool's second turn in time (it goes); else its first (asked) */
+{
+    if (*t && fm1_ms - *t < UI_ASK_MS) {
+        *t = 0;
+        return 1;
+    }
+    *t = fm1_ms | 1u;
+    return 0;
+}
+/* TOOLS' COPY: the clip (a first turn, or another clip's) or a bar of it (turning on) kept to paste */
+static void ui_l_copy(uint32_t t, int32_t s)
+{
+    uint32_t sc = lpp.scn % LP_NSCN, bars = lp_clip_bars(t, sc);
+    int32_t pos = 0;
+    char m[40], *e;
+    if (!lpp.clip[t][sc].len) {
+        ui_toast("EMPTY: NOTHING TO COPY");
+        return;
+    }
+    if (ui.cb_on && ui.cb_t == t && ui.cb_s == sc)
+        pos = sy_clampi(ui.cb_bar + 1 + s, 0, (int32_t)bars);
+    ui.cb_on = 1, ui.cb_t = (uint8_t)t, ui.cb_s = (uint8_t)sc, ui.cb_bar = (int8_t)(pos - 1);
+    ui.paste_t = 0;
+    e = sp_put(m, "COPIED: ");
+    if (pos)
+        e = sp_put(sp_fix(sp_put(e, "BAR "), pos, 0u, 0), " OF ");
+    ui_l_clip(e, t, sc);
+    ui_toast(m);
+}
+/* .. PASTE: what was copied into this clip (whole: it replaced; a bar: the same bar here); asked first if something
+ * goes */
+static void ui_l_paste(uint32_t t)
+{
+    uint32_t sc = lpp.scn % LP_NSCN, bt = lp_bar_ticks(), k, have = 0;
+    const lp_clip_t *d = &lpp.clip[t][sc];
+    int32_t bar = ui.cb_bar, r;
+    char m[40], *e;
+    if (!ui.cb_on) {
+        ui_toast("COPY FIRST: KNOB 1");
+        return;
+    }
+    if (ui.cb_t == t && ui.cb_s == sc) {
+        ui_toast("THIS IS THE CLIP COPIED");
+        return;
+    }
+    if (!lpp.clip[ui.cb_t % LP_NTRK][ui.cb_s % LP_NSCN].len) {
+        ui_toast("THE CLIP COPIED IS EMPTY NOW");
+        return;
+    }
+    if (ui_l_busy(t, sc))
+        return;
+    if (bar >= 0 && (uint32_t)bar * bt >= d->len) {
+        sp_fix(sp_put(ui_l_clip(m, t, sc), " HAS NO BAR "), bar + 1, 0u, 0);
+        ui_toast(m);
+        return;
+    }
+    for (k = d->head; k != LP_END; k = lp_ev[k].next)
+        have += bar < 0 || (lp_et(k) >= (uint32_t)bar * bt && lp_et(k) < (uint32_t)(bar + 1) * bt);
+    if ((have || (bar < 0 && d->len)) && !ui_l_asked(&ui.paste_t)) {
+        e = sp_put(m, "AGAIN: ");
+        if (bar >= 0)
+            e = sp_put(sp_fix(sp_put(e, "BAR "), bar + 1, 0u, 0), " OF ");
+        sp_put(ui_l_clip(e, t, sc), " GOES");
+        ui_toast(m);
+        return;
+    }
+    ui.paste_t = 0;
+    r = lp_clip_copy(ui.cb_t, ui.cb_s, t, sc, bar);
+    if (r == -1) {
+        ui_toast("FULL: 2048 NOTES AND MOVES");
+        return;
+    }
+    e = sp_put(m, "PASTED INTO ");
+    if (bar >= 0)
+        e = sp_put(sp_fix(sp_put(e, "BAR "), bar + 1, 0u, 0), " OF ");
+    ui_l_clip(e, t, sc);
+    ui_toast(m);
+}
+/* .. DOUBLE (right: twice as long, played again in its second half) / HALVE (left: its second half gone, asked first
+ * if notes go with it) */
+static void ui_l_dbl(uint32_t t, int32_t s)
+{
+    uint32_t sc = lpp.scn % LP_NSCN;
+    int32_t r;
+    char m[40];
+    if (!lpp.clip[t][sc].len) {
+        ui_toast("EMPTY: REC RECORDS IT");
+        return;
+    }
+    if (ui_l_busy(t, sc))
+        return;
+    if (s > 0) {
+        ui.halve_t = 0;
+        r = lp_clip_double(t, sc);
+        if (r == -1) {
+            ui_toast("FULL: 2048 NOTES AND MOVES");
+            return;
+        }
+        if (r == -2) {
+            sp_put(sp_fix(sp_put(m, "LONGEST: "), (int32_t)lp_max_bars(), 0u, 0), " BARS");
+            ui_toast(m);
+            return;
+        }
+    } else {
+        r = lp_clip_halve(t, sc, 0);
+        if (r == -2) {
+            ui_toast("ONE BAR: NO HALF OF IT");
+            return;
+        }
+        if (r > 0 && !ui_l_asked(&ui.halve_t)) {
+            ui_toast("AGAIN: ITS SECOND HALF GOES");
+            return;
+        }
+        ui.halve_t = 0;
+        lp_clip_halve(t, sc, 1);
+    }
+    r = (int32_t)lp_clip_bars(t, sc);
+    sp_put(sp_fix(sp_put(m, s > 0 ? "DOUBLED: " : "HALVED: "), r, 0u, 0), r == 1 ? " BAR" : " BARS");
+    ui_toast(m);
+}
+/* .. CLEAR (right: its notes, a drum track's hits; left: the motion MOTION picked on CLIP), asked first */
+static void ui_l_clear(uint32_t t, int32_t s)
+{
+    uint32_t sc = lpp.scn % LP_NSCN, n, dir = s > 0 ? 1u : 2u;
+    uint16_t ids[8];
+    int drum = ui_drums();
+    char m[48];
+    if (ui_l_busy(t, sc))
+        return;
+    if (ui.clr_dir != dir)
+        ui.clr_t2 = 0;
+    ui.clr_dir = (uint8_t)dir;
+    if (dir == 1u) {
+        n = lp_note_n(&lpp.clip[t][sc]);
+        if (!n) {
+            ui_toast(drum ? "NO HITS IN THIS CLIP" : "NO NOTES IN THIS CLIP");
+            return;
+        }
+        if (!ui_l_asked(&ui.clr_t2)) {
+            ui_toast(drum ? "AGAIN: ITS HITS GO" : "AGAIN: ITS NOTES GO");
+            return;
+        }
+        lp_notes_clear(t, sc);
+        ui.lnote = 0;
+        ui_toast(drum ? "HITS CLEARED" : "NOTES CLEARED");
+        return;
+    }
+    n = ui_l_moves(ids);
+    if (!n) {
+        ui_toast("NO MOTION IN THIS CLIP");
+        return;
+    }
+    if (!ui_l_asked(&ui.clr_t2)) {
+        sp_put(sp_put(sp_put(m, "AGAIN: "), SP[ids[ui.lmv % n]].name), ": MOTION GOES");
+        ui_toast(m);
+        return;
+    }
+    lp_moves_clear(ids[ui.lmv % n]);
+    sp_put(sp_put(m, SP[ids[ui.lmv % n]].name), ": MOTION CLEARED");
+    ui_toast(m);
+    ui.lmv = 0;
+}
+/* (C6) TYPE as turned to: set (the pages follow it) */
+static void ui_l_type_go(void)
+{
+    uint32_t t = lpp.sel % LP_NTRK, v = (uint32_t)(ui.lt_want - 1);
+    char m[32];
+    ui.lt_want = 0;
+    ui.lt_ask = 0;
+    if (v > 3u || v == ui_l_type3(t))
+        return;
+    lp_type_set(t, v == 3u ? LT_DRUM : v == 2u ? LT_MIDI : LT_SYNTH, v == 1u);
+    ui_l_follow();
+    ui_l_trk(m, t);
+    ui_toast(m);
+    ui.dirty = D_ALL;
+}
 static int sy_app_project(uint32_t p);              /* sy_app.c: the project saved, project p loaded */
 static void sy_app_project_new(void);               /* .. the project cleared */
 /* a turn of the looper's knobs (sy_ui.c ui_item_turn) */
@@ -171,38 +372,48 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
     char m[40];
     switch (item) {
     case UI_LTRK: lp_select((uint32_t)sy_clampi((int32_t)t + s, 0, LP_NTRK - 1)); return;
-    case UI_LSCN: lpp.scn = (uint8_t)sy_clampi((int32_t)lpp.scn + s, 0, LP_NSCN - 1); ui.lnote = 0; break;
-    case UI_LLNCH:
-        if (s > 0)
-            ui_l_launch(t, lpp.scn);
-        else {
-            lp_launch(t, LP_STOP);
-            sp_put(sp_fix(sp_put(m, "T"), (int32_t)t + 1, 0u, 0), " STOPS");
-            ui_toast(m);
-        }
-        break;
-    case UI_LSLNCH:
-        if (s > 0) {
-            ui_l_scene(lpp.scn);
-        } else {
-            lpr.req = LP_REQ_STOPALL;
-            ui_toast(cht.run && lpg.launch != LL_NOW ? "ALL STOP AT THE BAR" : "ALL STOP");
-        }
+    case UI_LSCN:
+        lpp.scn = (uint8_t)sy_clampi((int32_t)lpp.scn + s, 0, LP_NSCN - 1);
+        ui.lnote = 0;
+        ui.paste_t = ui.halve_t = ui.clr_t2 = 0;
         break;
     case UI_LVOL: k->vol = (uint8_t)sy_clampi(k->vol + ui_accel(e, s, 127), 0, 127); break;
-    case UI_LPAN: k->pan = (uint8_t)sy_clampi(k->pan + ui_accel(e, s, 127), 1, 127); break;
+    case UI_LPAN: k->pan = (uint8_t)ui_centre(item, s, k->pan, sy_clampi(k->pan + ui_accel(e, s, 127), 1, 127), 64); break;
     case UI_LMS: {                                  /* (PLAYS, MUTE, SOLO) */
         int32_t v = k->solo ? 2 : k->mute ? 1 : 0;
         v = sy_clampi(v + s, 0, 2);
         k->mute = v == 1, k->solo = v == 2;
         break;
     }
-    case UI_LTYPE: {                                /* (V0.85: DRUMS too, its clips' notes turned: sy_loop.c) */
-        int32_t v = sy_clampi((int32_t)ui_l_type3(t) + s, 0, 3);
-        lp_type_set(t, v == 3 ? LT_DRUM : v == 2 ? LT_MIDI : LT_SYNTH, v == 1);
-        ui_l_follow();
+    case UI_LTYPE:                                  /* (V0.85: DRUMS too. V0.86, C6: it goes when the turning stops; */
+        if (ui.lt_ask) {                            /* a track with clips asks for one more detent) */
+            ui_l_type_go();
+            return;
+        }
+        ui.lt_want = (int8_t)(sy_clampi((ui.lt_want ? ui.lt_want - 1 : (int32_t)ui_l_type3(t)) + s, 0, 3) + 1);
+        ui.lt_t = fm1_ms;
+        break;
+    case UI_LSPEED: {                               /* (V0.86, S8: x1/2, x1, x2 as the knob goes) */
+        static const uint8_t ORD[3] = {LS_HALF, LS_1, LS_2};
+        uint32_t sc = lpp.scn % LP_NSCN, sp = lpp.speed[t][sc] % LS_N;
+        if (!lpp.clip[t][sc].len) {
+            ui_toast("EMPTY: REC RECORDS IT");
+            return;
+        }
+        if (lp_cur_rec() && lpr.st == LR_TAKE) {
+            ui_toast("THE TAKE SETS IT: REC ENDS IT");
+            return;
+        }
+        lp_speed_set(t, sc, ORD[sy_clampi((sp == LS_HALF ? 0 : sp == LS_1 ? 1 : 2) + s, 0, 2)]);
         break;
     }
+    case UI_LCOPY: ui_l_copy(t, s); break;
+    case UI_LPASTE:
+        if (s > 0)
+            ui_l_paste(t);
+        break;
+    case UI_LDBL: ui_l_dbl(t, s); break;
+    case UI_LCLR: ui_l_clear(t, s); break;
     case UI_LCH: k->ch = (uint8_t)sy_clampi(k->ch + s, 0, 15); break;
     case UI_LCIN: k->cin = (uint8_t)sy_clampi(k->cin + s, 0, 16); break;
     case UI_LQNT: lpg.quant = (uint8_t)sy_clampi(lpg.quant + s, 0, LQ_N - 1); break;
@@ -255,20 +466,6 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
         ui.lmv = (uint8_t)(n ? sy_clampi(ui.lmv + s, 0, (int32_t)n - 1) : 0);
         break;
     }
-    case UI_LMCLR:
-        if (s > 0) {
-            uint16_t ids[8];
-            uint32_t n = ui_l_moves(ids);
-            if (!n) {
-                ui_toast("NO MOTION IN THIS CLIP");
-                return;
-            }
-            lp_moves_clear(ids[ui.lmv % n]);
-            sp_put(sp_put(m, SP[ids[ui.lmv % n]].name), ": MOTION CLEARED");
-            ui_toast(m);
-            ui.lmv = 0;
-        }
-        break;
     case UI_LSLOT: ui.lslot = (uint8_t)sy_clampi(ui.lslot + s, 0, LP_NSONG - 1); break;
     case UI_LSSCN: {                                /* (END, then the scenes) */
         int32_t v = lpp.song[ui.lslot % LP_NSONG] < LP_NSCN ? lpp.song[ui.lslot % LP_NSONG] : -1;
@@ -359,6 +556,46 @@ static int ui_loop_key(uint32_t k)                  /* .. its press (1: taken, n
     return 1;
 }
 
+/* V0.86, S5: on CLIPS the keys launch, SEQ not held: white 1-8 this scene's clips on tracks 1-8 (again: it stops),
+ * black 1-8 the scenes A-H; the others nothing */
+static int ui_clips_keys(void) { return !ui.lay && !ui.mod && UI_PG[ui.page].graph == G_LCLIPS; }
+static int ui_clips_key(uint32_t k)
+{
+    int32_t r = ui_pad_of(k);
+    if (r >= 0 && r < 8)
+        ui_l_launch((uint32_t)r, lpp.scn);
+    else if (r >= 16 && r < 24)
+        ui_l_scene((uint32_t)r - 16u);
+    lpx.seq++;
+    ui.dirty = D_ALL;
+    return 1;
+}
+/* .. their LEDs (sy_ui_draw.c sy_ui_leds; 1: key k's set here): a clip playing lit, launched blinking, there glowing;
+ * the scene picked lit, a scene with clips glowing */
+static int ui_clips_leds(uint32_t k)
+{
+    int32_t r;
+    uint32_t sc = lpp.scn % LP_NSCN, t;
+    int on = 0, dim = 0;
+    if (!ui_clips_keys())
+        return 0;
+    r = ui_pad_of(k);
+    if (r >= 0 && r < 8) {
+        on = (cht.run && lps[r].play == sc && lps[r].next == LP_NOSCN) ||
+             ((lps[r].next == sc || (lpr.st != LR_OFF && lpr.trk == (uint32_t)r && lpr.scn == sc)) && ((fm1_ms / 250u) & 1u));
+        dim = lpp.clip[r][sc].len != 0u;
+    } else if (r >= 16 && r < 24) {
+        on = (uint32_t)r - 16u == sc;
+        for (t = 0; t < LP_NTRK; t++)
+            dim |= lpp.clip[t][r - 16].len != 0u;
+    }
+    if (on)
+        ui_led(fm1_led, 14u + k);
+    else if (dim)
+        ui_led(fm1_led_dim, 14u + k);
+    return 1;
+}
+
 /* a project read (sy_app.c; ok 2: none kept, the UI's SCALE kept for its tracks), or not (ok 0); blocked: the one
  * loaded is not saved where older presets are */
 static void sy_ui_project(int ok, int blocked)
@@ -412,6 +649,32 @@ static void sy_ui_loop_ms(void)
         ui_toast("FULL: 2048 NOTES AND MOVES");
     }
     sy_ui_drum_ms();                                /* (V0.85: stopped, the drum played is KIT's) */
+    if (ui.lt_want && !ui.lt_ask && fm1_ms - ui.lt_t >= UI_LT_MS) {   /* (C6: TYPE stopped turning: it goes, or a */
+        uint32_t tr = lpp.sel % LP_NTRK, sc, any = 0;                    /* track with clips asks) */
+        for (sc = 0; sc < LP_NSCN; sc++)
+            any |= lpp.clip[tr][sc].len != 0u;
+        if ((uint32_t)(ui.lt_want - 1) == ui_l_type3(tr)) {
+            ui.lt_want = 0;
+        } else if (any) {
+            ui.lt_ask = 1;
+            ui.lt_t = fm1_ms;
+            sp_put(sp_put(m, "TURN ON: "), LT_TYPE3[(ui.lt_want - 1) & 3]);
+            ui_toast(m);
+        } else {
+            ui_l_type_go();
+        }
+        ui.dirty |= D_DISP | D_KNOBS;
+    } else if (ui.lt_ask && fm1_ms - ui.lt_t >= UI_ASK_MS) {
+        ui.lt_want = 0;
+        ui.lt_ask = 0;
+        ui_toast("TYPE KEPT");
+        ui.dirty |= D_DISP | D_KNOBS;
+    }
+    if ((ui.paste_t && fm1_ms - ui.paste_t >= UI_ASK_MS) || (ui.halve_t && fm1_ms - ui.halve_t >= UI_ASK_MS) ||
+        (ui.clr_t2 && fm1_ms - ui.clr_t2 >= UI_ASK_MS)) {   /* (an ask not answered: dropped, TOOLS redrawn) */
+        ui.paste_t = ui.halve_t = ui.clr_t2 = 0;
+        ui.dirty |= D_DISP | D_KNOBS;
+    }
     if ((ui.fam == FAM_SEQ || ui.lay == LAY_PAD) && (lpx.seq != seq || cht.run) &&
         fm1_ms - t >= (lpx.seq != seq ? 40u : 80u)) {   /* (a change at once; the places moving 12 a second) */
         seq = lpx.seq;
@@ -431,13 +694,6 @@ static const char *ui_loop_nv(uint32_t id, char *v)
     switch (id) {
     case UI_LTRK: ui_l_trk(v, t); return "TRACK";
     case UI_LSCN: v[0] = ui_l_scn(lpp.scn), v[1] = 0; return "SCENE";
-    case UI_LLNCH:
-        if (!c->len)
-            sp_put(v, "EMPTY");
-        else
-            sp_put(v, lps[t].play == lpp.scn && cht.run ? "STOP" : "LAUNCH");
-        return "CLIP";
-    case UI_LSLNCH: sp_put(sp_put(v, "LAUNCH "), (char[2]){ui_l_scn(lpp.scn), 0}); return "SCENE";
     case UI_LVOL: sp_fix(v, k->vol, 0u, 0); return "VOLUME";
     case UI_LPAN:
         if (k->pan == 64u)
@@ -446,7 +702,25 @@ static const char *ui_loop_nv(uint32_t id, char *v)
             sp_put(sp_fix(v, k->pan < 64u ? 64 - k->pan : k->pan - 64, 0u, 0), k->pan < 64u ? " L" : " R");
         return "PAN";
     case UI_LMS: sp_put(v, k->solo ? "SOLO" : k->mute ? "MUTE" : "PLAYS"); return "MUTE/SOLO";
-    case UI_LTYPE: sp_put(v, LT_TYPE3[ui_l_type3(t)]); return "TYPE";
+    case UI_LTYPE:                                  /* (C6: the type it goes to, while it waits) */
+        sp_put(sp_put(v, LT_TYPE3S[ui.lt_want ? (uint32_t)(ui.lt_want - 1) & 3u : ui_l_type3(t)]), ui.lt_ask ? "?" : "");
+        return "TYPE";
+    case UI_LSPEED: {
+        uint32_t sp = lpp.speed[t][lpp.scn % LP_NSCN] % LS_N;
+        sp_put(v, !c->len ? "\x97" : sp == LS_HALF ? "\xD7" "1/2" : sp == LS_2 ? "\xD7" "2" : "\xD7" "1");
+        return "SPEED";
+    }
+    case UI_LCOPY:
+        if (!ui.cb_on)
+            sp_put(v, c->len ? "TURN" : "\x97");
+        else if (ui.cb_bar >= 0)
+            sp_fix(sp_put(v, "BAR "), ui.cb_bar + 1, 0u, 0);
+        else
+            ui_l_clip(v, ui.cb_t, ui.cb_s);
+        return "COPY";
+    case UI_LPASTE: sp_put(v, ui.paste_t ? "AGAIN" : ui.cb_on ? "TURN" : "\x97"); return "PASTE";
+    case UI_LDBL: sp_put(v, ui.halve_t ? "AGAIN" : c->len ? "\xD7" "2 / HALF" : "\x97"); return "DOUBLE/HALVE";
+    case UI_LCLR: sp_put(v, ui.clr_t2 ? "AGAIN" : c->len ? "TURN" : "\x97"); return "CLEAR";
     case UI_LCH: sp_fix(sp_put(v, "CH "), k->ch + 1, 0u, 0); return "CHANNEL";
     case UI_LCIN:
         if (k->cin)
@@ -498,7 +772,6 @@ static const char *ui_loop_nv(uint32_t id, char *v)
         sp_put(v, n ? SP[ids[ui.lmv % n]].name : "NONE");
         return "MOTION";
     }
-    case UI_LMCLR: sp_put(v, "TURN"); return "CLEAR IT";
     case UI_LSLOT: sp_fix(v, (int32_t)ui.lslot % LP_NSONG + 1, 0u, 0); return "SLOT";
     case UI_LSSCN:
         if (lpp.song[ui.lslot % LP_NSONG] < LP_NSCN)
@@ -539,18 +812,18 @@ static void ui_l_row(uint32_t k0, const int32_t *ids)
     }
     pg.figs = 0xFu;
 }
-/* a page's title: the track selected (KNOB 1: k1 set) or a word; at the right what the transport or the recording
- * does */
-static void ui_l_head(const char *word, int k1)
+/* a page's title: the track selected or a word (ptag: the track's, PRESETS turning it: a P before it, V0.86 C1); at
+ * the right what the transport or the recording does */
+static void ui_l_head(const char *word, int ptag)
 {
     char t[24];
     const char *st = lpr.st == LR_COUNT ? "COUNT-IN" : lpr.st == LR_WAIT ? "REC: NEXT BAR"
                      : lpr.st == LR_TAKE ? "REC" : lpr.st == LR_DUB ? "OVERDUB" : cht.run ? "PLAYING" : "STOPPED";
     if (!word)
         ui_l_trk(t, lpp.sel);
-    lk_text(UI_TITLE_X, 24.0f, T14B, word ? word : t, ui_ink(k1 && ui_hot(0)), sk.ground, 0, 17);
-    if (k1)
-        ui_H(0, 8.0f, 27.0f);
+    lk_text(UI_TITLE_X, 24.0f, T14B, word ? word : t, sk.ink, sk.ground, 0, 17);
+    if (ptag)
+        lk_ptag(10.0f, 28.0f, 0);
     lk_chip(230.0f - lk_tw(T10B, st, 20) - 10.0f, 24.0f, st, lpr.st != LR_OFF || cht.run);
 }
 
@@ -561,16 +834,18 @@ static void ui_l_head(const char *word, int k1)
 #define UI_LRH 13.0f
 static void ui_p_lclips(void)
 {
-    static const int32_t IDS[3] = {UI_LSCN, UI_LLNCH, UI_LSLNCH};
-    uint32_t t, s, sel = lpp.sel % LP_NTRK, cs = lpp.scn % LP_NSCN;
+    static const int32_t IDS[3] = {UI_LTYPE, UI_LSCN, -1};
+    uint32_t t, s, sel = lpp.sel % LP_NTRK, cs = lpp.scn % LP_NSCN, blink = (fm1_ms / 250u) & 1u;
     char n[4];
     ui_l_head(0, 1);
+    lk_box(UI_LX0 + UI_LCW * (float)sel + 1.0f, UI_LY0, UI_LX0 + UI_LCW * (float)(sel + 1u) - 1.0f,
+           UI_LY0 + UI_LRH * (float)LP_NSCN, sk.line);   /* (V0.86: the track selected's column lit) */
     for (t = 0; t < LP_NTRK; t++) {                 /* (the tracks' numbers: the one selected boxed) */
         float x = UI_LX0 + UI_LCW * (float)t;
         sp_fix(n, (int32_t)t + 1, 0u, 0);
         if (t == sel) {
-            lk_box(x + 3.0f, 46.0f, x + UI_LCW - 3.0f, 58.0f, ui_ink(ui_hot(0)));
-            lk_text_c(x + 0.5f * UI_LCW, 47.0f, T9B, n, sk.ground, ui_ink(ui_hot(0)), 0, 0);
+            lk_box(x + 3.0f, 46.0f, x + UI_LCW - 3.0f, 58.0f, sk.ink);
+            lk_text_c(x + 0.5f * UI_LCW, 47.0f, T9B, n, sk.ground, sk.ink, 0, 0);
         } else {
             lk_text_c(x + 0.5f * UI_LCW, 47.0f, T9, n, sk.lab, sk.ground, 0, 0);
             if (lp_muted(t))                        /* (muted: a line under its number) */
@@ -584,31 +859,32 @@ static void ui_p_lclips(void)
         for (t = 0; t < LP_NTRK; t++) {
             const lp_clip_t *c = &lpp.clip[t][s];
             float x = UI_LX0 + UI_LCW * (float)t, x0 = x + 3.0f, x1 = x + UI_LCW - 3.0f, y0 = y + 2.0f, y1 = y + UI_LRH - 2.0f;
-            int rec = lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s, on = lps[t].play == s, nx = lps[t].next == s;
+            int rec = lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s, on = lps[t].play == s, nx = lps[t].next == s && blink;
+            uint16_t bg = t == sel ? sk.line : sk.ground;
             if (rec) {
                 lk_box(x0, y0, x1, y1, sk.hot);
             } else if (on && c->len) {
                 lk_box(x0, y0, x1, y1, cht.run ? (lp_muted(t) ? sk.mid : sk.ink) : sk.mid);
                 if (cht.run)                         /* (its place in it) */
                     lk_box(x0 + 1.0f, y1 - 2.0f, x0 + 1.0f + (x1 - x0 - 2.0f) * (float)lps[t].pos / (float)c->len, y1 - 1.0f,
-                           sk.ground);
+                           bg);
                 if (lps[t].next == LP_STOP)
-                    lk_box(0.5f * (x0 + x1) - 2.0f, y0 + 2.0f, 0.5f * (x0 + x1) + 2.0f, y0 + 6.0f, sk.ground);
+                    lk_box(0.5f * (x0 + x1) - 2.0f, y0 + 2.0f, 0.5f * (x0 + x1) + 2.0f, y0 + 6.0f, bg);
             } else if (c->len) {
-                lk_frame(x0 + 0.5f, y0 + 0.5f, x1 - x0 - 1.0f, y1 - y0 - 1.0f, 1.0f, lp_muted(t) ? sk.line : sk.mid);
+                lk_frame(x0 + 0.5f, y0 + 0.5f, x1 - x0 - 1.0f, y1 - y0 - 1.0f, 1.0f, lp_muted(t) && t != sel ? sk.line : sk.mid);
             } else {
                 lk_box(0.5f * (x0 + x1) - 1.0f, 0.5f * (y0 + y1) - 1.0f, 0.5f * (x0 + x1) + 1.0f, 0.5f * (y0 + y1) + 1.0f,
-                       sk.line);
+                       t == sel ? sk.mid : sk.line);
             }
             if (nx)                                 /* (launched: from the next bar) */
                 lk_frame(x0 - 1.5f, y0 - 1.5f, x1 - x0 + 3.0f, y1 - y0 + 3.0f, 1.0f, sk.hot);
             if (t == sel && s == cs)
-                lk_frame(x + 0.5f, y + 0.5f, UI_LCW - 1.0f, UI_LRH - 1.0f, 1.0f,
-                         ui_hot(1) || ui_hot(2) ? sk.hot : sk.ink);
+                lk_frame(x + 0.5f, y + 0.5f, UI_LCW - 1.0f, UI_LRH - 1.0f, 1.0f, ui_hot(1) ? sk.hot : sk.ink);
         }
     }
-    ui_H(1, 2.0f, UI_LY0 + UI_LRH * (float)cs - 1.0f);
-    ui_l_row(1u, IDS);
+    ui_l_row(0u, IDS);
+    lk_text(182.0f, 176.0f, T9, "THE KEYS", sk.lab, sk.ground, 20, 0);   /* (S5: what the keys do here) */
+    lk_text(182.0f, 188.0f, T10B, "LAUNCH", sk.ink, sk.ground, 0, 0);
 }
 
 /* MIXER: a strip a track (its PAN over a fader of VOLUME; M, S under), the one selected framed */
@@ -617,7 +893,7 @@ static void ui_p_lmix(void)
     static const int32_t IDS[3] = {UI_LVOL, UI_LPAN, UI_LMS};
     uint32_t t, sel = lpp.sel % LP_NTRK;
     char n[4];
-    ui_l_head(0, 1);
+    ui_l_head(0, 1);                                /* (V0.86: VOLUME, PAN, MUTE / SOLO on KNOBS 1-3) */
     for (t = 0; t < LP_NTRK; t++) {
         const lp_trk_t *k = &lpp.trk[t];
         float x = UI_LX0 + UI_LCW * (float)t, cx = x + 0.5f * UI_LCW, top = 74.0f, bot = 146.0f;
@@ -626,112 +902,95 @@ static void ui_p_lmix(void)
         uint16_t ink = lp_muted(t) ? sk.mid : sk.ink;
         sp_fix(n, (int32_t)t + 1, 0u, 0);
         if (me) {
-            lk_box(x + 3.0f, 46.0f, x + UI_LCW - 3.0f, 58.0f, ui_ink(ui_hot(0)));
-            lk_text_c(cx, 47.0f, T9B, n, sk.ground, ui_ink(ui_hot(0)), 0, 0);
+            lk_box(x + 3.0f, 46.0f, x + UI_LCW - 3.0f, 58.0f, sk.ink);
+            lk_text_c(cx, 47.0f, T9B, n, sk.ground, sk.ink, 0, 0);
         } else {
             lk_text_c(cx, 47.0f, T9, n, sk.lab, sk.ground, 0, 0);
         }
         lk_seg(cx - 8.0f, 66.0f, cx + 8.0f, 66.0f, 1.0f, sk.line);
-        lk_disc(px, 66.0f, 2.0f, me && ui_hot(2) ? sk.hot : ink);
+        lk_disc(px, 66.0f, 2.0f, me && ui_hot(1) ? sk.hot : ink);
         lk_seg(cx, top, cx, bot, 1.0f, sk.line);
         lk_seg(cx - 4.0f, bot - (bot - top) * 100.0f / 127.0f, cx + 4.0f, bot - (bot - top) * 100.0f / 127.0f, 1.0f, sk.line);
-        lk_box(cx - 3.0f, lv, cx + 3.0f, bot, me && ui_hot(1) ? sk.hot : ink);
+        lk_box(cx - 3.0f, lv, cx + 3.0f, bot, me && ui_hot(0) ? sk.hot : ink);
         if (k->mute)
-            lk_text_c(cx - 5.0f, 151.0f, T9B, "M", me && ui_hot(3) ? sk.hot : sk.ink, sk.ground, 0, 0);
+            lk_text_c(cx - 5.0f, 151.0f, T9B, "M", me && ui_hot(2) ? sk.hot : sk.ink, sk.ground, 0, 0);
         if (k->solo)
-            lk_text_c(cx + 5.0f, 151.0f, T9B, "S", me && ui_hot(3) ? sk.hot : sk.hot, sk.ground, 0, 0);
+            lk_text_c(cx + 5.0f, 151.0f, T9B, "S", sk.hot, sk.ground, 0, 0);
         if (me)
             lk_frame(x + 0.5f, 62.5f, UI_LCW - 1.0f, 102.0f, 1.0f, sk.mid);
     }
-    ui_l_row(1u, IDS);
+    ui_l_row(0u, IDS);
 }
 
-/* TRACK: TYPE's chips, its CHANNEL out and MIDI IN, what plays it */
-static void ui_p_ltrk(void)
+/* RECORD (V0.86: the TRACK page's CHANNEL and MIDI IN here, S1): QUANTIZE as chips, the track's CHANNEL out, MIDI IN */
+static void ui_p_lrec(void)
 {
-    uint32_t t = lpp.sel % LP_NTRK, i, ty = ui_l_type3(t);
+    uint32_t t = lpp.sel % LP_NTRK, ty = ui_l_type3(t), i;
     const lp_trk_t *k = &lpp.trk[t];
     char v[32];
     float x;
     pg.figs = 0xFu;
     sp_fix(sp_put(v, "TRACK "), (int32_t)t + 1, 0u, 0);
     ui_l_head(v, 1);
-    lk_label(UI_TITLE_X, 52.0f, "TYPE", 20);
-    for (i = 0, x = UI_TITLE_X; i < 4u; i++)
-        x = ui_chip(x, 66.0f, LT_TYPE3[i], i == ty, ui_hot(1));
+    lk_label(UI_TITLE_X, 52.0f, "QUANTIZE: THE NOTES PLAYED IN", 20);
+    for (i = 0, x = UI_TITLE_X; i < LQ_N; i++)
+        x = ui_chip(x, 66.0f, LQ_NAME[i], i == lpg.quant % LQ_N, ui_hot(0));
     lk_label(UI_TITLE_X, 92.0f, ty == 1u || ty == 2u ? "ITS NOTES OUT ON USB MIDI: CHANNEL"
                                 : "MIDI CHANNEL (OUT WITH SYNTH+MIDI)", 20);
     sp_fix(sp_put(v, "CH "), k->ch + 1, 0u, 0);
-    lk_text(UI_TITLE_X, 106.0f, T12B, v, ui_ink(ui_hot(2)), sk.ground, 0, 0);
+    lk_text(UI_TITLE_X, 106.0f, T12B, v, ui_ink(ui_hot(1)), sk.ground, 0, 0);
     lk_label(UI_TITLE_X, 132.0f, "MIDI IN: NOTES ON", 20);
     if (k->cin)
         sp_fix(sp_put(v, "CH "), k->cin, 0u, 0);
     else
         sp_put(v, "ANY, WHILE SELECTED");
-    lk_text(UI_TITLE_X, 146.0f, T12B, v, ui_ink(ui_hot(3)), sk.ground, 0, 0);
-    lk_text(UI_TITLE_X, 176.0f, T9, ty == 3u ? "THE DRUM KIT: EDIT SHOWS IT" : ty == 2u ? "ITS NOTES GO OUT, NO SOUND HERE"
-                                    : "THE SOUND PLAYING (ITS OWN: V0.9)", sk.lab, sk.ground, 20, 0);
-    lk_text(UI_TITLE_X, 190.0f, T9, ty == 3u ? "KEYS: 8 DRUMS, ACCENTED, DUCK" : "THE KEYS PLAY THE TRACK SELECTED", sk.lab,
-            sk.ground, 20, 0);
-    ui_H(1, 8.0f, 69.0f);
-    ui_H(2, 8.0f, 109.0f);
-    ui_H(3, 8.0f, 149.0f);
-}
-
-/* RECORD: QUANTIZE, COUNT-IN, LAUNCH as chips */
-static void ui_p_lrec(void)
-{
-    uint32_t i;
-    float x;
-    pg.figs = 0xFu;
-    ui_l_head("RECORD", 0);
-    lk_label(UI_TITLE_X, 52.0f, "QUANTIZE: THE NOTES PLAYED IN", 20);
-    for (i = 0, x = UI_TITLE_X; i < LQ_N; i++)
-        x = ui_chip(x, 66.0f, LQ_NAME[i], i == lpg.quant % LQ_N, ui_hot(0));
-    lk_label(UI_TITLE_X, 92.0f, "COUNT-IN: STOPPED, BEFORE A TAKE", 20);
-    x = ui_chip(UI_TITLE_X, 106.0f, "OFF", !lpg.cin, ui_hot(1));
-    ui_chip(x, 106.0f, "1 BAR", lpg.cin, ui_hot(1));
-    lk_label(UI_TITLE_X, 132.0f, "LAUNCH: A CLIP PLAYS FROM", 20);
-    for (i = 0, x = UI_TITLE_X; i < LL_N; i++)
-        x = ui_chip(x, 146.0f, LL_NAME[i], i == lpg.launch % LL_N, ui_hot(2));
-    lk_text(UI_TITLE_X, 176.0f, T9, "REC: A TAKE (AGAIN ENDS IT),", sk.lab, sk.ground, 20, 0);
-    lk_text(UI_TITLE_X, 190.0f, T9, "ON A CLIP: OVERDUB", sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 146.0f, T12B, v, ui_ink(ui_hot(2)), sk.ground, 0, 0);
+    ui_l_trk(v, t);
+    lk_text(UI_TITLE_X, 176.0f, T9, v, sk.lab, sk.ground, 20, 0);
+    lk_text(UI_TITLE_X, 190.0f, T9, "REC: A TAKE; ON A CLIP: OVERDUB", sk.lab, sk.ground, 20, 0);
     ui_H(0, 8.0f, 69.0f);
     ui_H(1, 8.0f, 109.0f);
     ui_H(2, 8.0f, 149.0f);
 }
 
-/* CLICK: OFF, REC, ON; LEVEL as ten cells; the bar's beats, the one now lit */
+/* CLICK: OFF, REC, ON; LEVEL as ten cells, the bar's beats beside (the one now lit); COUNT-IN, LAUNCH as chips (V0.86:
+ * from RECORD) */
 static void ui_p_lclick(void)
 {
     uint32_t i, nb = (uint32_t)sy_clampi(ui.tsb, 1, 16), at = ui_beat_now();
-    float x;
+    float x, sp = nb > 1u ? sy_minf(12.0f, 64.0f / (float)(nb - 1u)) : 0.0f;
     pg.figs = 0xFu;
     ui_l_head("CLICK", 0);
-    lk_label(UI_TITLE_X, 52.0f, "ON THE BEATS: RECORDING, OR ALWAYS", 20);
+    lk_label(UI_TITLE_X, 48.0f, "ON THE BEATS: RECORDING, OR ALWAYS", 20);
     for (i = 0, x = UI_TITLE_X; i < LC_N; i++)
-        x = ui_chip(x, 66.0f, LC_NAME[i], i == lpg.click % LC_N, ui_hot(0));
-    lk_label(UI_TITLE_X, 92.0f, "LEVEL", 20);
+        x = ui_chip(x, 60.0f, LC_NAME[i], i == lpg.click % LC_N, ui_hot(0));
+    lk_label(UI_TITLE_X, 84.0f, "LEVEL", 20);
     for (i = 0; i < 10u; i++) {
-        float xc = UI_TITLE_X + 14.0f * (float)i;
+        float xc = UI_TITLE_X + 11.0f * (float)i;
         if (i < lpg.clvl)
-            lk_box(xc, 106.0f, xc + 10.0f, 116.0f, ui_ink(ui_hot(1)));
+            lk_box(xc, 97.0f, xc + 8.0f, 107.0f, ui_ink(ui_hot(1)));
         else
-            lk_frame(xc + 0.5f, 106.5f, 9.0f, 9.0f, 1.0f, sk.line);
+            lk_frame(xc + 0.5f, 97.5f, 7.0f, 9.0f, 1.0f, sk.line);
     }
-    lk_label(UI_TITLE_X, 132.0f, "THE BAR", 20);
+    lk_label(150.0f, 84.0f, "THE BAR", 20);
     for (i = 0; i < nb; i++) {
-        float cx = UI_TITLE_X + 6.0f + 12.0f * (float)i;
-        int now = cht.run && i == at;
-        if (now)
-            lk_disc(cx, 152.0f, i ? 3.5f : 5.0f, sk.hot);
+        float cx = 155.0f + sp * (float)i;
+        if (cht.run && i == at)
+            lk_disc(cx, 102.0f, i ? 3.0f : 4.5f, sk.hot);
         else
-            lk_ring(cx, 152.0f, i ? 3.0f : 4.5f, 1.0f, sk.mid);
+            lk_ring(cx, 102.0f, i ? 2.5f : 4.0f, 1.0f, sk.mid);
     }
-    lk_text(UI_TITLE_X, 176.0f, T9, "THE DOWNBEAT HIGHER", sk.lab, sk.ground, 20, 0);
-    lk_text(UI_TITLE_X, 190.0f, T9, "COUNT-IN: A BAR OF IT FIRST", sk.lab, sk.ground, 20, 0);
-    ui_H(0, 8.0f, 69.0f);
-    ui_H(1, 8.0f, 109.0f);
+    lk_label(UI_TITLE_X, 120.0f, "COUNT-IN: A BAR BEFORE A TAKE", 20);
+    x = ui_chip(UI_TITLE_X, 132.0f, "OFF", !lpg.cin, ui_hot(2));
+    ui_chip(x, 132.0f, "1 BAR", lpg.cin, ui_hot(2));
+    lk_label(UI_TITLE_X, 156.0f, "LAUNCH: A CLIP PLAYS FROM", 20);
+    for (i = 0, x = UI_TITLE_X; i < LL_N; i++)
+        x = ui_chip(x, 168.0f, LL_NAME[i], i == lpg.launch % LL_N, ui_hot(3));
+    lk_text(UI_TITLE_X, 194.0f, T9, "THE DOWNBEAT CLICKS HIGHER", sk.lab, sk.ground, 20, 0);
+    ui_H(0, 8.0f, 63.0f);
+    ui_H(1, 8.0f, 99.0f);
+    ui_H(2, 8.0f, 135.0f);
+    ui_H(3, 8.0f, 171.0f);
 }
 
 /* NOTES, EDIT: the clip a bar at a time round the note picked, a piano roll (velo: a lane of velocities under it) */
@@ -745,7 +1004,7 @@ static void ui_l_roll(int velo)
     int32_t lo = 127, hi = 0, x, r;
     float y0 = 60.0f, y1 = velo ? 132.0f : 162.0f, h, sx = (UI_LRX1 - UI_LRX0) / (float)bt;
     char t[40], *e;
-    int hot = ui_hot(1) || ui_hot(2) || ui_hot(3);
+    int hot = velo ? ui_hot(0) : ui_hot(1) || ui_hot(2) || ui_hot(3);   /* (NOTE+: VELOCITY on KNOB 1) */
     qt = qt ? qt : LP_PPQ;
     e = sp_put(sp_put(t, "T"), "");
     e = sp_fix(e, (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0);
@@ -801,7 +1060,7 @@ static void ui_l_roll(int velo)
             lk_frame(xa - 1.5f, y - hh - 1.5f, xb - xa + 3.0f, 2.0f * hh + 3.0f, 1.0f, sk.ink);
         if (velo) {
             float yv = 162.0f - 24.0f * (float)(lp_ev[k].b & 0x7F) / 127.0f;
-            lk_seg(xa, 162.0f, xa, yv, k == pick ? 2.0f : 1.0f, k == pick && ui_hot(1) ? sk.hot : sk.mid);
+            lk_seg(xa, 162.0f, xa, yv, k == pick ? 2.0f : 1.0f, k == pick && hot ? sk.hot : sk.mid);
         }
     }
     if (lps[lpp.sel % LP_NTRK].play == lpp.scn && cht.run && c->len) {   /* (the playhead, in this bar) */
@@ -830,16 +1089,15 @@ static void ui_p_ledit(void)
     char t[24], v[24];
     ui_loop_nv(UI_LNOTE, v);
     sp_put(sp_put(t, "NOTE "), v);
-    lk_text(UI_TITLE_X, 24.0f, T14B, lp_note_n(lp_cur_clip()) ? t : "NO NOTES", ui_ink(ui_hot(0)), sk.ground, 0, 17);
-    ui_H(0, 8.0f, 27.0f);
+    lk_text(UI_TITLE_X, 24.0f, T14B, lp_note_n(lp_cur_clip()) ? t : "NO NOTES", sk.ink, sk.ground, 0, 17);
     ui_l_roll(1);
-    ui_l_row(1u, IDS);
+    ui_l_row(0u, IDS);                              /* (V0.86, C2: NOTE+, the note picked on NOTES) */
 }
 
 /* CLIP: LENGTH as cells, the clip's notes at a glance, MOTION's moves of the parameter picked as a line */
 static void ui_p_lclip(void)
 {
-    static const int32_t IDS[3] = {UI_LQAPP, UI_LMOVE, UI_LMCLR};
+    static const int32_t IDS[3] = {UI_LSPEED, UI_LQAPP, UI_LMOVE};   /* (V0.86: SPEED; CLEAR on TOOLS) */
     const lp_clip_t *c = lp_cur_clip();
     uint32_t bars = lp_clip_bars(lpp.sel, lpp.scn), mb = lp_max_bars(), i, k, nn = lp_note_n(c), nm;
     uint16_t ids[8];
@@ -889,13 +1147,13 @@ static void ui_p_lclip(void)
                     float x = 26.0f + 200.0f * (float)lp_et(k) / (float)c->len;
                     float y = 160.0f - 36.0f * (phi > plo ? (float)(v - plo) / (float)(phi - plo) : 0.5f);
                     if (py >= 0.0f) {
-                        lk_seg(px, py, x, py, 1.0f, ui_ink(ui_hot(2)));
-                        lk_seg(x, py, x, y, 1.0f, ui_ink(ui_hot(2)));
+                        lk_seg(px, py, x, py, 1.0f, ui_ink(ui_hot(3)));
+                        lk_seg(x, py, x, y, 1.0f, ui_ink(ui_hot(3)));
                     }
                     px = x, py = y;
                 }
             if (py >= 0.0f)
-                lk_seg(px, py, 226.0f, py, 1.0f, ui_ink(ui_hot(2)));
+                lk_seg(px, py, 226.0f, py, 1.0f, ui_ink(ui_hot(3)));
         } else {
             lk_text(26.0f, 140.0f, T9, "NO MOTION: A KNOB TURNED IN REC", sk.lab, sk.ground, 20, 0);
         }
@@ -904,6 +1162,87 @@ static void ui_p_lclip(void)
         lk_text(26.0f, 110.0f, T9, "OR KNOB 1: AN EMPTY CLIP", sk.lab, sk.ground, 20, 0);
     }
     ui_l_row(1u, IDS);
+}
+
+/* TOOLS (V0.86, S8): COPY, PASTE, DOUBLE / HALVE, CLEAR, a row each: what each does, what it would do now (an ask
+ * waiting: HOT) */
+static void ui_p_ltools(void)
+{
+    const lp_clip_t *c = lp_cur_clip();
+    uint32_t t = lpp.sel % LP_NTRK, sc = lpp.scn % LP_NSCN, bars = lp_clip_bars(t, sc), nn = lp_note_n(c), nm, i;
+    uint16_t ids[8];
+    int drum = ui_drums();
+    char v[48], f[48], *e;
+    pg.figs = 0xFu;
+    nm = ui_l_moves(ids);
+    ui_l_head(0, 1);
+    e = sp_put(sp_put(sp_put(v, "CLIP "), (char[2]){ui_l_scn(sc), 0}), " \xB7 ");
+    if (bars) {
+        e = sp_put(sp_fix(e, (int32_t)bars, 0u, 0), bars == 1u ? " BAR \xB7 " : " BARS \xB7 ");
+        e = sp_put(sp_fix(e, (int32_t)nn, 0u, 0), drum ? (nn == 1u ? " HIT" : " HITS") : nn == 1u ? " NOTE" : " NOTES");
+        if (nm)
+            sp_put(sp_fix(sp_put(e, " \xB7 "), (int32_t)nm, 0u, 0), " IN MOTION");
+    } else {
+        sp_put(e, "EMPTY");
+    }
+    lk_text(UI_TITLE_X, 42.0f, T10, v, lp_cur_rec() ? sk.hot : sk.lab, sk.ground, 20, 12);
+    for (i = 0; i < 4u; i++) {
+        float y = 58.0f + 36.0f * (float)i;
+        const char *lb = "";
+        int ask = 0;
+        e = v;
+        v[0] = 0;
+        switch (i) {
+        case 0:
+            lb = "COPY: THIS CLIP, THEN A BAR OF IT";
+            if (!ui.cb_on) {
+                sp_put(v, "NOTHING COPIED YET");
+            } else {
+                e = ui_l_clip(v, ui.cb_t, ui.cb_s);
+                if (ui.cb_bar >= 0)
+                    sp_fix(sp_put(e, ", BAR "), ui.cb_bar + 1, 0u, 0);
+                else
+                    sp_put(e, ", ALL OF IT");
+            }
+            break;
+        case 1:
+            lb = ui.cb_on && ui.cb_bar >= 0 ? "PASTE: INTO THE SAME BAR HERE" : "PASTE: INTO THIS CLIP, REPLACING IT";
+            ask = ui.paste_t != 0u;
+            if (ask)
+                sp_put(v, "AGAIN: WHAT IS HERE GOES");
+            else if (ui.cb_on)
+                ui_l_clip(sp_put(v, "INTO "), t, sc);
+            else
+                sp_put(v, "\x97");
+            break;
+        case 2:
+            lb = "RIGHT: TWICE AS LONG, LEFT: HALF";
+            ask = ui.halve_t != 0u;
+            if (ask)
+                sp_put(v, "AGAIN: ITS SECOND HALF GOES");
+            else if (bars)
+                sp_put(sp_fix(v, (int32_t)bars, 0u, 0), bars == 1u ? " BAR" : " BARS");
+            else
+                sp_put(v, "EMPTY");
+            break;
+        default:
+            lb = drum ? "RIGHT: ITS HITS, LEFT: THE MOTION" : "RIGHT: ITS NOTES, LEFT: THE MOTION";
+            ask = ui.clr_t2 != 0u;
+            if (ask && ui.clr_dir == 1u)
+                sp_put(v, drum ? "AGAIN: ITS HITS GO" : "AGAIN: ITS NOTES GO");
+            else if (ask)
+                sp_put(sp_put(sp_put(v, "AGAIN: "), nm ? SP[ids[ui.lmv % nm]].name : ""), " GOES");
+            else if (nm)
+                sp_put(sp_put(v, "MOTION PICKED: "), SP[ids[ui.lmv % nm]].name);
+            else
+                sp_put(v, nn ? "NO MOTION" : "\x97");
+            break;
+        }
+        lk_label(UI_TITLE_X, y, lb, 20);
+        lk_text(UI_TITLE_X, y + 12.0f, T12B, lk_fit(f, sizeof f, v, T12B, 0, 204.0f), ask ? sk.hot : ui_ink(ui_hot(i)),
+                sk.ground, 0, 0);
+        ui_H(i, 8.0f, y + 15.0f);
+    }
 }
 
 /* SONG: its sixteen slots (each a scene, its repeats; the one picked framed, the one playing marked; past the first

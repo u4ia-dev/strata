@@ -1,8 +1,9 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.85 DRUMS`: the STRATA UI of V0.67, SCL's
-chords, the ARP, the 8-track looper with V0.81's fixes, its drum synth and sidechain, and CORE 2, the second core
-measured: [CONTROLS.md](CONTROLS.md) "Chords", "The ARP", "The looper", "The drums", "CORE 2") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
+This is the procedure for putting Strata's **hardware test build** (`V0.86 UI`: V0.86's interface, step 1 of its
+plan, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes, its drum synth and
+sidechain, and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Buttons", "The looper", "The drums",
+"SETTINGS") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
 in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
@@ -389,7 +390,7 @@ New in V0.81:
 
 New in V0.85 DRUMS (the test page's rows "drums", "grid", "duck"; [CONTROLS.md](CONTROLS.md) "The drums"):
 
-33. **A drum track.** SEQ > TRACK: track 1, TYPE DRUMS. The white keys 1-8: KICK, SNARE, CLAP, HAT CL, HAT OP, CYM,
+33. **A drum track.** SEQ > CLIPS: track 1 (PRESETS picks it), TYPE DRUMS (V0.86: it changes when you stop turning). The white keys 1-8: KICK, SNARE, CLAP, HAT CL, HAT OP, CYM,
     WT 1, WT 2; 9-16 the same, louder (accented); the first black key DUCK (no sound). EDIT: KIT. DRUM: each drum's
     TUNE, DECAY and TONE by ear (stopped, the drum you play is the one picked); MORE: its own (PUNCH, SNAP, SPREAD,
     METAL, BEND), LEVEL, PAN. A HAT CL cuts a ringing HAT OP (DECAY long). No clicks at a hit's start or end.
@@ -401,11 +402,49 @@ New in V0.85 DRUMS (the test page's rows "drums", "grid", "duck"; [CONTROLS.md](
     track's DUCK row on the beats: the chord dips on each and comes back. KIT > DUCK: AMOUNT, ATTACK, RELEASE and SHAPE
     (PUMP: the pumping one) by ear; the drums themselves never dip.
 36. **Recording and TYPE.** REC on the drum track's empty clip in another scene: play drums for a bar or two (accented
-    ones too), REC: it loops as played. TRACK's TYPE SYNTH and back to DRUMS: the beat as it was (its accents, chances,
+    ones too), REC: it loops as played. CLIPS' TYPE SYNTH and back to DRUMS (each asks one detent more: the track has
+    clips): the beat as it was (its accents, chances,
     ratchets kept).
 37. **The load with drums.** HOME's CPU figure with a full beat playing (all eight drums), then with SUPERSAW chords
     over it: note both (the model: the eight drums sounding at once 11-15 % of a core, a beat's usual two or three
     much less).
+
+New in V0.86 UI ([CONTROLS.md](CONTROLS.md); the test page has no rows of its own for these yet: note them by hand):
+
+38. **Power-on and the layout.** The splash for 2 s, then HOME's SOUND. On every menu screen the bottom row names the
+    module's pages (the one shown in full and inverted, the others short: UNI, SPR ..), and the top right the menu's
+    module dots (SEQ's four in two groups). Note any screen whose short names you cannot read at arm's length.
+39. **The buttons once and twice.** From OSC A: ENV once (the page left in ENV), again (ENV 1's ADSR), twice (ENV 2);
+    EDIT twice: JUMP stays open, a key opens its module and closes it; LFO twice on OSC A's WAVE: MOMENTARY latched
+    there, a knob moves, LFO puts it back; GLO twice: PERFORM latched, GLO closes it; SCL twice, ARP twice: on and
+    off; SEQ once and twice; HOME twice: the browser. Whether 300 ms between the presses feels right, and whether a
+    single press ever acts as a double (or the other way).
+40. **PRESETS' list.** Flick PRESETS: the list follows, only the preset you stop on loads (0.4 s after). SAVE held while
+    the list is open: back to the sound you had. Edit a knob, then turn PRESETS: the first detent only opens the list
+    ("EDITED: TURN ON TO LEAVE IT"). The vermilion dot after an edited sound's name on HOME.
+41. **SEQ.** PRESETS picks the track on every SEQ page. CLIPS: TYPE turned on a track with clips asks for one more
+    detent; on CLIPS the white keys 1-8 launch the scene's clips, the black keys 1-8 the scenes; their LEDs (lit
+    playing, blinking launched or recording, glowing there). CLIP's SPEED x2 and x1/2 by ear, in time with the other
+    tracks. TOOLS: COPY a clip, PASTE it into another scene (asked when something is there), DOUBLE, HALVE, CLEAR.
+42. **The drum grid, a step held.** Hold a step's white key: the four knobs set its VELOCITY, ACCENT, CHANCE, RATCHET;
+    let go and they are the page's again. A tap on a hit takes it out as before; a hold with a turn keeps it.
+43. **Centre detents.** OSC A's OUTPUT PAN, a track's PAN, a drum's TUNE: turned through the middle, it stops there for
+    three detents. Note whether that feels like a detent or like a stuck knob.
+44. **HOME's other pages.** MIX 1-4, MIX 5-8: the eight tracks' VOLUME. On a drum track, HOME's grid of eight lit as the
+    drums sound (in time with what you hear), PRESETS picking the drum, TUNE, DECAY, TONE and DUCK moving the whole kit.
+45. **SETTINGS > POWER.** The battery's bars and its raw reading, on battery from full and over an hour (**unverified**:
+    the stock thresholds 531, 561, 591 on this unit; note the raw figure at full, at the first bar lost, and when the
+    FM-1 warns); USB power shows a bolt. SHOW BATTERY HOME, then EVERY SCREEN: the battery on the top lines. SCREEN OFF
+    AFTER 1 MIN: after a minute untouched the panel goes dark while the sound goes on and the backlight stays lit;
+    a button, a knob or a key wakes it, and that press does nothing else (**unverified** on this panel: Felucca's notes,
+    found on its 1.1.5). If the panel ever stays dark, a power cycle brings it back with SCREEN OFF as you left it:
+    set it OFF again (dark, a first press only wakes it; then HOME held 5 s opens the SETTINGS).
+46. **SETTINGS > KEY SCAN.** Press keys slowly and hard: does any dotted cell turn vermilion? (It would mean the keybed
+    has a second contact, as velocity needs; the matrix's spare cells say probably not.)
+47. **The help map.** HOME held on a few pages: what it says matches what the knobs and buttons do there; held on, the
+    SETTINGS at 5 s.
+48. **BENCH after a session.** The SCREEN row (the longest frame and its page: the help map and HOME's drum view are the
+    new heavy ones), STACKS (the main stack's figure against the build's ~5.6 KB).
 
 ## 5. The report
 
@@ -474,6 +513,20 @@ marked.
   at power-on, before any firmware runs, and the boot head they rely on is never written by any of these tools.
 
 ## 8. What was checked, and where
+
+- **V0.86 UI**: built and checked by the build: the image 464,480 bytes (+26,356 on V0.85), RAM 62,820 of 73,728 bytes
+  (+592), the pool 362,036 bytes, the interrupt stack ~2.7 KB of 4, the main stack ~5.6 KB of 8, register access in
+  `hal/` only; the package sha256 `941a9d56...4c00d8d4`, the flasher rebuilt (its page sha256 `2d285d9d...ae03af86`).
+  **Verified on host**: the engine's 94 checks and the drums' 18 with the golden renders unchanged (the effects' new
+  parameters at their defaults move no sample), USB MIDI out's 9, the cost model (BUDGET.md §16: unchanged within 3
+  instructions a sample), the stress test's 24 seeds x 3,000 steps under ASan and UBSan with TOOLS, SPEED and the
+  screen's sleep in (it found two one-byte stack overflows in new screen text and a null name in the help map, all
+  fixed). **Verified in the emulator**: 159 checks (19 new: the buttons once and twice, the help map, TOOLS, SPEED,
+  TYPE's guard, CLIPS' keys, the grid's held step, a power cycle with SPEED, the centre detent, the battery's bars,
+  the screen's sleep and wake, POWER's settings after a power cycle), 152 screens checked, 639 knob turns, the
+  flasher's 26 and the test page's 21, the emulator's page in a browser 6. **Needs a hardware test**: steps 38-48.
+  **Unverified**: the battery thresholds on this unit, the panel's sleep and wake (DISPOFF, SLPIN), whether the keybed
+  has second contacts.
 
 - **V0.85 DRUMS**: built and checked by the build: the image 438,124 bytes (+20,940 on V0.81), RAM 62,228 of 73,728
   bytes (+1,568: the drum voices, the kit, the ratchets), the pool 361,860 bytes, the interrupt stack ~2.7 KB of 4, the

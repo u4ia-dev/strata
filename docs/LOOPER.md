@@ -70,6 +70,13 @@ the bench build no longer measures flash reads.
   sixteenth; CHANCE in eighths; GRID and HIT show sixteen steps, the white keys the steps and the black keys the
   rows; the kit's knobs are not recorded as moves (moves are the sound's parameters).
 
+- **V0.86 step 1** (the interface, 2026-10-22, not installed): SEQ in two groups (once LOOP and CLIP, twice TRACK and
+  SONG); PRESETS picks the track; the TRACK page gone (TYPE on CLIPS, guarded: it changes when the turning stops, and a
+  track with clips asks for one more detent; CHANNEL and MIDI IN on RECORD; COUNT-IN and LAUNCH on CLICK); CLIPS' keys
+  launch; NOTES and NOTE+; CLIP's SPEED (x1/2, x1, x2, kept in the project: stream version 3); TOOLS (COPY a clip or a
+  bar, PASTE, DOUBLE / HALVE, CLEAR its notes or a motion; each that takes something away asks first); the drum grid's
+  step held (its hit's VELOCITY, ACCENT, CHANCE, RATCHET on the knobs). CONTROLS.md "The looper", FLASHING.md.
+
 ## Stages
 
 0. **Bench build** (V0.8 BENCH): the second core on the user's FM-1, measured. BENCH gets CORE 2: core 1 renders
