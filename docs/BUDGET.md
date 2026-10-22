@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,39 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 17. V0.86 step 2 (the drum editor)
+
+From the build (2026-10-22, with the renders review's fixes): the image **482,064 B** (+17,584 on step 1: the eight
+factory kits, 1,456 B; the drums' effects, their set-up at a hit (`sy_drum_hit` 5,022 B with it inlined) and their
+blocks; DRUM's and KIT's new pages, ~6 KB (EQ's response 1,794 B and its curve 1,062 B, COMP's 1,396 B, DRIVE's 796
+B); the kits' list; the review's PRESETS list by SAVE twice, SAVE + OCT+ and SAVE + OCT−); `.data` + `.bss`
+**63,636 B** (+816: the eight drum voices' effect state, 8 x 100 B; COMP's and HOLD's state; the list's asks); the pool
+362,036 B (unchanged); the interrupt stack ~3,056 B (+340: COMP's bus, two blocks of 128 B, in `sy_drum_block`) of
+4,096 allowed; the main stack ~5,624 B (+4) of 8,192 allowed. Left: **99,500 B** of the app slot, **10,092 B** of
+`.data` + `.bss`, **18,892 B** of the pool (4 KiB of each the build's margin); the spare SRAM 22,156 B used, 22,784 B
+left. The flash: nothing new; the kit's step-2 fields were in step 1's stream (version 3, 182 B of kit).
+
+The engine (`tools/costprobe/sy_dyn.sh`; `tests/sy_drum_golden.txt` and `tests/sy_golden.txt` unchanged: a drum with
+its effects at rest and COMP off plays bit for bit as before):
+
+| Scenario | Step 1 | Step 2 |
+| --- | ---: | ---: |
+| idle | 158 | 156 |
+| the eight drums sounding at once | 676 | 678 |
+| SUPERSAW, 8 notes, the drums, the duck | 4,834 | 4,834 |
+| the eight drums at once, every effect on each (DRIVE SOFT, the three EQ bands, SHAPE) and COMP | | 1,203 (+525: 11-15 % of a core) |
+
+The plan estimated ~240 a sample more with everything on; measured, the worst case (the new row: all eight drums
+sounding at once, every effect on each) is +525. Its parts (the model's per-line counts): DRIVE ~20 a drum (SOFT; the
+other TYPEs not counted), the three EQ bands ~29 a drum (LOW or HIGH alone ~10, MID alone ~18), SHAPE nothing a sample
+(it is in the drum's own gain ramp, a block's two gains), COMP ~22 for the eight (a block's peak, its gain stepped
+over the block). Two passes brought it from 1,323 to 1,203: each effect's coefficients held in registers through its
+loop (a loop a DRIVE TYPE, a loop for the bands in use), and SHAPE into the gains (which put it after DRIVE and EQ;
+before, it fed DRIVE). A beat seldom sounds more than three drums at once: with every effect on them, ~200 more. An
+effect at its neutral setting costs nothing (set at each hit: DRIVE 0 or its MIX 0, a band at its middle, SHAPE's two
+at theirs, COMP's AMOUNT 0). The drums count in the admission's block time as before (§15). **Needs hardware test**:
+BENCH's figure for a beat with effects on.
 
 ## 16. V0.86 step 1 (the interface)
 

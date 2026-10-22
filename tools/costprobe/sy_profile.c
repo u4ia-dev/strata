@@ -21,7 +21,8 @@ typedef struct {
     uint8_t voices;
     int16_t kv[24][2];                     /* parameter, value pairs (-1 ends) */
     int8_t sound;                          /* V0.81: a starter sound under them (sy_sounds.h; -1 none) */
-    uint8_t drums;                         /* V0.85: 1 every lane hit each 64 blocks (~46 ms), 2 and the duck each 32 */
+    uint8_t drums;                         /* V0.85: 1 every lane hit each 64 blocks (~46 ms), 2 and the duck each 32;
+                                            * V0.86: 3 as 1, every drum's effects on and the kit's COMP */
 } prof_t;
 
 #define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}, {SP_EQ_ON, 1},   \
@@ -46,6 +47,7 @@ static const prof_t PROF[] = {
     {"PAD, 8 notes", 8, {{-1, 0}}, 2},
     {"drums: the eight lanes sounding", 0, {{-1, 0}}, -1, 1},   /* (V0.85: sy_drum.c) */
     {"SUPERSAW, 8 notes, the drums, the duck", 8, {{-1, 0}}, 0, 2},
+    {"drums: the eight lanes, every effect, COMP", 0, {{-1, 0}}, -1, 3},   /* (V0.86: sy_drum.c's effects) */
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 
@@ -77,6 +79,13 @@ int main(int argc, char **argv)
     sy_tables_now();
     for (i = 0; i < p->voices; i++)
         sy_note_on(48 + 4 * i, 100);
+    if (p->drums == 3u) {                          /* (every drum's DRIVE, EQ and SHAPE off their rest, COMP on) */
+        for (i = 0; i < DK_N; i++) {
+            dk_fx_t *f = &dkk.fx[i];
+            f->dtype = DD_SOFT, f->drive = 40, f->dmix = 80, f->lo = 60, f->mid = 40, f->hi = 60, f->att = 60, f->sus = 40;
+        }
+        dkk.comp[0] = 50;
+    }
     for (i = 0; i < PROF_WARM + PROF_BLOCKS; i++) {
         uint32_t l;
         if (i == PROF_WARM)

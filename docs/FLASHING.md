@@ -1,10 +1,11 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.86 UI`: V0.86's interface, step 1 of its
-plan, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes, its drum synth and
-sidechain, and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Buttons", "The looper", "The drums",
-"SETTINGS") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by the FM-1's own USB-MIDI update path, from a web page
-in Chrome or Edge. Installing custom firmware is at your own risk: read sections 2 and 7 before you start.
+This is the procedure for putting Strata's **hardware test build** (`V0.86 UI`: V0.86's interface and drum editor,
+steps 1 and 2 of its plan, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes,
+its drum synth and sidechain, and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Buttons", "The
+looper", "The drums", "SETTINGS") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by
+the FM-1's own USB-MIDI update path, from a web page in Chrome or Edge. Installing custom firmware is at your own
+risk: read sections 2 and 7 before you start.
 
 The first hardware test (`V0.4`, 2026-10-16) left the FM-1 unreachable by every updater; a Flipper Zero brought it
 back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the fix: it passed the flasher's restart
@@ -419,9 +420,10 @@ New in V0.86 UI ([CONTROLS.md](CONTROLS.md); the test page has no rows of its ow
     there, a knob moves, LFO puts it back; GLO twice: PERFORM latched, GLO closes it; SCL twice, ARP twice: on and
     off; SEQ once and twice; HOME twice: the browser. Whether 300 ms between the presses feels right, and whether a
     single press ever acts as a double (or the other way).
-40. **PRESETS' list.** Flick PRESETS: the list follows, only the preset you stop on loads (0.4 s after). SAVE held while
-    the list is open: back to the sound you had. Edit a knob, then turn PRESETS: the first detent only opens the list
-    ("EDITED: TURN ON TO LEAVE IT"). The vermilion dot after an edited sound's name on HOME.
+40. **PRESETS' list** (as the renders review changed it). Turn PRESETS: the list opens and follows, nothing loads;
+    SAVE twice loads the one picked; left untouched for 3 s, the list goes. SAVE + OCT+ in the list: a new preset,
+    named first; SAVE + OCT− on a user preset asks, again deletes it (a starter sound stays). The bottom row turns
+    vermilion when loading would lose your edits. Whether 3 s is long enough to read the list.
 41. **SEQ.** PRESETS picks the track on every SEQ page. CLIPS: TYPE turned on a track with clips asks for one more
     detent; on CLIPS the white keys 1-8 launch the scene's clips, the black keys 1-8 the scenes; their LEDs (lit
     playing, blinking launched or recording, glowing there). CLIP's SPEED x2 and x1/2 by ear, in time with the other
@@ -445,6 +447,23 @@ New in V0.86 UI ([CONTROLS.md](CONTROLS.md); the test page has no rows of its ow
     SETTINGS at 5 s.
 48. **BENCH after a session.** The SCREEN row (the longest frame and its page: the help map and HOME's drum view are the
     new heavy ones), STACKS (the main stack's figure against the build's ~5.6 KB).
+
+New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; note them by hand too):
+
+49. **DRUM.** On a drum track, EDIT: DRUM's SOUND for the drum PRESETS picks (stopped, the drum you play). By ear on a
+    KICK and a SNARE: DRIVE's four TYPEs at DRIVE 50 and 100 (SOFT warm, HARD edged, FOLD hollow, CRUSH stepped), MIX
+    back to 0; EQ's LOW, MID with FREQ swept, HIGH; SHAPE's ATTACK up (more click), SUSTAIN down (a shorter body).
+    Note any setting that clicks, jumps in level or sounds broken. The graphs follow the knobs.
+50. **KIT.** SELECT from DRUM: ACCENT's TONE (soft hits darker, accented brighter); DUCK's SOURCE KICK with a synth
+    chord held under a beat (the synth ducks on each KICK, not on the DUCK row), BOTH; CURVE's HOLD (the duck stays
+    down longer); COMP at AMOUNT 50 and 100 on a full beat (the beat denser, louder from 20 % on; any pumping you
+    hear: note how fast).
+51. **The kits.** HOME twice on a drum track: the eight kits; PRESETS picks, SAVE twice loads; each kit by ear over the
+    same beat. Edit one, then HOME twice: its dot, and the bottom row warns before you load another. Power-cycle: the
+    kit as you left it.
+52. **The load with the effects.** HOME's CPU figure with the beat playing on a kit with effects (INDUSTRIAL: DRIVE on six
+    drums, COMP 60), then with SUPERSAW chords over it (the model: every effect on all eight drums at once 11-15 %
+    of a core more; a beat's usual two or three ~5 % more).
 
 ## 5. The report
 
@@ -514,6 +533,18 @@ marked.
 
 ## 8. What was checked, and where
 
+- **V0.86 step 2 (the drum editor, with the renders review's fixes)**: built and checked by the build: the image
+  482,064 bytes (+17,584 on step 1), RAM 63,636 of 73,728 bytes (+816), the pool 362,036 bytes, the interrupt stack
+  ~3.1 KB of 4, the main stack ~5.6 KB of 8, register access in `hal/` only; the package sha256
+  `e56d69ba...4183c2c6e`, the flasher rebuilt (its page sha256 `99843dcb...00e19ffc`). **Verified on host**: the
+  drums' 28 checks (10 new: SHAPE, DRIVE, EQ, COMP, the duck's SOURCE and HOLD, ACCENT's TONE, the factory kits, 40
+  random kits with every effect, the cost) with their golden renders unchanged, the engine's 94, USB MIDI out's 9; the
+  cost model (BUDGET.md §17: every effect on all eight drums at once +525 instructions a sample); the stress test's 24
+  seeds x 3,000 steps under ASan and UBSan with kit loads and the effects' values in (its first run stopped on the
+  duck's new HOLD state, which the check did not yet know; the check updated, clean). **Verified in the emulator**:
+  166 checks (7 new: PRESETS' list by SAVE twice, its SAVE + OCT+ and SAVE + OCT−, DRUM's and KIT's pages, the kits'
+  list, DRUM's reset, a power cycle with a kit), 159 screens checked, 681 knob turns, the flasher's 26 and the test
+  page's 21, the emulator's page in a browser 6. **Needs a hardware test**: steps 38-52 (deferred to V0.9's test).
 - **V0.86 UI**: built and checked by the build: the image 464,480 bytes (+26,356 on V0.85), RAM 62,820 of 73,728 bytes
   (+592), the pool 362,036 bytes, the interrupt stack ~2.7 KB of 4, the main stack ~5.6 KB of 8, register access in
   `hal/` only; the package sha256 `941a9d56...4c00d8d4`, the flasher rebuilt (its page sha256 `2d285d9d...ae03af86`).

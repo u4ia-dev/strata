@@ -171,7 +171,7 @@ marked, in channel order, then the packet; the half's poll sends them with no pa
 configured nothing goes in and the mark waits; all 16 channels fit the room asked for. Felucca's own tests of the
 ring (`scale_test`, `chord_test`, `v156_test`, `midi_control_test`, `midi_uart_test`) pass as before.
 
-### 2.7 The drums (`sy_drum_test`, 18 checks, V0.85)
+### 2.7 The drums (`sy_drum_test`, 28 checks, V0.85; V0.86 step 2)
 
 The drum synth (`sy_drum.c`) through `sy_block`, as the audio interrupt runs it: every lane at velocity 127 heard,
 under 0.8 (-2 dB), every sample finite, its voice ended within its DECAY; WT 1 and 2 play no hit while their table is
@@ -187,6 +187,18 @@ track: finite, every voice ended. Golden renders (each lane, and two bars of a b
 twice the same and as recorded in `tests/sy_drum_golden.txt`. The host's cost: all eight sounding ~0.2 % of real time
 (the target's: BUDGET.md §15). And the engine's 94, its golden renders unchanged: the drums' block, nothing sounding,
 touches nothing.
+
+V0.86 step 2, the drum editor (10 checks more): SHAPE on a steady sound, ATTACK 90 and SUSTAIN 20: x 3.02 at the hit
+(+9.6 dB) and x 0.437 on the body, within 2 %, the start's share falling between; DRIVE at 100 %: SOFT, HARD and FOLD
+bounded by their out level (0.400 for 0.5 in), CRUSH on 2 bits (every sample a step of 1/4), MIX 50 % half the way;
+EQ: LOW +12 +11.4 dB at 80 Hz and +0.1 at 6 kHz, MID +12 +12.0 at FREQ (1.27 kHz) and +0.5 at 80 Hz, HIGH -12 -10.5 dB
+at 10 kHz and 0 at 80 Hz; COMP 80 % on a beat: its crest (peak over RMS) 5.81 -> 4.33, nothing over full scale; the
+duck's SOURCE (ROW its row's hits, KICK the KICK's, BOTH both) and HOLD (100 ms: still at the bottom 80 ms after it
+got there; without, on its way back); ACCENT's TONE 100: a soft HAT CL darker, an accented one brighter; the eight
+factory kits: each loads whole, every lane accented finite, under 0.8 and ended (the loudest 0.697, MINIMAL's); 40
+random kits with every effect (DRIVE, EQ, SHAPE, COMP, SOURCE, HOLD): finite, every voice ended; the host's cost with
+every effect on, 0.4 % of real time (the target's: BUDGET.md §17). The golden renders unchanged: a drum with its
+effects at rest and COMP off plays bit for bit as before.
 
 ## 3. Known gaps (targets not met)
 
@@ -411,7 +423,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 159 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 166 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -554,6 +566,18 @@ HOME, its MIX, PRESETS' list and its guard, the unsaved dot, the help map, JUMP 
 turning and asking, CLIP's SPEED, TOOLS asking, the drum grid with a step held, a drum track's HOME, KEY SCAN,
 POWER), the check clean; the knob sweep 639 turns, none with findings (it found CLIPS' "SYNTH+MIDI" over SCENE's
 handle: the knob's value is "SYN+MIDI" now).
+
+V0.86's renders review and step 2 (7 checks more; 166 in all). PRESETS' list: untouched 3 s, it goes and nothing
+loads; SAVE twice loads the one picked and closes it; SAVE + OCT+ names a new preset ("SUPERSAW v2", USER 3) and SAVE
+saves it back to the page; SAVE + OCT- on it asks, again deletes ("DELETED USER 3"); on a starter sound, "A STARTER
+SOUND STAYS". The drum editor: EDIT on a drum track opens DRUM's SOUND, PRESETS picks the drum (CLAP), SELECT goes to
+KIT's ACCENT; DRUM's DRIVE, EQ (LOW held at its middle from 47) and SHAPE on the drum picked, the kit's dot after an
+edit; KIT's SOURCE, HOLD, COMP's AMOUNT and MIX, ACCENT's TONE; HOME twice on a drum track opens the kits at the kit's
+own, SAVE twice loads INDUSTRIAL (its name, its number, its KICK's DRIVE; the dot and the list gone); EDIT held 5 s on
+DRUM: "DRUM: RESET", the drum's DRIVE at rest; a power cycle: INDUSTRIAL back with its SNARE's DRIVE and COMP. The
+checks before on the new pages (V0.85's drum check on DRUM's SOUND, MIX, KIT's DUCK on KNOB 2). Screens: 159 (DRUM's
+five pages, KIT's four, the kits' list, PRESETS' delete question; the drum shots before redone on the new pages), the
+check clean; the knob sweep 681 turns (639 before), none with findings.
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 
@@ -704,7 +728,11 @@ SPEED called straight (never on the clip recording, as the UI keeps it), and now
 a rest past it; every clip's SPEED checked in range. Its first run found three bugs in the new screens, fixed: the
 EQ's SHAPES wrote "CUSTOM: AS POINTS SET IT" into 24 bytes and the latched MOMENTARY's banner "A KNOB · TAP LFO:
 CLOSES" into 24 (each a byte past its buffer, on the stack), and the help map read a knob's name that can be none.
-The 24 seeds run clean on V0.86 since.
+The 24 seeds run clean on V0.86 since. Step 2: now and then a factory kit loaded, or a drum's effect value, the duck's
+SOURCE or HOLD, ACCENT's TONE or a COMP value set at random (out of range too, as a kit's sanity must catch); the
+checks now take the duck's HOLD (state 3, its samples left in range) and COMP's level and gain (finite, the gain over
+0 and at most its +9 dB). Its first run on step 2 stopped on the duck's state 3, HOLD, which the check did not yet
+know: the check was out of date, not the code. The 24 seeds run clean on step 2.
 
     cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_fuzz web/emu/strata_fuzz.c -lm
     for s in $(seq 1 24); do build/emu/strata_fuzz $s 3000 || echo "seed $s failed"; done

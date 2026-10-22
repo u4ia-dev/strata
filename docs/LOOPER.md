@@ -76,6 +76,11 @@ the bench build no longer measures flash reads.
   launch; NOTES and NOTE+; CLIP's SPEED (x1/2, x1, x2, kept in the project: stream version 3); TOOLS (COPY a clip or a
   bar, PASTE, DOUBLE / HALVE, CLEAR its notes or a motion; each that takes something away asks first); the drum grid's
   step held (its hit's VELOCITY, ACCENT, CHANCE, RATCHET on the knobs). CONTROLS.md "The looper", FLASHING.md.
+- **V0.86 step 2** (the drum editor, 2026-10-22, not installed): EDIT on a drum track opens DRUM (the drum PRESETS
+  picks: SOUND, DRIVE, EQ, SHAPE, MIX) and KIT (ACCENT with TONE, DUCK with SOURCE, CURVE with HOLD, COMP on the eight
+  drums); HOME twice on a drum track lists the eight factory kits (SAVE twice loads one). Each drum's DRIVE, EQ and
+  SHAPE play in that order and cost nothing at rest; no delay or reverb a drum (V0.9's sends). CONTROLS.md "The drums",
+  FLASHING.md steps 49-52, BUDGET.md §17.
 
 ## Stages
 

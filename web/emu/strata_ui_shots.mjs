@@ -811,27 +811,58 @@ run(3.2);
   shot("DrumHit");
   ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
   run(0.3);
-  go(SEC.KIT, "DRUM");
+  go(52, "SOUND");                              // (V0.86 step 2: DRUM, the drum PRESETS picks; KIT, the kit's)
   run(0.1);
   shot("DrumKit");
-  turn(0, 5);                                   // (CYM: a long fall)
+  ex.web_enc(2, 5);                             // (PRESETS: CYM, a long fall)
   rest();
   shot("DrumKitCym");
-  turn(2, 4);                                   // DECAY turning
+  turn(1, 4);                                   // DECAY turning
   shot("DrumKitTurn");
   rest();
-  go(SEC.KIT, "MORE");
+  ex.web_enc(2, -5);                            // (back to the KICK)
+  run(0.1);
+  go(52, "DRIVE");
+  turn(1, 25);                                  // (DRIVE up: SOFT, +6 dB)
+  rest();
+  shot("DrumDrive");
+  go(52, "EQ");
+  turn(0, 15); turn(1, -10); turn(2, 8);        // (LOW up, MID down, HIGH up)
+  rest();
+  shot("DrumEq");
+  go(52, "SHAPE");
+  turn(0, 20); turn(1, -15);                    // (ATTACK up, SUSTAIN down)
+  rest();
+  shot("DrumShape");
+  go(52, "MIX");
   run(0.1);
   shot("DrumMore");
   go(SEC.KIT, "ACCENT");
-  run(0.1);
+  turn(2, 40);                                  // (TONE: soft hits darker)
+  rest();
   shot("DrumAccent");
   go(SEC.KIT, "DUCK");
   run(0.1);
   shot("DrumDuck");
-  turn(3, 1);                                   // SHAPE turning: PUMP
+  turn(0, 1);                                   // SOURCE turning: KICK
   shot("DrumDuckTurn");
   rest();
+  go(SEC.KIT, "CURVE");
+  turn(1, 16);                                  // (HOLD 40 MS)
+  rest();
+  shot("DrumCurve");
+  go(SEC.KIT, "COMP");
+  turn(0, 50); turn(3, -20);                    // (AMOUNT 50 %, MIX 80 %)
+  rest();
+  shot("DrumComp");
+  go(SEC.MACRO, "SOUND");                       // (V0.86: HOME twice on a drum track: the kits)
+  run(0.1);
+  ex.web_buttons(1 << B.HOME); run(0.03); ex.web_buttons(0); run(0.08);
+  ex.web_buttons(1 << B.HOME); run(0.03); ex.web_buttons(0); run(0.2);
+  ex.web_enc(2, 1);
+  run(0.1);
+  shot("DrumKits");
+  run(3.2);
   go(SEC.MACRO, "SOUND");                       // (V0.86, D1-D3: HOME on a drum track, its drums lit as they sound)
   for (const l of [0, 3, 1]) ex.web_test_drum_hit(l, 7, 110, 0);
   run(0.12);

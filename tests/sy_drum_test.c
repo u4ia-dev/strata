@@ -6,7 +6,9 @@
  * bursts SPREAD apart; HAT CL chokes HAT OP; ACCENT's lift, VELOCITY's share; PAN and the track's gains (a muted
  * track silent); the WT lanes on OSC A's and B's tables (none built: no hit); the duck's AMOUNT, ATTACK, RELEASE and
  * SHAPEs, on the synth's sound and never on the drums; 40 random kits healthy; the renders twice the same and as
- * recorded; the cost on the host. */
+ * recorded; the cost on the host. V0.86 (the drum editor): each drum's SHAPE, DRIVE (its four TYPEs, its MIX) and EQ
+ * (its three bands where they should act, and not elsewhere), the kit's COMP, the duck's SOURCE and HOLD, ACCENT's
+ * TONE, the eight factory kits, 40 random kits with every effect, the cost with every effect on. */
 #define SY_ENGINE 1
 #include "sy_host.h"
 
@@ -371,6 +373,239 @@ static void t_health(void)
     check("40 random kits, every lane (random velocity, accent, track): finite, every voice ended", ok && ends);
 }
 
+
+/* ---------------------------------------------------------------------------------------- V0.86 --- */
+/* a drum's effects on a sound x of n samples, a block at a time, as the hit set them (lane's dkk.fx): DRIVE and EQ,
+ * then SHAPE's gain stepped over the block as sy_drum_block steps it */
+static float FX[NMAX];
+static void fx_run(uint32_t lane, float *x, uint32_t n)
+{
+    dk_voice_t v;
+    uint32_t i, j;
+    memset(&v, 0, sizeof v);
+    dk_fx_hit(&v, lane);
+    for (i = 0; i + SY_BLK <= n; i += SY_BLK) {
+        if (v.fx_dr | v.fx_eq)
+            dk_fx_block(&v, x + i);
+        if (v.fx_sh) {
+            float g0, g1, dg;
+            dk_sh_gains(&v, &g0, &g1);
+            dg = (g1 - g0) * (1.0f / (float)SY_BLK);
+            for (j = 0; j < SY_BLK; j++, g0 += dg)
+                x[i + j] *= g0;
+        }
+    }
+}
+static uint32_t sine(float hz, float a, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        FX[i] = a * sinf(6.2831853f * hz * (float)i / SY_FS);
+    return n;
+}
+static float eq_db(uint32_t lo, uint32_t mid, uint32_t hi, uint32_t freq, float hz)
+{
+    uint32_t n = sine(hz, 0.25f, secs(0.4f) / SY_BLK * SY_BLK);
+    fresh();
+    dkk.fx[DK_KICK].lo = (uint8_t)lo, dkk.fx[DK_KICK].mid = (uint8_t)mid, dkk.fx[DK_KICK].hi = (uint8_t)hi;
+    dkk.fx[DK_KICK].freq = (uint8_t)freq;
+    fx_run(DK_KICK, FX, n);
+    return 20.0f * log10f(pkr(FX, n / 2u, n) / 0.25f);
+}
+static void t_fx(void)
+{
+    uint32_t n, i, k, ok = 1, bounded = 1, steps = 1, nd = 0;
+    float a, b, c, d, e, f, base[4], peak = 0.0f, last = 2.0f;
+    /* SHAPE on a steady sound: ATTACK the start's gain falling to SUSTAIN's */
+    fresh();
+    dkk.fx[DK_SNARE].att = 90, dkk.fx[DK_SNARE].sus = 20;
+    n = secs(0.2f) / SY_BLK * SY_BLK;
+    for (i = 0; i < n; i++)
+        FX[i] = 0.1f;
+    fx_run(DK_SNARE, FX, n);
+    a = FX[0] / 0.1f, b = FX[n - 1u] / 0.1f;
+    printf("drums:   SHAPE ATTACK 90, SUSTAIN 20: the start x %.2f (+9.6 dB wanted x 3.02), the body x %.3f (x 0.437)\n", a, b);
+    check("SHAPE: ATTACK's gain at the hit, SUSTAIN's on the body (within 2 %), the start's share falling between",
+          fabsf(a - 3.02f) < 0.06f && fabsf(b - 0.437f) < 0.009f && FX[secs(0.005f)] / 0.1f < a && FX[secs(0.005f)] / 0.1f > b);
+    /* DRIVE: each TYPE bounded at its out level; CRUSH at 100 % on 2 bits; MIX 50 % half way */
+    for (k = 0; k < DD_N; k++) {
+        fresh();
+        dkk.fx[DK_SNARE].dtype = (uint8_t)k, dkk.fx[DK_SNARE].drive = 100, dkk.fx[DK_SNARE].dmix = 100;
+        n = sine(220.0f, 0.5f, 4096u);
+        fx_run(DK_SNARE, FX, n);
+        peak = pkr(FX, 0, n);
+        bounded &= peak <= (k == DD_CRUSH ? 0.51f : 0.401f);
+        if (k == DD_CRUSH) {                       /* (its values: steps of a quarter) */
+            for (i = 0; i < n; i++)
+                steps &= fabsf(FX[i] * 4.0f - roundf(FX[i] * 4.0f)) < 1e-5f;
+        }
+        base[k] = peak;
+    }
+    fresh();
+    dkk.fx[DK_SNARE].dtype = DD_HARD, dkk.fx[DK_SNARE].drive = 100, dkk.fx[DK_SNARE].dmix = 50;
+    n = sine(220.0f, 0.5f, 4096u);
+    fx_run(DK_SNARE, FX, n);
+    for (i = 0; i < n; i++) {
+        float x = 0.5f * sinf(6.2831853f * 220.0f * (float)i / SY_FS), y = fminf(fmaxf(x * 16.0f, -1.0f), 1.0f) * 0.4f;
+        ok &= fabsf(FX[i] - 0.5f * (x + y)) < 1e-4f;
+    }
+    printf("drums:   DRIVE 100 %%: SOFT %.3f, HARD %.3f, FOLD %.3f, CRUSH %.3f at most (0.5 in)\n", base[0], base[1], base[2],
+           base[3]);
+    check("DRIVE: SOFT, HARD, FOLD bounded by its out level, CRUSH on 2 bits (steps of 1/4); MIX 50 % half the way",
+          bounded && steps && ok);
+    /* EQ: each band where it acts, and not far off elsewhere */
+    a = eq_db(100, 50, 50, 50, 80.0f), b = eq_db(100, 50, 50, 50, 6000.0f);
+    c = eq_db(50, 100, 50, 50, 200.0f * powf(2.0f, 5.3219281f * 0.5f)), d = eq_db(50, 100, 50, 50, 80.0f);
+    e = eq_db(50, 50, 0, 50, 10000.0f), f = eq_db(50, 50, 0, 50, 80.0f);
+    printf("drums:   EQ LOW +12: %+.1f dB at 80 Hz, %+.1f at 6 kHz; MID +12 (1.27 kHz): %+.1f there, %+.1f at 80 Hz; HIGH -12: %+.1f at 10 kHz, %+.1f at 80 Hz\n",
+           a, b, c, d, e, f);
+    check("EQ: LOW +12 dB over 8 dB at 80 Hz and within 1.5 dB at 6 kHz; MID +12 over 10 dB at FREQ; HIGH -12 under -9 dB at 10 kHz",
+          a > 8.0f && fabsf(b) < 1.5f && c > 10.0f && fabsf(d) < 3.0f && e < -9.0f && fabsf(f) < 1.5f);
+    (void)nd, (void)last;
+}
+/* COMP: the beat louder (its make-up) and its peaks held together: the peak over the loudness less */
+static float crest(uint32_t a, uint32_t b)
+{
+    double s = 0.0;
+    uint32_t i;
+    for (i = a; i < b; i++)
+        s += (double)L[i] * L[i];
+    return pkr(L, a, b) / (float)sqrt(s / (double)(b - a));
+}
+static void t_comp(void)
+{
+    uint32_t n, l, at;
+    float c0, c1, p0, p1;
+    for (l = 0; l < 2u; l++) {
+        fresh();
+        dkk.comp[0] = l ? 80 : 0, dkk.comp[1] = 10, dkk.comp[2] = 10, dkk.comp[3] = 100;   /* (RELEASE 29 ms) */
+        at = 0;
+        for (n = 0; n < 8u; n++) {
+            sy_drum_hit(n & 1u ? DK_SNARE : DK_KICK, 0, 127, 0);
+            sy_drum_hit(DK_HATC, 0, 100, 0);
+            at = run(secs(0.25f), at);
+        }
+        if (l)
+            c1 = crest(secs(0.5f), at), p1 = pkr(L, secs(0.5f), at);
+        else
+            c0 = crest(secs(0.5f), at), p0 = pkr(L, secs(0.5f), at);
+    }
+    printf("drums:   COMP 80 %%: the beat's crest %.2f -> %.2f, its peak %.3f -> %.3f\n", c0, c1, p0, p1);
+    check("COMP: the beat's crest (peak over RMS) lower with it on; nothing over full scale", c1 < c0 * 0.85f && p1 < 1.0f);
+}
+/* the duck's SOURCE (its row, the KICK, both) and HOLD */
+static void t_duck2(void)
+{
+    uint32_t src, ok = 1, b, held = 0, down = 0;
+    for (src = 0; src < DSRC_N; src++) {
+        int row, kick;
+        fresh();
+        dkk.dsrc = (uint8_t)src;
+        sy_drum_hit(DK_DUCK, 0, 100, 0);
+        row = dkd.st != 0u;
+        sy_drum_off();
+        sy_drum_hit(DK_KICK, 0, 100, 0);
+        kick = dkd.st != 0u;
+        ok &= row == (src != DSRC_KICK) && kick == (src != DSRC_ROW);
+    }
+    check("the duck's SOURCE: ROW its row's hits, KICK the KICK's, BOTH both", ok);
+    for (b = 0; b < 2u; b++) {                      /* (HOLD 40: 100 ms down, then the release; 0: the release at once) */
+        uint32_t k;
+        fresh();
+        dkk.amount = 75, dkk.attack = 0, dkk.release = 50, dkk.dhold = (uint8_t)(b ? 40 : 0);
+        sy_note_on(48, 100);
+        run(secs(0.1f), 0);
+        sy_drum_hit(DK_DUCK, 0, 100, 0);
+        for (k = 0; k < secs(0.08f) / SY_BLK; k++)
+            run(SY_BLK, 0);
+        if (b)
+            held = fabsf(dkd.g - 0.25f) < 1e-4f;
+        else
+            down = dkd.g > 0.26f;
+    }
+    check("the duck's HOLD 100 ms: still at the bottom 80 ms after it got there; without: on its way back by then", held && down);
+}
+/* ACCENT's TONE: a soft hit darker (the HAT CL's high-pass lower) than at TONE 0, an accented one brighter */
+static float bright(uint32_t vel, int acc, uint32_t at)
+{
+    uint32_t n, i;
+    double d = 0.0, e = 0.0;
+    fresh();
+    dkk.atone = (uint8_t)at;
+    sy_drum_hit(DK_HATC, 0, vel, acc);
+    n = run(secs(0.05f), 0);
+    for (i = 1; i < n; i++) {
+        d += (double)(L[i] - L[i - 1u]) * (L[i] - L[i - 1u]);
+        e += (double)L[i] * L[i];
+    }
+    return (float)(d / (e + 1e-20));
+}
+static void t_atone(void)
+{
+    float s0 = bright(30, 0, 0), s1 = bright(30, 0, 100), a0 = bright(127, 1, 0), a1 = bright(127, 1, 100);
+    printf("drums:   ACCENT's TONE 100: a soft HAT CL's brightness %.3f -> %.3f, an accented one's %.3f -> %.3f\n", s0, s1, a0,
+           a1);
+    check("ACCENT's TONE: a soft hit darker than at 0, an accented one brighter", s1 < s0 * 0.95f && a1 > a0);
+}
+/* the factory kits: each loads whole, every lane heard, healthy and ended */
+static void t_kits(void)
+{
+    uint32_t k, l, ok = 1, ends = 1, named = 1;
+    float worst = 0.0f, kw = 0.0f;
+    for (k = 0; k < DK_NKIT; k++) {
+        fresh();
+        dk_kit_load(k);
+        named &= dkk.kit == k && dkk.name[0] != 0 && strcmp(dkk.name, DK_KITS[k].name) == 0;
+        for (l = 0; l < DK_N; l++) {
+            uint32_t n;
+            sy_drum_hit(l, 0, 127, 1);
+            n = run(secs(dk_t60(l, dkk.l[l].decay) * 2.2f + 0.3f), 0);
+            ok &= finite_all(n);
+            worst = fmaxf(worst, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+            ends &= !dkv[l].on;
+            kw = fmaxf(kw, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+            if (fmaxf(pkr(L, 0, n), pkr(R, 0, n)) > 0.75f)
+                printf("drums:     %s %s: %.3f\n", DK_KITS[k].name, DK_NAME[l], fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+        }
+        printf("drums:   %-10s its loudest accented hit %.3f\n", DK_KITS[k].name, kw);
+        kw = 0.0f;
+    }
+    printf("drums:   the %u factory kits: the loudest accented hit %.3f\n", DK_NKIT, worst);
+    check("the factory kits: each loads whole (its name, its number); every lane accented finite, under 0.8 (-2 dB), ended",
+          ok && ends && named && worst < 0.8f);
+}
+static void t_health2(void)
+{
+    uint32_t seed = 54321u, k, l, ok = 1, ends = 1;
+    float worst = 0.0f;
+    for (k = 0; k < 40u; k++) {
+        fresh();
+        for (l = 0; l < DK_N; l++) {
+            dk_fx_t *f = &dkk.fx[l];
+            f->dtype = (uint8_t)(sy_rand(&seed) % DD_N), f->drive = (uint8_t)(sy_rand(&seed) % 101u);
+            f->dmix = (uint8_t)(sy_rand(&seed) % 101u);
+            f->lo = (uint8_t)(sy_rand(&seed) % 101u), f->mid = (uint8_t)(sy_rand(&seed) % 101u);
+            f->hi = (uint8_t)(sy_rand(&seed) % 101u), f->freq = (uint8_t)(sy_rand(&seed) % 101u);
+            f->att = (uint8_t)(sy_rand(&seed) % 101u), f->sus = (uint8_t)(sy_rand(&seed) % 101u);
+        }
+        dkk.dsrc = (uint8_t)(sy_rand(&seed) % DSRC_N), dkk.dhold = (uint8_t)(sy_rand(&seed) % 101u);
+        dkk.atone = (uint8_t)(sy_rand(&seed) % 101u);
+        for (l = 0; l < 4u; l++)
+            dkk.comp[l] = (uint8_t)(sy_rand(&seed) % 101u);
+        for (l = 0; l < DK_N; l++) {
+            uint32_t n;
+            sy_drum_hit(l, sy_rand(&seed) % 8u, 1u + sy_rand(&seed) % 127u, (int)(sy_rand(&seed) & 1u));
+            n = run(secs(dk_t60(l, dkk.l[l].decay) * 2.2f + 0.3f), 0);
+            ok &= finite_all(n);
+            worst = fmaxf(worst, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+            ends &= !dkv[l].on;
+        }
+    }
+    printf("drums:   40 random kits with every effect: the loudest hit %.3f\n", worst);
+    check("40 random kits with every effect (DRIVE, EQ, SHAPE, COMP, the duck's SOURCE and HOLD): finite, every voice ended",
+          ok && ends);
+}
+
 /* the renders: each lane, then a bar of a beat over a held chord (a duck on each beat), twice, against the file */
 static uint32_t pattern(void)
 {
@@ -495,6 +730,27 @@ static void t_cost(void)
                100.0 * all / rt);
         check("the cost on the host: all eight lanes sounding under 10 % of real time", all / rt < 0.10);
     }
+    {                                               /* (V0.86: every effect of every drum on, and COMP) */
+        clock_t c3, c4;
+        for (l = 0; l < DK_N; l++) {
+            dk_fx_t *f = &dkk.fx[l];
+            f->dtype = DD_SOFT, f->drive = 40, f->dmix = 80, f->lo = 60, f->mid = 40, f->hi = 60, f->att = 60, f->sus = 40;
+        }
+        dkk.comp[0] = 50;
+        c3 = clock();
+        for (b = 0; b < nb; b++) {
+            if (b % 64u == 0u)
+                for (l = 0; l < DK_N; l++)
+                    sy_drum_hit(l, 0, 100, 0);
+            sy_block(o);
+        }
+        c4 = clock();
+        {
+            double all = (double)(c4 - c3) / CLOCKS_PER_SEC / nb * 1e6, rt = (double)SY_BLK / SY_FS * 1e6;
+            printf("drums:   host cost a block, every effect on: %.2f us (%.1f %% of real time)\n", all, 100.0 * all / rt);
+            check("the cost on the host with every effect on: under 15 % of real time", all / rt < 0.15);
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -509,6 +765,12 @@ int main(int argc, char **argv)
     t_gains();
     t_duck();
     t_health();
+    t_fx();
+    t_comp();
+    t_duck2();
+    t_atone();
+    t_kits();
+    t_health2();
     t_golden(argc > 1 ? argv[1] : "tests/sy_drum_golden.txt");
     t_cost();
     return t_done();

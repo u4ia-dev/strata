@@ -45,9 +45,9 @@ static void ui_l_follow(void)
         to = SEC_LGRID;
     else if (!drum && s == SEC_LGRID)
         to = SEC_LCLIP;
-    else if (drum && ui.fam == FAM_EDIT && s != SEC_KIT)
-        to = SEC_KIT;
-    else if (!drum && s == SEC_KIT)
+    else if (drum && ui.fam == FAM_EDIT && s != SEC_KIT && s != SEC_DRUM)
+        to = SEC_DRUM;                              /* (V0.86: DRUM, then KIT) */
+    else if (!drum && (s == SEC_KIT || s == SEC_DRUM))
         to = SEC_OSCA;
     if (to == 0xFFu)
         return;
@@ -608,6 +608,7 @@ static void sy_ui_project(int ok, int blocked)
         return;
     }
     lp_select_to(lpp.sel, ok == 2);
+    ui.kedited = 0;                                 /* (V0.86: the project's kit as it was kept) */
     ui.lprj = lpg.prj;
     ui.lnote = ui.lmv = ui.lslot = 0;
     if (!ok)

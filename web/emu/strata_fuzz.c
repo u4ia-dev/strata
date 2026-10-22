@@ -140,8 +140,11 @@ static void check(void)
         if (memcmp(&was, &dkk, sizeof dkk))
             fail("the kit out of its ranges", 0, 0);
     }
-    if (dkd.st > 2u || !(dkd.g >= 0.0f && dkd.g <= 1.0f) || !(dkd.d >= 0.0f && dkd.d <= 1.0f))
+    if (dkd.st > 3u || !(dkd.g >= 0.0f && dkd.g <= 1.0f) || !(dkd.d >= 0.0f && dkd.d <= 1.0f)
+        || dkd.h > (int32_t)(100.0f * DK_HOLD_MS * 0.001f * SY_FS))   /* (3: V0.86's HOLD) */
         fail("the duck's state", dkd.st, (int)(dkd.g * 1000.0f));
+    if (!(dkc.e >= 0.0f && dkc.e < 1e3f) || !(dkc.g > 0.0f && dkc.g <= 3.0f))   /* (COMP: its make-up, +9 dB at most) */
+        fail("COMP's state", (int)(dkc.e * 1000.0f), (int)(dkc.g * 1000.0f));
     for (k = 0; k < DK_N; k++)
         if (dkv[k].on && (!(dkv[k].a == dkv[k].a) || dkv[k].trk > SY_NOTRK))
             fail("a drum voice", (int)k, dkv[k].trk);
@@ -227,8 +230,13 @@ static void act(void)
             uint32_t f = rn(6);                   /* VELOCITY, ACCENT, CHANCE, RATCHET moved, read) */
             TRACE("%u grid %u row %u step %u\n", step_no, f, t, s);
             web_test_grid(f, rn(9), rn(40), f ? (int32_t)rn(9) - 4 : (int32_t)rn(128));
-        } else if (q == 9) {                      /* (the kit: any value, kept in range) */
-            web_test_kit(rn(8), rn(16), (int32_t)rn(140));
+        } else if (q == 9) {                      /* (the kit: any value, kept in range; V0.86: the drums' effects, */
+            if (rn(12) == 0)                      /* the kit's, a factory kit loaded) */
+                dk_kit_load(rn(DK_NKIT));
+            else if (rn(2))
+                web_test_kit(rn(8), 30u + rn(17), (int32_t)rn(140));
+            else
+                web_test_kit(rn(8), rn(16), (int32_t)rn(140));
         } else if (q == 10) {                     /* (a hit straight in: any row, the duck's too) */
             web_test_drum_hit(rn(10), rn(9), rn(128), rn(2));
         } else if (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s) {

@@ -60,6 +60,11 @@ static const char *ui_loop_nv(uint32_t id, char *v);
 static int32_t ui_pad_of(uint32_t k);
 static uint32_t ui_l_type3(uint32_t t);
 static void ui_p_kdrum(void);                       /* sy_ui_drum.c: the drums' pages (V0.85), their keys' LEDs */
+static void ui_p_ddrive(void);                      /* .. (V0.86 step 2: DRUM's DRIVE, EQ, SHAPE; KIT's CURVE, COMP) */
+static void ui_p_deq(void);
+static void ui_p_dshape(void);
+static void ui_p_kcurve(void);
+static void ui_p_kcomp(void);
 static void ui_p_kmore(void);
 static void ui_p_kacc(void);
 static void ui_p_kduck(void);
@@ -328,8 +333,8 @@ static const char *ui_knob_nv(uint32_t k, char *v)
         n = ui_chord_nv((uint32_t)id, v);           /* (SCL's chords, V0.7; ARP's, V0.75) */
     } else if ((id >= UI_LTRK && id <= UI_LNEW) || (id >= UI_LSPEED && id <= UI_LCLR)) {
         n = ui_loop_nv((uint32_t)id, v);            /* (the looper's, V0.8) */
-    } else if (id >= UI_KLANE && id <= UI_GRAT) {
-        n = ui_drum_nv((uint32_t)id, v);            /* (the drums', V0.85) */
+    } else if ((id >= UI_KLANE && id <= UI_GRAT) || (id >= UI_KDTYPE && id <= UI_KCMIX)) {
+        n = ui_drum_nv((uint32_t)id, v);            /* (the drums', V0.85; V0.86 step 2's) */
     } else if (id == UI_EQSHP) {                    /* (V0.86: the EQ's SHAPES) */
         n = "SHAPE";
         sp_put(v, EQ_SHAPES[ui_eq_shape()]);
@@ -555,7 +560,7 @@ static void ui_p_hdrum(void)
     static const char *const NM[4] = {"TUNE", "DECAY", "TONE", "DUCK"};
     uint32_t i, pick = ui.krow % DK_N;
     char t[40];
-    ui_home_name(dkk.name, 0);
+    ui_home_name(dkk.name, ui.kedited);            /* (V0.86: edited since loaded, its dot) */
     lk_ptag(8.0f, 52.0f, 0);
     sp_put(sp_put(sp_fix(sp_put(t, "T"), (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0), " DRUMS \xB7 "), DK_NAME[pick]);
     lk_text(26.0f, 50.0f, T10, t, sk.lab, sk.ground, 20, 0);
@@ -2392,6 +2397,38 @@ static void ui_p_kscan(void)
 
 /* SAFE START: the sound before was not brought back (a crash, a hang or a failed boot came before; or HOME was held
  * at power-on), until a button, a knob or a key, or 6 s */
+/* the kits' list (V0.86, K8; HOME twice on a drum track): the eight factory kits as PRESETS' list shows the presets,
+ * the one the project's kit came from marked (its edits' dot after it); SAVE twice loads the one picked */
+static void ui_p_klist(void)
+{
+    uint32_t k, first, pos = ui.pl_pos < DK_NKIT ? ui.pl_pos : 0u;
+    char t[24], r[24];
+    int lose = ui.kedited && pos != dkk.kit;
+    sp_fix(sp_put(sp_fix(r, (int32_t)pos + 1, 0u, 0), " OF "), (int32_t)DK_NKIT, 0u, 0);
+    lk_top("KITS", -1, 0, 0, r, 0, 0);
+    first = pos > 2u ? pos - 2u : 0u;
+    if (first > DK_NKIT - 5u)
+        first = DK_NKIT - 5u;
+    for (k = first; k < first + 5u; k++) {
+        float y = 26.0f + (float)(k - first) * 31.0f, e;
+        int hi = k == pos, on = k == dkk.kit;
+        uint16_t ink = hi ? sk.ground : sk.ink, bg = hi ? sk.ink : sk.ground;
+        if (hi)
+            lk_box(4.0f, y, 236.0f, y + 23.0f, sk.ink);
+        sp_fix(sp_put(t, "0"), (int32_t)k + 1, 0u, 0);
+        lk_text(10.0f, y + 6.0f, T9, t, hi ? sk.ground : sk.lab, bg, 0, 0);
+        e = lk_text(40.0f, y + 4.0f, T12B, DK_KITS[k].name, ink, bg, 0, 15);
+        if (on && ui.kedited)
+            lk_disc(e + 5.0f, y + 9.0f, 2.5f, hi ? sk.ground : sk.hot);
+        if (on)
+            lk_disc(226.0f, y + 11.5f, 3.0f, ink);
+    }
+    lk_text(8.0f, 186.0f, T9, "A KIT: ITS DRUMS, THEIR EFFECTS,", sk.lab, sk.ground, 20, 0);
+    lk_text(8.0f, 199.0f, T9, "THE DUCK AND COMP; KEPT IN THE PROJECT", sk.lab, sk.ground, 20, 0);
+    if (lk_vis(0.0f, LK_ZY, 240.0f, LK_ZY + 15.0f))
+        lk_text(8.0f, LK_ZY + 1.5f, T10B, lose ? "SAVE TWICE: THE KIT'S EDITS GO" : "SAVE TWICE: LOAD IT", lose ? sk.hot : sk.lab,
+                sk.ground, 0, 12);
+}
 /* PRESETS' list (V0.86, H4; the renders' note): five rows round the one picked, each its number and name (the one
  * playing a dot at the right, its edits' dot after its name), the one picked inverted; at the top PRESETS and where it
  * is; under the rows SAVE + OCT's; at the bottom SAVE twice (HOT when it would leave edits); SAVE + OCT-'s question
@@ -2402,6 +2439,10 @@ static void ui_p_plist(void)
     uint32_t n = sy_app_list(0, 0, ids), k, first, pos = ui.pl_pos < n ? ui.pl_pos : (n ? n - 1u : 0u), now = sy_app_entry_now();
     char t[40], r[24], up[17];
     int lose = ui.edited && pos < n && ids[pos] != now;
+    if (ui.pl_kits) {                               /* (V0.86, K8: the factory kits' list, HOME twice on a drum track) */
+        ui_p_klist();
+        return;
+    }
     sp_fix(sp_put(sp_fix(r, (int32_t)pos + 1, 0u, 0), " OF "), (int32_t)n, 0u, 0);
     lk_top("PRESETS", -1, 0, 0, r, 0, 0);
     first = pos > 2u ? pos - 2u : 0u;
@@ -2808,7 +2849,8 @@ static void (*const UI_PAGE[])(void) = {
     [G_LEDIT] = ui_p_ledit, [G_LCLIP] = ui_p_lclip, [G_LSONG] = ui_p_lsong, [G_LPRJ] = ui_p_lprj,
     [G_CORE2] = ui_p_core2, [G_KDRUM] = ui_p_kdrum, [G_KMORE] = ui_p_kmore, [G_KACC] = ui_p_kacc,
     [G_KDUCK] = ui_p_kduck, [G_LGRID] = ui_p_lgrid, [G_LHIT] = ui_p_lhit, [G_HMIX] = ui_p_hmix, [G_LTOOLS] = ui_p_ltools,
-    [G_POWER] = ui_p_power, [G_KSCAN] = ui_p_kscan,
+    [G_POWER] = ui_p_power, [G_KSCAN] = ui_p_kscan, [G_DDRIVE] = ui_p_ddrive, [G_DEQ] = ui_p_deq,
+    [G_DSHAPE] = ui_p_dshape, [G_KCURVE] = ui_p_kcurve, [G_KCOMP] = ui_p_kcomp,
 };
 _Static_assert(sizeof UI_PAGE / sizeof UI_PAGE[0] == G_N, "a page for every G_*");
 

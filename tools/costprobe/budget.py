@@ -24,7 +24,8 @@ NAMES = ["idle: no voice, no effect", "1 voice: A x 1", "1 voice: A x 16", "8 vo
          "8 voices: A + B x 16 (budget 48), LADDER, every effect",
          "8 voices: A BEND+ / B SYNC x 1, LP12, SUB + pink NOISE", "1 voice: A x 1, every effect",
          "SUPERSAW, 1 note", "SUPERSAW, 8 notes", "PLUCK, 8 notes", "PAD, 8 notes",
-         "drums: the eight lanes sounding", "SUPERSAW, 8 notes, the drums, the duck"]
+         "drums: the eight lanes sounding", "SUPERSAW, 8 notes, the drums, the duck",
+         "drums: the eight lanes, every effect, COMP"]
 
 
 def load(d):

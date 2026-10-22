@@ -131,7 +131,10 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_DKTUNE, UI_DKDEC, UI_DKTONE, UI_DKDUCK,     /* DECAY, TONE, the duck's AMOUNT (ui_virt); MIX 1-4, 5-8: */
        UI_HV1, UI_HV2, UI_HV3, UI_HV4, UI_HV5, UI_HV6, UI_HV7, UI_HV8,   /* the tracks' VOLUME; CLIP's SPEED, */
        UI_LSPEED, UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR,     /* TOOLS': COPY, PASTE, DOUBLE / HALVE, CLEAR; */
-       UI_PBATT, UI_PSCR };                           /* SETTINGS > POWER: SHOW BATTERY, SCREEN OFF AFTER) */
+       UI_PBATT, UI_PSCR,                             /* SETTINGS > POWER: SHOW BATTERY, SCREEN OFF AFTER; step 2's */
+       UI_KDTYPE, UI_KDRIVE, UI_KDMIX, UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF,   /* DRUM: DRIVE, EQ, SHAPE; KIT: ACCENT's */
+       UI_KSATT, UI_KSSUS, UI_KATONE, UI_DSRC, UI_DHOLD,                    /* TONE, the duck's SOURCE, HOLD, COMP) */
+       UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX };
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -145,15 +148,16 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_LTRK (SEC_COUNT + 10)                   /* TRACK (TRACK, RECORD, CLICK), */
 #define SEC_LCLIP (SEC_COUNT + 11)                  /* CLIP (NOTES, EDIT, CLIP), */
 #define SEC_LSONG (SEC_COUNT + 12)                  /* SONG (SONG, PROJECT)) */
-#define SEC_KIT (SEC_COUNT + 13)                    /* (V0.85: EDIT's on a drum track, the kit: DRUM, MORE, ACCENT, */
-#define SEC_LGRID (SEC_COUNT + 14)                  /* DUCK; SEQ's CLIP on a drum track: GRID, HIT, CLIP) */
-#define SEC_N (SEC_COUNT + 15)                      /* every section, the UI's own too (ui.spage) */
+#define SEC_KIT (SEC_COUNT + 13)                    /* (V0.85: EDIT's on a drum track, the kit: V0.86 ACCENT, DUCK, */
+#define SEC_LGRID (SEC_COUNT + 14)                  /* CURVE, COMP; SEQ's CLIP on a drum track: GRID, HIT, CLIP) */
+#define SEC_DRUM (SEC_COUNT + 15)                   /* (V0.86, step 2: EDIT's on a drum track: the drum PRESETS picks; */
+#define SEC_N (SEC_COUNT + 16)                      /* SEC_KIT the kit's) every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
        G_LCLIPS, G_LMIX, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
-       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_N };
+       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_DDRIVE, G_DEQ, G_DSHAPE, G_KCURVE, G_KCOMP, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -329,10 +333,25 @@ static const ui_page_t UI_PG[] = {
     {SEC_LCLIP, G_LTOOLS, "TOOLS", {UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR}},
     {SEC_LSONG, G_LSONG, "SONG", {UI_LSLOT, UI_LSSCN, UI_LSREP, UI_LSON}},
     {SEC_LSONG, G_LPRJ, "PROJECT", {UI_LPRJ, UI_LLOAD, UI_LNEW, -1}},
-    {SEC_KIT, G_KDRUM, "DRUM", {UI_KLANE, UI_KTUNE, UI_KDEC, UI_KTONE}},    /* (V0.85, the drums: sy_ui_drum.c) */
-    {SEC_KIT, G_KMORE, "MORE", {UI_KLANE, UI_KCHR, UI_KLVL, UI_KPAN}},
-    {SEC_KIT, G_KACC, "ACCENT", {UI_KACC, UI_KVSN, -1, -1}},
-    {SEC_KIT, G_KDUCK, "DUCK", {UI_DAMT, UI_DATT, UI_DREL, UI_DSHP}},
+    /* (V0.85, the drums: sy_ui_drum.c. V0.86 step 2, K1, K2, K7: DRUM the drum PRESETS picks, KIT the kit's) */
+    {SEC_DRUM, G_KDRUM, "SOUND", {UI_KTUNE, UI_KDEC, UI_KTONE, UI_KCHR}},
+    {SEC_DRUM, G_DDRIVE, "DRIVE", {UI_KDTYPE, UI_KDRIVE, UI_KDMIX, -1}},
+    {SEC_DRUM, G_DEQ, "EQ", {UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF}},
+    {SEC_DRUM, G_DSHAPE, "SHAPE", {UI_KSATT, UI_KSSUS, -1, -1}},
+    {SEC_DRUM, G_KMORE, "MIX", {UI_KLVL, UI_KPAN, -1, -1}},
+    UI_V(SEC_DRUM, UI_KTUNE, UI_KDEC, UI_KTONE, UI_KCHR)
+    UI_V(SEC_DRUM, UI_KDTYPE, UI_KDRIVE, UI_KDMIX, -1)
+    UI_V(SEC_DRUM, UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF)
+    UI_V(SEC_DRUM, UI_KSATT, UI_KSSUS, -1, -1)
+    UI_V(SEC_DRUM, UI_KLVL, UI_KPAN, -1, -1)
+    {SEC_KIT, G_KACC, "ACCENT", {UI_KACC, UI_KVSN, UI_KATONE, -1}},
+    {SEC_KIT, G_KDUCK, "DUCK", {UI_DSRC, UI_DAMT, UI_DATT, UI_DREL}},
+    {SEC_KIT, G_KCURVE, "CURVE", {UI_DSHP, UI_DHOLD, -1, -1}},
+    {SEC_KIT, G_KCOMP, "COMP", {UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX}},
+    UI_V(SEC_KIT, UI_KACC, UI_KVSN, UI_KATONE, -1)
+    UI_V(SEC_KIT, UI_DSRC, UI_DAMT, UI_DATT, UI_DREL)
+    UI_V(SEC_KIT, UI_DSHP, UI_DHOLD, -1, -1)
+    UI_V(SEC_KIT, UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX)
     {SEC_LGRID, G_LGRID, "GRID", {UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC}},
     {SEC_LGRID, G_LHIT, "HIT", {UI_GSTEP, UI_GROW, UI_GCHN, UI_GRAT}},
     {SEC_LGRID, G_LCLIP, "CLIP", {UI_LBARS, UI_LSPEED, UI_LQAPP, UI_LMOVE}},
@@ -524,6 +543,8 @@ static struct {
     uint8_t pl_ask;                                 /* .. SAVE + OCT-'s delete asked: the user slot + 1 (0 none) */
     uint8_t sv_list;                                /* .. NAME IT opened from the list (SAVE + OCT+): back to sv_ret */
     uint8_t del_list;                               /* .. the delete asked from the list */
+    uint8_t pl_kits;                                /* .. (V0.86, K8) the list is the factory kits' (HOME twice, drums) */
+    uint8_t kedited;                                /* .. the kit edited since loaded: HOME's dot */
     uint32_t pl_t;                                  /* .. its last detent, or press */
     uint8_t cb_on, cb_t, cb_s;                      /* .. (S8) TOOLS: a copy kept; its clip (track, scene), */
     int8_t cb_bar;                                  /* .. the whole (-1) or a bar of it */
@@ -604,7 +625,7 @@ static const char *ui_sec_name(uint32_t s)
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
            : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD" : s == SEC_CMID ? "MIDI"
            : s == SEC_STEPS ? "STEPS" : s == SEC_SEQ ? "LOOP" : s == SEC_LTRK ? "TRACK" : s == SEC_LCLIP ? "CLIP"
-           : s == SEC_LSONG ? "SONG" : s == SEC_KIT ? "KIT" : s == SEC_LGRID ? "CLIP"
+           : s == SEC_LSONG ? "SONG" : s == SEC_KIT ? "KIT" : s == SEC_LGRID ? "CLIP" : s == SEC_DRUM ? "DRUM"
            : "PRESETS";
 }
 static void ui_save_open(void);                     /* sy_ui_save.c */
@@ -640,7 +661,7 @@ static uint32_t ui_fam_of(uint32_t sec)
         return FAM_FX;
     if (sec == SEC_LGRID)                           /* (V0.85: the drum track's CLIP, SEQ's; its KIT, EDIT's) */
         return FAM_SEQ;
-    if (sec == SEC_KIT)
+    if (sec == SEC_KIT || sec == SEC_DRUM)
         return FAM_EDIT;
     for (f = 0; f < FAM_N; f++)
         for (k = 0; FAM_SECS[f][k] != 0xFF; k++)
@@ -775,6 +796,8 @@ static const char *ui_hint(uint32_t sec)
         return "SONG ON: ITS SCENES IN TURN";
     if (sec == SEC_KIT)                             /* (V0.85) */
         return "THE KEYS: 8 DRUMS, ACCENTED, DUCK";
+    if (sec == SEC_DRUM)                            /* (V0.86) */
+        return "PRESETS PICKS THE DRUM";
     if (sec == SEC_LGRID)
         return "WHITE KEYS: STEPS \xB7 BLACK: ROWS";
     return 0;
@@ -816,9 +839,10 @@ static uint32_t ui_fam_secs(uint32_t f, uint8_t *sec)
             sec[nc++] = SEC_CHAIN;
         return nc;
     }
-    if (f == FAM_EDIT && ui_drums()) {              /* (V0.85: a drum track's EDIT is its kit; its CLIP the grid) */
-        sec[0] = SEC_KIT;
-        return 1;
+    if (f == FAM_EDIT && ui_drums()) {              /* (V0.85: a drum track's EDIT is its kit; its CLIP the grid. */
+        sec[0] = SEC_DRUM;                          /* V0.86, K7: DRUM, then KIT) */
+        sec[1] = SEC_KIT;
+        return 2;
     }
     if (f == FAM_SAVE) {                            /* (V0.86: NAME IT and the browser each a screen of its own) */
         sec[0] = ui_sec() == SEC_SAVE ? (uint8_t)SEC_SAVE : (uint8_t)SEC_BROWSE;
@@ -876,6 +900,7 @@ static void ui_chain_flip(void);
 static void ui_lay_open(uint32_t lay, uint32_t b);
 static void ui_step_section(int32_t s);
 static void ui_browse_open(void);
+static void ui_kl_open(void);
 /* a family button once: from elsewhere its page (FX: the view it showed, the chain view if that module has gone);
  * in its family its first page (FX: the chain view, the module shown picked) */
 static void ui_family_tap(uint32_t f)
@@ -911,7 +936,12 @@ static void ui_family_tap(uint32_t f)
 static void ui_family_twice(uint32_t f)
 {
     switch (f) {
-    case FAM_HOME: ui_browse_open(); break;
+    case FAM_HOME:                                  /* (V0.86, K8: on a drum track, the kits) */
+        if (ui_drums())
+            ui_kl_open();
+        else
+            ui_browse_open();
+        break;
     case FAM_EDIT: ui_lay_open(LAY_JUMP, B_EDIT); ui.lay_lock = 1; break;
     case FAM_ENV: {                                 /* (the other envelope than the one shown before the first press; */
         uint32_t from = ui.tap_from == SEC_ENV1 || ui.tap_from == SEC_ENV2 ? ui.tap_from : ui_sec(), to;   /* from */
@@ -1338,12 +1368,29 @@ static void ui_pl_close(void)
         return;
     ui.pl_open = 0;
     ui.pl_ask = 0;
+    ui.pl_kits = 0;
+    ui.dirty = D_ALL;
+}
+static void ui_kl_open(void)                        /* V0.86 (K8): the factory kits as the list, the kit's picked */
+{
+    ui.pl_open = 1;
+    ui.pl_kits = 1;
+    ui.pl_pos = (uint16_t)(dkk.kit < DK_NKIT ? dkk.kit : 0u);
+    ui.pl_ask = 0;
+    ui.pl_t = fm1_ms;
     ui.dirty = D_ALL;
 }
 static void ui_pl_turn(int32_t s)
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n = sy_app_list(0, 0, ids), now = sy_app_entry_now(), k;
+    if (ui.pl_open && ui.pl_kits) {                 /* (the kits') */
+        ui.pl_pos = (uint16_t)sy_clampi((int32_t)ui.pl_pos + s, 0, DK_NKIT - 1);
+        ui.pl_t = fm1_ms;
+        ui.dirty = D_ALL;
+        return;
+    }
+    ui.pl_kits = 0;
     if (!n)
         return;
     if (!ui.pl_open) {                              /* (opened on the sound playing) */
@@ -1366,12 +1413,26 @@ static void ui_pl_load(void)                        /* SAVE twice: the one picke
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n = sy_app_list(0, 0, ids);
+    if (ui.pl_kits) {                               /* (V0.86, K8: a factory kit as the project's) */
+        char t[32];
+        dk_kit_load(ui.pl_pos);
+        ui.kedited = 0;
+        lpx.seq++;
+        sp_put(sp_put(t, "KIT: "), dkk.name);
+        ui_toast(t);
+        ui_pl_close();
+        return;
+    }
     if (ui.pl_pos < n && (ids[ui.pl_pos] != sy_app_entry_now() || ui.edited))
         sy_app_entry_load(ids[ui.pl_pos]);
     ui_pl_close();
 }
 static void ui_pl_new(void)                         /* SAVE + OCT+: the sound playing as a new preset, named first */
 {
+    if (ui.pl_kits) {
+        ui_toast("A KIT IS KEPT WITH ITS PROJECT");
+        return;
+    }
     ui.sv_ret = ui.page;
     ui_pl_close();
     ui_save_open_new();
@@ -1380,6 +1441,10 @@ static void ui_pl_del(void)                         /* SAVE + OCT-: the one pick
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n = sy_app_list(0, 0, ids), s;
+    if (ui.pl_kits) {
+        ui_toast("THE FACTORY KITS STAY");
+        return;
+    }
     if (ui.pl_pos >= n)
         return;
     if (ids[ui.pl_pos] < SY_USER) {
@@ -1414,6 +1479,10 @@ static void ui_presets(int32_t s)
             ui_l_trk(t, lpp.sel);
             ui_toast(t);
         }
+        return;
+    }
+    if (ui.pl_open && ui.pl_kits) {                 /* (V0.86: the kits' list open) */
+        ui_pl_turn(s);
         return;
     }
     if (ui_drums()) {                               /* (K1, D3: the drum) */
@@ -1908,6 +1977,7 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
             dkk.ktone = (int8_t)ui_centre(item, s, dkk.ktone, sy_clampi(dkk.ktone + ui_accel(e, s, 100), -50, 50), 0);
         else
             dkk.amount = (uint8_t)sy_clampi(dkk.amount + ui_accel(e, s, 100), 0, 100);
+        ui.kedited = 1;
         ui.dirty |= D_KNOBS | D_DISP;
     } else if (item >= UI_CTYPE && item <= UI_CMOVE) {   /* the FX chain view's */
         ui_chain_turn(item, s);
@@ -1925,7 +1995,7 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui_chord_turn(item, s);
     } else if ((item >= UI_LTRK && item <= UI_LNEW) || (item >= UI_LSPEED && item <= UI_LCLR)) {   /* the looper's */
         ui_loop_turn(item, s, e);                                                                     /* (sy_ui_loop.c) */
-    } else if (item >= UI_KLANE && item <= UI_GRAT) {   /* the drums' (V0.85: sy_ui_drum.c) */
+    } else if ((item >= UI_KLANE && item <= UI_GRAT) || (item >= UI_KDTYPE && item <= UI_KCMIX)) {   /* the drums' */
         ui_drum_turn(item, s, e);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
         ch_clock = s > 0;
@@ -2413,8 +2483,15 @@ static void ui_reset(uint32_t b)
     } else if (sec == SEC_STEPS) {
         ch_steps_clear();
         ui.astep = 0;
-    } else if (sec == SEC_KIT) {                    /* (V0.85: the kit as a project starts) */
-        dk_defaults();
+    } else if (sec == SEC_DRUM) {                   /* (V0.86: the drum picked as a kit starts) */
+        dkk.l[ui.krow % DK_N] = DK_DEF[ui.krow % DK_N];
+        dk_fx_rest(&dkk.fx[ui.krow % DK_N]);
+        ui.kedited = 1;
+    } else if (sec == SEC_KIT) {                    /* (V0.86: the kit's own settings as a kit starts) */
+        dkk.accent = 50, dkk.vsens = 70, dkk.amount = 60, dkk.attack = 2, dkk.release = 45, dkk.shape = DS_EXP;
+        dkk.dsrc = DSRC_ROW, dkk.dhold = 0, dkk.atone = 0;
+        dkk.comp[0] = 0, dkk.comp[1] = 20, dkk.comp[2] = 40, dkk.comp[3] = 100;
+        ui.kedited = 1;
     } else if (sec == SEC_SEQ || sec == SEC_LCLIP || sec == SEC_LGRID) {   /* (V0.8: the clip shown, the selected */
         lp_clip_clear(lpp.sel, lpp.scn);            /* track's in the scene picked: gone) */
         ui.lnote = ui.lmv = 0;

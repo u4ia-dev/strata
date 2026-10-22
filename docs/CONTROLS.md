@@ -1,8 +1,9 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.86 step 1, the interface
-(one layout on every screen, the pages regrouped, HOME's three pages, PRESETS' list, SEQ in two groups with SPEED and
-TOOLS, the buttons once and twice, the help map, SETTINGS > POWER), on V0.85's drums, V0.8's looper, V0.75's ARP,
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: V0.86 step 2, the drum
+editor (DRUM and KIT, each drum's DRIVE, EQ and SHAPE, COMP, eight factory kits), on step 1's interface (one layout on
+every screen, the pages regrouped, HOME's three pages, PRESETS' list, SEQ in two groups with SPEED and TOOLS, the
+buttons once and twice, the help map, SETTINGS > POWER), on V0.85's drums, V0.8's looper, V0.75's ARP,
 V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on
 2026-10-17, V0.6 and V0.65 since, V0.7 to V0.86 **need a hardware test**. How it is built:
 [ARCHITECTURE.md](ARCHITECTURE.md) §14, §17. How it is tested: [TESTING.md](TESTING.md) §6.3.
@@ -61,6 +62,8 @@ Buttons). SELECT picks the module, ALGORITHM steps its pages, in every menu; bot
 | GLO | VOICE | VOICE: MODE · VOICES · GLIDE · GL MODE; PLAY: BEND UP · BEND DN · VEL AMP · VOLUME |
 | | MATRIX | SLOTS: SLOT · SOURCE · DEST · AMOUNT |
 | | GLOBAL | TEMPO: BPM · TS-BEAT · TS-NOTE · CLOCK IN (V0.75) |
+| EDIT (a drum track) | DRUM | the drum PRESETS picks: SOUND: TUNE · DECAY · TONE · its own (PUNCH, SNAP, SPREAD, METAL, BEND); DRIVE: TYPE · DRIVE · MIX; EQ: LOW · MID · HIGH · FREQ; SHAPE: ATTACK · SUSTAIN; MIX: LEVEL · PAN (The drums, below) |
+| | KIT | the whole kit: ACCENT: ACCENT · VELOCITY · TONE; DUCK: SOURCE · AMOUNT · ATTACK · RELEASE; CURVE: SHAPE · HOLD; COMP: AMOUNT · ATTACK · RELEASE · MIX |
 | SCL | SCALE | SCALE: SCALE · ROOT · FIT · VELOCITY |
 | | CHORD | CHORD: MODE · TYPE (KEY: SHAPE) · VOICING · SPREAD; STRUM: STRUM · DIRECTION · HUMAN · TAPER; BASS: BASS · OCTAVE · LEVEL (Chords, below; the selected track's) |
 | ARP | ARP | STYLE: STYLE · RATE · MOVE · FEEL; GROOVE: GATE · SWING · LENGTH · LATCH (The ARP, below) |
@@ -166,8 +169,8 @@ own):
 
 | Button | Once (another menu / its own) | Twice | Held | Held 5 s | + OCT+ | + OCT− |
 | --- | --- | --- | --- | --- | --- | --- |
-| HOME | the page left / SOUND | the browser (a drum track: the kits, with step 2); a tap: back | the help map | the SETTINGS (a countdown from the hold) | the next sound | the sound before |
-| EDIT | the page left / OSC A > WAVE (a drum track: KIT) | JUMP latched: a key opens its module and closes it; EDIT closes it | JUMP | the section shown reset | the source or filter shown on | off |
+| HOME | the page left / SOUND | the browser (a drum track: the kits' list, V0.86); a tap: back | the help map | the SETTINGS (a countdown from the hold) | the next sound | the sound before |
+| EDIT | the page left / OSC A > WAVE (a drum track: DRUM > SOUND) | JUMP latched: a key opens its module and closes it; EDIT closes it | JUMP | the section shown reset | the source or filter shown on | off |
 | ENV | the page left / ENV 1 > ADSR | ENV 1 <-> ENV 2 | the MOD layer for ENV 2 | the envelope shown reset | that MOD layer latched | let go |
 | LFO | the page left / LFO 1 > POINTS | MOMENTARY latched on the page before (its changes go back when LFO closes it) | MOMENTARY | the LFO shown reset (its points too) | a point added (left of the one picked; halfway) | the point picked deleted (not the ends) |
 | FX | the page left / the chain view | the chain view <-> the module picked | MACROS | the module shown reset (the chain view: the chain as INIT's) | the chain view: a module added; a module's page: it in | taken out; bypassed |
@@ -414,7 +417,7 @@ its decisions: [LOOPER.md](LOOPER.md).
 - **Kept**: QUANTIZE, COUNT-IN, LAUNCH, CLICK, its LEVEL and the project loaded with the settings; the rest in the
   project.
 
-## The drums (V0.85)
+## The drums (V0.85; V0.86 the drum editor)
 
 TRACK's TYPE has a fourth: **DRUMS**, a track that plays the project's drum kit (one kit a project; any track can be a
 drum track, they share it). The design: [LOOPER.md](LOOPER.md) stage 2. Everything else of a track is as above (its
@@ -436,12 +439,28 @@ clips and scenes, VOLUME, PAN, MUTE, SOLO, recording, launching, SONG); a drum t
   LEVEL, lit as it sounds), the output's bloom at the right; PRESETS picks the drum (framed: the one KIT opens on);
   the knobs move the whole kit: TUNE (±24 semitones on every drum), DECAY (every drum's shorter or longer, ±1 octave of
   time), TONE (every drum's TONE together) and the duck's AMOUNT.
-- **KIT** (EDIT on a drum track): DRUM (KNOB 1 the drum, TUNE, DECAY, TONE; its fall drawn, KICK's sweep dashed),
-  MORE (its PUNCH, SNAP, SPREAD, METAL or BEND; LEVEL; PAN: the eight as a mixer), ACCENT (ACCENT: an accented hit's
-  lift, up to +6 dB; VELOCITY: how much a hit's velocity counts, 0 every hit as LEVEL; the gain by velocity drawn),
-  DUCK (AMOUNT, ATTACK 0 .. 50 ms, RELEASE 20 ms .. 1 s, SHAPE: LINEAR, EXP (back quickly, then slowly), PUMP (held
-  down, back late); the synth's level drawn over time). Stopped, the drum you play is the one picked. EDIT held 5 s
-  on KIT: the kit as a project starts.
+- **DRUM** (EDIT on a drum track; V0.86 step 2, K1-K5): the drum PRESETS picks (wherever a drum track is selected;
+  stopped, the drum you play is picked; the title says which, the eight names under it). SOUND: TUNE, DECAY, TONE and
+  its own (PUNCH, SNAP, SPREAD, METAL or BEND); its fall drawn, KICK's sweep dashed. DRIVE: TYPE (SOFT, HARD, FOLD,
+  CRUSH), DRIVE (in up to +24 dB, out held about level; CRUSH: 15 bits down to 2), MIX; its curve drawn. EQ: LOW (a
+  shelf at 200 Hz), MID (a bell at FREQ), HIGH (a shelf at 2 kHz), each ±12 dB, FREQ 200 Hz .. 8 kHz; its response
+  drawn. SHAPE: ATTACK (the hit's start, ±12 dB, back to the body over ~5 ms) and SUSTAIN (the body, ±12 dB); the
+  fall drawn with and without. MIX: LEVEL and PAN (the eight as a mixer). Each drum: DRIVE, then EQ, then SHAPE, then
+  its pan; each spends nothing at its neutral setting (DRIVE 0 or MIX 0, a band at its middle, SHAPE's at theirs).
+  EDIT held 5 s on DRUM: the drum picked as a kit starts, its effects off.
+- **KIT** (EDIT on a drum track, after DRUM; K6, K9): ACCENT (ACCENT: an accented hit's lift, up to +6 dB; VELOCITY:
+  how much a hit's velocity counts, 0 every hit as LEVEL; TONE: a soft hit darker, an accented one brighter; the gain
+  by velocity drawn), DUCK (SOURCE: ROW (the DUCK row's hits), KICK (the KICK's), BOTH; AMOUNT, ATTACK 0 .. 50 ms,
+  RELEASE 20 ms .. 1 s), CURVE (SHAPE: LINEAR, EXP (back quickly, then slowly), PUMP (held down, back late); HOLD: down
+  for 0 .. 250 ms before the release; the synth's level drawn over time), COMP (on the eight drums together: AMOUNT
+  (its threshold, 0 .. −30 dB, 4:1; above 20 % a make-up of up to +9 dB), ATTACK 0.1 .. 30 ms, RELEASE 20 ms .. 1 s,
+  MIX (the pressed sound with the dry, in parallel); its curve drawn, level in against out). EDIT held 5 s on KIT: the kit's own
+  settings (these four pages) as a kit starts, its drums kept.
+- **The kits** (HOME twice on a drum track; K8): the eight factory kits as PRESETS' list shows the presets: CLASSIC,
+  PUNCH, INDUSTRIAL, LO-FI, MINIMAL, TRIBAL, GLITCH, SOFT. PRESETS picks, SAVE twice loads the one picked as the
+  project's kit (its drums, their effects, the duck and COMP; the tracks' hits stay); the list goes after 3 s
+  untouched. The one the kit came from is marked, with a dot when it was edited since (HOME's name has the same dot);
+  loading another then says first that the edits go: a kit loaded is not undone.
 - **The sidechain**: the DUCK row's hits make no sound; each ducks the synth (every synth track, after its effects)
   by AMOUNT, over ATTACK, and lets it back over RELEASE along SHAPE. The drums are never ducked. MIDI tracks' notes go
   out untouched.
@@ -460,8 +479,9 @@ clips and scenes, VOLUME, PAN, MUTE, SOLO, recording, launching, SONG); a drum t
   track's.
 - **TYPE** changes keep a clip as it is: on a synth or MIDI track a hit plays as a sixteenth, on a drum track a note as
   a plain hit of its drum (GM's numbers; others are silent). Back to DRUMS, nothing was lost.
-- **Kept** in the project: the kit (and the duck's settings), the tracks' TYPE, the hits with their ACCENT, CHANCE and
-  RATCHET. A project saved by V0.8 or V0.81 loads with the kit as a project starts.
+- **Kept** in the project: the kit (its drums and their effects, the duck's and COMP's settings, its name and the
+  factory kit it came from), the tracks' TYPE, the hits with their ACCENT, CHANCE and RATCHET. A project saved by V0.8
+  or V0.81 loads with the kit as a project starts; one saved by V0.85 or step 1, with its effects off.
 
 ## LEDs
 

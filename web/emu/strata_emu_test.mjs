@@ -2087,8 +2087,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   d.web_keys(1 << W[8]); const p2 = play(d, 0.25).peak; d.web_keys(0); play(d, 0.6);
   keyTap(BK[0]);
   const duck = [kit(0, 23), kit(0, 21)];
-  check(`DRUMS: T1 DRUMS, EDIT shows its KIT (section ${kitPg[0]}, ${kitPg[1]}); white key 1 a KICK (peak ${p1.toFixed(3)}), white 9 accented (${(p2 / p1).toFixed(2)} x), black 1 DUCK (state ${duck[0]}, the synth's gain ${duck[1]}): KICKs ${hits(0) - h0[0]}, DUCKs ${hits(8) - h0[1]}`,
-        tr(0, 0) === 2 && kitPg[0] === 50 && kitPg[1] === "DRUM" && p1 > 0.05 && Math.abs(p2 / p1 - 1.5) < 0.1 && duck[0] > 0 &&
+  check(`DRUMS: T1 DRUMS, EDIT shows its DRUM (V0.86: section ${kitPg[0]}, ${kitPg[1]}); white key 1 a KICK (peak ${p1.toFixed(3)}), white 9 accented (${(p2 / p1).toFixed(2)} x), black 1 DUCK (state ${duck[0]}, the synth's gain ${duck[1]}): KICKs ${hits(0) - h0[0]}, DUCKs ${hits(8) - h0[1]}`,
+        tr(0, 0) === 2 && kitPg[0] === 52 && kitPg[1] === "SOUND" && p1 > 0.05 && Math.abs(p2 / p1 - 1.5) < 0.1 && duck[0] > 0 &&
         hits(0) - h0[0] === 2 && hits(8) - h0[1] === 1);
   // 2. the grid (SEQ's CLIP on a drum track): black keys the row, white keys the steps; an empty clip made a bar and
   //    launched; the LEDs show the row's steps and the row
@@ -2154,16 +2154,17 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const asDrums = [d.web_test_lp_note(0, 1, 0, 3), d.web_test_page_section(), cstr(d, d.web_test_page_name())];
   check(`.. TYPE SYNTH: a hit kept (${asSynth[0]}), the page ${asSynth[1]} ${asSynth[2]}; DRUMS again: ${asDrums[0]}, ${asDrums[1]} ${asDrums[2]}; the accented HAT ${d.web_test_lp_note(0, 1, 2, 3)}`,
         asSynth.join() === "16384,48,NOTES" && asDrums.join() === "16384,51,GRID" && d.web_test_lp_note(0, 1, 2, 3) === 16416);
-  // 7. the kit's knobs: DRUM (TUNE, DECAY of the drum picked: the last played, stopped), MORE (LEVEL), DUCK (AMOUNT)
+  // 7. the kit's knobs (V0.86: DRUM's SOUND, TUNE on KNOB 1, the drum picked: the last played, stopped; MIX's LEVEL;
+  //    KIT's DUCK, AMOUNT on KNOB 2)
   tap(d, B.EDIT);
-  goPage(d, 50, "DRUM");
+  goPage(d, 52, "SOUND");
   keyTap(W[1]);                                 // (a SNARE played, stopped: the drum picked)
   play(d, 0.3);
-  turn(E.K2, 5);                                // (TUNE +5)
-  goPage(d, 50, "MORE");
-  turn(E.K3, -20);                              // (LEVEL 100 -> 80: a turn after a pause, a step a detent)
+  turn(E.K1, 5);                                // (TUNE +5)
+  goPage(d, 52, "MIX");
+  turn(E.K1, -20);                              // (LEVEL 100 -> 80: a turn after a pause, a step a detent)
   goPage(d, 50, "DUCK");
-  turn(E.K1, -10);                              // (AMOUNT 60 -> 50)
+  turn(E.K2, -10);                              // (AMOUNT 60 -> 50)
   const kv = [kit(1, 0) - 24, kit(1, 4), kit(0, 12)];
   check(`.. the kit's knobs: the SNARE played is the drum picked; TUNE ${kv[0]}, LEVEL ${kv[1]}, the duck's AMOUNT ${kv[2]}`,
         kv[0] === 5 && kv[1] === 80 && kv[2] === 50);
@@ -2182,6 +2183,79 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
                 d2.web_test_lp_note(0, 1, 2, 3), d2.web_test_kit(1, 0, -1) - 24, d2.web_test_kit(1, 4, -1), d2.web_test_kit(0, 12, -1)];
   check(`.. after a power cycle: T1 TYPE ${back[0]}; KICK 1 ${back[1]}, HAT 15 ${back[2]}, SNARE 5's RATCHET ${back[3] + 1}; the take's HAT ${back[4]}; the SNARE's TUNE ${back[5]}, LEVEL ${back[6]}; AMOUNT ${back[7]}`,
         back.join() === "2,1,1,3,16416,5,80,50");
+
+  // 9. V0.86 step 2, the drum editor: DRUM (the drum PRESETS picks) and KIT; each page's knobs on the kit; a factory
+  //    kit through HOME twice; the edits' dot; a power cycle
+  {
+    const e = d2, et = (k, n) => { e.web_enc(k, n); play(e, 0.3); }, en = () => cstr(e, e.web_test_page_name());
+    const ek = (l, f, v = -1) => e.web_test_kit(l, f, v), es = () => e.web_test_page_section();
+    const etap = (b) => { e.web_buttons(1 << b); play(e, 0.03); e.web_buttons(0); play(e, 0.35); };
+    const etwice = (b) => { for (let i = 0; i < 2; i++) { e.web_buttons(1 << b); play(e, 0.03); e.web_buttons(0); play(e, 0.08); } play(e, 0.3); };
+    play(e, 2.0);                               // (past the splash)
+    e.web_test_lp(0, 0);
+    play(e, 0.1);
+    etap(B.EDIT);
+    const p0 = [es(), en()];
+    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (PRESETS: the drum, KICK -> CLAP)
+    const pk = ek(0, 49);
+    e.web_enc(E.SELECT, 1); play(e, 0.1);       // (SELECT: KIT)
+    const p1 = [es(), en()];
+    check(`DRUM EDITOR: EDIT on a drum track: ${p0} (DRUM's SOUND); PRESETS picks the drum (${pk}: CLAP); SELECT: ${p1} (KIT)`,
+          p0.join() === "52,SOUND" && pk === 2 && p1[0] === 50);
+    const ed0 = ek(0, 48);
+    goPage(e, 52, "DRIVE"); play(e, 0.05);
+    et(E.K1, 1); et(E.K2, 30); et(E.K3, -20);   // (CLAP: TYPE HARD, DRIVE up, MIX down)
+    const dr = [ek(2, 30), ek(2, 31), ek(2, 32)];
+    goPage(e, 52, "EQ"); play(e, 0.05);
+    ek(2, 33, 47);
+    et(E.K1, 1); et(E.K1, 1); et(E.K1, 1);      // (LOW: 47 -> 48 -> 49 -> 50, the middle: it stays there)
+    et(E.K1, 1); et(E.K1, 1);
+    const lo = ek(2, 33);
+    goPage(e, 52, "SHAPE"); play(e, 0.05);
+    et(E.K1, 10); et(E.K2, -10);
+    const sh = [ek(2, 37), ek(2, 38)];
+    check(`DRUM's pages on the drum picked: DRIVE TYPE, DRIVE, MIX ${dr}; EQ LOW from 47 holding at the middle: ${lo}; SHAPE ${sh}; the kit's dot after edits (${ed0} -> ${ek(0, 48)})`,
+          dr[0] === 1 && dr[1] > 20 && dr[2] < 100 && lo === 50 && sh[0] > 50 && sh[1] < 50 && ed0 === 0 && ek(0, 48) === 1);
+    goPage(e, 50, "DUCK"); play(e, 0.05);
+    et(E.K1, 1);
+    goPage(e, 50, "CURVE"); play(e, 0.05);
+    et(E.K2, 20);
+    goPage(e, 50, "COMP"); play(e, 0.05);
+    et(E.K1, 40); et(E.K4, -30);
+    goPage(e, 50, "ACCENT"); play(e, 0.05);
+    et(E.K3, 25);
+    const kt = [ek(0, 40), ek(0, 41), ek(0, 43), ek(0, 46), ek(0, 42)];
+    check(`KIT's pages: the duck's SOURCE KICK (${kt[0]}), HOLD ${kt[1]}; COMP AMOUNT ${kt[2]}, MIX ${kt[3]}; ACCENT's TONE ${kt[4]}`,
+          kt[0] === 1 && kt[1] > 0 && kt[2] > 20 && kt[3] < 100 && kt[4] > 0);
+    etap(B.HOME);                               // (HOME twice on a drum track: the kits)
+    etwice(B.HOME);
+    const kl = [e.web_test_pl(0), e.web_test_pl(3), e.web_test_pl(1)];
+    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (PUNCH -> INDUSTRIAL from where it opens; SAVE twice: loaded)
+    const want = e.web_test_pl(1);
+    saveTwice(e);
+    const ld = [ek(0, 47), cstr(e, e.web_test_kit_name()), ek(0, 48), e.web_test_pl(0), ek(0, 30), ek(0, 31)];
+    check(`HOME twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, SAVE twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
+          kl.join() === "1,1,0" && ld[0] === want && ld[1] === "INDUSTRIAL" && ld[2] === 0 && ld[3] === 0 && ld[4] === 1 && ld[5] === 70);
+    etap(B.EDIT);                               // (EDIT held 5 s on DRUM: the drum picked as a kit starts)
+    goPage(e, 52, "SOUND"); play(e, 0.05);
+    e.web_buttons(1 << B.EDIT); play(e, 5.4); e.web_buttons(0); play(e, 0.3);
+    const rs = [cstr(e, e.web_test_toast()), ek(ek(0, 49), 30), ek(ek(0, 49), 31)];
+    check(`EDIT held 5 s on DRUM: "${rs[0]}", the drum picked's DRIVE back to rest (${rs[1]}, ${rs[2]})`,
+          rs[0] === "DRUM: RESET" && rs[2] === 0);
+    play(e, 7.0);                               // (stopped, quiet: the project written, an object at a time) a power cycle
+    const nor2 = new Uint8Array(e.memory.buffer, e.web_nor(), e.web_nor_size()).slice();
+    const { instance } = await WebAssembly.instantiate(bytes, {});
+    const e2 = instance.exports;
+    if (e2._initialize) e2._initialize();
+    new Uint8Array(e2.memory.buffer, e2.web_nor(), e2.web_nor_size()).set(nor2);
+    e2.web_master(700);
+    e2.web_boot();
+    play(e2, 0.3);
+    const b2 = [e2.web_test_kit(0, 47, -1), cstr(e2, e2.web_test_kit_name()), e2.web_test_kit(1, 30, -1), e2.web_test_kit(1, 31, -1),
+                e2.web_test_kit(0, 43, -1)];                    // (-1: read only; a missing argument is a 0 written)
+    check(`.. after a power cycle: the kit ${b2[0]} "${b2[1]}", its SNARE's DRIVE ${b2[2]} ${b2[3]}, COMP ${b2[4]}`,
+          b2[0] === ld[0] && b2[1] === "INDUSTRIAL" && b2[2] === 2 && b2[3] === 50 && b2[4] === 60);
+  }
 }
 
 {                                               // V0.8 BENCH: CORE 2 (sy_c2.c): the emulator has one core

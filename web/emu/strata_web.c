@@ -768,7 +768,11 @@ EXPORT int32_t web_test_power(int32_t batt, int32_t usbp)
 }
 EXPORT uint32_t web_test_scr(void) { return ui.scr_st; }
 /* PRESETS' list (V0.86): f 0 open, 1 the one picked (its place), 2 SAVE + OCT-'s delete asked (the user slot + 1) */
-EXPORT int32_t web_test_pl(uint32_t f) { return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : -1; }
+EXPORT int32_t web_test_pl(uint32_t f)   /* (3: the kits' list) */
+{
+    return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : f == 3u ? ui.pl_kits : -1;
+}
+EXPORT const char *web_test_kit_name(void) { return dkk.name; }
 EXPORT uint32_t web_test_lcd_off(void) { return web_lcd_off; }
 EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
 {
@@ -939,8 +943,25 @@ EXPORT int32_t web_test_kit(uint32_t lane, uint32_t f, int32_t v)
         }
         return *b;
     }
+    if (f >= 30u && f <= 38u) {                     /* (V0.86, step 2: lane's DRIVE TYPE, DRIVE, MIX, EQ LOW, MID, HIGH, */
+        uint8_t *x = &dkk.fx[lane % DK_N].dtype + (f - 30u);   /* FREQ, SHAPE ATTACK, SUSTAIN; the kit's SOURCE, */
+        if (v >= 0) {                                         /* HOLD, ACCENT's TONE, COMP's four, the factory kit */
+            *x = (uint8_t)v;                                  /* it came from, edited since) */
+            dk_sane();
+        }
+        return *x;
+    }
+    if (f >= 40u && f <= 46u) {
+        uint8_t *x = f == 40u ? &dkk.dsrc : f == 41u ? &dkk.dhold : f == 42u ? &dkk.atone : &dkk.comp[f - 43u];
+        if (v >= 0) {
+            *x = (uint8_t)v;
+            dk_sane();
+        }
+        return *x;
+    }
     return f == 20u ? dkv[lane % DK_N].on : f == 21u ? (int32_t)(dkd.g * 1000.0f + 0.5f) : f == 22u ? dk_last
-           : f == 23u ? dkd.st : f == 24u ? (int32_t)dk_nhit[lane % DK_ROWS] : -1;   /* (24: row lane's hits so far) */
+           : f == 23u ? dkd.st : f == 24u ? (int32_t)dk_nhit[lane % DK_ROWS] : f == 47u ? dkk.kit : f == 48u ? ui.kedited
+           : f == 49u ? (int32_t)ui.krow : -1;   /* (24: row lane's hits so far) */
 }
 EXPORT void web_test_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, uint32_t acc) { sy_drum_hit(lane, trk, vel, (int)acc); }
 /* the drum grid of the selected clip (sy_loop.c): f 0 step s of row toggled (1 in, 0 out, -1 neither), 1 .. 4 its

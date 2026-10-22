@@ -14,6 +14,12 @@
  * (sy_block; V0.9's sends will put them through the rack): the synth's sound is ducked first, the drums never. The DUCK
  * row's hits (silent) start the duck: the synth down by AMOUNT over ATTACK, back over RELEASE along SHAPE. All of it
  * runs in the audio interrupt; the kit (dkk) is the main loop's to edit (bytes, each read whole at a hit).
+ * V0.86 (step 2, the drum editor; K3, K5, K6, K9): each drum's DRIVE (SOFT, HARD, FOLD, CRUSH, with its MIX), EQ (LOW
+ * and HIGH first-order shelves, MID a band-pass at FREQ) and SHAPE (its start and its body, a gain on its own
+ * envelope, in its pan's gains), in that order, each set at the hit and spending nothing at its neutral setting;
+ * COMP on the eight together (a peak a control block, 4:1 above AMOUNT's threshold, its MIX in parallel); the duck's
+ * SOURCE (its row, the KICK's hits, both) and HOLD; ACCENT's TONE (a soft hit darker, an accented one brighter). Eight
+ * factory kits (DK_KITS).
  * Needs sy_core.h, sy_wt.c (wt_tab, wt_frame, wt_level), sy_voice.c (sy_tgain, SY_NOTRK). */
 
 /* --------------------------------------------------------------------------------------------- the kit --- */
@@ -27,6 +33,10 @@ static const uint8_t DK_NOTE[DK_ROWS] = {36, 38, 39, 42, 46, 49, 45, 50, 24};   
                                                                                  * C1 (outside them) */
 enum { DS_LIN, DS_EXP, DS_PUMP, DS_N };            /* the duck's SHAPE, its way back: even, quick then slow, late */
 static const char *const DS_NAME[DS_N] = {"LINEAR", "EXP", "PUMP"};
+enum { DD_SOFT, DD_HARD, DD_FOLD, DD_CRUSH, DD_N };  /* V0.86: a drum's DRIVE's TYPE */
+static const char *const DD_NAME[DD_N] = {"SOFT", "HARD", "FOLD", "CRUSH"};
+enum { DSRC_ROW, DSRC_KICK, DSRC_BOTH, DSRC_N };    /* .. the duck's SOURCE: its row's hits, the KICK's, both */
+static const char *const DSRC_NAME[DSRC_N] = {"ROW", "KICK", "BOTH"};
 
 typedef struct {
     int8_t tune;                                   /* TUNE: semitones, -24 .. 24 */
@@ -68,6 +78,13 @@ static const float DK_T60[DK_N][2] = {{0.08f, 2.0f}, {0.06f, 1.0f}, {0.06f, 1.2f
                                       {0.15f, 2.0f}, {0.4f, 6.0f},  {0.05f, 3.0f}, {0.05f, 3.0f}};
 #define DK_GAIN 0.5f                               /* a lane's peak at LEVEL 127, velocity 127 (-6 dB: room to add) */
 
+static const dk_lane_t DK_DEF[DK_N] = {           /* the lanes as a kit starts */
+    {0, 45, 30, 55, 110, 64, {0, 0}}, {0, 40, 45, 55, 100, 64, {0, 0}}, {0, 40, 40, 45, 95, 70, {0, 0}},
+    {0, 30, 55, 70, 80, 58, {0, 0}},  {0, 40, 55, 70, 75, 58, {0, 0}},  {0, 50, 45, 55, 70, 72, {0, 0}},
+    {0, 45, 0, 40, 95, 54, {0, 0}},   {12, 40, 0, 30, 90, 74, {0, 0}},
+};
+#define DK_FX0 {DD_SOFT, 0, 100, 50, 50, 50, 50, 50, 50, 0}   /* a drum's effects at rest */
+static void dk_fx_rest(dk_fx_t *f) { static const dk_fx_t R = DK_FX0; *f = R; }
 static void dk_defaults3(void)                     /* V0.86's: as a kit starts (a version 1 or 2 project's too) */
 {
     static const char NM[] = "DRUM KIT";
@@ -82,23 +99,13 @@ static void dk_defaults3(void)                     /* V0.86's: as a kit starts (
     memset(dkk.name, 0, sizeof dkk.name);
     memcpy(dkk.name, NM, sizeof NM);
     dkk.kit = 0xFF;
-    for (i = 0; i < DK_N; i++) {
-        dk_fx_t *f = &dkk.fx[i];
-        f->dtype = 0, f->drive = 0, f->dmix = 100;
-        f->lo = f->mid = f->hi = 50, f->freq = 50;
-        f->att = f->sus = 50;
-        f->rsv = 0;
-    }
+    for (i = 0; i < DK_N; i++)
+        dk_fx_rest(&dkk.fx[i]);
     memset(dkk.rsv3, 0, sizeof dkk.rsv3);
 }
 static void dk_defaults(void)                      /* the kit as a project starts */
 {
-    static const dk_lane_t D[DK_N] = {
-        {0, 45, 30, 55, 110, 64, {0, 0}}, {0, 40, 45, 55, 100, 64, {0, 0}}, {0, 40, 40, 45, 95, 70, {0, 0}},
-        {0, 30, 55, 70, 80, 58, {0, 0}},  {0, 40, 55, 70, 75, 58, {0, 0}},  {0, 50, 45, 55, 70, 72, {0, 0}},
-        {0, 45, 0, 40, 95, 54, {0, 0}},   {12, 40, 0, 30, 90, 74, {0, 0}},
-    };
-    memcpy(dkk.l, D, sizeof D);
+    memcpy(dkk.l, DK_DEF, sizeof DK_DEF);
     dkk.accent = 50;
     dkk.vsens = 70;
     dkk.amount = 60;
@@ -129,7 +136,7 @@ static void dk_sane(void)                          /* a kit read back: every val
     dkk.ktune = (int8_t)sy_clampi(dkk.ktune, -24, 24);   /* (V0.86's) */
     dkk.kdecay = (uint8_t)(dkk.kdecay > 100u ? 100u : dkk.kdecay);
     dkk.ktone = (int8_t)sy_clampi(dkk.ktone, -50, 50);
-    dkk.dsrc = (uint8_t)(dkk.dsrc % 3u);
+    dkk.dsrc = (uint8_t)(dkk.dsrc % DSRC_N);
     dkk.dhold = (uint8_t)(dkk.dhold > 100u ? 100u : dkk.dhold);
     dkk.atone = (uint8_t)(dkk.atone > 100u ? 100u : dkk.atone);
     for (i = 0; i < 4u; i++)
@@ -140,7 +147,7 @@ static void dk_sane(void)                          /* a kit read back: every val
             dkk.name[i] = ' ';
     for (i = 0; i < DK_N; i++) {
         dk_fx_t *f = &dkk.fx[i];
-        f->dtype = (uint8_t)(f->dtype % 4u);
+        f->dtype = (uint8_t)(f->dtype % DD_N);
         f->drive = (uint8_t)(f->drive > 100u ? 100u : f->drive);
         f->dmix = (uint8_t)(f->dmix > 100u ? 100u : f->dmix);
         f->lo = (uint8_t)(f->lo > 100u ? 100u : f->lo);
@@ -151,6 +158,93 @@ static void dk_sane(void)                          /* a kit read back: every val
         f->sus = (uint8_t)(f->sus > 100u ? 100u : f->sus);
     }
 }
+/* V0.86 (K8): the eight factory kits, in the image (HOME twice on a drum track lists them; one loaded is the project's
+ * kit, edited and kept as any). Their lanes TUNE, DECAY, TONE, own, LEVEL, PAN; ACCENT, VELOCITY; the duck's AMOUNT,
+ * ATTACK, RELEASE, SHAPE; SOURCE, HOLD, ACCENT's TONE; COMP; each drum's DRIVE (TYPE, amount, MIX), EQ (LOW, MID,
+ * HIGH, FREQ), SHAPE (ATTACK, SUSTAIN) */
+#define DK_N8 DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0
+#define DK_NKIT 8u
+static const dk_kit_t DK_KITS[DK_NKIT] = {
+    {/* CLASSIC: 808-like: a long round kick, a thin snare, the clap's spread */
+     .l = {{0, 72, 18, 40, 115, 64, {0, 0}}, {2, 34, 40, 50, 92, 62, {0, 0}}, {0, 46, 45, 58, 92, 70, {0, 0}},
+         {0, 24, 62, 78, 76, 56, {0, 0}}, {0, 46, 58, 78, 72, 56, {0, 0}}, {0, 62, 46, 62, 64, 74, {0, 0}},
+         {-5, 48, 0, 30, 92, 50, {0, 0}}, {7, 42, 0, 26, 88, 78, {0, 0}}},
+     .accent = 50, .vsens = 70, .amount = 50, .attack = 2, .release = 45, .shape = DS_EXP,
+     .kdecay = 50, .dsrc = DSRC_ROW, .dhold = 0, .atone = 30, .comp = {0, 20, 40, 100}, .name = "CLASSIC",
+     .fx = {DK_N8}},
+    {/* PUNCH: 909-like: a short driven kick, a bright snare, the kit pressed together */
+     .l = {{0, 42, 62, 66, 112, 64, {0, 0}}, {0, 42, 62, 66, 100, 62, {0, 0}}, {0, 40, 50, 48, 92, 68, {0, 0}},
+         {0, 20, 72, 86, 80, 54, {0, 0}}, {0, 40, 66, 86, 74, 54, {0, 0}}, {0, 72, 60, 70, 66, 76, {0, 0}},
+         {-3, 40, 0, 44, 90, 50, {0, 0}}, {5, 36, 0, 40, 88, 78, {0, 0}}},
+     .accent = 60, .vsens = 70, .amount = 55, .attack = 2, .release = 40, .shape = DS_PUMP,
+     .kdecay = 50, .dsrc = DSRC_KICK, .dhold = 10, .atone = 20, .comp = {35, 30, 40, 100}, .name = "PUNCH",
+     .fx = {{DD_SOFT, 25, 100, 58, 50, 54, 50, 70, 46, 0}, {DD_SOFT, 15, 60, 50, 56, 56, 60, 62, 50, 0}, DK_FX0, DK_FX0,
+         DK_FX0, DK_FX0, DK_FX0, DK_FX0}},
+    {/* INDUSTRIAL: hard and folded, the metal bright, the duck deep */
+     .l = {{-3, 55, 70, 80, 112, 64, {0, 0}}, {-2, 46, 70, 70, 100, 60, {0, 0}}, {-4, 50, 64, 70, 94, 72, {0, 0}},
+         {-2, 26, 82, 100, 78, 50, {0, 0}}, {-2, 50, 78, 100, 72, 50, {0, 0}}, {-5, 70, 70, 90, 66, 80, {0, 0}},
+         {-12, 52, 0, 60, 90, 44, {0, 0}}, {-7, 46, 0, 70, 86, 84, {0, 0}}},
+     .accent = 70, .vsens = 60, .amount = 70, .attack = 3, .release = 50, .shape = DS_EXP,
+     .kdecay = 50, .dsrc = DSRC_BOTH, .dhold = 15, .atone = 50, .comp = {60, 15, 35, 100}, .name = "INDUSTRIAL",
+     .fx = {{DD_HARD, 70, 100, 62, 44, 50, 40, 60, 50, 0}, {DD_FOLD, 50, 80, 50, 60, 56, 55, 60, 46, 0},
+         {DD_CRUSH, 40, 70, 50, 50, 50, 50, 50, 50, 0}, {DD_HARD, 30, 60, 50, 50, 60, 50, 50, 50, 0}, DK_FX0, DK_FX0,
+         {DD_FOLD, 40, 100, 56, 50, 50, 50, 50, 50, 0}, {DD_HARD, 55, 90, 50, 50, 50, 50, 50, 50, 0}}},
+    {/* LO-FI: crushed and dull: the highs cut, the lows up */
+     .l = {{0, 55, 30, 45, 104, 64, {0, 0}}, {0, 40, 36, 55, 96, 60, {0, 0}}, {0, 44, 36, 50, 90, 70, {0, 0}},
+         {0, 26, 46, 70, 74, 56, {0, 0}}, {0, 44, 44, 70, 68, 56, {0, 0}}, {0, 56, 40, 60, 60, 74, {0, 0}},
+         {-5, 46, 0, 30, 90, 50, {0, 0}}, {5, 40, 0, 26, 86, 78, {0, 0}}},
+     .accent = 40, .vsens = 60, .amount = 45, .attack = 2, .release = 50, .shape = DS_EXP,
+     .kdecay = 50, .dsrc = DSRC_ROW, .dhold = 0, .atone = 40, .comp = {30, 30, 50, 100}, .name = "LO-FI",
+     .fx = {{DD_CRUSH, 55, 80, 62, 50, 30, 50, 50, 50, 0}, {DD_CRUSH, 70, 100, 56, 54, 26, 50, 50, 50, 0},
+         {DD_CRUSH, 70, 100, 50, 54, 26, 50, 50, 50, 0}, {DD_CRUSH, 75, 100, 50, 50, 30, 60, 50, 50, 0},
+         {DD_CRUSH, 75, 100, 50, 50, 30, 60, 50, 50, 0}, {DD_CRUSH, 70, 100, 50, 50, 26, 60, 50, 50, 0},
+         {DD_CRUSH, 60, 100, 56, 50, 30, 50, 50, 50, 0}, {DD_CRUSH, 60, 100, 56, 50, 30, 50, 50, 50, 0}}},
+    {/* MINIMAL: short and clicky: tight starts, little body */
+     .l = {{0, 30, 40, 30, 92, 64, {0, 0}}, {3, 26, 54, 60, 64, 58, {0, 0}}, {0, 30, 50, 34, 82, 70, {0, 0}},
+         {0, 14, 70, 80, 74, 52, {0, 0}}, {0, 30, 64, 80, 64, 52, {0, 0}}, {0, 40, 56, 64, 48, 78, {0, 0}},
+         {0, 30, 0, 20, 84, 48, {0, 0}}, {12, 24, 0, 16, 80, 80, {0, 0}}},
+     .accent = 45, .vsens = 75, .amount = 40, .attack = 1, .release = 30, .shape = DS_EXP,
+     .kdecay = 50, .dsrc = DSRC_KICK, .dhold = 0, .atone = 20, .comp = {20, 30, 30, 100}, .name = "MINIMAL",
+     .fx = {{DD_SOFT, 0, 100, 54, 50, 50, 50, 62, 34, 0}, {DD_SOFT, 0, 100, 50, 50, 54, 50, 58, 38, 0}, DK_FX0,
+         {DD_SOFT, 0, 100, 50, 50, 50, 50, 60, 40, 0}, DK_FX0, DK_FX0, DK_FX0, DK_FX0}},
+    {/* TRIBAL: the WT lanes as toms, long and low; the clap wide */
+     .l = {{-5, 60, 24, 34, 110, 64, {0, 0}}, {-3, 44, 34, 40, 88, 60, {0, 0}}, {-2, 50, 40, 80, 88, 72, {0, 0}},
+         {0, 22, 50, 66, 62, 54, {0, 0}}, {0, 42, 50, 66, 56, 54, {0, 0}}, {-2, 64, 40, 56, 54, 76, {0, 0}},
+         {-9, 66, 0, 46, 100, 42, {0, 0}}, {-2, 60, 0, 40, 96, 86, {0, 0}}},
+     .accent = 55, .vsens = 80, .amount = 35, .attack = 3, .release = 55, .shape = DS_LIN,
+     .kdecay = 50, .dsrc = DSRC_ROW, .dhold = 0, .atone = 40, .comp = {25, 25, 45, 100}, .name = "TRIBAL",
+     .fx = {DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0, DK_FX0, {DD_SOFT, 20, 60, 56, 62, 46, 40, 56, 64, 0},
+         {DD_SOFT, 20, 60, 56, 62, 46, 46, 56, 64, 0}}},
+    {/* GLITCH: high, crushed and folded, short, panned wide */
+     .l = {{5, 34, 50, 60, 108, 64, {0, 0}}, {12, 28, 70, 80, 92, 30, {0, 0}}, {7, 30, 64, 20, 86, 100, {0, 0}},
+         {5, 12, 84, 100, 76, 20, {0, 0}}, {7, 28, 80, 100, 66, 108, {0, 0}}, {9, 40, 70, 90, 56, 90, {0, 0}},
+         {12, 26, 0, 100, 88, 24, {0, 0}}, {19, 22, 0, 100, 84, 104, {0, 0}}},
+     .accent = 50, .vsens = 50, .amount = 45, .attack = 1, .release = 25, .shape = DS_PUMP,
+     .kdecay = 50, .dsrc = DSRC_BOTH, .dhold = 0, .atone = 0, .comp = {45, 10, 25, 100}, .name = "GLITCH",
+     .fx = {{DD_FOLD, 35, 70, 50, 50, 50, 50, 60, 40, 0}, {DD_CRUSH, 80, 100, 50, 56, 50, 70, 50, 50, 0},
+         {DD_CRUSH, 85, 100, 50, 50, 56, 60, 50, 50, 0}, DK_FX0, {DD_FOLD, 60, 60, 50, 50, 50, 50, 50, 50, 0},
+         {DD_CRUSH, 60, 80, 50, 50, 50, 50, 50, 50, 0}, {DD_FOLD, 70, 100, 50, 50, 50, 50, 50, 50, 0},
+         {DD_CRUSH, 90, 100, 50, 50, 50, 50, 50, 50, 0}}},
+    {/* SOFT: low, dark and dynamic: soft starts, soft hits darker still */
+     .l = {{0, 56, 10, 30, 100, 64, {0, 0}}, {0, 38, 24, 40, 80, 60, {0, 0}}, {0, 44, 26, 50, 76, 70, {0, 0}},
+         {0, 22, 34, 60, 62, 56, {0, 0}}, {0, 40, 32, 60, 56, 56, {0, 0}}, {0, 58, 28, 50, 50, 74, {0, 0}},
+         {-5, 50, 0, 20, 84, 50, {0, 0}}, {5, 44, 0, 16, 80, 78, {0, 0}}},
+     .accent = 35, .vsens = 90, .amount = 30, .attack = 4, .release = 70, .shape = DS_LIN,
+     .kdecay = 50, .dsrc = DSRC_ROW, .dhold = 0, .atone = 70, .comp = {0, 20, 40, 100}, .name = "SOFT",
+     .fx = {{DD_SOFT, 0, 100, 54, 50, 42, 50, 36, 56, 0}, {DD_SOFT, 0, 100, 50, 50, 40, 50, 38, 54, 0},
+         {DD_SOFT, 0, 100, 50, 50, 40, 50, 40, 52, 0}, {DD_SOFT, 0, 100, 50, 50, 40, 50, 40, 50, 0},
+         {DD_SOFT, 0, 100, 50, 50, 40, 50, 40, 50, 0}, {DD_SOFT, 0, 100, 50, 50, 40, 50, 40, 52, 0}, DK_FX0,
+         DK_FX0}},
+};
+static void dk_kit_load(uint32_t i)                /* factory kit i as the project's (the main loop's) */
+{
+    if (i >= DK_NKIT)
+        return;
+    dkk = DK_KITS[i];
+    dkk.kit = (uint8_t)i;
+    dk_sane();
+}
+
 static float dk_t60(uint32_t lane, uint32_t d)     /* DECAY d's time to -60 dB, s */
 {
     const float *r = DK_T60[lane % DK_N];
@@ -175,6 +269,15 @@ typedef struct {
     uint32_t wph, winc, wsh;                       /* WT: the phase, its step, the shift to an index */
     const int16_t *wf;                             /* .. the level's samples */
     uint32_t next;                                 /* CLAP: the next burst's sample */
+    /* V0.86 (step 2): the drum's effects as its hit set them (none in use: nothing spent) */
+    uint8_t fx_sh, fx_dr, fx_eq, dr_t;             /* SHAPE, DRIVE, EQ in use (EQ: its bands, LOW 1, MID 2, HIGH 4);
+                                                    * DRIVE's TYPE */
+    float sh_s, sh_d, sh_w, sh_kw;                 /* SHAPE: the body's gain, the start's over it, the start's share,
+                                                    * its fall a block */
+    float dr_g, dr_c, dr_m;                        /* DRIVE: its gain in (CRUSH: its steps), out, its MIX */
+    float e_lx, e_ly, e_hx, e_hy, e_ic1, e_ic2;    /* EQ: the LOW shelf's and the HIGH shelf's last in and out, MID's SVF */
+    float e_l0, e_l1, e_la, e_h0, e_h1, e_ha;      /* .. the shelves' coefficients (b0, b1, a1) */
+    float e_c1, e_c2, e_c3, e_k, e_gm;             /* .. MID's, and its gain less one */
 } dk_voice_t;
 static dk_voice_t dkv[DK_N];
 static volatile uint8_t dk_last;                   /* the last lane hit, 0xFF none (the UI's: the kit's pages follow it) */
@@ -184,8 +287,16 @@ static struct {
     float d;                                       /* the duck's depth now: 0 .. 1 */
     float r;                                       /* its release's place: 1 at the start .. 0 */
     float g;                                       /* the synth's gain where the last block ended */
-    uint8_t st;                                    /* 0 none, 1 attack, 2 release */
+    uint8_t st;                                    /* 0 none, 1 attack, 2 release, 3 HOLD (V0.86) */
+    int32_t h;                                     /* .. HOLD's samples left */
 } dkd;
+static struct {
+    float e, g;                                    /* V0.86: COMP's level (a block's peak, followed), its gain at the end
+                                                    * of the last block */
+} dkc;
+static float dk_db(int32_t v, float span) { return sy_exp2f((float)(v - 50) * (span / 50.0f) * 0.16609640f); }   /* a
+                                                    * 0 .. 100 knob as a gain, 50 unity, span dB at its ends */
+#define DK_HOLD_MS 2.5f                            /* HOLD: 0 .. 100 as 0 .. 250 ms */
 
 static inline float dk_noise(uint32_t *s) { return (float)(int32_t)sy_rand(s) * (1.0f / 2147483648.0f); }
 
@@ -201,6 +312,134 @@ static void dk_svf(dk_voice_t *v, float hz, float k)
 
 static void dk_duck_start(void) { dkd.st = 1; }
 
+/* V0.86: drum lane's effects set for its hit: what is at rest stays off (DRIVE, EQ, then SHAPE: a gain on what
+ * they give) */
+static void dk_fx_hit(dk_voice_t *v, uint32_t lane)
+{
+    const dk_fx_t *f = &dkk.fx[lane];
+    v->fx_sh = f->att != 50u || f->sus != 50u;
+    if (v->fx_sh) {                                /* (SHAPE: the gain s + d w, w from 1 falling over ~5 ms) */
+        float a = dk_db(f->att, 12.0f);
+        v->sh_s = dk_db(f->sus, 12.0f);
+        v->sh_d = a - v->sh_s;
+        v->sh_w = 1.0f;
+        v->sh_kw = sy_exp2f(-1.4426950f * (float)SY_BLK / (0.005f * SY_FS));   /* (w's fall a block) */
+    }
+    v->fx_dr = f->drive && f->dmix;
+    if (v->fx_dr) {
+        float d = (float)f->drive * 0.01f;
+        v->dr_t = (uint8_t)(f->dtype % DD_N);
+        v->dr_m = (float)f->dmix * 0.01f;
+        if (v->dr_t == DD_CRUSH) {                 /* (its steps a unit: 15 bits at 1 % .. 2 bits at 100 %) */
+            v->dr_g = sy_exp2f(15.0f - 13.0f * d);
+            v->dr_c = 1.0f / v->dr_g;
+        } else {                                   /* (in up to +24 dB; out held about level) */
+            v->dr_g = sy_exp2f(4.0f * d);
+            v->dr_c = 1.0f / (1.0f + 1.5f * d);
+        }
+    }
+    v->fx_eq = (uint8_t)((f->lo != 50u) | (f->mid != 50u) << 1 | (f->hi != 50u) << 2);   /* (the bands in use) */
+    if (v->fx_eq) {                                /* (+-12 dB a band: LOW a shelf at 200 Hz, HIGH one at 2 kHz (first */
+        float fm = 200.0f * sy_exp2f(5.3219281f * (float)f->freq * 0.01f), g, gl, gh, kl, kh;   /* order, bilinear), */
+        gl = dk_db(f->lo, 12.0f), gh = dk_db(f->hi, 12.0f);                                    /* MID at FREQ, 200 Hz */
+        kl = 1.0f / sy_tanpi(200.0f / SY_FS), kh = 1.0f / sy_tanpi(2000.0f / SY_FS);           /* .. 8 kHz) */
+        v->e_l0 = (kl + gl) / (kl + 1.0f), v->e_l1 = (gl - kl) / (kl + 1.0f), v->e_la = (1.0f - kl) / (kl + 1.0f);
+        v->e_h0 = (gh * kh + 1.0f) / (kh + 1.0f), v->e_h1 = (1.0f - gh * kh) / (kh + 1.0f), v->e_ha = (1.0f - kh) / (kh + 1.0f);
+        v->e_gm = dk_db(f->mid, 12.0f) - 1.0f;
+        g = sy_tanpi(sy_minf(fm, 0.45f * SY_FS) / SY_FS);
+        v->e_k = 1.4f;
+        v->e_c1 = 1.0f / (1.0f + g * (g + v->e_k));
+        v->e_c2 = g * v->e_c1;
+        v->e_c3 = g * v->e_c2;
+        v->e_lx = v->e_ly = v->e_hx = v->e_hy = v->e_ic1 = v->e_ic2 = 0.0f;
+    }
+}
+/* .. SHAPE's gain at this block's start and end (*g0, *g1; its start's share stepped on a block): folded into the
+ * drum's own gains (sy_drum_block's ramp), it costs nothing a sample */
+static void dk_sh_gains(dk_voice_t *v, float *g0, float *g1)
+{
+    float w = v->sh_w;
+    *g0 = v->sh_s + v->sh_d * w;
+    w = w > 1e-5f ? w * v->sh_kw : 0.0f;
+    *g1 = v->sh_s + v->sh_d * w;
+    v->sh_w = w;
+}
+/* .. a block of DRIVE and EQ on its sound x (its coefficients held in registers through each loop: the stores to x
+ * would make them reread) */
+static void dk_fx_block(dk_voice_t *v, float *x)
+{
+    uint32_t i;
+    if (v->fx_dr) {                                /* (a loop a TYPE) */
+        const float g = v->dr_g, c = v->dr_c, m = v->dr_m;
+        switch (v->dr_t) {
+        case DD_SOFT:
+            for (i = 0; i < SY_BLK; i++)
+                x[i] += (sy_softclip(x[i] * g) * c - x[i]) * m;
+            break;
+        case DD_HARD:
+            for (i = 0; i < SY_BLK; i++)
+                x[i] += (sy_clampf(x[i] * g, -1.0f, 1.0f) * c - x[i]) * m;
+            break;
+        case DD_FOLD:                              /* (a triangle's fold: u while |u| < 1, then back) */
+            for (i = 0; i < SY_BLK; i++) {
+                float t = 0.25f * x[i] * g + 0.25f;
+                t -= (float)sy_floori(t);
+                x[i] += ((1.0f - 4.0f * sy_absf(t - 0.5f)) * c - x[i]) * m;
+            }
+            break;
+        default:                                   /* (CRUSH: onto its steps) */
+            for (i = 0; i < SY_BLK; i++)
+                x[i] += ((float)sy_floori(x[i] * g + 0.5f) * c - x[i]) * m;
+            break;
+        }
+    }
+    if (v->fx_eq) {                                /* (one band: its own loop; more: one loop for the three, a band at */
+        const float l0 = v->e_l0, l1 = v->e_l1, la = v->e_la, h0 = v->e_h0, h1 = v->e_h1, ha = v->e_ha;   /* its middle */
+        const float c1 = v->e_c1, c2 = v->e_c2, c3 = v->e_c3, gk = v->e_gm * v->e_k;                    /* exactly */
+        float lx = v->e_lx, ly = v->e_ly, hx = v->e_hx, hy = v->e_hy, ic1 = v->e_ic1, ic2 = v->e_ic2;  /* as it was) */
+        if (v->fx_eq == 1u) {
+            for (i = 0; i < SY_BLK; i++) {
+                float x0 = x[i];
+                ly = l0 * x0 + l1 * lx - la * ly;
+                lx = x0;
+                x[i] = ly;
+            }
+        } else if (v->fx_eq == 4u) {
+            for (i = 0; i < SY_BLK; i++) {
+                float x0 = x[i];
+                hy = h0 * x0 + h1 * hx - ha * hy;
+                hx = x0;
+                x[i] = hy;
+            }
+        } else if (v->fx_eq == 2u) {
+            for (i = 0; i < SY_BLK; i++) {
+                float v3 = x[i] - ic2, v1 = c1 * ic1 + c2 * v3, v2 = ic2 + c2 * ic1 + c3 * v3;
+                ic1 = 2.0f * v1 - ic1;
+                ic2 = 2.0f * v2 - ic2;
+                x[i] += gk * v1;
+            }
+        } else {
+            for (i = 0; i < SY_BLK; i++) {
+                float x0 = x[i], y, v3, v1, v2;
+                ly = l0 * x0 + l1 * lx - la * ly;   /* (LOW) */
+                lx = x0;
+                v3 = ly - ic2, v1 = c1 * ic1 + c2 * v3, v2 = ic2 + c2 * ic1 + c3 * v3;   /* (MID) */
+                ic1 = 2.0f * v1 - ic1;
+                ic2 = 2.0f * v2 - ic2;
+                y = ly + gk * v1;
+                hy = h0 * y + h1 * hx - ha * hy;    /* (HIGH) */
+                hx = y;
+                x[i] = hy;
+            }
+        }
+        SY_FLUSH(ly);
+        SY_FLUSH(hy);
+        SY_FLUSH(ic1);
+        SY_FLUSH(ic2);
+        v->e_lx = lx, v->e_ly = ly, v->e_hx = hx, v->e_hy = hy, v->e_ic1 = ic1, v->e_ic2 = ic2;
+    }
+}
+
 /* a hit of row lane (DK_DUCK: the duck) for track trk, velocity vel (1 .. 127), accented */
 static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
 {
@@ -212,10 +451,13 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     if (lane >= DK_ROWS)
         return;
     dk_nhit[lane]++;
-    if (lane == DK_DUCK) {
-        dk_duck_start();
+    if (lane == DK_DUCK) {                         /* (V0.86: SOURCE KICK: the row's hits start nothing) */
+        if (dkk.dsrc != DSRC_KICK)
+            dk_duck_start();
         return;
     }
+    if (lane == DK_KICK && dkk.dsrc != DSRC_ROW)   /* (.. KICK or BOTH: the KICK's hits start it) */
+        dk_duck_start();
     k = &dkk.l[lane];
     v = &dkv[lane];
     x = (float)(vel > 127u ? 127u : vel) * (1.0f / 127.0f);
@@ -226,6 +468,10 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
     p = sy_clampf(((float)k->pan - 64.0f) * (1.0f / 63.0f), -1.0f, 1.0f);
     m = sy_exp2f((float)(k->tune + dkk.ktune) * (1.0f / 12.0f));   /* (V0.86: the kit's TUNE, DECAY, TONE on its own) */
     tone = (uint32_t)sy_clampi((int32_t)k->tone + dkk.ktone, 0, 100);
+    if (dkk.atone)                                 /* (V0.86, K9: ACCENT's TONE: a soft hit darker, an accented one
+                                                    * brighter) */
+        tone = (uint32_t)sy_clampi((int32_t)tone - (int32_t)((float)dkk.atone * 0.6f * (1.0f - x) + 0.5f) +
+                                   (acc ? (int32_t)dkk.atone / 4 : 0), 0, 100);
     t60 = dk_t60(lane, k->decay);
     if (dkk.kdecay != 50u)
         t60 *= sy_exp2f(((float)dkk.kdecay - 50.0f) * 0.02f);
@@ -300,6 +546,7 @@ static void sy_drum_hit(uint32_t lane, uint32_t trk, uint32_t vel, int acc)
         }
         break;
     }
+    dk_fx_hit(v, lane);
     v->on = 1;
     dk_last = (uint8_t)lane;
 }
@@ -422,9 +669,16 @@ static void dk_duck_block(float *ml, float *mr)
     if (dkd.st == 1u) {                            /* (ATTACK: from where it is to the bottom, straight) */
         float att = (float)dkk.attack * 0.001f * SY_FS;
         dkd.d = att <= (float)SY_BLK ? 1.0f : sy_minf(1.0f, dkd.d + (float)SY_BLK / att);
-        if (dkd.d >= 1.0f)
-            dkd.st = 2, dkd.r = 1.0f;
+        if (dkd.d >= 1.0f) {                       /* (V0.86: HOLD first, if any) */
+            dkd.st = dkk.dhold ? 3u : 2u, dkd.r = 1.0f;
+            dkd.h = (int32_t)((float)dkk.dhold * DK_HOLD_MS * 0.001f * SY_FS);
+        }
         d = dkd.d;
+    } else if (dkd.st == 3u) {                     /* (HOLD: down, then the release) */
+        dkd.h -= (int32_t)SY_BLK;
+        if (dkd.h <= 0)
+            dkd.st = 2;
+        d = 1.0f;
     } else if (dkd.st == 2u) {                     /* (RELEASE: back along SHAPE) */
         float r;
         dkd.r = sy_maxf(0.0f, dkd.r - (float)SY_BLK / (dk_rel_s() * SY_FS));
@@ -443,15 +697,51 @@ static void dk_duck_block(float *ml, float *mr)
     dkd.g = g1;
 }
 
-/* a block (sy_block, after the effects): the duck on the synth, then the drums sounding added in */
+/* V0.86: COMP on the drums' sum (l, r) a block: a peak a block, followed (ATTACK 0.1 .. 30 ms, RELEASE 20 ms .. 1 s);
+ * above AMOUNT's threshold (0 .. -30 dB) 4:1, AMOUNT's make-up (up to +9 dB); MIX the pressed in parallel. The gain
+ * goes down from the block's start (its peak known before it plays: a hit's start pressed with it; ATTACK how fast the
+ * level follows), back up over the block */
+static void dk_comp_block(float *l, float *r)
+{
+    float pk = 0.0f, amt = (float)dkk.comp[0] * 0.01f, ta, tr, thr, g0 = dkc.g, g1 = 1.0f, dg;
+    float m = (float)dkk.comp[3] * 0.01f;
+    uint32_t i;
+    for (i = 0; i < SY_BLK; i++)
+        pk = sy_maxf(pk, sy_maxf(sy_absf(l[i]), sy_absf(r[i])));
+    ta = 0.0001f * sy_exp2f(8.2288f * (float)dkk.comp[1] * 0.01f);
+    tr = 0.02f * sy_exp2f(5.6439f * (float)dkk.comp[2] * 0.01f);
+    dkc.e += (pk - dkc.e) * (1.0f - sy_exp2f(-1.4426950f * (float)SY_BLK / ((pk > dkc.e ? ta : tr) * SY_FS)));
+    thr = sy_exp2f(-30.0f * amt * 0.16609640f);
+    if (dkc.e > thr)
+        g1 = sy_exp2f(0.75f * sy_log2f(thr / dkc.e));
+    if (amt > 0.2f)                                /* (make-up: half the reduction a -6 dB peak would get) */
+        g1 *= sy_exp2f(0.375f * (30.0f * amt - 6.0f) * 0.16609640f);
+    if (g1 < g0)                                   /* (down: from the block's start, its peak known: 0.7 ms ahead) */
+        g0 = g1;
+    dg = (g1 - g0) * (1.0f / (float)SY_BLK);
+    for (i = 0; i < SY_BLK; i++, g0 += dg) {
+        l[i] += (l[i] * g0 - l[i]) * m;
+        r[i] += (r[i] * g0 - r[i]) * m;
+    }
+    SY_FLUSH(dkc.e);
+    dkc.g = g1;
+}
+
+/* a block (sy_block, after the effects): the duck on the synth, then the drums sounding added in (V0.86: through
+ * COMP when it is on) */
 static void sy_drum_block(float *ml, float *mr)
 {
-    float x[SY_BLK];
-    uint32_t l, i;
+    float x[SY_BLK], bl[SY_BLK], br[SY_BLK], *ol = ml, *orr = mr;
+    uint32_t l, i, bus = dkk.comp[0] != 0u;
     dk_duck_block(ml, mr);
+    if (bus) {
+        memset(bl, 0, sizeof bl);
+        memset(br, 0, sizeof br);
+        ol = bl, orr = br;
+    }
     for (l = 0; l < DK_N; l++) {
         dk_voice_t *v = &dkv[l];
-        float gl, gr, tl, tr, dl, dr;
+        float gl, gr, tl, tr, dl, dr, el, er;
         if (!v->on)
             continue;
         switch (l) {
@@ -461,12 +751,20 @@ static void sy_drum_block(float *ml, float *mr)
         case DK_WT1: case DK_WT2: dk_wt(v, l, x); break;
         default: dk_metal(v, x); break;
         }
+        if (v->fx_dr | v->fx_eq)
+            dk_fx_block(v, x);
         tl = sy_tgain[v->trk][0], tr = sy_tgain[v->trk][1];
         gl = v->g[0] * v->tg[0], gr = v->g[1] * v->tg[1];
-        dl = (v->g[0] * tl - gl) * (1.0f / (float)SY_BLK), dr = (v->g[1] * tr - gr) * (1.0f / (float)SY_BLK);
+        el = v->g[0] * tl, er = v->g[1] * tr;
+        if (v->fx_sh) {                            /* (SHAPE: in the ramp) */
+            float s0, s1;
+            dk_sh_gains(v, &s0, &s1);
+            gl *= s0, gr *= s0, el *= s1, er *= s1;
+        }
+        dl = (el - gl) * (1.0f / (float)SY_BLK), dr = (er - gr) * (1.0f / (float)SY_BLK);
         for (i = 0; i < SY_BLK; i++, gl += dl, gr += dr) {
-            ml[i] += x[i] * gl;
-            mr[i] += x[i] * gr;
+            ol[i] += x[i] * gl;
+            orr[i] += x[i] * gr;
         }
         v->tg[0] = tl, v->tg[1] = tr;
         v->n += SY_BLK;
@@ -474,6 +772,15 @@ static void sy_drum_block(float *ml, float *mr)
         SY_FLUSH(v->s2);
         if (v->a < 1e-4f && v->n >= v->hold)       /* (-80 dB: done) */
             v->on = 0;
+    }
+    if (bus) {
+        dk_comp_block(bl, br);
+        for (i = 0; i < SY_BLK; i++) {
+            ml[i] += bl[i];
+            mr[i] += br[i];
+        }
+    } else {
+        dkc.e = 0.0f, dkc.g = 1.0f;                /* (COMP off: at rest for when it comes on) */
     }
 }
 
@@ -485,6 +792,9 @@ static void sy_drum_off(void)                      /* every drum silent, the duc
     dkd.st = 0;
     dkd.d = 0.0f;
     dkd.g = 1.0f;
+    dkd.h = 0;
+    dkc.e = 0.0f;
+    dkc.g = 1.0f;
 }
 static int sy_drum_sounding(void)                  /* any drum sounding, or the duck not at rest */
 {
@@ -492,7 +802,7 @@ static int sy_drum_sounding(void)                  /* any drum sounding, or the 
     for (l = 0; l < DK_N; l++)
         if (dkv[l].on)
             return 1;
-    return dkd.st != 0u || dkd.g < 1.0f;
+    return dkd.st != 0u || dkd.g < 1.0f || (dkk.comp[0] && dkc.e > 1e-4f);
 }
 static void sy_drum_init(void)
 {
