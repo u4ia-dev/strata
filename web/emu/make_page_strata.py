@@ -22,7 +22,7 @@ import sys
 
 HEAD = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n')
-TITLE = '<title>Strata V0.8 Emulator</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n'
+TITLE = '<title>Strata Looper Emulator</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n'
 
 LOAD_WORKLET = '''// the worklet: worklet.js beside the page, else its source (WORKLET_SRC) as a module of its own
 async function loadWorklet(ac) {
