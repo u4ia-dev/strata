@@ -3,12 +3,13 @@
 # Copyright (C) 2026 u4ia
 """Make STRATA's site (GitHub Pages) from the flasher make_flasher.py made:
   index.html                  the landing page: what Strata is, the disclaimer, the data warning, the links
-  flash/                      build/flasher as it is (the flasher, the package, the test page, the USB check, FLASHING.md,
-                              README.md, NOTICE.md, LICENSE, LICENSING.md, LICENSES/: the licences beside the package)
+  flash/                      build/flasher's public part: the installer (index.html without its INTERNAL parts, the test
+                              and report), the package, README.md, NOTICE.md, LICENSE, LICENSING.md, LICENSES/ (the
+                              licences beside the package). The test page, the USB check, FLASHING.md and serve.py are
+                              for the internal hardware test only and stay out.
   LICENSE, NOTICE.md, LICENSING.md, LICENSES/   (again at the top)
   book/                       the guide and the manual (book/, built by `npm run build` there into build/book)
   .nojekyll                   (served as files)
-serve.py stays out (the backup step runs on the user's own computer, from the source).
   web/strata_flash/make_site.py REPO_URL [OUT_DIR]   (after make_flasher.py; OUT_DIR: build/site)
 """
 import hashlib
@@ -21,6 +22,39 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 FLASHER = ROOT / "build" / "flasher"
+INTERNAL = ("serve.py", "__pycache__", "test.html", "usb_check.html", "FLASHING.md")   # (the hardware test's: not public)
+BOOK_INSTALL = "../book/manual/install.html"
+
+
+def public_flasher(raw):
+    """the installer without its INTERNAL parts (the test and report), and its pointers to FLASHING.md, the internal
+    test's document, turned to the manual's install page"""
+    t = re.sub(r"[ ]*<!--INTERNAL-->.*?<!--/INTERNAL-->\n", "", raw, flags=re.S)
+    t = re.sub(r"/\*INTERNAL\*/.*?/\*/INTERNAL\*/\n?", "", t, flags=re.S)
+    swaps = [
+        ('<span class="n">1 / 3</span>', '<span class="n">1 / 2</span>'),
+        ('<span class="n">2 / 3</span>', '<span class="n">2 / 2</span>'),
+        ("Hardware test flasher for the M-VAVE FM-1 &middot; Chrome or Edge, on this computer only",
+         "Installer for the M-VAVE FM-1 &middot; Chrome or Edge on a computer"),
+        ('$("find").disabled ? "s3" : "s2"', '"s2"'),
+        (" Now step 3.", ""),
+        ("the Flipper Zero route (FLASHING.md, section 6).",
+         f'the Flipper Zero route (<a href="{BOOK_INSTALL}#recovery">the manual</a>).'),
+        ("(FLASHING.md, section 6) or the FM-1 Transporter.",
+         f'(<a href="{BOOK_INSTALL}#recovery">the manual</a>) or the FM-1 Transporter.'),
+        ('Flipper Zero route (FLASHING.md, " +\n    "section 6), and send the log.',
+         'Flipper Zero route (the manual\'s " +\n    "Recovery), and keep the log.'),
+        ("run serve.py from Strata's source (FLASHING.md, section 2)", "run serve.py from Strata's source (the manual: Back up first)"),
+        ("open it from build\\\\flasher\\\\serve.py (FLASHING.md, section 3)", "open it from build\\\\flasher\\\\serve.py (the manual: Install)"),
+    ]
+    for a, b in swaps:
+        if t.count(a) != 1:
+            raise SystemExit(f"site: the flasher's {a[:50]!r} is not there once: update make_site.py")
+        t = t.replace(a, b)
+    for left in ("INTERNAL-->", "INTERNAL*/", 'id="s3"', "FLASHING.md, section", "test.html", "usb_check"):
+        if left in t:
+            raise SystemExit(f"site: {left!r} left in the public flasher")
+    return t
 
 
 def page(repo, version, sha):
@@ -63,14 +97,13 @@ def page(repo, version, sha):
     Felucca. Free software, GPL-3.0-only. Package {html.escape(version)}, SHA-256 <code>{html.escape(sha[:16])}…</code></p>
   <div class="row">
     <a class="btn go" href="flash/">Install</a>
-    <a class="btn" href="flash/test.html">Test</a>
     <a class="btn" href="book/">Guide &amp; manual</a>
     <a class="btn" href="{r}">Source</a>
   </div>
   <section class="warn">
     <h2>Before you install</h2>
     <p><b>Saving anything in Strata can overwrite Felucca's projects and samples</b> (the same flash), and going back
-      does not bring them back. Make a full flash backup first and keep it (FLASHING.md, section 2): it is the only way
+      does not bring them back. Make a full flash backup first and keep it (<a href="book/manual/install.html#back-up-first">how</a>): it is the only way
       back to exactly what you had. Strata never writes the boot area, the calibration and trim data, Bluetooth pairing
       or the unit's own keys.</p>
     <p class="mute">Chrome or Edge on a computer, the FM-1 on a USB data cable straight into it. Backups are made on your
@@ -117,7 +150,9 @@ def main():
         raise SystemExit("site: run web/strata_flash/make_flasher.py first")
     if out.exists():
         shutil.rmtree(out)
-    shutil.copytree(FLASHER, out / "flash", ignore=shutil.ignore_patterns("serve.py", "__pycache__"))
+    shutil.copytree(FLASHER, out / "flash", ignore=shutil.ignore_patterns(*INTERNAL))
+    (out / "flash" / "index.html").write_text(public_flasher((FLASHER / "index.html").read_text(encoding="utf-8")),
+                                         encoding="utf-8", newline="\n")
     for doc in ("LICENSE", "LICENSING.md", "NOTICE.md", "README.md"):
         shutil.copy(ROOT / doc, out / doc)
     if not (ROOT / "build" / "book" / "index.html").exists():

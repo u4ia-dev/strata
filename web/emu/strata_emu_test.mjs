@@ -37,8 +37,8 @@ const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
              PH_ON: 236, EQ2_MID: 209, EQPT: 1009, EQF: 1010, EQG: 1011, EQQ: 1012,
-             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, CLOCK: 1071, DRAWN: 12,
-             EQSHP: 1127, EQSF: 1128, EQSA: 1129 };  // sy_ui.c UI_*, LFO_DRAW
+             LPT: 1002, LX: 1003, LY: 1004, LC: 1005, BPM: 1006, TSB: 1007, TSN: 1008, CLOCK: 1067, DRAWN: 12,
+             EQSHP: 1123, EQSF: 1124, EQSA: 1125 };  // sy_ui.c UI_*, LFO_DRAW
 const SRC = { LFO1: 3, LFO2: 4 };                                                           // sy_param.c SRC_*
 const pid = (x, sec, nm, k) => {               // the parameter at knob k of a page, found by its section and name
   const p = x.web_test_page();
@@ -1191,7 +1191,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
                 "MATRIX", "DRIVE", "CHORUS", "DELAY", "REVERB", "OTT", "EQ", "DRIVE 2", "CHORUS 2", "OTT 2", "EQ 2",
                 "FLANGER", "FLANGER 2", "PHASER", "PHASER 2", "FX FILTER", "FX FILTER 2", "BITCRUSH", "BITCRUSH 2",
                 "TREMOLO", "TREMOLO 2", "RING MOD", "RING MOD 2", "TAPE", "TAPE 2", "CHAIN", "MENU", "GLOBAL", "SAVE",
-                "BROWSE", "SCALE", "ARP", "CHORD", "MIDI", "STEPS"];
+                "BROWSE", "SCALE", "ARP", "CHORD", "(free)", "STEPS"];
   const here = () => `${SECN[z.web_test_page_section()]} ${cstr(z, z.web_test_page_name())}`;
   const hush = () => { for (let k = 0; k < 40 && play(z, 0.25).peak > 1e-5; k++); play(z, 0.3); };
   const idleDraws = () => { play(z, 1.2); const d0 = z.web_screen_draws(); play(z, 1.0); return z.web_screen_draws() - d0; };
@@ -1445,9 +1445,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   c2.web_master(700);
   c2.web_boot();
   play(c2, 0.3);
-  const kept = [0, 1, 2, 5, 9, 12, 22].map((f) => c2.web_test_chd(f, -1));
-  check(`chords: after a power cycle MODE, TYPE, SPREAD, STYLE, BASS, MIDI IN, STRUM ${kept.join(" ")}`,
-        kept.join() === "2,13,2,0,1,1,9");
+  const kept = [0, 1, 2, 5, 9, 22].map((f) => c2.web_test_chd(f, -1));
+  check(`chords: after a power cycle MODE, TYPE, SPREAD, STYLE, BASS, STRUM ${kept.join(" ")}`,
+        kept.join() === "2,13,2,0,1,9");
 }
 {                                               // V0.75: the ARP (sy_chord.c: MODE, the steps, GROOVE, LATCH, the beat)
   const c = await boot();

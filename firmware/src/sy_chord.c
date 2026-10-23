@@ -52,8 +52,6 @@ typedef struct {
     uint8_t perf, style;                         /* the ARP: on (ARP + OCT+), its STYLE (PF_*) */
     uint8_t rate[PF_N], move[PF_N], feel[PF_N];  /* .. each style's own */
     uint8_t bass, boct, blvl;                    /* BASS: on, octaves under (1, 2), level (% of the chord's) */
-    uint8_t min, mout, och, bch;                 /* MIDI: roots from MIDI in, out over USB, the chords' and the bass's
-                                                  * channels (0 .. 15) */
     uint8_t gate, swing, latch, len;             /* GROOVE: ARP's and PATTERN's note (% of a step, 5 .. 200), SWING (50
                                                   * straight .. 75: the odd steps half a step late), LATCH, ARP's
                                                   * LENGTH (1 .. 16) */
@@ -165,10 +163,6 @@ static void ch_chord_defaults(void)
 }
 static void ch_midi_defaults(void)
 {
-    chd.min = 0;
-    chd.mout = 0;
-    chd.och = 0;                                 /* channel 1, the bass on 2 */
-    chd.bch = 1;
 }
 static void ch_defaults(void)
 {

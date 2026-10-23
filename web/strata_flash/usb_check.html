@@ -214,7 +214,7 @@ $("silent").addEventListener("click", () => { log("the user: the FM-1 played not
 
 // 4: the serial console, raw
 async function withConsole(fn) {
-  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x5354 }, { usbVendorId: 0x1209, usbProductId: 0x0001 }] });
   const info = port.getInfo();
   log(`serial port picked: USB ${(info.usbVendorId || 0).toString(16)}:${(info.usbProductId || 0).toString(16)}`);
   await port.open({ baudRate: 115200 });

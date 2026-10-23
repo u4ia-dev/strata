@@ -379,7 +379,7 @@ const num = (m, k) => (m[k] === undefined ? NaN : Number(m[k]));
 
 async function findPort() {                                                            // a port this page was given
   const ports = await navigator.serial.getPorts();
-  return ports.find((p) => { const i = p.getInfo(); return i.usbVendorId === 0x1209 && i.usbProductId === 0x0001; }) || null;
+  return ports.find((p) => { const i = p.getInfo(); return i.usbVendorId === 0x1209 && (i.usbProductId === 0x5354 || i.usbProductId === 0x0001); }) || null;
 }
 async function reconnect(ms) {                                                         // after the FM-1 started again
   const end = Date.now() + ms / FAST;
@@ -508,7 +508,7 @@ async function preflight() {
 }
 $("c-con").addEventListener("click", async () => {
   try {
-    const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+    const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x5354 }, { usbVendorId: 0x1209, usbProductId: 0x0001 }] });
     if (con.alive) await con.close();
     await con.open(port);
     con.lost = () => { $("s-con").textContent = "lost (switched off?)"; log("console: lost"); gate(); };

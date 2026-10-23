@@ -22,7 +22,7 @@ const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, AR
             OCTUP: 13 };                                                                     // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
-              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, LTRK: 47,
+              CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, STEPS: 45, SEQ: 46, LTRK: 47,
               LCLIP: 48, LSONG: 49, KIT: 50, LGRID: 51, DRUM: 52, DEBUG: 53 };   // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
@@ -404,12 +404,7 @@ held(14, 0.1);                                  // G4: G major (C major's), the 
 shot("Bass");
 ex.web_keys(0);
 run(0.3);
-go(SEC.CMID, "MIDI");
-ex.web_test_chd(12, 1);
-ex.web_test_chd(13, 1);
-run(0.05);
-shot("ChordMidi");
-for (const [f, v] of [[0, 0], [2, 0], [9, 0], [12, 0], [13, 0], [16, 0]]) ex.web_test_chd(f, v);   // (the chords off again)
+for (const [f, v] of [[0, 0], [2, 0], [9, 0], [16, 0]]) ex.web_test_chd(f, v);   // (the chords off again)
 go(SEC.KEYS, "SCALE");
 turn(0, -1);
 rest();
@@ -488,11 +483,6 @@ run(0.2);
 shot("Momentary");
 ex.web_buttons(0);
 run(0.3);
-ex.web_buttons(1 << B.EDIT);
-run(0.7);
-shot("Jump");
-ex.web_buttons(0);
-run(0.3);
 for (let i = 0; i < 2; i++) { ex.web_buttons(1 << B.EDIT); run(0.03); ex.web_buttons(0); run(0.08); }   // (V0.86:
 run(0.3);                                                                                               // twice:
 shot("JumpLatched");                                                                                    // latched)
@@ -517,15 +507,12 @@ go(SEC.LFO1, "VALUES");
 shot("LfoValues");
 run(1.6);
 go(SEC.MACRO, "SOUND");
-tap(B.SAVE);                                    // SAVE once: a new version, in the first free slot
-run(0.6);
-shot("Saved");
-run(1.6);
-ex.web_buttons(1 << B.SAVE);                    // SAVE held: over its own slot, the countdown
-run(1.6);
-shot("SaveHold");
-ex.web_buttons(0);
+tap(B.SAVE);                                    // SAVE once: the SAVE window (V0.87); SAVE on its row 2: NAME IT
 run(0.3);
+tap(B.SAVE);
+run(0.2);
+tap(B.SAVE);                                    // .. SAVE there: a new user preset, playing
+run(1.0);
 ex.web_buttons(1 << B.SAVE);                    // SAVE twice: the browser
 run(0.05);
 ex.web_buttons(0);
@@ -699,7 +686,8 @@ run(3.2);
   shot("LoopType");
   run(0.6);
   shot("LoopTypeAsk");
-  run(2.2);
+  tap(B.OCTUP);                                 // (anything but SAVE: the question closed, the TYPE kept)
+  run(0.3);
   lp(2, 2);
   go(SEC.LTRK, "RECORD");
   run(0.1);

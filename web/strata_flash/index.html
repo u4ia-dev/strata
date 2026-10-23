@@ -1,6 +1,7 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2026 u4ia
+     (INTERNAL ... /INTERNAL marks what make_site.py leaves out of the public site: the test and report.)
      After Felucca's web/index_pkg.html (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
      GPL-3.0); its update protocol (fm1ota.js) and package code (fm1pkg.js) are Felucca's, unchanged.
      STRATA's flasher: a page on this computer (Web MIDI's SysEx needs a secure context: localhost). make_flasher.py
@@ -181,6 +182,7 @@
     </div>
   </section>
 
+  <!--INTERNAL-->
   <section class="card" id="s3">
     <h2><span class="n">3 / 3</span>Test and report</h2>
     <p>Work through the checklist in <a href="FLASHING.md" target="_blank" rel="noopener">FLASHING.md</a> (section
@@ -195,6 +197,7 @@
     moment.</p>
     <pre id="report-text" hidden></pre>
   </section>
+  <!--/INTERNAL-->
 
   <section class="card">
     <h2>Going back</h2>
@@ -298,10 +301,10 @@ function gate() {
   $("stock-go").disabled = !stock || writing || backingUp || !$("c-power").checked;
   $("bk-start").disabled = !bk || !!bk.why_not || backingUp || writing;
   $("bk-cancel").hidden = !backingUp;
-  $("report").disabled = $("run").disabled = writing || !navigator.serial;
+  /*INTERNAL*/$("report").disabled = $("run").disabled = writing || !navigator.serial;/*/INTERNAL*/
   $("stock-file").disabled = writing;
   const next = !ready ? "s1" : !writing && !$("confirm").hidden ? "s2" : $("find").disabled ? "s3" : "s2";
-  for (const id of ["s1", "s2", "s3"]) $(id).classList.toggle("next", id === next);   // (the next step's page)
+  for (const id of ["s1", "s2", "s3"]) $(id)?.classList.toggle("next", id === next);   // (the next step's; s3 internal)
 }
 document.querySelectorAll(".pre").forEach((c) => c.addEventListener("change", gate));
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = ""; } });
@@ -406,7 +409,7 @@ function stepper() {
 
 // the last check: Strata answers after a real restart. Its first start comes straight from the update loader (a core
 // reset: the USB controller keeps the loader's settings), every later one from a chip reset, and on 2026-10-16 only
-// the first could send (FLASHING.md, section 9). So Done waits for the FM-1 to leave USB, come back, and answer.
+// the first could send (docs/FLASHING.md §9). So Done waits for the FM-1 to leave USB, come back, and answer.
 const FM1_PORT = /fm-1|felucca|ota|composite|sinco|usb-midi/i;   // (fm1ota.js find's)
 const fm1Ports = () => [...midi.inputs.values()].filter((p) => p.state !== "disconnected" && FM1_PORT.test(p.name || "")).length;
 async function restartCheck(product) {
@@ -540,9 +543,10 @@ $("stock-write").addEventListener("click", async () => {
   writing = false; gate();
 });
 
+/*INTERNAL*/
 // the report: Strata's console (sy_console.c) over Web Serial, `status` and `bench`
 async function consoleRun(cmds, beforeLast = 0) {
-  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x0001 }] });
+  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x5354 }, { usbVendorId: 0x1209, usbProductId: 0x0001 }] });
   await port.open({ baudRate: 115200 });
   let reader = null, writer = null, out = "";
   try {
@@ -609,6 +613,7 @@ $("copy").addEventListener("click", async () => {
     say("Selected: press Ctrl+C to copy.", "");
   }
 });
+/*/INTERNAL*/
 gate();
 </script>
 </body>

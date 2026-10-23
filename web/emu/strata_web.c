@@ -737,7 +737,7 @@ EXPORT const char *web_test_chord_name(void)
 EXPORT int32_t web_test_chd(uint32_t f, int32_t v)
 {
     uint8_t *p[26] = {&chd.mode, &chd.ftype, &chd.spread, &chd.voicing, &chd.perf, &chd.style, 0, 0, 0, &chd.bass,
-                      &chd.boct, &chd.blvl, &chd.min, &chd.mout, &chd.och, &chd.bch, &chd.ktype,
+                      &chd.boct, &chd.blvl, 0, 0, 0, 0, &chd.ktype,   /* (12-15: SCL's MIDI until V0.87) */
                       &chd.gate, &chd.swing, &chd.latch, &chd.len, &ch_clock, &chd.strum, &chd.sdir, &chd.human,
                       &chd.taper};
     uint8_t *q = f == 6u ? &chd.rate[chd.style % PF_N] : f == 7u ? &chd.move[chd.style % PF_N]

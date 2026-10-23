@@ -107,8 +107,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_BRUN, UI_BCLR,                              /* (BENCH's: RUN, CLEAR the peaks) */
        UI_CTYPE, UI_CSLOT, UI_CMOVE, UI_CMIX,         /* (the FX chain view's: a type to add, a slot, MOVE, its MIX) */
        UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR,          /* (V0.7, SCL's chords (sy_chord.c chd): CHORD's, the ARP's */
-       UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* STYLE's, BASS's, MIDI's) */
-       UI_BON, UI_BOCT, UI_BLVL, UI_CIN, UI_COUT, UI_COCH, UI_CBCH,
+       UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL,         /* STYLE's, BASS's) */
+       UI_BON, UI_BOCT, UI_BLVL,
        UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH,       /* (V0.75, ARP's: GROOVE's; a step's (the one picked: STEPS', */
        UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT, UI_SRAT, UI_SCHN, UI_SSLD,   /* RATCHET's); STRUM's; GLOBAL's */
        UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP,           /* CLOCK IN) */
@@ -144,7 +144,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_KEYS (SEC_COUNT + 4)                    /* (SCL: the keys' scale) */
 #define SEC_ARP (SEC_COUNT + 5)                     /* (V0.75, the ARP's: STYLE, GROOVE; */
 #define SEC_CHORD (SEC_COUNT + 6)                   /* SCL's chords: CHORD, STRUM, BASS; */
-#define SEC_CMID (SEC_COUNT + 7)                    /* .. their MIDI; */
+                                                    /* (SEC_COUNT + 7: free; SCL's MIDI page until V0.87) */
 #define SEC_STEPS (SEC_COUNT + 8)                   /* the ARP's STEPS, RATCHET) */
 #define SEC_SEQ (SEC_COUNT + 9)                     /* (V0.8, the SEQ button's, the looper: LOOP (CLIPS, MIXER), */
 #define SEC_LTRK (SEC_COUNT + 10)                   /* TRACK (TRACK, RECORD, CLICK), */
@@ -158,7 +158,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
-       G_VALUES, G_CHORD, G_PERF, G_BASS, G_CMIDI, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
+       G_VALUES, G_CHORD, G_PERF, G_BASS, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
        G_LCLIPS, G_LMIX, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
        G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_DDRIVE, G_DEQ, G_DSHAPE, G_KCURVE, G_KCOMP, G_WIPE, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
@@ -319,7 +319,6 @@ static const ui_page_t UI_PG[] = {
     {SEC_CHORD, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR}},   /* (V0.7: sy_ui_chord.c) */
     {SEC_CHORD, G_STRUM, "STRUM", {UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP}},
     {SEC_CHORD, G_BASS, "BASS", {UI_BON, UI_BOCT, UI_BLVL, -1}},
-    {SEC_CMID, G_CMIDI, "MIDI", {UI_CIN, UI_COUT, UI_COCH, UI_CBCH}},
     {SEC_ARP, G_PERF, "STYLE", {UI_PSTY, UI_PRATE, UI_PMOVE, UI_PFEEL}},    /* (V0.75: the ARP button's) */
     {SEC_ARP, G_GROOVE, "GROOVE", {UI_AGATE, UI_ASWING, UI_ALEN, UI_ALATCH}},
     {SEC_STEPS, G_STEPS, "STEPS", {UI_SSTEP, UI_STYPE, UI_SLVL, UI_SOCT}},
@@ -626,7 +625,7 @@ static uint32_t ui_sec(void) { return UI_PG[ui.page].sec; }
 static const char *ui_sec_name(uint32_t s)
 {
     return s < SEC_COUNT ? SEC_NAMES[s] : s == SEC_MENU ? "SETTINGS" : s == SEC_GLOBAL ? "GLOBAL" : s == SEC_SAVE ? "SAVE"
-           : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD" : s == SEC_CMID ? "MIDI"
+           : s == SEC_KEYS ? "SCALE" : s == SEC_ARP ? "ARP" : s == SEC_CHORD ? "CHORD"
            : s == SEC_STEPS ? "STEPS" : s == SEC_SEQ ? "LOOP" : s == SEC_LTRK ? "TRACK" : s == SEC_LCLIP ? "CLIP"
            : s == SEC_LSONG ? "SONG" : s == SEC_KIT ? "KIT" : s == SEC_LGRID ? "CLIP" : s == SEC_DRUM ? "DRUM"
            : s == SEC_DEBUG ? "DEBUG" : "PRESETS";
@@ -2404,10 +2403,7 @@ static void ui_chord_turn(int32_t item, int32_t s)
     case UI_BON: chd.bass = s > 0; break;
     case UI_BOCT: chd.boct = (uint8_t)sy_clampi(chd.boct + s, 1, 2); break;
     case UI_BLVL: chd.blvl = (uint8_t)sy_clampi(chd.blvl + 5 * s, 5, 100); break;
-    case UI_CIN: chd.min = s > 0; break;
-    case UI_COUT: chd.mout = s > 0; break;
-    case UI_COCH: chd.och = (uint8_t)sy_clampi(chd.och + s, 0, 15); break;
-    default: chd.bch = (uint8_t)sy_clampi(chd.bch + s, 0, 15); break;
+    default: break;
     }
     if (!was && sy_chord_active())
         sy_app_keys_hand();                         /* (V0.75: the keys held go over to the chords) */
@@ -3585,7 +3581,7 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             for (i = 0; i < PF_N; i++)
                 c[6u + i] = chd.rate[i], c[9u + i] = chd.move[i], c[12u + i] = chd.feel[i];
             c[15] = chd.bass, c[16] = chd.boct, c[17] = chd.blvl;
-            c[18] = chd.min, c[19] = chd.mout, c[20] = chd.och, c[21] = chd.bch;
+            /* c[18] .. c[21]: 0, free (SCL's MIDI settings until V0.87, never read) */
             c[22] = chd.spread, c[23] = chd.strum, c[24] = chd.sdir, c[25] = chd.human, c[26] = chd.taper;
             c[27] = ui.lastmode;
         }
@@ -3642,7 +3638,6 @@ static uint32_t sy_ui_settings(uint8_t *b, uint32_t n)
             chd.feel[i] = (uint8_t)sy_clampi(c[12u + i], lo, hi);
         }
         chd.bass = c[15] != 0, chd.boct = (uint8_t)sy_clampi(c[16], 1, 2), chd.blvl = (uint8_t)sy_clampi(c[17], 1, 100);
-        chd.min = c[18] != 0, chd.mout = c[19] != 0, chd.och = c[20] & 15u, chd.bch = c[21] & 15u;
         chd.spread = (uint8_t)(c[22] % CH_NSPREAD), chd.strum = (uint8_t)(c[23] % CH_NSTRUM);
         chd.sdir = (uint8_t)(c[24] % CH_NSDIR), chd.human = (uint8_t)sy_clampi(c[25], 0, 100);
         chd.taper = (uint8_t)sy_clampi(c[26], 0, 100);

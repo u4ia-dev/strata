@@ -326,8 +326,7 @@ OCT+ turns the chords on (MODE as it was, KEY at first), SCL + OCT− off, from 
 
 The ARP button's menu: tap ARP for it (STYLE, GROOVE; twice: STEPS, RATCHET). ARP + OCT+ turns it on, ARP + OCT− off,
 from any page; hold a chord and ARP + OCT+: it arpeggiates what is held at once. It plays the chord CHORD makes (KEY,
-FREE) or, with MODE OFF, the keys held ; BASS goes on under it. (SCL's MIDI page, MIDI IN ROOTS, USB OUT, CHORDS CH and BASS CH, is in no menu in V0.87:
-its settings are kept but unused.)
+FREE) or, with MODE OFF, the keys held; BASS goes on under it.
 
 - **STYLE**: STYLE · RATE · MOVE · FEEL, each style with its own three.
   - **ARP** (the default): a step arpeggiator. RATE · MODE · OCTAVES.

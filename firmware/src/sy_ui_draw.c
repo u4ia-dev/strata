@@ -37,7 +37,6 @@ static int ui_eq_modded(void);
 static void ui_p_chord(void);                       /* sy_ui_chord.c: SCL's chord pages (V0.7) */
 static void ui_p_cperf(void);
 static void ui_p_cbass(void);
-static void ui_p_cmidi(void);
 static const char *ui_chord_nv(uint32_t id, char *v);
 static void ui_p_steps(void);                       /* .. ARP's (V0.75), STRUM's */
 static void ui_p_strum(void);
@@ -2917,7 +2916,7 @@ static void (*const UI_PAGE[])(void) = {
     [G_BENCH] = ui_p_bench, [G_CHAIN] = ui_p_chain, [G_FLANGER] = ui_p_flanger, [G_PHASER] = ui_p_phaser,
     [G_FFILT] = ui_p_ffilt, [G_CRUSH] = ui_p_crush, [G_TREM] = ui_p_trem, [G_RING] = ui_p_ring, [G_TAPE] = ui_p_tape,
     [G_VOICE] = ui_p_voice, [G_PLAY] = ui_p_play, [G_VALUES] = ui_p_values, [G_CHORD] = ui_p_chord,
-    [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_CMIDI] = ui_p_cmidi, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
+    [G_PERF] = ui_p_cperf, [G_BASS] = ui_p_cbass, [G_STEPS] = ui_p_steps, [G_RATCH] = ui_p_ratch,
     [G_GROOVE] = ui_p_groove, [G_STRUM] = ui_p_strum, [G_LCLIPS] = ui_p_lclips, [G_LMIX] = ui_p_lmix,
     [G_LREC] = ui_p_lrec, [G_LCLICK] = ui_p_lclick, [G_LNOTES] = ui_p_lnotes,
     [G_LEDIT] = ui_p_ledit, [G_LCLIP] = ui_p_lclip, [G_LSONG] = ui_p_lsong, [G_WIPE] = ui_p_wipe,

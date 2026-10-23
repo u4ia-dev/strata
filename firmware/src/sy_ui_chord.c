@@ -78,10 +78,6 @@ static const char *ui_chord_nv(uint32_t id, char *v)
     case UI_BON: sp_put(v, chd.bass ? "ON" : "OFF"); return "BASS";
     case UI_BOCT: sp_put(sp_fix(v, -(int32_t)chd.boct, 0u, 1), chd.boct == 1u ? " OCTAVE" : " OCTAVES"); return "OCTAVE";
     case UI_BLVL: sp_put(sp_fix(v, chd.blvl, 0u, 0), "%"); return "LEVEL";
-    case UI_CIN: sp_put(v, chd.min ? "ROOTS" : "AS SENT"); return "MIDI IN";
-    case UI_COUT: sp_put(v, chd.mout ? "ON" : "OFF"); return "USB OUT";
-    case UI_COCH: sp_fix(v, chd.och + 1, 0u, 0); return "CHORDS CH";
-    case UI_CBCH: sp_fix(v, chd.bch + 1, 0u, 0); return "BASS CH";
     case UI_AGATE: sp_put(sp_fix(v, chd.gate, 0u, 0), "%"); return "GATE";
     case UI_ASWING: sp_put(sp_fix(v, chd.swing, 0u, 0), "%"); return "SWING";
     case UI_ALEN: sp_put(sp_fix(v, chd.len, 0u, 0), chd.len == 1u ? " STEP" : " STEPS"); return "LENGTH";
@@ -411,57 +407,6 @@ static void ui_p_cbass(void)
     }
     ui_H(0, 8.0f, 27.0f);
     ui_H(1, 8.0f, 43.0f);
-}
-
-/* MIDI: the keys and MIDI in into the chords, the chords into the sound and out over USB, the channels */
-static void ui_ch_box(float x, float y, float w, const char *s, int on)
-{
-    if (on)
-        lk_frame(x + 0.5f, y + 0.5f, w - 1.0f, 19.0f, 1.0f, sk.ink);
-    else
-        lk_frame_dash(x + 0.5f, y + 0.5f, w - 1.0f, 19.0f, 2.0f, 2.0f, sk.mid);
-    lk_text_c(x + 0.5f * w, y + 3.0f, T9B, s, on ? sk.ink : sk.lab, sk.ground, 20, 0);
-}
-static void ui_ch_wire(const float *p, uint32_t n, int on, int hot)
-{
-    if (on)
-        lk_poly(p, n, 1.5f, ui_ink(hot));
-    else
-        lk_poly_dash(p, n, 1.0f, sk.mid, 2.0f, 2.0f);
-}
-static void ui_p_cmidi(void)
-{
-    char v[16];
-    pg.figs = 0xFu;                                 /* (every value on the page: no flag) */
-    ui_ch_box(14.0f, 40.0f, 64.0f, "KEYS", 1);
-    ui_ch_box(14.0f, 96.0f, 64.0f, "MIDI IN", 1);
-    ui_ch_box(96.0f, 68.0f, 62.0f, "CHORDS", chd.mode != CH_OFF || chd.perf || chd.bass);
-    ui_ch_box(176.0f, 40.0f, 56.0f, "SOUND", 1);
-    ui_ch_box(176.0f, 96.0f, 56.0f, "USB OUT", chd.mout);
-    {
-        float a[6] = {78, 50, 87, 50, 96, 74}, b[6] = {78, 106, 87, 106, 96, 82}, c[6] = {158, 74, 167, 50, 176, 50};
-        float d[6] = {158, 82, 167, 106, 176, 106}, e[4] = {78, 112, 176, 112};
-        ui_ch_wire(a, 3u, 1, 0);
-        ui_ch_wire(b, 3u, chd.min, ui_hot(0));
-        ui_ch_wire(c, 3u, 1, 0);
-        ui_ch_wire(d, 3u, chd.mout, ui_hot(1));
-        if (!chd.min)                               /* (MIDI notes as sent: straight to the sound) */
-            lk_seg_dash(e[0], e[1], e[2] - 4.0f, e[3], sk.line, 1.0f, 3.0f);
-    }
-    lk_label(26.0f, 136.0f, "MIDI IN", 20);
-    lk_text(26.0f, 148.0f, T10B, chd.min ? "ROOTS OF CHORDS" : "AS SENT", ui_ink(ui_hot(0)), sk.ground, 0, 0);
-    lk_label(144.0f, 136.0f, "USB OUT", 20);
-    lk_text(144.0f, 148.0f, T10B, chd.mout ? "ON" : "OFF", ui_ink(ui_hot(1)), sk.ground, 0, 0);
-    lk_label(26.0f, 176.0f, "CHORDS CH", 20);
-    sp_fix(v, chd.och + 1, 0u, 0);
-    lk_text(26.0f, 188.0f, T12B, v, chd.mout ? ui_ink(ui_hot(2)) : sk.lab, sk.ground, 0, 0);
-    lk_label(144.0f, 176.0f, "BASS CH", 20);
-    sp_fix(v, chd.bch + 1, 0u, 0);
-    lk_text(144.0f, 188.0f, T12B, v, chd.mout ? ui_ink(ui_hot(3)) : sk.lab, sk.ground, 0, 0);
-    ui_H(0, 8.0f, 145.0f);
-    ui_H(1, 126.0f, 145.0f);
-    ui_H(2, 8.0f, 185.0f);
-    ui_H(3, 126.0f, 185.0f);
 }
 
 /* ------------------------------------------------------------------------------------------- ARP (V0.75) --- */
