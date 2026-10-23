@@ -231,8 +231,12 @@ static void act(void)
             TRACE("%u grid %u row %u step %u\n", step_no, f, t, s);
             web_test_grid(f, rn(9), rn(40), f ? (int32_t)rn(9) - 4 : (int32_t)rn(128));
         } else if (q == 9) {                      /* (the kit: any value, kept in range; V0.86: the drums' effects, */
-            if (rn(12) == 0)                      /* the kit's, a factory kit loaded) */
-                dk_kit_load(rn(DK_NKIT));
+            if (rn(12) == 0)                      /* the kit's, a factory kit loaded; V0.87 a row's model, any */
+                dk_kit_load(rn(DK_NKIT));         /* byte, a factory drum preset into a row) */
+            else if (rn(6) == 0)
+                dkk.l[rn(8)].model = (uint8_t)rn(10), dkk.l[rn(8)].var = (uint8_t)rn(5), dk_sane();
+            else if (rn(8) == 0)
+                dk_row_set(rn(8), &DKP[rn(DK_NPRE)], 1u + rn(DK_NPRE));
             else if (rn(2))
                 web_test_kit(rn(8), 30u + rn(17), (int32_t)rn(140));
             else

@@ -58,6 +58,9 @@ the bench build no longer measures flash reads.
 
 ## Status
 
+- **V0.87 step 2**: built 2026-10-23, not installed: seven drum models, any row any model (in the rows' spare
+  bytes: a project of before plays as it did); 64 factory drum presets by category; six factory kits (808, 909, LO-FI,
+  VIDEO GAME, TRAP, DRUM & BASS) as copies of them; the user's 64 drum presets and 16 kits; EUCLID on the drum CLIP.
 - **V0.87 step 1**: built 2026-10-23, not installed: CLIPS with the tracks as rows; SONG on LOOP; the projects a list
   (SEQ twice); SEQ + OCT+ a new clip of a bar (PRESETS its length), SEQ + OCT− its deletion, asked; TYPE on a track with
   clips asked as a window (SAVE yes); REC twice TAKE; SELECT on HOME the track; GLO held + PLAY tap tempo.

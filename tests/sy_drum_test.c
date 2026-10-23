@@ -555,7 +555,7 @@ static void t_kits(void)
     for (k = 0; k < DK_NKIT; k++) {
         fresh();
         dk_kit_load(k);
-        named &= dkk.kit == k && dkk.name[0] != 0 && strcmp(dkk.name, DK_KITS[k].name) == 0;
+        named &= dkk.kit == k && dkk.name[0] != 0 && strcmp(dkk.name, DK_FKITS[k].name) == 0;
         for (l = 0; l < DK_N; l++) {
             uint32_t n;
             sy_drum_hit(l, 0, 127, 1);
@@ -565,14 +565,73 @@ static void t_kits(void)
             ends &= !dkv[l].on;
             kw = fmaxf(kw, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
             if (fmaxf(pkr(L, 0, n), pkr(R, 0, n)) > 0.75f)
-                printf("drums:     %s %s: %.3f\n", DK_KITS[k].name, DK_NAME[l], fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+                printf("drums:     %s %s: %.3f\n", DK_FKITS[k].name, DK_NAME[l], fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
         }
-        printf("drums:   %-10s its loudest accented hit %.3f\n", DK_KITS[k].name, kw);
+        printf("drums:   %-10s its loudest accented hit %.3f\n", DK_FKITS[k].name, kw);
         kw = 0.0f;
     }
     printf("drums:   the %u factory kits: the loudest accented hit %.3f\n", DK_NKIT, worst);
     check("the factory kits: each loads whole (its name, its number); every lane accented finite, under 0.8 (-2 dB), ended",
           ok && ends && named && worst < 0.8f);
+}
+/* V0.87 (step 2): every model and variant on the KICK row, and every factory drum preset: heard, finite, under 0.8,
+ * ended; a row of its place's own model (V0.85's) the same as that model set (the projects of before) */
+static void t_models(void)
+{
+    uint32_t m, v, i, n, ok = 1, ends = 1, heard = 1, same = 1;
+    float worst = 0.0f, quiet = 1.0f;
+    for (m = 0; m < DM_N; m++)
+        for (v = 0; v < DM_NVAR[m]; v++) {
+            fresh();
+            dkk.l[0].model = (uint8_t)(m + 1u), dkk.l[0].var = (uint8_t)v;
+            sy_drum_hit(0, 0, 127, 1);
+            n = run(secs(dk_t60(0, dkk.l[0].decay) * 2.2f + 0.3f), 0);
+            ok &= finite_all(n);
+            worst = fmaxf(worst, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+            quiet = fminf(quiet, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+            heard &= fmaxf(pkr(L, 0, n), pkr(R, 0, n)) > 0.02f;
+            ends &= !dkv[0].on;
+            printf("drums:   %-6s %-8s peak %.3f\n", DM_NAME[m], DM_VAR[m][v], fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+        }
+    for (i = 0; i < DK_NPRE; i++) {
+        fresh();
+        dk_row_set(0, &DKP[i], i + 1u);
+        {                                           /* (a preset as the kit keeps it: in every range already) */
+            dk_kit_t was = dkk;
+            dk_sane();
+            same &= memcmp(&was, &dkk, sizeof dkk) == 0;
+        }
+        sy_drum_hit(0, 0, 127, 1);
+        n = run(secs(dk_t60(0, dkk.l[0].decay) * 2.2f + 0.3f), 0);
+        ok &= finite_all(n);
+        worst = fmaxf(worst, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+        quiet = fminf(quiet, fmaxf(pkr(L, 0, n), pkr(R, 0, n)));
+        heard &= fmaxf(pkr(L, 0, n), pkr(R, 0, n)) > 0.02f;
+        ends &= !dkv[0].on;
+        if (fmaxf(pkr(L, 0, n), pkr(R, 0, n)) > 0.8f || fmaxf(pkr(L, 0, n), pkr(R, 0, n)) < 0.05f || dkv[0].on)
+            printf("drums:     %s: %.3f%s\n", DKP[i].name, fmaxf(pkr(L, 0, n), pkr(R, 0, n)), dkv[0].on ? " (on)" : "");
+    }
+    for (i = 0; i < DK_N && same; i++) {            /* (row i of its own model: as that model set explicitly) */
+        float a[4];
+        uint32_t vr, mm;
+        fresh();
+        sy_drum_hit(i, 0, 100, 0);
+        n = run(secs(0.2f), 0);
+        a[0] = pkr(L, 0, n), a[1] = pkr(R, 0, n);
+        fresh();
+        mm = dk_model(i, &vr);
+        dkk.l[i].model = (uint8_t)(mm + 1u), dkk.l[i].var = (uint8_t)vr;
+        sy_drum_hit(i, 0, 100, 0);
+        n = run(secs(0.2f), 0);
+        a[2] = pkr(L, 0, n), a[3] = pkr(R, 0, n);
+        same &= a[0] == a[2] && a[1] == a[3];
+    }
+    printf("drums:   the models and the %u presets: the loudest accented hit %.3f, the quietest %.3f\n", (unsigned)DK_NPRE,
+           worst, quiet);
+    check("the seven models, each variant, and every factory drum preset: heard, finite, under 0.8 (-2 dB), ended", ok &&
+          ends && heard && worst < 0.8f);
+    check("every factory preset in the kit's ranges; a row of its place's own model (a project of before) sounds as that "
+          "model set (bit for bit)", same);
 }
 static void t_health2(void)
 {
@@ -770,6 +829,7 @@ int main(int argc, char **argv)
     t_duck2();
     t_atone();
     t_kits();
+    t_models();
     t_health2();
     t_golden(argc > 1 ? argv[1] : "tests/sy_drum_golden.txt");
     t_cost();

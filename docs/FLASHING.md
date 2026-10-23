@@ -478,6 +478,12 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     window); a reset by EDIT + OCT− held 5 s, stopped once by letting go of OCT−; REC twice after playing a phrase
     (TAKE: it loops); GLO held + PLAY tapped in time (tap tempo); SEQ + OCT+ (a new clip, PRESETS its length), SEQ +
     OCT− twice (DELETE?, deleted). Any one that does not do what CONTROLS.md says: note it.
+57. **V0.87 step 2: the drums by ear.** On a drum track: EDIT twice on KIT, load each of the six kits over the same
+    beat (808, 909, LO-FI, VIDEO GAME, TRAP, DRUM & BASS): do they sound like their names, and unlike each other?
+    DRUM > MODEL on the KICK row: each model, each TYPE, a hit at a time (anything that clicks, whistles, aliases
+    badly or is far louder or quieter than the rest: note which). EDIT twice on DRUM: a few presets of each category.
+    Save a drum preset and a kit of your own, power-cycle: both still there. EUCLID on a row: HITS, STEPS, ROTATE.
+    BENCH's AUDIO row with VIDEO GAME and TRAP playing.
 
 ## 5. The report
 

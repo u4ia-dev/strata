@@ -565,7 +565,7 @@ static void ui_p_hdrum(void)
     char t[40];
     ui_home_name(dkk.name, ui.kedited);            /* (V0.86: edited since loaded, its dot) */
     lk_ptag(8.0f, 52.0f, 0);
-    sp_put(sp_put(sp_fix(sp_put(t, "T"), (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0), " DRUMS \xB7 "), DK_NAME[pick]);
+    sp_put(sp_put(sp_fix(sp_put(t, "T"), (int32_t)lpp.sel % LP_NTRK + 1, 0u, 0), " DRUMS \xB7 "), dk_rname(pick));
     lk_text(26.0f, 50.0f, T10, t, sk.lab, sk.ground, 20, 0);
     ui_live(66.0f, 151.0f);                         /* (the cells lit as the drums sound) */
     for (i = 0; i < DK_N; i++) {
@@ -2452,11 +2452,26 @@ static void ui_row_of(uint32_t k, ui_row_t *r, char *up)
 {
     static const char *const ST[3] = {"EMPTY", "KEPT", "PRESETS THERE"};
     uint32_t j;
-    if (ui.pl_kind == PL_KITS) {
-        sp_fix(sp_put(r->num, "0"), (int32_t)k + 1, 0u, 0);
-        r->name = DK_KITS[k].name;
-        r->on = k == dkk.kit;
+    if (ui.pl_kind == PL_KITS) {                    /* (V0.87: the factory's, then the user's) */
+        int32_t id = ui_kit_at(k);
+        if (id >= 0 && !((uint32_t)id & 0x80u))
+            sp_fix(sp_put(r->num, "0"), id + 1, 0u, 0), r->name = DK_FKITS[id].name;
+        else if (id >= 0)
+            sp_fix(sp_put(r->num, "K"), (id & 0x7F) + 1, 0u, 0), r->name = dk_uk_name((uint32_t)id & 0x7Fu);
+        r->on = id >= 0 && (uint32_t)id == dkk.kit;
         r->dot = r->on && ui.kedited;
+    } else if (ui.pl_kind == PL_DRUMS) {            /* (V0.87: a category's drum presets, each's model) */
+        int32_t id = ui_dl_at(k);
+        if (id > 0 && id <= (int32_t)DK_NPRE) {
+            sp_fix(sp_put(r->num, (id - 1) % 8 < 9 ? "0" : ""), (id - 1) % 8 + 1, 0u, 0);
+            r->name = DKP[id - 1].name;
+            r->right = DM_NAME[(DKP[id - 1].l.model + DM_N - 1u) % DM_N];
+        } else if (id > 0) {
+            sp_fix(sp_put(r->num, "U"), (id & 0x7F) + 1, 0u, 0);
+            r->name = dk_up_name((uint32_t)id & 0x7Fu);
+            r->right = "USER";
+        }
+        r->on = id > 0 && (uint32_t)id == *dk_pid(ui.krow);
     } else if (ui.pl_kind == PL_TABLES) {
         uint32_t t = ui_tbl_at(k);
         sp_fix(sp_put(r->num, t < 9u ? "0" : ""), (int32_t)t + 1, 0u, 0);
@@ -2490,7 +2505,7 @@ static void ui_row_of(uint32_t k, ui_row_t *r, char *up)
 }
 static void ui_p_plist(void)
 {
-    static const char *const TOP[4] = {"PRESETS", "KITS", "WAVETABLES", "PROJECTS"};
+    static const char *const TOP[5] = {"PRESETS", "KITS", "WAVETABLES", "PROJECTS", "DRUMS"};
     uint32_t n = ui.pl_kind == PL_SOUNDS ? sy_app_list(0, 0, ui_lids) : ui_pl_n(), k, first;
     uint32_t pos = ui.pl_pos < n ? ui.pl_pos : (n ? n - 1u : 0u);
     char t[40], r[24], up[24];
@@ -2498,8 +2513,10 @@ static void ui_p_plist(void)
     int lose = 0;
     ui_row_t row;
     sp_fix(sp_put(sp_fix(r, (int32_t)pos + 1, 0u, 0), " OF "), (int32_t)n, 0u, 0);
-    lk_top(ui.pl_kind == PL_TABLES ? (ui.pl_osc ? "OSC B TABLES" : "OSC A TABLES") : TOP[ui.pl_kind % 4u], -1, 0, 0, r,
-           0, 0);
+    if (ui.pl_kind == PL_DRUMS)                     /* (V0.87: "KICK DRUMS") */
+        sp_put(sp_put(up, DC_NAME[ui.pl_dcat % DC_N]), " DRUMS");
+    lk_top(ui.pl_kind == PL_TABLES ? (ui.pl_osc ? "OSC B TABLES" : "OSC A TABLES") : ui.pl_kind == PL_DRUMS ? up
+           : TOP[ui.pl_kind % 5u], -1, 0, 0, r, 0, 0);
     first = pos > 2u ? pos - 2u : 0u;
     if (n > 5u && first > n - 5u)
         first = n - 5u;
@@ -2521,9 +2538,12 @@ static void ui_p_plist(void)
         if (row.on)
             lk_disc(226.0f, y + 11.5f, 3.0f, ink);
     }
-    if (ui.pl_kind == PL_KITS) {
+    if (ui.pl_kind == PL_DRUMS) {                   /* (V0.87) */
+        l1 = "SELECT: ANOTHER CATEGORY", l2 = "SAVE TWICE: INTO THE ROW PICKED";
+        bot = "SAVE+OCT+: THE ROW AS NEW";
+    } else if (ui.pl_kind == PL_KITS) {
         l1 = "A KIT: ITS DRUMS, THEIR EFFECTS,", l2 = "THE DUCK AND COMP; KEPT IN THE PROJECT";
-        lose = ui.kedited && pos != dkk.kit;
+        lose = ui.kedited && ui_kit_at(pos) != (int32_t)dkk.kit;
         bot = lose ? "SAVE TWICE: THE KIT'S EDITS GO" : bot;
     } else if (ui.pl_kind == PL_TABLES) {
         l1 = "SELECT: ANOTHER CATEGORY", l2 = "IT BUILDS AS IT LOADS";

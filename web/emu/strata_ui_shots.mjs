@@ -925,6 +925,39 @@ run(3.2);
   shot("NewClip");
   ex.web_buttons(0); run(0.4);
 }
+{                                               // V0.87 step 2: the drum models, presets, kits, saving, EUCLID
+  ex.web_test_lp_trk(0, 0, 2);
+  ex.web_test_lp(0, 0);
+  ex.web_test_lp(1, 0);
+  run(0.2);
+  go(SEC.DRUM, "MODEL");
+  turn(0, -10); turn(0, 2); turn(1, 1);         // (FM, BELL)
+  rest();
+  shot("DrumModel");
+  go(SEC.DRUM, "SOUND");
+  rest();
+  shot("DrumSoundFm");
+  twice(B.EDIT);
+  shot("DrumPresets");
+  ex.web_enc(E.SELECT, 2); run(0.1);
+  ex.web_enc(E.PRESET, 3); run(0.1);
+  shot("DrumPresetsHat");
+  run(5.2);
+  tap(B.SAVE); run(0.4);
+  shot("DrumSaveWindow");
+  ex.web_buttons(1 << B.SAVE); run(0.03); ex.web_buttons(0); run(0.5);
+  shot("DrumNameIt");
+  tap(B.HOME);
+  go(SEC.KIT, "ACCENT");
+  twice(B.EDIT);
+  ex.web_enc(E.PRESET, 3); run(0.1);
+  shot("DrumKits87");
+  run(5.2);
+  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons(0); run(0.4);
+  go(SEC.LGRID, "EUCLID");
+  turn(0, 1); turn(1, -4); rest();
+  shot("DrumEuclid");
+}
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
 writeFileSync(`${out}/lint.txt`, lints.join("\n"));
 writeFileSync(`${out}/shots.json`, JSON.stringify(shots));

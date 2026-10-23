@@ -2104,7 +2104,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   keyTap(BK[0]);
   const duck = [kit(0, 23), kit(0, 21)];
   check(`DRUMS: T1 DRUMS, EDIT shows its DRUM (V0.86: section ${kitPg[0]}, ${kitPg[1]}); white key 1 a KICK (peak ${p1.toFixed(3)}), white 9 accented (${(p2 / p1).toFixed(2)} x), black 1 DUCK (state ${duck[0]}, the synth's gain ${duck[1]}): KICKs ${hits(0) - h0[0]}, DUCKs ${hits(8) - h0[1]}`,
-        tr(0, 0) === 2 && kitPg[0] === 52 && kitPg[1] === "SOUND" && p1 > 0.05 && Math.abs(p2 / p1 - 1.5) < 0.1 && duck[0] > 0 &&
+        tr(0, 0) === 2 && kitPg[0] === 52 && kitPg[1] === "MODEL" && p1 > 0.05 && Math.abs(p2 / p1 - 1.5) < 0.1 && duck[0] > 0 &&
         hits(0) - h0[0] === 2 && hits(8) - h0[1] === 1);
   // 2. the grid (SEQ's CLIP on a drum track): black keys the row, white keys the steps; an empty clip made a bar and
   //    launched; the LEDs show the row's steps and the row
@@ -2216,8 +2216,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     const pk = ek(0, 49);
     e.web_enc(E.SELECT, 1); play(e, 0.1);       // (SELECT: KIT)
     const p1 = [es(), en()];
-    check(`DRUM EDITOR: EDIT on a drum track: ${p0} (DRUM's SOUND); PRESETS picks the drum (${pk}: CLAP); SELECT: ${p1} (KIT)`,
-          p0.join() === "52,SOUND" && pk === 2 && p1[0] === 50);
+    check(`DRUM EDITOR: EDIT on a drum track: ${p0} (DRUM's MODEL, V0.87); PRESETS picks the drum (${pk}: CLAP); SELECT: ${p1} (KIT)`,
+          p0.join() === "52,MODEL" && pk === 2 && p1[0] === 50);
     const ed0 = ek(0, 48);
     goPage(e, 52, "DRIVE"); play(e, 0.05);
     et(E.K1, 1); et(E.K2, 30); et(E.K3, -20);   // (CLAP: TYPE HARD, DRIVE up, MIX down)
@@ -2246,12 +2246,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     etap(B.HOME);                               // (V0.87, U6: EDIT twice on a drum track: the kits)
     etwice(B.EDIT);
     const kl = [e.web_test_pl(0), e.web_test_pl(3), e.web_test_pl(1)];
-    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (PUNCH -> INDUSTRIAL from where it opens; SAVE twice: loaded)
+    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (808 -> LO-FI from where it opens; SAVE twice: loaded)
     const want = e.web_test_pl(1);
     saveTwice(e);
     const ld = [ek(0, 47), cstr(e, e.web_test_kit_name()), ek(0, 48), e.web_test_pl(0), ek(0, 30), ek(0, 31)];
     check(`EDIT twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, SAVE twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
-          kl.join() === "1,1,0" && ld[0] === want && ld[1] === "INDUSTRIAL" && ld[2] === 0 && ld[3] === 0 && ld[4] === 1 && ld[5] === 70);
+          kl.join() === "1,1,0" && ld[0] === want && ld[1] === "LO-FI" && ld[2] === 0 && ld[3] === 0 && ld[4] === 3 && ld[5] === 50);
     etap(B.EDIT);                               // (EDIT held 5 s on DRUM: the drum picked as a kit starts)
     goPage(e, 52, "SOUND"); play(e, 0.05);
     const [, drs] = octHold(e, B.EDIT, 5.3);     // (V0.87, U2: EDIT + OCT- held 5 s)
@@ -2270,7 +2270,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     const b2 = [e2.web_test_kit(0, 47, -1), cstr(e2, e2.web_test_kit_name()), e2.web_test_kit(1, 30, -1), e2.web_test_kit(1, 31, -1),
                 e2.web_test_kit(0, 43, -1)];                    // (-1: read only; a missing argument is a 0 written)
     check(`.. after a power cycle: the kit ${b2[0]} "${b2[1]}", its SNARE's DRIVE ${b2[2]} ${b2[3]}, COMP ${b2[4]}`,
-          b2[0] === ld[0] && b2[1] === "INDUSTRIAL" && b2[2] === 2 && b2[3] === 50 && b2[4] === 60);
+          b2[0] === ld[0] && b2[1] === "LO-FI" && b2[2] === 3 && b2[3] === 70 && b2[4] === 30);
   }
 }
 
@@ -2606,6 +2606,91 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   tap(v, B.SAVE);
   check(`WIPE: asked (${wq}); SAVE: "${vt()}", the palette STRATA (${v.web_test_palette(-1)}), LIGHTS HIGH (${v.web_dim_level()}); the presets kept`,
         wq === 3 && /^WIPED/.test(vt()) && v.web_test_palette(-1) === 0 && v.web_dim_level() === 3);
+}
+{                                               // V0.87 step 2: the drum models, presets and kits, the user's, EUCLID
+  const d = await boot(), dt = () => cstr(d, d.web_test_toast()), dn = (r) => cstr(d, d.web_test_dk_name(r));
+  const dbtn = (b) => { d.web_buttons(1 << b); play(d, 0.03); d.web_buttons(0); play(d, 0.05); };
+  splash(d);
+  d.web_test_lp_trk(0, 0, 2); d.web_test_lp(0, 0); play(d, 0.2);
+  goPage(d, 52, "MODEL"); play(d, 0.05);
+  const m0 = [d.web_test_dkm(0, 0), d.web_test_dkm(0, 1), dn(0)];
+  const heard = [];
+  for (let m = 0; m < 7; m++) {                 // (KNOB 1 the model: each heard on the KICK row)
+    d.web_enc(E.K1, -10); play(d, 0.2); d.web_enc(E.K1, m); play(d, 0.2);
+    d.web_test_drum_hit(0, 0, 120, 0);
+    heard.push(`${d.web_test_dkm(0, 0)}:${play(d, 0.4).peak > 0.02 ? 1 : 0}`);
+  }
+  d.web_enc(E.K2, 5); play(d, 0.2);             // (KNOB 2 its TYPE: WAVE's TABLE B)
+  const tb = [d.web_test_dkm(0, 0), d.web_test_dkm(0, 1), dn(0)];
+  check(`DRUM > MODEL: the KICK row PUNCH KICK as a kit starts (${m0}); KNOB 1 each model, each heard (${heard.join(" ")}); KNOB 2 TYPE (${tb})`,
+        m0.join() === "1,0,KICK" && heard.join(" ") === "0:1 1:1 2:1 3:1 4:1 5:1 6:1" && tb.join() === "6,1,KICK");
+  twiceB(d, B.EDIT);                            // (EDIT twice on DRUM: the row's category's presets; PRESETS, SAVE twice)
+  const dl = [d.web_test_pl(0), d.web_test_pl(3), d.web_test_pl(5)];
+  d.web_enc(E.PRESET, 1); play(d, 0.1);
+  saveTwice(d);
+  const ld = [dn(0), d.web_test_dkm(0, 0), d.web_test_dkm(0, 1), d.web_test_dkm(0, 2), d.web_test_pl(0), dt()];
+  twiceB(d, B.EDIT);
+  d.web_enc(E.SELECT, 1); play(d, 0.1);
+  const cat = [d.web_test_pl(5), d.web_test_pl(1)];
+  play(d, 5.3);
+  check(`EDIT twice on DRUM: the drum presets (${dl}: open, DRUMS, KICK); PRESETS, SAVE twice: "${ld[0]}" in the row (${ld.slice(1, 4)}, the list gone ${ld[4]}, "${ld[5]}"); SELECT: SNARE's (${cat})`,
+        dl.join() === "1,4,0" && ld[0] === "909 KICK" && ld.slice(1, 5).join() === "1,0,2,0" && ld[5] === "KICK: 909 KICK" &&
+        cat.join() === "1,0");
+  dbtn(B.SAVE); play(d, 0.5);                   // (SAVE on DRUM: the drum; a factory's: SAVE AS NEW, NAME IT, written)
+  const sw = [d.web_test_win(1), d.web_test_win(2)];
+  dbtn(B.SAVE); play(d, 0.4);
+  const nm = [d.web_test_page_section(), cstr(d, d.web_test_save_name())];
+  dbtn(B.SAVE); play(d, 0.8);
+  const sv = [dt(), d.web_test_dkm(0, 2), d.web_test_dkm(0, 3), dn(0), d.web_test_page_section()];
+  goPage(d, 52, "SOUND"); d.web_enc(E.K1, 3); play(d, 0.3);
+  dbtn(B.SAVE); play(d, 0.5);
+  const sw2 = d.web_test_win(2);
+  dbtn(B.SAVE); play(d, 0.8);
+  check(`SAVE on DRUM: the window (${sw}), NAME IT (${nm}); SAVE: "${sv[0]}" (the row's preset ${sv[1]}, ${sv[2]} of the user's, "${sv[3]}", back ${sv[4]}); edited, SAVE over it (row ${sw2 + 1}): "${dt()}"`,
+        sw.join() === "1,1" && nm[0] === SEC.SAVE && nm[1] === "909 KICK v2" && sv[0] === "SAVED: 909 KICK v2 · DRUM 1" &&
+        sv[1] === 128 && sv[2] === 1 && sv[3] === "909 KICK v2" && sv[4] === 52 && sw2 === 0 && dt() === "SAVED OVER DRUM 1");
+  goPage(d, 50, "ACCENT"); play(d, 0.1);        // (SAVE on KIT: the kit, as new, NAME IT)
+  dbtn(B.SAVE); play(d, 0.5); dbtn(B.SAVE); play(d, 0.4);
+  const kn = cstr(d, d.web_test_save_name());
+  dbtn(B.SAVE); play(d, 0.8);
+  const ks = [dt(), cstr(d, d.web_test_kit_name()), d.web_test_dkm(0, 4)];
+  twiceB(d, B.EDIT);                            // (EDIT twice on KIT: the kits, the factory's six then the user's)
+  const kl = [d.web_test_pl(0), d.web_test_pl(3), d.web_test_pl(1)];
+  d.web_enc(E.PRESET, -10); play(d, 0.1);
+  saveTwice(d);
+  const k808 = [cstr(d, d.web_test_kit_name()), dn(0), d.web_test_dkm(0, 0), dn(3), d.web_test_dkm(3, 0)];
+  twiceB(d, B.EDIT);
+  d.web_enc(E.PRESET, 6); play(d, 0.1);
+  saveTwice(d);
+  check(`SAVE on KIT: "${kn}", "${ks[0]}" (the kit "${ks[1]}", ${ks[2]} kit of the user's); EDIT twice: the kits (${kl}); 808: "${k808[0]}", rows "${k808[1]}" (${k808[2]}), "${k808[3]}" (${k808[4]}); the user's back: "${cstr(d, d.web_test_kit_name())}"`,
+        kn === "DRUM KIT v2" && ks[0] === "SAVED: DRUM KIT v2 · KIT 1" && ks[1] === "DRUM KIT v2" && ks[2] === 1 &&
+        kl.join() === "1,1,6" && k808.join() === "808,808 KICK,0,808 HAT,5" && cstr(d, d.web_test_kit_name()) === "DRUM KIT v2");
+  goPage(d, 51, "EUCLID"); play(d, 0.1);        // (EUCLID: the KICK row refilled, the others kept)
+  d.web_test_grid(0, 1, 4, 100);
+  d.web_enc(E.K1, 1); play(d, 0.2);
+  const e1 = [d.web_test_dkm(0, 5), d.web_test_dkm(1, 5)];
+  d.web_enc(E.K2, -8); play(d, 0.2);
+  const e2 = [d.web_test_dkm(0, 5), d.web_test_dkm(1, 5)];
+  check(`EUCLID: HITS 5 of 16 on the KICK row (${e1[0]} hits, the SNARE's ${e1[1]} kept); STEPS 8: twice a bar (${e2[0]}, ${e2[1]})`,
+        e1.join() === "5,1" && e2.join() === "10,1");
+  play(d, 3.8);                                 // (a power cycle: the user's drums and kits kept)
+  const nor = new Uint8Array(d.memory.buffer, d.web_nor(), d.web_nor_size()).slice();
+  const d2 = (await WebAssembly.instantiate(bytes, {})).instance.exports;
+  if (d2._initialize) d2._initialize();
+  new Uint8Array(d2.memory.buffer, d2.web_nor(), d2.web_nor_size()).set(nor);
+  d2.web_master(700); d2.web_boot(); play(d2, 2.2);
+  check(`.. after a power cycle: the user's drum presets ${d2.web_test_dkm(0, 3)}, kits ${d2.web_test_dkm(0, 4)}`,
+        d2.web_test_dkm(0, 3) === 1 && d2.web_test_dkm(0, 4) === 1);
+  goPage(d, 52, "SOUND");                        // (the drum presets' list: the user's deleted, asked first)
+  twiceB(d, B.EDIT);
+  d.web_enc(E.PRESET, 20); play(d, 0.1);
+  const lch = (b) => { d.web_buttons(1 << B.SAVE); play(d, 0.05); d.web_buttons((1 << B.SAVE) | (1 << b)); play(d, 0.03);
+                       d.web_buttons(1 << B.SAVE); play(d, 0.03); d.web_buttons(0); play(d, 0.4); };
+  lch(B.OCTDN);
+  const asked = [d.web_test_pl(2), d.web_test_dkm(0, 3)];
+  lch(B.OCTDN); play(d, 0.8);
+  check(`the drum presets' list: SAVE + OCT- on the user's asks (${asked}), again: "${dt()}" (${d.web_test_dkm(0, 3)} left)`,
+        asked[0] === 9 && asked[1] === 1 && dt() === "DELETED DRUM 1" && d.web_test_dkm(0, 3) === 0);
 }
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

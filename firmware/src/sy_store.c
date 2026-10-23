@@ -37,7 +37,11 @@
 #define SS_PRJ_BYTES (SS_PRJ_OBJS * 2u * SS_SECTOR)
 #define SS_PRJ_LO 0xCB000u                         /* .. 1 and 2 (where the 128 presets ended) */
 #define SS_PRJ_HI (SS_USER_BASE + SS_NPAIRS * 2u * SS_SECTOR)   /* .. 3 and 4 (presets 65 .. 104 before) */
-enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_PRJ0 = SS_USER0 + SS_NPAIRS, SS_NOBJ = SS_PRJ0 + SS_NPRJ * SS_PRJ_OBJS };
+#define SS_DK_BASE (SS_PRJ_LO + 2u * SS_PRJ_BYTES)   /* V0.87 (D3): the user's drum presets, then kits (0xDB000) */
+enum { SS_SETTINGS, SS_EDIT, SS_USER0, SS_PRJ0 = SS_USER0 + SS_NPAIRS, SS_DRUMS = SS_PRJ0 + SS_NPRJ * SS_PRJ_OBJS,
+       SS_KITS, SS_NOBJ };
+_Static_assert(SS_DK_BASE == 0xDB000u && FL_IN(SS_DK_BASE, 4u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI) &&
+               SS_DK_BASE + 4u * SS_SECTOR <= FL_OTA_LO, "the user's drums and kits: the main store, below the update's");
 _Static_assert(SS_SLOTS * SS_SLOT_BYTES <= SS_PAYLOAD_MAX, "a pair's slots fit its payload");
 _Static_assert(SP_PACK_MAX + 2u <= SS_SLOT_BYTES, "a packed patch fits a slot");
 _Static_assert(FL_IN(SS_USER_BASE, SS_NPAIRS * 2u * SS_SECTOR, FL_DATA_LO, FL_DATA_HI), "user presets: the main store");
@@ -85,6 +89,8 @@ static uint32_t ss_sector(uint32_t obj, uint32_t copy)   /* copy A (0) or B (1) 
         return SS_SET_BASE + copy * SS_SECTOR;
     if (obj == SS_EDIT)
         return SS_EDIT_BASE + copy * SS_SECTOR;
+    if (obj == SS_DRUMS || obj == SS_KITS)         /* (V0.87: the user's drums, kits at 0xDB000, 0xDD000) */
+        return SS_DK_BASE + (obj - SS_DRUMS) * 2u * SS_SECTOR + copy * SS_SECTOR;
     if (obj >= SS_PRJ0) {                          /* (a project's object: 1, 2 at 0xCB000; 3, 4 at 0xB1000) */
         uint32_t pj = (obj - SS_PRJ0) / SS_PRJ_OBJS, o = (obj - SS_PRJ0) % SS_PRJ_OBJS;
         return (pj < 2u ? SS_PRJ_LO + pj * SS_PRJ_BYTES : SS_PRJ_HI + (pj - 2u) * SS_PRJ_BYTES) + o * 2u * SS_SECTOR +
@@ -235,4 +241,29 @@ static int ss_user_put(uint32_t s, const uint8_t *src, uint32_t len)
     for (i = 0; i < len; i++)
         ss_buf[at + 2u + i] = src[i];
     return ss_save(obj, ss_buf, SS_SLOTS * SS_SLOT_BYTES);
+}
+
+/* ---------------------------------------------------------------------------------------- records --- */
+/* V0.87 (D3): object obj as n records of sz bytes: record i into dst (0: read; never saved, or none readable: -1) */
+static int ss_rec_get(uint32_t obj, uint32_t i, uint32_t sz, uint32_t n, void *dst)
+{
+    int got;
+    if (i >= n || (got = ss_load(obj, ss_buf, SS_PAYLOAD_MAX)) < 0 || (uint32_t)got < (i + 1u) * sz)
+        return -1;
+    memcpy(dst, ss_buf + i * sz, sz);
+    return 0;
+}
+/* .. record i set to src's sz bytes (0: emptied, zeros), the others kept: 0 */
+static int ss_rec_put(uint32_t obj, uint32_t i, uint32_t sz, uint32_t n, const void *src)
+{
+    int got;
+    uint32_t k;
+    if (i >= n || n * sz > SS_PAYLOAD_MAX)
+        return -1;
+    got = ss_load(obj, ss_buf, SS_PAYLOAD_MAX);
+    for (k = got < 0 ? 0u : (uint32_t)got; k < n * sz; k++)
+        ss_buf[k] = 0;
+    for (k = 0; k < sz; k++)
+        ss_buf[i * sz + k] = src ? ((const uint8_t *)src)[k] : 0u;
+    return ss_save(obj, ss_buf, n * sz);
 }

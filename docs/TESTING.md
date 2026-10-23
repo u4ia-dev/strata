@@ -171,7 +171,7 @@ marked, in channel order, then the packet; the half's poll sends them with no pa
 configured nothing goes in and the mark waits; all 16 channels fit the room asked for. Felucca's own tests of the
 ring (`scale_test`, `chord_test`, `v156_test`, `midi_control_test`, `midi_uart_test`) pass as before.
 
-### 2.7 The drums (`sy_drum_test`, 28 checks, V0.85; V0.86 step 2)
+### 2.7 The drums (`sy_drum_test`, 30 checks, V0.85; V0.86 step 2; V0.87 step 2: the models)
 
 The drum synth (`sy_drum.c`) through `sy_block`, as the audio interrupt runs it: every lane at velocity 127 heard,
 under 0.8 (-2 dB), every sample finite, its voice ended within its DECAY; WT 1 and 2 play no hit while their table is
@@ -423,7 +423,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 171 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 178 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -595,6 +595,17 @@ windows, the lists, the questions, the reset's countdown, a new clip, DEBUG, WIP
 3000, clean. The LEDs: `tests/sy_led_test.c` (host) traces the scan's line writes in quarters: every level steady
 frame to frame (+-1 us), HIGH 90.7 / MED 39.7 / LOW 14.7 us lit a frame, the glow 3.4 / 2.4 / 1.7 us, OFF dark, the
 breath 8 steps a period; how it looks **needs a hardware test** (FLASHING.md step 53).
+
+V0.87 step 2 (178 checks): DRUM > MODEL (each of the seven models heard on the KICK row, TYPE), EDIT twice on DRUM
+(the row's category's presets, one copied in, SELECT the next category), the SAVE window on DRUM (NAME IT, a user drum
+preset written, then saved over) and on KIT (a user kit), EDIT twice on KIT (the factory's six then the user's; 808
+loaded with its rows' presets; the user's back), EUCLID (5 of 16, then STEPS 8: 10 a bar, the other rows kept), the
+user's library through a power cycle, a user drum preset deleted from the list (asked first). The host's drum test
+(30 checks): every model and variant and all 64 factory presets heard, finite, under 0.8, ended; every preset in the
+kit's ranges; a row of its place's own model sounding as that model set, bit for bit, and V0.85's golden renders
+unchanged. The stress test loads presets into rows and sets any model byte (24 x 3000, clean). Screens: 181 (MODEL,
+the presets' lists, the SAVE window and NAME IT on DRUM, the kits, EUCLID), the check clean; the knob sweep 687
+turns, none with findings. How the new models sound: by ear (FLASHING.md step 57).
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 

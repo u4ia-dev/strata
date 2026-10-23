@@ -48,6 +48,7 @@ static const prof_t PROF[] = {
     {"drums: the eight lanes sounding", 0, {{-1, 0}}, -1, 1},   /* (V0.85: sy_drum.c) */
     {"SUPERSAW, 8 notes, the drums, the duck", 8, {{-1, 0}}, 0, 2},
     {"drums: the eight lanes, every effect, COMP", 0, {{-1, 0}}, -1, 3},   /* (V0.86: sy_drum.c's effects) */
+    {"drums: the eight lanes on V0.87's models", 0, {{-1, 0}}, -1, 4},    /* (V0.87 step 2: ANALOG, FM, CHIP, NOISE) */
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 
@@ -79,6 +80,12 @@ int main(int argc, char **argv)
     sy_tables_now();
     for (i = 0; i < p->voices; i++)
         sy_note_on(48 + 4 * i, 100);
+    if (p->drums == 4u) {                          /* (V0.87: the new models, their heaviest variants, on every row) */
+        static const uint8_t MV[DK_N][2] = {{DM_ANALOG, 0}, {DM_FM, 0}, {DM_FM, 1}, {DM_CHIP, 0}, {DM_CHIP, 2},
+                                            {DM_NOISE, 0}, {DM_CHIP, 1}, {DM_ANALOG, 0}};
+        for (i = 0; i < DK_N; i++)
+            dkk.l[i].model = (uint8_t)(MV[i][0] + 1u), dkk.l[i].var = MV[i][1], dkk.l[i].chr = 60, dkk.l[i].decay = 90;
+    }
     if (p->drums == 3u) {                          /* (every drum's DRIVE, EQ and SHAPE off their rest, COMP on) */
         for (i = 0; i < DK_N; i++) {
             dk_fx_t *f = &dkk.fx[i];

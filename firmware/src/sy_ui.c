@@ -135,7 +135,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_KDTYPE, UI_KDRIVE, UI_KDMIX, UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF,   /* DRUM: DRIVE, EQ, SHAPE; KIT: ACCENT's */
        UI_KSATT, UI_KSSUS, UI_KATONE, UI_DSRC, UI_DHOLD,                    /* TONE, the duck's SOURCE, HOLD, COMP) */
        UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX,
-       UI_WIPE };                                     /* (V0.87: SETTINGS > WIPE) */
+       UI_WIPE,                                       /* (V0.87: SETTINGS > WIPE; step 2: DRUM's MODEL, TYPE; the drum */
+       UI_KMODEL, UI_KVAR, UI_EHITS, UI_ESTEPS, UI_EROT };   /* CLIP's EUCLID: HITS, STEPS, ROTATE) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -336,11 +337,13 @@ static const ui_page_t UI_PG[] = {
     {SEC_LCLIP, G_LCLIP, "CLIP", {UI_LBARS, UI_LSPEED, UI_LQAPP, UI_LMOVE}},
     {SEC_LCLIP, G_LTOOLS, "TOOLS", {UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR}},
     /* (V0.85, the drums: sy_ui_drum.c. V0.86 step 2, K1, K2, K7: DRUM the drum PRESETS picks, KIT the kit's) */
+    {SEC_DRUM, G_KDRUM, "MODEL", {UI_KMODEL, UI_KVAR, -1, -1}},   /* (V0.87, step 2: the row's model, U7) */
     {SEC_DRUM, G_KDRUM, "SOUND", {UI_KTUNE, UI_KDEC, UI_KTONE, UI_KCHR}},
     {SEC_DRUM, G_DDRIVE, "DRIVE", {UI_KDTYPE, UI_KDRIVE, UI_KDMIX, -1}},
     {SEC_DRUM, G_DEQ, "EQ", {UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF}},
     {SEC_DRUM, G_DSHAPE, "SHAPE", {UI_KSATT, UI_KSSUS, -1, -1}},
     {SEC_DRUM, G_KMORE, "MIX", {UI_KLVL, UI_KPAN, -1, -1}},
+    UI_V(SEC_DRUM, UI_KMODEL, UI_KVAR, -1, -1)
     UI_V(SEC_DRUM, UI_KTUNE, UI_KDEC, UI_KTONE, UI_KCHR)
     UI_V(SEC_DRUM, UI_KDTYPE, UI_KDRIVE, UI_KDMIX, -1)
     UI_V(SEC_DRUM, UI_KEQL, UI_KEQM, UI_KEQH, UI_KEQF)
@@ -356,6 +359,7 @@ static const ui_page_t UI_PG[] = {
     UI_V(SEC_KIT, UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX)
     {SEC_LGRID, G_LGRID, "GRID", {UI_GSTEP, UI_GROW, UI_GVEL, UI_GACC}},
     {SEC_LGRID, G_LHIT, "HIT", {UI_GSTEP, UI_GROW, UI_GCHN, UI_GRAT}},
+    {SEC_LGRID, G_LGRID, "EUCLID", {UI_EHITS, UI_ESTEPS, UI_EROT, UI_GROW}},   /* (V0.87, step 2: the row picked) */
     {SEC_LGRID, G_LCLIP, "CLIP", {UI_LBARS, UI_LSPEED, UI_LQAPP, UI_LMOVE}},
     {SEC_LGRID, G_LTOOLS, "TOOLS", {UI_LCOPY, UI_LPASTE, UI_LDBL, UI_LCLR}},
     {SEC_SAVE, G_SAVE, "NAME IT", {UI_SCUR, UI_SCHR, UI_SCAT, UI_SSLOT}},
@@ -557,6 +561,9 @@ static struct {
     uint8_t asg_made, asg_was[NSLOT];               /* .. the slots it took (freed at 0 when it shuts), their sources */
     uint8_t last_k;                                 /* .. the knob turned last (the window starts on it) */
     uint8_t sw, sw_pos;                             /* .. (U17) the SAVE window open; its row: SAVE, AS NEW, CANCEL */
+    uint8_t sw_kind, sv_kind, pl_dcat;              /* .. step 2: what SAVE saves (0 the sound, 1 the drum picked, 2
+                                                     * the kit); NAME IT's; the drum presets' list's category (DC_*) */
+    uint8_t e_hits, e_steps, e_rot;                 /* .. EUCLID's HITS, STEPS, ROTATE */
     uint8_t qk, qv;                                 /* .. a question asked (Q_*), what about (a clip: its index + 1) */
     uint8_t new_clip;                               /* .. (S3) SEQ + OCT+ made a clip: SEQ still held, PRESETS its length */
     uint32_t rec_t;                                 /* .. (F09) REC tapped once, not recording: its time | 1 (a second: TAKE) */
@@ -918,13 +925,17 @@ static void ui_family_tap(uint32_t f)
  * module picked; GLO PERFORM latched; SCL the chords on, off; ARP the ARP on, off; SEQ the projects (S2). A latched
  * layer's button closes it */
 static void ui_asg_open(uint32_t b);
+static void ui_dl_open(void);
 static void ui_family_twice(uint32_t f)
 {
     switch (f) {
     case FAM_HOME: ui_go(ui_first_page(SEC_MENU)); break;
     case FAM_EDIT:
-        if (ui_drums())
-            ui_kl_open();
+        if (ui_drums() && (ui.tap_from == SEC_KIT || ui.tap_from == SEC_MACRO)) {   /* (V0.87, U6: on KIT or HOME the */
+            ui_go(ui.tap_page);                                                        /* kits; else the drum presets */
+            ui_kl_open();                                                              /* of the row picked's kind) */
+        } else if (ui_drums())
+            ui_dl_open();
         else
             ui_tl_open(ui_sec() == SEC_OSCB);
         break;
@@ -1337,13 +1348,54 @@ static void ui_undo(int redo)
 static void lp_select(uint32_t t);
 static char *ui_l_trk(char *b, uint32_t t);
 static void ui_save_open_new(void);                 /* sy_ui_save.c */
+static void ui_save_open_dk(uint32_t kind);         /* .. (V0.87: a drum preset 1, a kit 2) */
+static int sy_dk_get(uint32_t kind, uint32_t i, void *dst);   /* sy_app.c (V0.87) */
+static int sy_dk_put(uint32_t kind, uint32_t i, const void *src);
 static int sy_app_delete(uint32_t s);               /* sy_app.c */
 static int sy_app_project(uint32_t p);              /* .. the project saved, project p loaded */
 static void sy_app_project_new(void);               /* .. the one loaded cleared */
 /* V0.87: the lists PRESETS' grammar runs (PRESETS moves, SAVE twice loads, SAVE + OCT+ / OCT- their new and their
  * delete, UI_PL_CLOSE_MS untouched and it goes): the sounds; the factory kits (K8); the wavetables (EDIT twice, U6:
  * the oscillator's, by category, SELECT the next category); the projects (SEQ twice, S2) */
-enum { PL_SOUNDS, PL_KITS, PL_TABLES, PL_PROJECTS };
+enum { PL_SOUNDS, PL_KITS, PL_TABLES, PL_PROJECTS, PL_DRUMS };   /* (V0.87 step 2: the drum presets) */
+/* V0.87 (step 2): the kits' list: the factory's, then the user's (0x80 + n); the drum presets' list: a category's
+ * (ui.pl_dcat), the factory's (1 .. DK_NPRE), then the user's (0x80 + n); -1 past the end */
+static int32_t ui_kit_at(uint32_t pos)
+{
+    uint32_t u, k = DK_NKIT;
+    if (pos < DK_NKIT)
+        return (int32_t)pos;
+    for (u = 0; u < DK_NUK; u++)
+        if (dk_uk_name(u) && k++ == pos)
+            return (int32_t)(0x80u | u);
+    return -1;
+}
+static int32_t ui_dl_at(uint32_t pos)
+{
+    uint32_t i, k = 0;
+    for (i = 0; i < DK_NPRE; i++)
+        if (DKP[i].cat == ui.pl_dcat && k++ == pos)
+            return (int32_t)(i + 1u);
+    for (i = 0; i < DK_NUP; i++)
+        if (dk_up_name(i) && dk_up[i].cat == ui.pl_dcat && k++ == pos)
+            return (int32_t)(0x80u | i);
+    return -1;
+}
+static uint32_t ui_at_n(int32_t (*at)(uint32_t))   /* (a list's entries) */
+{
+    uint32_t k = 0;
+    while (at(k) >= 0)
+        k++;
+    return k;
+}
+static uint32_t ui_at_pos(int32_t (*at)(uint32_t), int32_t id)   /* (.. where id is: 0 not there) */
+{
+    uint32_t k;
+    for (k = 0; at(k) >= 0; k++)
+        if (at(k) == id)
+            return k;
+    return 0;
+}
 static uint32_t ui_tbl_at(uint32_t pos)             /* the wavetables' list: entry pos's table (by category, number) */
 {
     uint32_t c, t, k = 0;
@@ -1364,8 +1416,8 @@ static int32_t ui_tbl_id(void) { return ui.pl_osc ? SP_B_TABLE : SP_A_TABLE; }
 static uint32_t ui_pl_n(void)                       /* the list's entries */
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
-    return ui.pl_kind == PL_KITS ? DK_NKIT : ui.pl_kind == PL_TABLES ? WT_NFACT : ui.pl_kind == PL_PROJECTS ? LP_NPRJ
-                                                                                                           : sy_app_list(0, 0, ids);
+    return ui.pl_kind == PL_KITS ? ui_at_n(ui_kit_at) : ui.pl_kind == PL_DRUMS ? ui_at_n(ui_dl_at)
+         : ui.pl_kind == PL_TABLES ? WT_NFACT : ui.pl_kind == PL_PROJECTS ? LP_NPRJ : sy_app_list(0, 0, ids);
 }
 static void ui_pl_close(void)
 {
@@ -1385,7 +1437,12 @@ static void ui_list_open(uint32_t kind, uint32_t pos)
     ui.pl_t = fm1_ms;
     ui.dirty = D_ALL;
 }
-static void ui_kl_open(void) { ui_list_open(PL_KITS, dkk.kit < DK_NKIT ? dkk.kit : 0u); }   /* (V0.86, K8) */
+static void ui_kl_open(void) { ui_list_open(PL_KITS, ui_at_pos(ui_kit_at, dkk.kit)); }   /* (V0.86, K8) */
+static void ui_dl_open(void)                        /* (V0.87, U6, U7: the drum presets, the row picked's category) */
+{
+    ui.pl_dcat = (uint8_t)dk_row_cat(ui.krow);
+    ui_list_open(PL_DRUMS, ui_at_pos(ui_dl_at, *dk_pid(ui.krow)));
+}
 static void ui_tl_open(uint32_t o)                  /* (V0.87, U6, B2: the oscillator shown's) */
 {
     ui.pl_osc = (uint8_t)(o != 0u);
@@ -1419,6 +1476,14 @@ static void ui_pl_turn(int32_t s)
 }
 static void ui_pl_cat(int32_t s)                    /* SELECT in the wavetables' list: the next category's first */
 {
+    if (ui.pl_kind == PL_DRUMS) {                   /* (V0.87: the drum presets') */
+        ui.pl_dcat = (uint8_t)sy_clampi((int32_t)ui.pl_dcat + (s > 0 ? 1 : -1), 0, DC_N - 1);
+        ui.pl_pos = 0;
+        ui.pl_ask = 0;
+        ui.pl_t = fm1_ms;
+        ui.dirty = D_ALL;
+        return;
+    }
     int32_t c = sy_clampi((int32_t)WT_RECIPES[ui_tbl_at(ui.pl_pos)].cat + (s > 0 ? 1 : -1), 0, (int32_t)WT_NCAT - 1);
     uint32_t p;
     for (p = 0; p < WT_NFACT && WT_RECIPES[ui_tbl_at(p)].cat != (uint32_t)c; p++)
@@ -1438,12 +1503,40 @@ static void ui_pl_load(void)                        /* SAVE twice: the one picke
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n;
     char t[32];
-    if (ui.pl_kind == PL_KITS) {                    /* (V0.86, K8: a factory kit as the project's) */
-        dk_kit_load(ui.pl_pos);
+    if (ui.pl_kind == PL_KITS) {                    /* (V0.86, K8: a factory kit as the project's; V0.87 a user's) */
+        int32_t id = ui_kit_at(ui.pl_pos);
+        if (id >= 0 && id < (int32_t)DK_NKIT) {
+            dk_kit_load((uint32_t)id);
+        } else if (id >= 0) {
+            if (sy_dk_get(1, (uint32_t)id & 0x7Fu, &dk_rec)) {
+                ui_toast("NOT READ: NOT LOADED");
+                ui_pl_close();
+                return;
+            }
+            dkk = dk_rec;
+            dkk.kit = (uint8_t)id;
+            dk_sane();
+        }
         ui.kedited = 0;
         lpx.seq++;
         sp_put(sp_put(t, "KIT: "), dkk.name);
         ui_toast(t);
+    } else if (ui.pl_kind == PL_DRUMS) {            /* (V0.87: a drum preset into the row picked, its LEVEL, PAN kept) */
+        int32_t id = ui_dl_at(ui.pl_pos);
+        dk_pre_t p;
+        if (id > 0 && id <= (int32_t)DK_NPRE)
+            p = DKP[id - 1];
+        else if (id < 0 || sy_dk_get(0, (uint32_t)id & 0x7Fu, &p))
+            id = -1;
+        if (id < 0) {
+            ui_toast("NOT READ: NOT LOADED");
+        } else {
+            dk_row_set(ui.krow, &p, (uint32_t)id);
+            ui.kedited = 1;
+            lpx.seq++;
+            sp_put(sp_put(sp_put(t, DK_NAME[ui.krow % DK_N]), ": "), dk_rname(ui.krow));
+            ui_toast(t);
+        }
     } else if (ui.pl_kind == PL_TABLES) {           /* (V0.87: the table, built as it loads) */
         uint32_t tab = ui_tbl_at(ui.pl_pos);
         if (sy_patch.p[ui_tbl_id()] != (int16_t)tab) {
@@ -1466,21 +1559,47 @@ static void ui_pl_load(void)                        /* SAVE twice: the one picke
 }
 static void ui_pl_new(void)                         /* SAVE + OCT+: the sound playing as a new preset, named first */
 {
-    if (ui.pl_kind != PL_SOUNDS) {
-        ui_toast(ui.pl_kind == PL_KITS ? "A KIT IS KEPT WITH ITS PROJECT" : ui.pl_kind == PL_TABLES
-                 ? "THE TABLES ARE THE FACTORY'S" : "A NEW ONE: AN EMPTY ONE, SAVE TWICE");
+    uint32_t k = ui.pl_kind;
+    if (k == PL_TABLES || k == PL_PROJECTS) {
+        ui_toast(k == PL_TABLES ? "THE TABLES ARE THE FACTORY'S" : "A NEW ONE: AN EMPTY ONE, SAVE TWICE");
         return;
     }
     ui.sv_ret = ui.page;
     ui_pl_close();
-    ui_save_open_new();
+    if (k == PL_SOUNDS)
+        ui_save_open_new();
+    else                                            /* (V0.87: the row picked, the kit, as new) */
+        ui_save_open_dk(k == PL_DRUMS ? 1u : 2u);
 }
 static void ui_pl_del(void)                         /* SAVE + OCT-: the one picked deleted, the second time */
 {
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n = sy_app_list(0, 0, ids), s;
-    if (ui.pl_kind == PL_KITS || ui.pl_kind == PL_TABLES) {
-        ui_toast(ui.pl_kind == PL_KITS ? "THE FACTORY KITS STAY" : "THE FACTORY TABLES STAY");
+    if (ui.pl_kind == PL_KITS || ui.pl_kind == PL_DRUMS) {   /* (V0.87: the user's, asked first) */
+        int32_t id = ui.pl_kind == PL_KITS ? ui_kit_at(ui.pl_pos) : ui_dl_at(ui.pl_pos);
+        if (id < 0)
+            return;
+        if (!((uint32_t)id & 0x80u)) {
+            ui_toast(ui.pl_kind == PL_KITS ? "THE FACTORY KITS STAY" : "THE FACTORY DRUMS STAY");
+            return;
+        }
+        if (ui.pl_ask != ui.pl_pos + 1u) {
+            ui.pl_ask = (uint8_t)(ui.pl_pos + 1u);
+            ui.dirty = D_ALL;
+            return;
+        }
+        ui.pl_ask = 0;
+        ui.dirty = D_ALL;
+        if (ui.saving || sy_dk_put(ui.pl_kind == PL_KITS, (uint32_t)id & 0x7Fu, 0)) {
+            ui_toast("BUSY: TRY AGAIN");
+            return;
+        }
+        ui.saving = 1;
+        ui_toast("DELETING");
+        return;
+    }
+    if (ui.pl_kind == PL_TABLES) {
+        ui_toast("THE FACTORY TABLES STAY");
         return;
     }
     if (ui.pl_kind == PL_PROJECTS) {                /* (V0.87, S2: the one loaded cleared, asked first) */
@@ -1548,7 +1667,7 @@ static void ui_presets(int32_t s)
     }
     if (ui_drums()) {                               /* (K1, D3: the drum) */
         ui.krow = (uint8_t)sy_clampi((int32_t)(ui.krow % DK_N) + s, 0, DK_N - 1);
-        ui_toast(DK_NAME[ui.krow]);
+        ui_toast(dk_rname(ui.krow));
         ui.dirty |= D_DISP | D_KNOBS | D_HEAD;
         return;
     }
@@ -1740,12 +1859,23 @@ static void ui_asg_off(void)                        /* OCT-: the source taken of
     ui_toast(t);
     ui.dirty = D_ALL;
 }
-static void ui_sw_open(void)                        /* SAVE once (U17) */
+static int32_t ui_sw_own(void)                      /* (the user's slot SAVE writes over: -1 none) */
 {
+    uint32_t p = *dk_pid(ui.krow);
+    if (!ui.sw_kind)
+        return sy_app_slot();
+    if (ui.sw_kind == 1u)
+        return (p & 0x80u) && dk_up_name(p & 0x7Fu) ? (int32_t)(p & 0x7Fu) : -1;
+    return dkk.kit != 0xFFu && (dkk.kit & 0x80u) && dk_uk_name(dkk.kit & 0x7Fu) ? (int32_t)(dkk.kit & 0x7Fu) : -1;
+}
+static void ui_dk_over(void);                       /* sy_ui_save.c */
+static void ui_sw_open(void)                        /* SAVE once (U17; V0.87 step 2: a drum track's, on DRUM the drum */
+{                                                   /* picked, else the kit) */
     ui_pl_close();
     ui_win_close();
     ui.sw = 1;
-    ui.sw_pos = sy_app_slot() >= 0 ? 0u : 1u;
+    ui.sw_kind = (uint8_t)(ui_drums() ? (ui_sec() == SEC_DRUM ? 1u : 2u) : 0u);
+    ui.sw_pos = ui_sw_own() >= 0 ? 0u : 1u;
     ui.dirty = D_ALL;
 }
 static void ui_sw_do(void)                          /* SAVE in it: the row picked */
@@ -1754,10 +1884,16 @@ static void ui_sw_do(void)                          /* SAVE in it: the row picke
     ui.sw = 0;
     ui.dirty = D_ALL;
     if (p == 0u) {
-        ui_save_over();
+        if (ui.sw_kind)
+            ui_dk_over();
+        else
+            ui_save_over();
     } else if (p == 1u) {
         ui.sv_ret = ui.page;
-        ui_save_open_new();
+        if (ui.sw_kind)
+            ui_save_open_dk(ui.sw_kind);
+        else
+            ui_save_open_new();
     }
 }
 static void ui_wipe(void);
@@ -1770,7 +1906,7 @@ static int ui_win_press(uint32_t b)
         if (b == B_OCTDN)
             ui_asg_off();
     } else if (ui.sw && (b == B_OCTDN || b == B_OCTUP)) {   /* (OCT- up the rows, OCT+ down; SAVE kept for */
-        ui.sw_pos = (uint8_t)sy_clampi((int32_t)ui.sw_pos + (b == B_OCTUP ? 1 : -1), sy_app_slot() >= 0 ? 0 : 1, 2);
+        ui.sw_pos = (uint8_t)sy_clampi((int32_t)ui.sw_pos + (b == B_OCTUP ? 1 : -1), ui_sw_own() >= 0 ? 0 : 1, 2);
         ui.dirty = D_ALL;                                    /* a sound of a user slot) */
     } else if ((ui.sw || ui.qk) && b == B_SAVE) {
         return 1;                                   /* (its release does it) */
@@ -2359,7 +2495,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui_chord_turn(item, s);
     } else if ((item >= UI_LTRK && item <= UI_LNEW) || (item >= UI_LSPEED && item <= UI_LCLR)) {   /* the looper's */
         ui_loop_turn(item, s, e);                                                                     /* (sy_ui_loop.c) */
-    } else if ((item >= UI_KLANE && item <= UI_GRAT) || (item >= UI_KDTYPE && item <= UI_KCMIX)) {   /* the drums' */
+    } else if ((item >= UI_KLANE && item <= UI_GRAT) || (item >= UI_KDTYPE && item <= UI_KCMIX) ||
+               (item >= UI_KMODEL && item <= UI_EROT)) {   /* the drums' (V0.87: MODEL, TYPE, EUCLID's) */
         ui_drum_turn(item, s, e);
     } else if (item == UI_CLOCK) {                  /* GLOBAL's CLOCK IN: the panel's tempo, MIDI's clock */
         ch_clock = s > 0;
@@ -3328,7 +3465,7 @@ static void sy_ui_ms(void)
     }
     if (s) {                                        /* SELECT: the section (the chain view: the slot) */
         ui_cd_stop();
-        if (ui.pl_open && ui.pl_kind == PL_TABLES) {   /* (V0.87: the wavetables' list, a category) */
+        if (ui.pl_open && (ui.pl_kind == PL_TABLES || ui.pl_kind == PL_DRUMS)) {   /* (V0.87: a category) */
             ui_pl_cat(s);
             s = 0;
         } else {
@@ -3569,6 +3706,7 @@ static void sy_ui_boot(void)
     ui.kvel = 100;                                  /* SCL: chromatic from C, the keys as they are, 100 */
     ui.help = 1;                                    /* SETTINGS: hints on, any MIDI channel, no program changes */
     ui.glow = 3;                                    /* (V0.87: LIGHTS HIGH, the HAL's own level till the settings load) */
+    ui.e_hits = 4, ui.e_steps = 16, ui.e_rot = 0;    /* (EUCLID: four on sixteen) */
     ui.ml_pick = -1;
     memset((void *)ml_cc, 0xFF, sizeof ml_cc);
     ch_boot();                                      /* (V0.7: the chords off; V0.8: a side a track) */

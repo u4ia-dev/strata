@@ -60,6 +60,31 @@ static void ui_drum_turn(int32_t item, int32_t s, uint32_t e)
     int kit = 1;                                    /* (V0.86: the kit edited since loaded: HOME's dot) */
     switch (item) {
     case UI_KLANE: ui.krow = (uint8_t)sy_clampi((int32_t)ui_d_lane() + s, 0, DK_N - 1); kit = 0; break;
+    case UI_KMODEL: case UI_KVAR: {                 /* (V0.87, step 2: the row's model, its variant; a new model: the
+                                                     * row no longer its preset, its place's name) */
+        uint32_t vr, m = dk_model(l, &vr), m2 = item == UI_KMODEL ? (uint32_t)sy_clampi((int32_t)m + s, 0, DM_N - 1) : m;
+        uint32_t v2 = item == UI_KVAR ? (uint32_t)sy_clampi((int32_t)vr + s, 0, (int32_t)DM_NVAR[m] - 1) : m2 == m ? vr : 0u;
+        if (m2 == m && v2 == vr)
+            return;
+        k->model = (uint8_t)(m2 + 1u), k->var = (uint8_t)v2;
+        if (m2 != m)
+            *dk_pid(l) = 0;
+        break;
+    }
+    case UI_EHITS: case UI_ESTEPS: case UI_EROT: {  /* (V0.87, step 2: EUCLID: the row picked refilled) */
+        if (item == UI_ESTEPS)
+            ui.e_steps = (uint8_t)sy_clampi(ui.e_steps + s, 1, 16);
+        else if (item == UI_EHITS)
+            ui.e_hits = (uint8_t)sy_clampi(ui.e_hits + s, 0, 16);
+        else
+            ui.e_rot = (uint8_t)sy_clampi(ui.e_rot + s, 0, 15);
+        ui.e_hits = (uint8_t)(ui.e_hits > ui.e_steps ? ui.e_steps : ui.e_hits);
+        ui.e_rot = (uint8_t)(ui.e_rot % ui.e_steps);
+        if (lp_grid_euclid(ui_d_row(), ui.e_hits, ui.e_steps, ui.e_rot, 100u) < 0)
+            ui_toast("NOT NOW: A TAKE RECORDING, OR FULL");
+        kit = 0;
+        break;
+    }
     case UI_KTUNE: k->tune = (int8_t)ui_centre(item, s, k->tune, sy_clampi(k->tune + s, -24, 24), 0); break;
     case UI_KDEC: k->decay = (uint8_t)sy_clampi(k->decay + ui_accel(e, s, 100), 0, 100); break;
     case UI_KTONE: k->tone = (uint8_t)sy_clampi(k->tone + ui_accel(e, s, 100), 0, 100); break;
@@ -149,7 +174,7 @@ static int ui_grid_key(uint32_t k)
     }
     if (r && !cht.run && lpr.st == LR_OFF)
         sy_app_drum(DK_NOTE[ui_d_row()], sy_ui_key_vel());
-    sp_put(sp_put(sp_fix(sp_put(sp_put(sp_put(m, DK_NAME[ui_d_row()]), " "), "STEP "), (int32_t)st + 1, 0u, 0), " "),
+    sp_put(sp_put(sp_fix(sp_put(sp_put(sp_put(m, dk_rname(ui_d_row())), " "), "STEP "), (int32_t)st + 1, 0u, 0), " "),
            r ? "IN" : "OUT");
     ui_toast(m);
     ui.dirty = D_ALL;
@@ -163,7 +188,7 @@ static void ui_grid_ms(void)
         return;
     if (ui_grid_keys() && !ui.ghold_new && !ui.ghold_turn &&
         lp_grid_toggle(ui_d_row(), ui.gstep % ui_d_steps(), sy_ui_key_vel()) == 0) {
-        sp_put(sp_fix(sp_put(sp_put(m, DK_NAME[ui_d_row()]), " STEP "), (int32_t)(ui.gstep % ui_d_steps()) + 1, 0u, 0),
+        sp_put(sp_fix(sp_put(sp_put(m, dk_rname(ui_d_row())), " STEP "), (int32_t)(ui.gstep % ui_d_steps()) + 1, 0u, 0),
                " OUT");
         ui_toast(m);
     }
@@ -245,7 +270,20 @@ static const char *ui_drum_nv(uint32_t id, char *v)
     const dk_fx_t *f = &dkk.fx[l];
     v[0] = 0;
     switch (id) {
-    case UI_KLANE: sp_put(v, DK_NAME[l]); return "DRUM";
+    case UI_KLANE: sp_put(v, dk_rname(l)); return "DRUM";
+    case UI_KMODEL: {                               /* (V0.87, step 2) */
+        uint32_t vr, m = dk_model(l, &vr);
+        sp_put(v, DM_NAME[m]);
+        return "MODEL";
+    }
+    case UI_KVAR: {
+        uint32_t vr, m = dk_model(l, &vr);
+        sp_put(v, DM_VAR[m][vr]);
+        return "TYPE";
+    }
+    case UI_EHITS: sp_fix(v, ui.e_hits, 0u, 0); return "HITS";
+    case UI_ESTEPS: sp_fix(v, ui.e_steps, 0u, 0); return "STEPS";
+    case UI_EROT: sp_fix(v, ui.e_rot, 0u, 0); return "ROTATE";
     case UI_KTUNE:
         if (k->tune)
             sp_put(sp_fix(v, k->tune, 0u, 1), " ST");
@@ -253,9 +291,10 @@ static const char *ui_drum_nv(uint32_t id, char *v)
             sp_put(v, "0");
         return "TUNE";
     case UI_KDEC: ui_d_time(v, dk_t60(l, k->decay)); return "DECAY";
-    case UI_KTONE:
-        if (l >= DK_WT1) {
-            const wt_table_t *t = &wt_tab[l - DK_WT1];
+    case UI_KTONE: {
+        uint32_t vr, m = dk_model(l, &vr);
+        if (m == DM_WAVE) {
+            const wt_table_t *t = &wt_tab[vr & 1u];
             if (t->n)
                 sp_fix(sp_put(sp_fix(v, sy_floori((float)k->tone * 0.01f * (float)(t->n - 1u) + 0.5f) + 1, 0u, 0), " OF "),
                        t->n, 0u, 0);
@@ -264,8 +303,13 @@ static const char *ui_drum_nv(uint32_t id, char *v)
             return "FRAME";
         }
         sp_fix(v, k->tone, 0u, 0);
-        return "TONE";
-    case UI_KCHR: sp_fix(v, k->chr, 0u, 0); return DK_CHR[l];
+        return dk_tone_name(m, vr);
+    }
+    case UI_KCHR: {
+        uint32_t vr, m = dk_model(l, &vr);
+        sp_fix(v, k->chr, 0u, 0);
+        return DM_CHR[m][vr];
+    }
     case UI_KLVL: sp_fix(v, k->level, 0u, 0); return "LEVEL";
     case UI_KPAN:
         if (k->pan == 64u)
@@ -321,7 +365,7 @@ static const char *ui_drum_nv(uint32_t id, char *v)
     case UI_GSTEP:
         sp_fix(sp_put(sp_fix(v, (int32_t)(ui.gstep % ui_d_steps()) + 1, 0u, 0), " OF "), (int32_t)ui_d_steps(), 0u, 0);
         return "STEP";
-    case UI_GROW: sp_put(v, DK_NAME[ui_d_row()]); return "ROW";
+    case UI_GROW: sp_put(v, dk_rname(ui_d_row())); return "ROW";
     case UI_GVEL: case UI_GACC: case UI_GCHN: case UI_GRAT: {
         uint32_t g = id - UI_GVEL;
         int32_t x = lp_cur_clip()->len ? lp_grid_attr(ui_d_row(), ui.gstep % ui_d_steps(), g, 0) : -1;
@@ -381,15 +425,15 @@ static void ui_d_knobs4(const int32_t *ids)
 static void ui_d_lanes(void)
 {
     uint32_t l, cur = ui_d_lane();
-    lk_text(UI_TITLE_X, 24.0f, T14B, DK_NAME[cur], sk.ink, sk.ground, 0, 17);
+    lk_text(UI_TITLE_X, 24.0f, T14B, dk_rname(cur), sk.ink, sk.ground, 0, 17);
     lk_ptag(10.0f, 28.0f, 0);
     for (l = 0; l < DK_N; l++) {
         float x = 26.0f + 52.0f * (float)(l % 4u), y = 44.0f + 13.0f * (float)(l / 4u);
         if (l == cur) {
-            lk_box(x - 3.0f, y - 1.0f, x + lk_tw(T9B, DK_NAME[l], 20) + 3.0f, y + 11.0f, sk.ink);
-            lk_text(x, y, T9B, DK_NAME[l], sk.ground, sk.ink, 20, 0);
+            lk_box(x - 3.0f, y - 1.0f, x + lk_tw(T9B, dk_rname(l), 20) + 3.0f, y + 11.0f, sk.ink);
+            lk_text(x, y, T9B, dk_rname(l), sk.ground, sk.ink, 20, 0);
         } else {
-            lk_text(x, y, T9, DK_NAME[l], sk.lab, sk.ground, 20, 0);
+            lk_text(x, y, T9, dk_rname(l), sk.lab, sk.ground, 20, 0);
         }
     }
 }
@@ -428,15 +472,14 @@ static void ui_d_fall(uint32_t l, float x0, float x1, float y0, float y1, float 
 /* DRUM > SOUND: its fall over time (the amplitude to -60 dB; KICK's sweep dashed, CLAP's bursts), DECAY's time marked */
 static void ui_p_kdrum(void)
 {
-    static const int32_t IDS[4] = {UI_KTUNE, UI_KDEC, UI_KTONE, UI_KCHR};
-    uint32_t l = ui_d_lane(), i;
+    uint32_t l = ui_d_lane(), i, vr, kick = dk_model(l, &vr) == DM_PUNCH && vr == 0u;   /* (V0.87: PUNCH's KICK swept) */
     const dk_lane_t *k = &dkk.l[l];
     float t60 = dk_t60(l, k->decay), span = t60 * 1.25f, x0 = 26.0f, x1 = 226.0f, y0 = 78.0f, y1 = 140.0f;
     char t[40];
     ui_d_lanes();
     lk_seg(x0, y1 + 0.5f, x1, y1 + 0.5f, 1.0f, sk.line);
     ui_d_fall(l, x0, x1, y0, y1, span, t60, 0, ui_ink(ui_hot(1)), 0.0f);
-    if (l == DK_KICK) {                             /* (the sweep: from PUNCH's height down to the pitch) */
+    if (kick) {                                     /* (the sweep: from PUNCH's height down to the pitch) */
         float p0 = 1.0f + 6.0f * (float)k->chr * 0.01f, qx = x0, qy = 0.0f;
         for (i = 0; i <= 24u; i++) {
             float tt = span * (float)i / 24.0f, f = 1.0f + p0 * sy_exp2f(-9.9658f * tt / 0.2f), x = x0 + (x1 - x0) * (float)i / 24.0f;
@@ -449,10 +492,14 @@ static void ui_p_kdrum(void)
     {                                               /* (DECAY's time: a tick on the axis, its words) */
         float xd = x0 + (x1 - x0) * t60 / span;
         lk_seg(xd, y1 - 3.0f, xd, y1 + 4.0f, 1.0f, ui_ink(ui_hot(1)));
-        ui_d_time(sp_put(t, l == DK_KICK ? "PITCH DASHED \xB7 -60 DB AT " : "-60 DB AT "), t60);
+        ui_d_time(sp_put(t, kick ? "PITCH DASHED \xB7 -60 DB AT " : "-60 DB AT "), t60);
         lk_text_r(x1, y1 + 6.0f, T9, t, sk.lab, sk.ground, 20, 0);
     }
-    ui_d_knobs4(IDS);
+    {                                               /* (SOUND's four; V0.87 MODEL's MODEL and TYPE) */
+        const int16_t *pid = UI_PG[ui.page].id;
+        const int32_t ids[4] = {pid[0], pid[1], pid[2], pid[3]};
+        ui_d_knobs4(ids);
+    }
 }
 
 /* DRUM > DRIVE (V0.86): what comes out for what goes in (-1 .. 1 each way; as it is dashed), the TYPE and the gain */
@@ -744,11 +791,11 @@ static void ui_d_grid(int hit)
         sp_put(sp_put(tx, ""), "A WHITE KEY STARTS A BAR");
     if (ui.ghold)                                   /* (held: the track, the clip, the row) */
         sp_put(sp_put(sp_put(sp_put(sp_fix(sp_put(tx, "T"), (int32_t)t + 1, 0u, 0), " \xB7 "),
-                             (char[2]){(char)('A' + lpp.scn % LP_NSCN), 0}), " \xB7 "), DK_NAME[ui_d_row()]);
+                             (char[2]){(char)('A' + lpp.scn % LP_NSCN), 0}), " \xB7 "), dk_rname(ui_d_row()));
     lk_text(UI_TITLE_X, 40.0f, T10, tx, lp_cur_rec() ? sk.hot : sk.lab, sk.ground, 20, 12);
     for (r = 0; r < DK_ROWS; r++) {                 /* (the rows' names, the one picked bold) */
         float y = UI_GY0 + UI_GDY * (float)r;
-        lk_text(8.0f, y + 1.0f, r == ui_d_row() ? T9B : T9, DK_NAME[r], r == ui_d_row() ? ui_ink(ui_hot(1)) : sk.lab,
+        lk_text(8.0f, y + 1.0f, r == ui_d_row() ? T9B : T9, dk_rname(r), r == ui_d_row() ? ui_ink(ui_hot(1)) : sk.lab,
                 sk.ground, 0, 0);
         for (s = 0; s < 16u && p0 + s < n; s++)    /* (an empty step: a dot, a beat's first a little brighter) */
             lk_box(UI_GX0 + UI_GDX * (float)s + 4.5f, y + 5.0f, UI_GX0 + UI_GDX * (float)s + 6.5f, y + 7.0f,
@@ -799,6 +846,10 @@ static void ui_d_grid(int hit)
     if (ui.ghold) {                                 /* (S7: held, the step's words; the knobs under) */
         sp_put(sp_fix(sp_put(tx, "STEP "), (int32_t)cur + 1, 0u, 0), " HELD");
         lk_text(UI_TITLE_X, 22.0f, T14B, tx, sk.ink, sk.ground, 0, 17);
+    } else if (UI_PG[ui.page].id[0] == UI_EHITS) {  /* (V0.87: EUCLID, KNOB 1 its HITS in the title) */
+        sp_put(sp_fix(sp_put(sp_fix(tx, ui.e_hits, 0u, 0), " HITS IN "), ui.e_steps, 0u, 0), " STEPS");
+        lk_text(UI_TITLE_X, 22.0f, T14B, tx, ui_ink(ui_hot(0)), sk.ground, 0, 17);
+        ui_H(0, 8.0f, 25.0f);
     } else {                                        /* (KNOB 1: the step, in the title) */
         char v[24];
         ui_drum_nv(UI_GSTEP, v);
@@ -810,12 +861,12 @@ static void ui_d_grid(int hit)
 static const int32_t UI_D_HELD[4] = {UI_GVEL, UI_GACC, UI_GCHN, UI_GRAT};   /* (S7: a step held) */
 static void ui_p_lgrid(void)
 {
-    static const int32_t IDS[3] = {UI_GROW, UI_GVEL, UI_GACC};
+    static const int32_t IDS[3] = {UI_GROW, UI_GVEL, UI_GACC}, EIDS[3] = {UI_ESTEPS, UI_EROT, UI_GROW};
     ui_d_grid(0);
     if (ui.ghold)
         ui_d_knobs4(UI_D_HELD);
     else
-        ui_d_knobs(1u, IDS);
+        ui_d_knobs(1u, UI_PG[ui.page].id[0] == UI_EHITS ? EIDS : IDS);   /* (V0.87: EUCLID's) */
 }
 static void ui_p_lhit(void)
 {

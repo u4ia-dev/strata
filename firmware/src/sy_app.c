@@ -365,6 +365,42 @@ static void sy_uidx_scan(void)                   /* (power-on: each pair read on
         }
     }
 }
+/* V0.87 (step 2, D3): the user's drum presets (SS_DRUMS: 64 records, a dk_pre_t each) and kits (SS_KITS: 16, a
+ * dk_kit_t each; a record's name "": empty). Their names read at power-on (sy_drum.c dk_up, dk_uk); one read whole to
+ * load it; a save or a delete queued and written hushed, as a preset's (sy_flash_ms; sy_ui_dk_saved told) */
+#define SY_DK_REC(kind) ((kind) ? (uint32_t)sizeof(dk_kit_t) : (uint32_t)sizeof(dk_pre_t))
+#define SY_DK_N(kind) ((kind) ? DK_NUK : DK_NUP)
+static void sy_dk_name(char *to, const char *from, uint32_t n)   /* (a record's name: printable, n at most, then 0) */
+{
+    uint32_t i;
+    for (i = 0; i < n && from[i]; i++)
+        to[i] = from[i] < 32 || from[i] > 126 ? ' ' : from[i];
+    to[i] = 0;
+}
+static void sy_dk_index(uint32_t kind, uint32_t i, const uint8_t *rec)   /* (record i as read or written; 0 empty) */
+{
+    if (!kind) {
+        const dk_pre_t *p = (const dk_pre_t *)rec;
+        sy_dk_name(dk_up[i].name, rec ? p->name : "", sizeof dk_up[i].name - 1u);
+        dk_up[i].cat = rec ? (uint8_t)(p->cat % DC_N) : 0u;
+    } else {
+        sy_dk_name(dk_uk[i], rec ? ((const dk_kit_t *)rec)->name : "", sizeof dk_uk[i] - 1u);
+    }
+}
+static void sy_dk_boot(void)
+{
+    uint32_t kind, i;
+    for (kind = 0; kind < 2u; kind++) {
+        int n = ss_load(kind ? SS_KITS : SS_DRUMS, ss_buf, SS_PAYLOAD_MAX);
+        for (i = 0; i < SY_DK_N(kind); i++)
+            sy_dk_index(kind, i, n > 0 && (i + 1u) * SY_DK_REC(kind) <= (uint32_t)n ? ss_buf + i * SY_DK_REC(kind) : 0);
+    }
+}
+static int sy_dk_get(uint32_t kind, uint32_t i, void *dst)   /* record i whole into dst: 0 */
+{
+    return ss_rec_get(kind ? SS_KITS : SS_DRUMS, i, SY_DK_REC(kind), SY_DK_N(kind), dst);
+}
+static int sy_dk_put(uint32_t kind, uint32_t i, const void *src);   /* (below sy_fl) */
 
 /* a preset's name and category (0: none such) */
 static const char *sy_app_entry(uint32_t id, uint8_t *cat)
@@ -496,7 +532,8 @@ static void sy_app_sound_step(int32_t s)
  * settings and the sound playing (back at power-on): only after 3 s without sound (the ring under -70 dBFS, nothing
  * to hush), when they differ from what the flash has */
 #define SY_QUIET_MS 3000u
-enum { SY_FL_SAVE = 1, SY_FL_DEL, SY_FL_BACK };   /* a slot's write: a SAVE, a delete, a delete put back */
+enum { SY_FL_SAVE = 1, SY_FL_DEL, SY_FL_BACK, SY_FL_DK };   /* a slot's write: a SAVE, a delete, a delete put back;
+                                                             * V0.87 a drum preset's or a kit's */
 static struct {
     uint8_t busy;                                /* a write waiting for the hush (SY_FL_*) */
     uint16_t slot;
@@ -507,6 +544,21 @@ static struct {
     uint8_t prj_told;                            /* .. its sectors hold older presets: said once */
 } sy_fl;
 static void sy_ui_project(int ok, int blocked);  /* sy_ui.c: a project loaded (or not); its place in the way */
+static void sy_ui_dk_saved(int rc, uint32_t kind, uint32_t i, int del);   /* sy_ui_save.c (V0.87) */
+_Static_assert(sizeof(dk_kit_t) <= SP_PACK_MAX, "a kit's record fits the write's buffer");
+/* a drum preset (kind 0) or a kit (1) into the user's record i (src 0: deleted); 0 queued */
+static int sy_dk_put(uint32_t kind, uint32_t i, const void *src)
+{
+    if (sy_fl.busy || i >= SY_DK_N(kind) || sy_next_st)
+        return -1;
+    if (src)
+        memcpy(sy_fl.pk, src, SY_DK_REC(kind));
+    sy_fl.len = src ? SY_DK_REC(kind) : 0u;
+    sy_fl.slot = (uint16_t)(i | kind << 8);
+    sy_fl.busy = SY_FL_DK;
+    sy_hush_req = 1;
+    return 0;
+}
 static void sy_ui_deleted(int rc, uint32_t s);   /* sy_ui_save.c: a delete or its putting back done */
 static void sy_ui_restored(int rc, uint32_t s);
 
@@ -663,7 +715,15 @@ static void sy_flash_ms(void)
         }
         return;
     }
-    if (sy_fl.busy && sy_hushed) {               /* a SAVE, a delete, its putting back: hushed, the slot written, */
+    if (sy_fl.busy == SY_FL_DK && sy_hushed) {  /* (V0.87: a drum preset or a kit: hushed, its record written) */
+        uint32_t kind = sy_fl.slot >> 8, i = sy_fl.slot & 0xFFu;
+        int rc = ss_rec_put(kind ? SS_KITS : SS_DRUMS, i, SY_DK_REC(kind), SY_DK_N(kind), sy_fl.len ? sy_fl.pk : 0);
+        sy_hush_req = 0;
+        sy_fl.busy = 0;
+        if (!rc)
+            sy_dk_index(kind, i, sy_fl.len ? sy_fl.pk : 0);
+        sy_ui_dk_saved(rc, kind, i, !sy_fl.len);
+    } else if (sy_fl.busy && sy_hushed) {        /* a SAVE, a delete, its putting back: hushed, the slot written, */
         uint32_t job = sy_fl.busy;               /* back */
         int rc = ss_user_put(sy_fl.slot, sy_fl.pk, job == SY_FL_DEL ? 0u : sy_fl.len);
         sy_hush_req = 0;
@@ -720,6 +780,7 @@ static void sy_flash_boot(void)
     memset(&sy_fl, 0, sizeof sy_fl);
     sy_fl.prj_want = -1;
     sy_uidx_scan();
+    sy_dk_boot();                                /* (V0.87: the user's drum presets and kits, their names) */
     if ((n = ss_load(SS_SETTINGS, b, sizeof b)) > 0 && sy_ui_settings(b, (uint32_t)n))
         sy_fl.set_crc = ss_crc32(b, (uint32_t)n);
     sy_prj_scan();                               /* (V0.8: the project the settings name; none kept: a new one, */

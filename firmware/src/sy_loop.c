@@ -1494,6 +1494,50 @@ static int32_t lp_grid_toggle(uint32_t row, uint32_t s, uint32_t vel)
     lpx.seq++;
     return r;
 }
+/* V0.87 (step 2): EUCLID: row's hits in the selected clip as hits spread over steps (Bresenham's), rotated by rot,
+ * again every steps sixteenths to its end (an empty clip made a bar first); the other rows kept. 0, -1 not now */
+static int32_t lp_grid_euclid(uint32_t row, uint32_t hits, uint32_t steps, uint32_t rot, uint32_t vel)
+{
+    lp_clip_t *c = lp_cur_clip();
+    uint32_t t = lpp.sel % LP_NTRK, fl, k, st, n, nx;
+    int32_t r = 0;
+    if (row >= DK_ROWS || !steps || (lp_cur_rec() && lpr.st == LR_TAKE))
+        return -1;
+    fl = LP_LOCK();
+    if (!c->len) {
+        c->len = (uint16_t)lp_bar_ticks();
+        if (lps[t].play >= LP_NSCN && lps[t].next == LP_NOSCN)
+            lps[t].next = lpp.scn;
+    }
+    for (k = c->head; k != LP_END; k = nx) {        /* (the row's hits out) */
+        nx = lp_ev[k].next;
+        if (!(lp_ev[k].t & LP_MOVE) && lp_drum_row(lp_ev[k].a) == row) {
+            lp_unlink(c, k);
+            lp_forget(k);
+            lp_release(k);
+        }
+    }
+    n = c->len / LP_STEP;
+    for (st = 0; st < n && r == 0; st++) {
+        uint32_t i = (st + rot) % steps;
+        if ((i * hits) % steps >= hits)
+            continue;
+        if ((k = lp_alloc()) == LP_END) {
+            lpr.full = 1;
+            r = -1;
+            break;
+        }
+        lp_ev[k].t = (uint16_t)(st * LP_STEP);
+        lp_ev[k].len = LP_HIT;
+        lp_ev[k].a = DK_NOTE[row];
+        lp_ev[k].b = (uint8_t)sy_clampi((int32_t)vel, 1, 127);
+        lp_insert(c, k);
+    }
+    lps[t].resync = 1;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+    return r;
+}
 /* the hit of row in step s: f 0 VELOCITY (1 .. 127), 1 ACCENT (0, 1), 2 CHANCE (0 .. 7), 3 RATCHET (0 .. 3), moved
  * by d (0: as it is); its value (-1: no hit there) */
 static int32_t lp_grid_attr(uint32_t row, uint32_t s, uint32_t f, int32_t d)

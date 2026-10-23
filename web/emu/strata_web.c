@@ -799,9 +799,32 @@ EXPORT uint32_t web_test_scr(void) { return ui.scr_st; }
 /* PRESETS' list (V0.86): f 0 open, 1 the one picked (its place), 2 SAVE + OCT-'s delete asked (the user slot + 1) */
 EXPORT int32_t web_test_pl(uint32_t f)   /* (3: the kits' list) */
 {
-    return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : f == 3u ? ui.pl_kind : f == 4u ? ui.pl_osc : -1;
+    return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : f == 3u ? ui.pl_kind : f == 4u ? ui.pl_osc : f == 5u ? ui.pl_dcat : -1;
 }
 EXPORT const char *web_test_kit_name(void) { return dkk.name; }
+/* V0.87 (step 2): row r's model (f 0), variant (1), preset (2: dk_pid); the user's drum presets (3), kits (4) used;
+ * the selected clip's hits on row r (5) */
+EXPORT int32_t web_test_dkm(uint32_t r, uint32_t f)
+{
+    uint32_t v, m = dk_model(r % DK_N, &v), i, n = 0;
+    if (f == 0u || f == 1u)
+        return (int32_t)(f ? v : m);
+    if (f == 2u)
+        return *dk_pid(r);
+    if (f == 3u || f == 4u) {
+        for (i = 0; i < (f == 3u ? DK_NUP : DK_NUK); i++)
+            n += (f == 3u ? dk_up_name(i) : dk_uk_name(i)) != 0;
+        return (int32_t)n;
+    }
+    if (f == 5u) {
+        const lp_clip_t *c = lp_cur_clip();
+        for (i = 0; c->len && i < c->len / LP_STEP; i++)
+            n += lp_grid_at(c, r, i) != LP_END;
+        return (int32_t)n;
+    }
+    return -1;
+}
+EXPORT const char *web_test_dk_name(uint32_t r) { return dk_rname(r); }
 EXPORT uint32_t web_test_lcd_off(void) { return web_lcd_off; }
 EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
 {

@@ -58,20 +58,36 @@ static uint32_t ui_name_ver(const char *n, char *base)
     return 1u;
 }
 
+/* V0.87 (step 2): what NAME IT names (ui.sv_kind): 0 a sound (64 user slots, 16 characters), 1 a drum preset (64,
+ * 11), 2 a kit (16, 12): a slot's name (0 empty), their count, a name's room, the first free slot */
+static const char *ui_kind_name(uint32_t s)
+{
+    return ui.sv_kind == 1u ? dk_up_name(s) : ui.sv_kind == 2u ? dk_uk_name(s) : sy_app_slot_name(s);
+}
+static uint32_t ui_kind_n(void) { return ui.sv_kind == 1u ? DK_NUP : ui.sv_kind == 2u ? DK_NUK : SS_NUSER; }
+static uint32_t ui_sv_max(void) { return ui.sv_kind == 1u ? 11u : ui.sv_kind == 2u ? 12u : 16u; }
+static int32_t ui_kind_free(void)
+{
+    uint32_t s;
+    for (s = 0; s < ui_kind_n(); s++)
+        if (!ui_kind_name(s))
+            return (int32_t)s;
+    return -1;
+}
 /* name's next version: "BASE vN", N one above the highest version of its base a user slot holds (the base cut to
- * fit 16 characters) */
+ * fit 16 characters; V0.87: the kind's slots, its room) */
 static void ui_save_version(const char *name, char *out)
 {
     char base[17], b2[17], suf[8];
     uint32_t s, top = ui_name_ver(name, base), v, n, k;
     const char *u;
-    for (s = 0; s < SS_NUSER; s++)
-        if ((u = sy_app_slot_name(s)) != 0 && (v = ui_name_ver(u, b2)) > top && ui_streq(b2, base))
+    for (s = 0; s < ui_kind_n(); s++)
+        if ((u = ui_kind_name(s)) != 0 && (v = ui_name_ver(u, b2)) > top && ui_streq(b2, base))
             top = v;
     sp_fix(sp_put(suf, " v"), (int32_t)top + 1, 0u, 0);
     n = ui_strlen(base);
-    if (n + ui_strlen(suf) > 16u)
-        n = 16u - ui_strlen(suf);
+    if (n + ui_strlen(suf) > ui_sv_max())
+        n = ui_sv_max() - ui_strlen(suf);
     while (n && base[n - 1u] == ' ')
         n--;
     for (k = 0; k < n; k++)
@@ -110,13 +126,14 @@ static void ui_save_hold(void)
 }
 
 /* the slot NAME IT writes to is the sound's own: a rename */
-static int ui_save_renaming(void) { return sy_app_slot() >= 0 && (uint32_t)sy_app_slot() == ui.sv_slot; }
+static int ui_save_renaming(void) { return !ui.sv_kind && sy_app_slot() >= 0 && (uint32_t)sy_app_slot() == ui.sv_slot; }
 
 /* NAME IT (SAVE in the browser): the sound playing's name and category to edit, into its own slot (a rename) or,
  * a sound from no user slot, the first free one */
 static void ui_save_open(void)
 {
     int32_t own = sy_app_slot(), fr = sy_app_slot_free();
+    ui.sv_kind = 0;
     sp_put(ui.sv_name, sy_patch.name);
     ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
     ui.sv_cur = ui.sv_len;
@@ -135,6 +152,7 @@ static void ui_save_open_new(void)
         ui_toast("EVERY USER SLOT IN USE");
         return;
     }
+    ui.sv_kind = 0;
     ui_save_version(sy_patch.name, ui.sv_name);
     ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
     ui.sv_cur = ui.sv_len;
@@ -146,11 +164,113 @@ static void ui_save_open_new(void)
     ui_go(ui_first_page(SEC_SAVE));
 }
 
+/* V0.87 (step 2): NAME IT for a drum preset (kind 1: the row picked, its next version, its category) or a kit (2) */
+static void ui_save_open_dk(uint32_t kind)
+{
+    int32_t fr;
+    ui.sv_kind = (uint8_t)kind;
+    if ((fr = ui_kind_free()) < 0) {
+        ui_toast(kind == 1u ? "EVERY DRUM SLOT IN USE" : "EVERY KIT SLOT IN USE");
+        ui.sv_kind = 0;
+        return;
+    }
+    ui_save_version(kind == 1u ? dk_rname(ui.krow) : dkk.name, ui.sv_name);
+    ui.sv_len = (uint8_t)ui_strlen(ui.sv_name);
+    ui.sv_cur = ui.sv_len;
+    ui.sv_cat = (uint8_t)(kind == 1u ? dk_row_cat(ui.krow) : 0u);
+    ui.sv_sym = 0;
+    ui.sv_key = 0xFF;
+    ui.sv_slot = (uint8_t)fr;
+    ui.sv_list = 1;
+    ui_go(ui_first_page(SEC_SAVE));
+}
+/* .. the row picked (kind 1) or the kit (2) as a record named so (a row of its place's own model: that model named) */
+static void ui_dk_rec(uint32_t kind, void *rec, const char *name, uint32_t cat)
+{
+    uint32_t i, n = kind == 1u ? 11u : 12u;
+    char *to;
+    if (kind == 1u) {
+        dk_pre_t *p = (dk_pre_t *)rec;
+        uint32_t v, m = dk_model(ui.krow, &v);
+        memset(p, 0, sizeof *p);
+        p->cat = (uint8_t)(cat % DC_N);
+        p->l = dkk.l[ui.krow % DK_N];
+        p->l.model = (uint8_t)(m + 1u), p->l.var = (uint8_t)v;
+        p->fx = dkk.fx[ui.krow % DK_N];
+        to = p->name;
+    } else {
+        dk_kit_t *k = (dk_kit_t *)rec;
+        *k = dkk;
+        memset(k->name, 0, sizeof k->name);
+        k->kit = 0xFF;
+        to = k->name;
+    }
+    for (i = 0; i < n && name[i]; i++)
+        to[i] = name[i];
+}
+/* the SAVE window's SAVE on a drum track: the row picked over its user drum preset, the kit over its user kit */
+static void ui_dk_over(void)
+{
+    int32_t own = ui_sw_own();
+    if (own < 0) {
+        ui_toast("NOTHING TO SAVE OVER");
+        return;
+    }
+    ui_dk_rec(ui.sw_kind, &dk_rec, ui.sw_kind == 1u ? dk_up[own].name : dk_uk[own], ui.sw_kind == 1u ? dk_up[own].cat : 0u);
+    if (ui.saving || sy_dk_put(ui.sw_kind - 1u, (uint32_t)own, &dk_rec)) {
+        ui_toast("BUSY: TRY AGAIN");
+        return;
+    }
+    ui.saving = 1;
+    ui.sv_over = 1;
+    ui.sv_kind = ui.sw_kind;
+    ui.sv_slot = (uint8_t)own;
+    ui_toast("SAVING");
+}
+/* sy_app.c: a drum preset (kind 0) or a kit (1) written to the user's record i, or deleted there (del), or failed */
+static void sy_ui_dk_saved(int rc, uint32_t kind, uint32_t i, int del)
+{
+    char t[sizeof ui.toast], u[16], *e;
+    ui.saving = 0;
+    ui.dirty = D_ALL;
+    if (rc) {
+        sp_fix(sp_put(t, "SAVE FAILED: "), rc, 0u, 0);
+        ui_toast(t);
+        return;
+    }
+    sp_fix(sp_put(u, kind ? "KIT " : "DRUM "), (int32_t)i + 1, 0u, 0);
+    if (del) {
+        sp_put(sp_put(t, "DELETED "), u);
+        if (kind && dkk.kit == (0x80u | i))
+            dkk.kit = 0xFF;
+    } else {
+        if (kind) {
+            dkk.kit = (uint8_t)(0x80u | i);
+            memset(dkk.name, 0, sizeof dkk.name);
+            memcpy(dkk.name, dk_uk[i], sizeof dkk.name - 1u);
+            ui.kedited = 0;
+            lpx.seq++;
+        } else {
+            *dk_pid(ui.krow) = (uint8_t)(0x80u | i);
+        }
+        if (ui.sv_over) {
+            sp_put(sp_put(t, "SAVED OVER "), u);
+        } else {
+            e = sp_put(sp_put(t, "SAVED: "), kind ? dk_uk[i] : dk_up[i].name);
+            sp_put(sp_put(e, " \xB7 "), u);
+        }
+    }
+    ui_toast(t);
+    if (ui_sec() == SEC_SAVE)
+        ui_go(ui.sv_ret);
+    ui.sv_list = 0;
+}
+
 static void ui_save_type(char c)                    /* a character in at the cursor */
 {
     uint32_t i;
-    if (ui.sv_len >= 16u) {
-        ui_toast("16 CHARACTERS AT MOST");
+    if (ui.sv_len >= ui_sv_max()) {
+        ui_toast(ui.sv_kind == 1u ? "11 CHARACTERS AT MOST" : ui.sv_kind == 2u ? "12 CHARACTERS AT MOST" : "16 CHARACTERS AT MOST");
         return;
     }
     for (i = ui.sv_len; i > ui.sv_cur; i--)
@@ -180,6 +300,17 @@ static void ui_save_write(void)                     /* SAVE on NAME IT: the name
         ui.sv_cur = ui.sv_len;
     if (!ui.sv_len) {
         ui_toast("NAME IT FIRST");
+        return;
+    }
+    if (ui.sv_kind) {                               /* (V0.87: a drum preset, a kit) */
+        ui_dk_rec(ui.sv_kind, &dk_rec, ui.sv_name, ui.sv_cat);
+        if (ui.saving || sy_dk_put(ui.sv_kind - 1u, ui.sv_slot, &dk_rec)) {
+            ui_toast("BUSY: TRY AGAIN");
+            return;
+        }
+        ui.saving = 1;
+        ui.sv_over = 0;
+        ui_toast("SAVING");
         return;
     }
     if (ui.saving || sy_app_save(ui.sv_slot, ui.sv_name, ui.sv_cat)) {
@@ -333,7 +464,7 @@ static void ui_save_item_turn(int32_t item, int32_t s)
     } else if (item == UI_SCHR) {                   /* the character at the cursor (at the end: one more) */
         uint32_t c = 0;
         if (ui.sv_cur == ui.sv_len) {
-            if (ui.sv_len >= 16u)
+            if (ui.sv_len >= ui_sv_max())
                 return;
             ui.sv_name[ui.sv_len++] = ' ';
             ui.sv_name[ui.sv_len] = 0;
@@ -342,10 +473,12 @@ static void ui_save_item_turn(int32_t item, int32_t s)
             c++;
         c = (uint32_t)(((int32_t)(c % UI_NCHARS) + s % (int32_t)UI_NCHARS + (int32_t)UI_NCHARS) % (int32_t)UI_NCHARS);
         ui.sv_name[ui.sv_cur] = UI_CHARS[c];
-    } else if (item == UI_SCAT) {
-        ui.sv_cat = (uint8_t)((ui.sv_cat + (uint32_t)(s % (int32_t)CAT_COUNT + (int32_t)CAT_COUNT)) % CAT_COUNT);
+    } else if (item == UI_SCAT) {                   /* (V0.87: a drum preset's categories; a kit has none) */
+        uint32_t n = ui.sv_kind == 1u ? DC_N : ui.sv_kind == 2u ? 1u : CAT_COUNT;
+        ui.sv_cat = (uint8_t)((ui.sv_cat + (uint32_t)(s % (int32_t)n + (int32_t)n)) % n);
     } else if (item == UI_SSLOT) {
-        ui.sv_slot = (uint8_t)((ui.sv_slot + (uint32_t)(s % (int32_t)SS_NUSER + (int32_t)SS_NUSER)) % SS_NUSER);
+        uint32_t n = ui_kind_n();
+        ui.sv_slot = (uint8_t)((ui.sv_slot + (uint32_t)(s % (int32_t)n + (int32_t)n)) % n);
     } else if (item == UI_BCAT) {
         ui.br_cat = (uint8_t)((ui.br_cat + (uint32_t)(s % 9 + 9)) % 9u);
     } else if (item == UI_BBANK) {
@@ -399,9 +532,9 @@ static void ui_save_flag(int32_t id, char *t)
         else
             e[0] = c, e[1] = 0;
     } else if (id == UI_SCAT) {
-        sp_put(e, CAT_NAMES[ui.sv_cat]);
+        sp_put(e, ui.sv_kind == 1u ? DC_NAME[ui.sv_cat % DC_N] : ui.sv_kind == 2u ? "KIT" : CAT_NAMES[ui.sv_cat]);
     } else if (id == UI_SSLOT) {
-        sp_fix(sp_put(e, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0);
+        sp_fix(sp_put(e, ui.sv_kind == 1u ? "DRUM " : ui.sv_kind == 2u ? "KIT " : "USER "), (int32_t)ui.sv_slot + 1, 0u, 0);
     } else if (id == UI_BCAT) {
         sp_put(e, ui.br_cat ? CAT_NAMES[ui.br_cat - 1u] : "ALL");
     } else if (id == UI_BBANK) {
@@ -433,7 +566,8 @@ static void ui_save_label(char *t)
  * types (the one typed last bold a moment) */
 static void ui_p_save(void)
 {
-    const char *occ = sy_app_slot_name(ui.sv_slot), *ch = ui.sv_sym ? UI_SYM : UI_ABC;
+    const char *occ = ui_kind_name(ui.sv_slot), *ch = ui.sv_sym ? UI_SYM : UI_ABC;
+    const char *cat = ui.sv_kind == 1u ? DC_NAME[ui.sv_cat % DC_N] : ui.sv_kind == 2u ? "KIT" : CAT_NAMES[ui.sv_cat % CAT_COUNT];
     uint32_t i, k;
     float cx = 24.0f + 12.0f * (float)ui.sv_cur, x, w;
     char t[32], f[32];
@@ -449,12 +583,13 @@ static void ui_p_save(void)
             lk_text_c(bx + 5.5f, 36.0f, T14B, c, cur ? sk.ground : c[0] == '+' && i == ui.sv_len ? sk.lab : sk.ink,
                       cur ? ui_ink(ui_hot(0) || ui_hot(1)) : sk.ground, 0, 16);
     }
-    w = lk_tw(T10B, CAT_NAMES[ui.sv_cat % CAT_COUNT], 20) + 12.0f;   /* the category, the slot */
+    w = lk_tw(T10B, cat, 20) + 12.0f;               /* the category, the slot */
     lk_frame(26.5f, 80.5f, w - 1.0f, 17.0f, 1.0f, ui_ink(ui_hot(2)));
-    lk_text(32.5f, 82.0f, T10B, CAT_NAMES[ui.sv_cat % CAT_COUNT], ui_ink(ui_hot(2)), sk.ground, 20, 13);
+    lk_text(32.5f, 82.0f, T10B, cat, ui_ink(ui_hot(2)), sk.ground, 20, 13);
     x = 26.0f + w;
     {
-        char *e = sp_put(sp_fix(sp_put(t, "USER "), (int32_t)ui.sv_slot + 1, 0u, 0), " \xB7 ");
+        char *e = sp_put(sp_fix(sp_put(t, ui.sv_kind == 1u ? "DRUM " : ui.sv_kind == 2u ? "KIT " : "USER "),
+                                (int32_t)ui.sv_slot + 1, 0u, 0), " \xB7 ");
         sp_put(e, ui_save_renaming() ? "RENAME" : occ ? (ui_streq(occ, ui.sv_name) ? "SAVES OVER" : "REPLACES") : "EMPTY");
         lk_fit(f, sizeof f, t, T10B, 20, 226.0f - (x + 26.0f));
         ui_H(3, x + 4.0f, 84.0f);
@@ -549,16 +684,19 @@ static void ui_p_sw(void)
 {
     static const char *const R[3] = {"SAVE", "SAVE AS NEW", "CANCEL"};
     char t[40], nm[24], r0[24];
-    int own = sy_app_slot() >= 0;
-    uint32_t i;
+    int32_t sl = ui_sw_own();
+    int own = sl >= 0;
+    uint32_t i, kind = ui.sw_kind;
+    const char *what = kind == 1u ? dk_rname(ui.krow) : kind == 2u ? dkk.name : sy_patch.name;
     lk_frame(14.5f, 44.5f, 211.0f, 150.0f, 1.5f, sk.hot);
-    sp_put(sp_put(t, "SAVE "), sy_patch.name);
+    sp_put(sp_put(t, "SAVE "), what);
     lk_text(26.0f, 56.0f, T14B, lk_fit(nm, sizeof nm, t, T14B, 0, 190.0f), sk.hot, sk.ground, 0, 17);
-    ui_save_version(sy_patch.name, nm);
+    ui.sv_kind = (uint8_t)kind;                     /* (V0.87: the next version among the kind's own) */
+    ui_save_version(what, nm);
     if (own)
-        sp_fix(sp_put(r0, "OVER USER "), sy_app_slot() + 1, 0u, 0);
+        sp_fix(sp_put(r0, kind == 1u ? "OVER DRUM " : kind == 2u ? "OVER KIT " : "OVER USER "), sl + 1, 0u, 0);
     else
-        sp_put(r0, "STARTERS STAY");
+        sp_put(r0, kind ? "FACTORY'S STAY" : "STARTERS STAY");
     for (i = 0; i < 3u; i++) {
         float y = 80.0f + 30.0f * (float)i;
         int on = i == ui.sw_pos;

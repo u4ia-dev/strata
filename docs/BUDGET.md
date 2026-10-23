@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17, V0.87's in §18)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17, V0.87's in §18 and §19)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,23 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 19. V0.87 step 2 (the drums' models, presets, kits)
+
+| | V0.87 step 2 | |
+|---|---:|---|
+| App image | 503,348 B | +11,704 on step 1; 78,216 B of the app slot free |
+| RAM .data + .bss | 66,980 B | +1,072 on step 1, of 73,728 |
+| Pool, stacks | as step 1 | interrupt ~3,068 B, main ~5,304 B |
+
+The flash: the models' code (ANALOG, FM, CHIP; NOISE is CLAP's filter without its bursts), the 64 factory presets
+(32 B each, 2 KB), the six kits as preset numbers (~60 B each), the lists and NAME IT's kinds. The RAM: the user's
+library's names (64 drum presets x 13 B, 16 kits x 13 B: 1,040 B) and one record buffer (182 B) the saves and loads
+share; the voices' model state is now a union (one model a row at a time), so eight voices cost no more than
+before. Nothing more in the pool. The cost (`tools/costprobe`, an estimate on the target's listing): the eight rows
+on the new models at their heaviest (two ANALOG, two FM, three CHIP, one NOISE, all sounding, DECAY 90) 766
+instructions a sample, against 671 for V0.85's eight rows: about 22 % of a core at 154/us, 3 points more; a usual
+beat sounds two or three rows at once. **Needs a hardware test** (BENCH's AUDIO row with a kit playing).
 
 ## 18. V0.87 step 1 (the interface's changes, the LEDs)
 

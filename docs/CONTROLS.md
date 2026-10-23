@@ -1,7 +1,7 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: **V0.87 step 1** (the
-changes below, "V0.87"), on V0.86 step 2, the drum editor (DRUM and KIT, each drum's DRIVE, EQ and SHAPE, COMP, eight factory kits), on step 1's interface (one layout on
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: **V0.87 steps 1 and 2** (the
+changes below, "V0.87"; step 2 the drums: "The drums' models, presets and kits"), on V0.86 step 2, the drum editor (DRUM and KIT, each drum's DRIVE, EQ and SHAPE, COMP, eight factory kits), on step 1's interface (one layout on
 every screen, the pages regrouped, HOME's three pages, PRESETS' list, SEQ in two groups with SPEED and TOOLS, the
 buttons once and twice, the help map, SETTINGS > POWER), on V0.85's drums, V0.8's looper, V0.75's ARP,
 V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on
@@ -476,10 +476,34 @@ clips and scenes, VOLUME, PAN, MUTE, SOLO, recording, launching, SONG); a drum t
   (its threshold, 0 .. −30 dB, 4:1; above 20 % a make-up of up to +9 dB), ATTACK 0.1 .. 30 ms, RELEASE 20 ms .. 1 s,
   MIX (the pressed sound with the dry, in parallel); its curve drawn, level in against out). EDIT + OCT− held 5 s on KIT: the kit's own
   settings (these four pages) as a kit starts, its drums kept.
-- **The kits** (EDIT twice on a drum track, V0.87; K8): the eight factory kits as PRESETS' list shows the presets: CLASSIC,
-  PUNCH, INDUSTRIAL, LO-FI, MINIMAL, TRIBAL, GLITCH, SOFT. PRESETS picks, SAVE twice loads the one picked as the
-  project's kit (its drums, their effects, the duck and COMP; the tracks' hits stay); the list goes after 3 s
-  untouched. The one the kit came from is marked, with a dot when it was edited since (HOME's name has the same dot);
+- **The drums' models, presets and kits** (V0.87 step 2; the plan's D1-D5):
+  - **Any row any model.** DRUM > MODEL: KNOB 1 MODEL, KNOB 2 TYPE. ANALOG (a sine body swept down from DROP; SNAP
+    adds its second body and noise: kicks, toms, congas, an 808 snare), PUNCH (KICK, SNARE, CLAP: V0.85's), FM (DRUM:
+    a pitch drop and a click; BELL: none; TONE is RATIO, the model's own INDEX), CHIP (SQUARE and TRIANGLE swept down
+    by SWEEP over SPEED; NOISE a 15-bit register at PITCH, LOOP from 50 its short loop; the level in 16 steps), NOISE
+    (a band-pass at FREQ, WIDTH narrower), METAL (CLOSED, OPEN, CYMBAL: the six squares), WAVE (TABLE A, TABLE B: OSC
+    A's or B's table, TONE the FRAME). SOUND's TONE and fourth knob take the model's names. A row keeps its place (its
+    key, its GRID row, its GM note) whatever its model; a new model turns its name back to its place's. A project of
+    before plays as it did (its rows on their own models, bit for bit).
+  - **Drum presets by category** (KICK, SNARE, CLAP, HAT, CYMBAL, TOM, PERC, FX; eight factory presets each): EDIT
+    twice on DRUM opens the row picked's category (its preset's, else its place's: the KICK row KICK, the WT rows PERC
+    and TOM); SELECT the next category, PRESETS the preset (its model at the right), SAVE twice copies it into the row
+    (its LEVEL and PAN kept): the row then shows its name. SAVE + OCT+ there: the row as a new preset, named first; SAVE
+    + OCT− on one of yours: deleted, asked first.
+  - **Kits**: EDIT twice on KIT (or from HOME): the six factory kits, 808, 909, LO-FI, VIDEO GAME, TRAP, DRUM & BASS
+    (each row a copy of a preset), then yours (K1 to K16). PRESETS picks, SAVE twice loads the one picked as the
+    project's kit (its drums, their effects, the duck and COMP; the tracks' hits stay); the list goes after 5 s
+    untouched.
+  - **Saving** (the SAVE window on a drum track): on DRUM it saves the row picked as a drum preset, on KIT, HOME and
+    elsewhere the kit: SAVE over your own (its name kept: "SAVED OVER DRUM 3"), SAVE AS NEW (NAME IT: its next
+    version, 11 characters for a drum, 12 for a kit; KNOB 3 a drum's category; KNOB 4 the slot). Yours are kept apart
+    from projects: 64 drum presets and 16 kits (the store at 0xDB000, inside the allow-list); a kit is kept in its
+    project as before.
+  - **EUCLID** (CLIP's page on a drum track, after HIT): KNOB 1 HITS, KNOB 2 STEPS (1-16), KNOB 3 ROTATE, KNOB 4 the
+    ROW: each turn refills the row's hits over the clip (an empty clip made a bar first), the pattern again every
+    STEPS sixteenths; the other rows stay.
+- **The kits** (EDIT twice on a drum track, V0.87; K8): PRESETS picks, SAVE twice loads the one picked as the
+  project's kit; the list goes after 5 s untouched. The one the kit came from is marked, with a dot when it was edited since (HOME's name has the same dot);
   loading another then says first that the edits go: a kit loaded is not undone.
 - **The sidechain**: the DUCK row's hits make no sound; each ducks the synth (every synth track, after its effects)
   by AMOUNT, over ATTACK, and lets it back over RELEASE along SHAPE. The drums are never ducked. MIDI tracks' notes go
