@@ -269,7 +269,7 @@ try {
     await tick(sid);
     const after = await ev(sid, "document.getElementById('find').disabled"), bks = await ev(sid, "document.getElementById('bk-status').textContent");
     check(`the package checked (${facts}); a backup 5 min old ("${bks.slice(0, 26)}..."); Find off, off with one box, on with three`,
-          /Package checked/.test(st) && /FM-1_900/.test(facts) && /610,090/.test(facts) && /^Backup ready \(5 min ago/.test(bks) &&
+          /Package checked/.test(st) && /FM-1_900/.test(facts) && facts.includes(fs.statSync(path.join(root, "strata.fwsc")).size.toLocaleString("en-US")) && /^Backup ready \(5 min ago/.test(bks) &&
           before && one && !after);
     await shot(sid, "flasher_light.png");
     check(`no exceptions on load${exceptions(sid).map((x) => " | " + x.slice(0, 160)).join("")}`, exceptions(sid).length === 0);

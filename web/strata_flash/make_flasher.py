@@ -167,7 +167,7 @@ def main(pkg="build/strata.fwsc", out="build/flasher"):
         shutil.copy(SRC / "docs" / "FLASHING.md", out / "FLASHING.md")
     for f in sorted((SRC / "LICENSES").glob("*.txt")):
         shutil.copy(f, out / "LICENSES" / f.name)
-    for doc in ("LICENSE", "LICENSING.md"):
+    for doc in ("LICENSE", "LICENSING.md", "NOTICE.md", "README.md"):   # (V0.87: the notices, the disclaimer)
         shutil.copy(SRC / doc, out / doc)
     print(f"flasher: {out}: index.html ({len(html)} B), strata.fwsc ({len(raw)} B, {product}, sha256 "
           f"{meta['sha256'][:16]}...), {meta['version']}")

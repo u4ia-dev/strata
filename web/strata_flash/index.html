@@ -232,10 +232,15 @@
   </section>
 
   <footer>
-    <span>Strata (a Felucca fork) and Felucca: GPL-3.0, no warranty; at your own risk. The package also holds three
-    JieLi AC79 SDK files (Apache-2.0): see LICENSING.md and LICENSES/ beside this page.</span>
-    <span>M-VAVE and FM-1 are trademarks of their respective owners. Strata is not affiliated with or endorsed by
-    them, nor by Felucca's author.</span>
+    <span><b>Your saved data:</b> saving in Strata can overwrite Felucca's projects and samples (the same flash);
+    make a backup first and keep it.</span>
+    <span>Strata (Copyright (C) 2026 u4ia, a modified Felucca, Copyright (C) 2026 Leo Kuroshita, Hügelton
+    Instruments): GPL-3.0-only, <b>no warranty</b>; a pre-release, installed at your own risk. The package also holds
+    three JieLi AC79 SDK files (Apache-2.0). The source, its notices and every licence: <a href="README.md">README.md</a>,
+    <a href="NOTICE.md">NOTICE.md</a>, <a href="LICENSING.md">LICENSING.md</a>, <a href="LICENSES/">LICENSES/</a>
+    beside this page.</span>
+    <span>M-VAVE and FM-1 are trademarks of their respective owners. Strata is independent: not affiliated with,
+    endorsed by or supported by them, nor by Felucca's author or Hügelton Instruments.</span>
   </footer>
 </main>
 <script type="module">
@@ -310,7 +315,9 @@ function showBackup() {
   st.dataset.ok = backupOk ? "1" : "";
   bar.hidden = !(r && r.state === "reading");
   if (r) bar.value = r.progress || 0;
-  if (!r) { st.textContent = "This page's server cannot make backups: open it from build\\flasher\\serve.py (FLASHING.md, section 3)."; return; }
+  if (!r) { st.textContent = location.hostname.endsWith("github.io")   // (the site: no local server, no backup step)
+    ? "Backups are made on your computer, not on this site: run serve.py from Strata's source (FLASHING.md, section 2), or keep the one you made with the Flipper Zero."
+    : "This page's server cannot make backups: open it from build\\flasher\\serve.py (FLASHING.md, section 3)."; return; }
   if (r.why_not) { st.textContent = `Backups are off: ${r.why_not}.`; return; }
   const failed = r.failed && r.failed.length ? ` Windows could not read a USB device (${r.failed.length}×): if that was ` +
     "the FM-1, switch it off and do the Flipper steps again." : "";

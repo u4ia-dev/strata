@@ -149,6 +149,18 @@ a sound a track, inserts and sends and voices on the second core (V0.9), the dru
 
 ## 2. Before anything: a full backup
 
+> **Your saved data.** Strata keeps its presets, projects and drum library in the FM-1's data area, in the same
+> flash where Felucca keeps its projects and samples (0x97000 to 0xDF000, inside the store's allow-list). Installing
+> Strata does not erase that area, but **saving anything in Strata can overwrite Felucca's projects and samples**, and
+> going back to Felucca or to the official firmware does not bring them back. Make a full flash backup before you
+> install (docs/FLASHING.md, section 2) and keep it: it is the only way back to exactly what you had. Strata never writes
+> the boot area, the calibration and trim data, Bluetooth pairing or the unit's own keys.
+
+> **Disclaimer.** Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
+> 16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until
+> it is recovered, and you install Strata at your own risk. Strata is a **pre-release**: its versions from V0.7 on are
+> being tested on the hardware now.
+
 Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep it. It holds what is on the FM-1 now
 (the firmware, and Felucca's projects if you have Felucca), and it is the way back to exactly this state. Make it
 **the same day as the install, by a route that enters backup mode at power-on**: that route still works when the
@@ -484,6 +496,11 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     badly or is far louder or quieter than the rest: note which). EDIT twice on DRUM: a few presets of each category.
     Save a drum preset and a kit of your own, power-cycle: both still there. EUCLID on a row: HITS, STEPS, ROTATE.
     BENCH's AUDIO row with VIDEO GAME and TRAP playing.
+58. **The release build's USB identity** (all in one sitting with 53 to 57; **needs this hardware test**). After the
+    install, the computer lists a MIDI port named **"Strata for FM-1"** (maker "u4ia"; Windows: Device Manager, Sound,
+    video and game controllers), the flasher's Find, the test page and the console still connect, and the USB audio
+    input still records. Send the soft key (the flasher's "Put the FM-1 in backup mode"), then switch the FM-1 off and
+    on: Strata again. Optional: Felucca's installer still finds the FM-1 (the way back to Felucca).
 
 ## 5. The report
 

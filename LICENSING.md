@@ -1,3 +1,11 @@
+# Licensing
+
+**Strata** (Copyright (C) 2026 u4ia, GPL-3.0-only) is a modified version of Felucca. What Strata changed, what a copy
+of Strata must come with and what its firmware image holds: [NOTICE.md](NOTICE.md). Strata adds one third-party part:
+the **Space Mono** font (SIL OFL 1.1, Copyright 2016 The Space Mono Project Authors, no Reserved Font Name), rasterised
+into the UI at build time (`tools/gen_aa_font.py`); its licence is [LICENSES/OFL-SpaceMono.txt](LICENSES/OFL-SpaceMono.txt).
+Felucca's licensing, as Felucca states it, follows.
+
 # Felucca licensing
 
 Felucca is free software, licensed under the GNU General Public License, version 3 only

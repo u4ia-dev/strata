@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+ * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+ * Modified for Strata by u4ia, 2026-10 (NOTICE.md) */
 /* USB full-speed device on USB0: a
  * class-compliant USB-MIDI interface. All SIE traffic happens in one place,
  * usb_poll(), called from the TIMER5 ISR at 2 kHz, so INDEX is never shared
@@ -8,6 +9,9 @@
  * SysEx F0 22 24 35 7D F7 (the stock soft key, tools/fm1_softkey.py) asks
  * the main loop to enter UBOOT. VID 0x1209 / PID 0x0001 is the pid.codes
  * TEST id: fine for the bench, must be replaced before any release.
+ * Strata (u4ia): 1209:5354 (the app, STRATA_USB) and 1209:5355 (its update
+ * loader, STRATA_LOADER), requested from pid.codes for Strata; its strings
+ * "u4ia", "Strata for FM-1", "Strata Update for FM-1" (docs/RELEASE.md).
  * FELUCCA_CDC=1 adds a CDC-ACM serial function (IAD composite: EP2 notify,
  * EP3 bulk data) for the console in console.c; FELUCCA_USB_LAYOUT picks how
  * the composite presents itself, usb_cdc_switch / FELUCCA_CDC_DEFAULT=0 leave
@@ -376,6 +380,18 @@ static uint8_t usb_cdc_on = FELUCCA_CDC_DEFAULT != 0;      /* the console is pre
 #endif
 #define UAC_AS_IF (AUD_IF + 2u)
 static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
+#if defined(STRATA_USB) || defined(STRATA_LOADER)
+/* Strata's own (u4ia): its maker, its name ("FM-1" in it: the installers' port filters still find it) */
+static const uint8_t STR1[] = {10, 3, 'u', 0, '4', 0, 'i', 0, 'a', 0};
+#ifdef FELUCCA_LOADER
+static const uint8_t STR2[] = {46, 3, 'S', 0, 't', 0, 'r', 0, 'a', 0, 't', 0, 'a', 0, ' ', 0, 'U', 0, 'p', 0, 'd', 0,
+                               'a', 0, 't', 0, 'e', 0, ' ', 0, 'f', 0, 'o', 0, 'r', 0, ' ', 0, 'F', 0, 'M', 0, '-', 0,
+                               '1', 0};
+#else
+static const uint8_t STR2[] = {32, 3, 'S', 0, 't', 0, 'r', 0, 'a', 0, 't', 0, 'a', 0, ' ', 0, 'f', 0, 'o', 0, 'r', 0,
+                               ' ', 0, 'F', 0, 'M', 0, '-', 0, '1', 0};
+#endif
+#else
 static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, 't', 0, 'o', 0, 'n', 0, ' ', 0, 'I', 0,
                                'n', 0, 's', 0, 't', 0, 'r', 0, 'u', 0, 'm', 0, 'e', 0, 'n', 0, 't', 0, 's', 0};
 #ifdef FELUCCA_LOADER
@@ -383,6 +399,7 @@ static const uint8_t STR2[] = {30, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c
                                'd', 0, 'a', 0, 't', 0, 'e', 0};
 #else
 static const uint8_t STR2[] = {16, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c', 0, 'a', 0};
+#endif
 #endif
 
 static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)

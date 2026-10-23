@@ -217,6 +217,17 @@ stops it; [FLASHING.md](FLASHING.md)).
 
 **Power-on** (V0.86, P4): the splash for 2 s, then HOME's SOUND.
 
+**The backup-mode message.** Like the official firmware, Strata answers the SysEx message
+`F0 22 24 35 7D F7` (the "soft key") on its USB MIDI port by restarting into the chip's backup mode (UBOOT), where a
+full flash backup can be read or written. Any program that can send SysEx to the FM-1 can send it. The FM-1 then
+stops playing and waits; switching it off and on returns to Strata. Nothing is written by the message itself. The same
+mode is reached by holding OCT− and OCT+ for 5 s (a countdown from 2 s).
+
+**Developer features kept in the build.** The USB serial console (a CDC port: the device report, BENCH's
+figures, the event log), the DEBUG menu (HOME held 5 s: BENCH, KEY SCAN, CORE 2) and CORE 2 (the second core, off by
+default; ON starts it at the next power-on, TEST runs a 30 s load) stay in every Strata build, release builds too.
+CORE 2's figures on the FM-1 are not measured yet (**needs a hardware test**).
+
 ## The layers
 
 A layer lasts while its button is held (REC's MOD layer and GLO's PERFORM can be latched: the button + OCT+; a tap or

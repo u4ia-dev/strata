@@ -91,6 +91,8 @@ static uint32_t sie_rd(uint32_t r) __attribute__((noinline, minsize));
 #define UA_PRIME48 183u          /* .. at 48 kHz, the same in 48 kHz frames (Felucca's 113 / 87 / 139, + 70) */
 #define UA_LO48 157u
 #define UA_HI48 209u
+#define FELUCCA_USB_PID 0x5354u /* Strata (u4ia): its USB id 1209:5354, its strings (usb.c; docs/RELEASE.md) */
+#define STRATA_USB 1
 #include "usb.c"
 #if FELUCCA_UART
 #include "midi_uart.c"

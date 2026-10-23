@@ -1,66 +1,64 @@
-# Felucca
+# Strata
 
-[![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
+Wavetable synthesizer, 8-track looper and drum machine firmware for the **M-VAVE FM-1**, by u4ia. A fork of
+[Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments). Free software, GPL-3.0-only.
 
-![Felucca 1.0](docs/felucca-1.0.png)
+**Install it in the browser:** <@SITE@> (Chrome or Edge on a computer).
 
-Multi-engine synthesizer firmware for the M-VAVE FM-1, **version 1.6.1**. Connect the FM-1 to a computer by USB, open the
-[web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge and press Install; no extra hardware is needed.
-Installing is at your own risk: M-VAVE's updater or the installer's **Return to official V15** takes you back.
-Want to look around first? [Try it in your browser](https://hugelton.github.io/Felucca/webapp/try/), no FM-1 needed.
+## Disclaimer
 
-- Install: [web installer](https://hugelton.github.io/Felucca/), or `tools/fm1_install.py` from a terminal
-- Edit: [web editor](https://hugelton.github.io/Felucca/webapp/editor/) (developed in [Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp))
-- Read: the manual is in the [wiki](https://github.com/hugelton/Felucca/wiki/Home): [Installation](https://github.com/hugelton/Felucca/wiki/Installation) ·
-  [Controls](https://github.com/hugelton/Felucca/wiki/Controls) · [Menu](https://github.com/hugelton/Felucca/wiki/Menu) ·
-  [Engines](https://github.com/hugelton/Felucca/wiki/Engines) · [Release notes](https://github.com/hugelton/Felucca/wiki/Release-Notes) ·
-  [Troubleshooting](https://github.com/hugelton/Felucca/wiki/Troubleshooting)
-- Build: [BUILDING.md](BUILDING.md); clone with the engines' submodule: `git clone --recurse-submodules https://github.com/hugelton/Felucca.git`
+Strata is independent, unofficial firmware. It is not affiliated with, endorsed by or supported by M-VAVE or the
+owners of the FM-1, nor by Felucca's author or Hügelton Instruments. "M-VAVE" and "FM-1" are trademarks of their
+respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments. They are used here only to
+say what Strata runs on and where it comes from.
 
-<a href="https://hugelton.itch.io/felucca"><img src="https://static.itch.io/images/badge-color.svg" alt="Available on itch.io" width="74"></a>
+Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
+16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until
+it is recovered, and you install Strata at your own risk. Strata is a **pre-release**: its versions from V0.7 on are
+being tested on the hardware now.
+
+## Before you install
+
+**Your saved data.** Strata keeps its presets, projects and drum library in the FM-1's data area, in the same
+flash where Felucca keeps its projects and samples (0x97000 to 0xDF000, inside the store's allow-list). Installing
+Strata does not erase that area, but **saving anything in Strata can overwrite Felucca's projects and samples**, and
+going back to Felucca or to the official firmware does not bring them back. Make a full flash backup before you
+install (docs/FLASHING.md, section 2) and keep it: it is the only way back to exactly what you had. Strata never writes
+the boot area, the calibration and trim data, Bluetooth pairing or the unit's own keys.
 
 ## What it is
 
-Thirteen engines with factory presets, four tracks (8 voices shared), a 64-step sequencer (chords, ties, chance, conditions,
-ratchets, nudge, locks, automation, live and step recording), SEQ TOOLS, songs, effects, a MOD matrix, MIDI (USB and TRS,
-per-track channels, MIDI LEARN) and USB audio. More: [Features](https://github.com/hugelton/Felucca/wiki/Features).
+- A wavetable engine (54 tables, two oscillators, sub and noise, filters, envelopes, drawn LFOs, a modulation matrix
+  with polarity), a chain of up to eight effects, chords, an arpeggiator.
+- An 8-track looper: synth, MIDI and drum tracks, clips in eight scenes, takes and overdubs, SONG, projects.
+- A drum synth: seven models any row can use, 64 drum presets by category, six factory kits, your own presets and
+  kits, Euclidean fills, a sidechain duck and a kit compressor.
+- The STRATA screen UI with twelve themes and steady LEDs at four levels.
 
-## New in 1.6.1
+The panel, page by page: [docs/CONTROLS.md](docs/CONTROLS.md). The screens: [docs/UI.md](docs/UI.md). The looper:
+[docs/LOOPER.md](docs/LOOPER.md). Installing, testing and going back: [docs/FLASHING.md](docs/FLASHING.md).
 
-- **MENU > LARGE keeps one size per knob** (#251): a value no longer jumps between sizes as you turn the knob
-- **Updates check the package's size on the FM-1**: a package made for another device is refused before anything is erased
-- **Second core (beta), off by default:** MENU > SYSTEM > 2ND CORE > ON (BETA), then restart: the FM-1's second core
-  renders some of the parts, same sound, more headroom (#247)
-- **Felucca-Engines:** ANALOG, LOFI, TRIO, WHEEL and NOISE now live in [their own repository](https://github.com/hugelton/Felucca-Engines)
-  under the MIT licence (a git submodule here); Felucca itself stays GPL-3.0-only
+## Things to know
 
-## New in 1.6
+**The backup-mode message.** Like the official firmware, Strata answers the SysEx message
+`F0 22 24 35 7D F7` (the "soft key") on its USB MIDI port by restarting into the chip's backup mode (UBOOT), where a
+full flash backup can be read or written. Any program that can send SysEx to the FM-1 can send it. The FM-1 then
+stops playing and waits; switching it off and on returns to Strata. Nothing is written by the message itself. The same
+mode is reached by holding OCT− and OCT+ for 5 s (a countdown from 2 s).
 
-- **Your own UI colours:** COLOR has an eleventh value, CUSTOM, set in the web editor with a live preview on the FM-1
-- **The SEQ piano roll follows the play position** when the pattern is longer than one screen
-- **Conditional steps** (1:2 … 4:4, FILL), **EUCLID, DOUBLE and HALF**, **a MIDI channel per track**, PHASE FOLD, three more drum kits and humanize in the MOD matrix (1.5.5 and 1.5.6 were never released: 1.6 carries them)
-- ⚠ A project with conditional steps does not open on 1.5 or 1.5.1; projects saved by 1.4 or later do not open on 1.1.5.x
+**Developer features kept in the build.** The USB serial console (a CDC port: the device report, BENCH's
+figures, the event log), the DEBUG menu (HOME held 5 s: BENCH, KEY SCAN, CORE 2) and CORE 2 (the second core, off by
+default; ON starts it at the next power-on, TEST runs a 30 s load) stay in every Strata build, release builds too.
+CORE 2's figures on the FM-1 are not measured yet (**needs a hardware test**).
 
-All changes and what to know before going back: [Release notes](https://github.com/hugelton/Felucca/wiki/Release-Notes) · [Upgrading from 1.1.5](https://github.com/hugelton/Felucca/wiki/Upgrading-from-1.1.5).
+## Going back
 
-## Support and contributing
+To the official V15: M-VAVE's updater, or the flasher's "Return to official V15" with M-VAVE's own file. To Felucca:
+Felucca's installer. To exactly what you had: your flash backup, by the Flipper Zero route (docs/FLASHING.md, section 6).
 
-Please report what you find in [Issues](https://github.com/hugelton/Felucca/issues) (reproducible bugs, one per issue). Ideas and
-requests go to [Discussions](https://github.com/hugelton/Felucca/discussions). Pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
-Felucca is GPLv3 and you are free to fork it; before starting yet another fork, please consider whether a PR would do.
+## Licence and credits
 
-## AI disclaimer
-
-Felucca is developed with the assistance of AI coding agents (code, tests, documentation, translation, maintenance). The
-design, features, sound design and direction are the maintainer's or the community's, and no generative AI is used for music,
-icons or artwork. See [On AI-Assisted Development and Responsibility](https://github.com/hugelton/Felucca/discussions/166).
-
-## Credits and licence
-
-Free software: [GPL-3.0-only](LICENSE), the Hügelton Sample Pack included; the bundled fonts and ported DSP keep their own licences,
-and five engines ([Felucca-Engines](https://github.com/hugelton/Felucca-Engines), `firmware/engines/`) are MIT
-([LICENSES/](LICENSES/), [LICENSING.md](LICENSING.md)). Thanks to everyone whose work and contributions are in it: [CREDITS.md](CREDITS.md).
-
-M-VAVE and FM-1 are trademarks of their respective owners. Felucca is not affiliated with or endorsed by them.
-
-Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+GPL-3.0-only ([LICENSE](LICENSE)). What Strata changed in Felucca, what every copy must come with, and the parts
+under other licences: [NOTICE.md](NOTICE.md), [LICENSING.md](LICENSING.md), [CREDITS.md](CREDITS.md),
+[LICENSES/](LICENSES/). Felucca's own README: [docs/FELUCCA-README.md](docs/FELUCCA-README.md). Building:
+[BUILDING.md](BUILDING.md).

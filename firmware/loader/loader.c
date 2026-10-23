@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+ * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+ * Modified for Strata by u4ia, 2026-10 (NOTICE.md) */
 /* Felucca update loader (device side). Runs from RAM, started by the SPL from
  * an update record, with interrupts off: USB is polled from the main loop.
  * It is a USB-MIDI device "Felucca Update" (1209:0002) that answers the
@@ -11,7 +12,11 @@
 #define FELUCCA_CDC 0
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
+#ifdef STRATA_LOADER
+#define FELUCCA_USB_PID 0x5355                  /* Strata's update loader: 1209:5355 (u4ia; docs/RELEASE.md) */
+#else
 #define FELUCCA_USB_PID 0x0002
+#endif
 #define FELUCCA_ID "ota-FM-1_900"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "fm1_time.h"
