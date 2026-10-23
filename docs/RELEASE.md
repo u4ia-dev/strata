@@ -10,14 +10,26 @@ any release"): **VID 0x1209, PID 0x5354** (the app, `firmware/src/strata.c`) and
 product "Strata for FM-1" (the loader: "Strata Update for FM-1"); "FM-1" in the name keeps the installers' MIDI port
 filter (`web/fm1ota.js`) finding it. Felucca's own build is unchanged.
 
-The two PIDs are **requested, not yet granted**: pid.codes allocates them by a pull request to
-<https://github.com/pidcodes/pidcodes.github.com> once the project's source is public with a licence file. The request
+The two PIDs are **not yet requested**: pid.codes allocates them by a pull request to
+<https://github.com/pidcodes/pidcodes.github.com> once the project's source is public with a licence file (it is,
+since 2026-10-23). The fork <https://github.com/u4ia-dev/pidcodes.github.com> exists; the pull request is opened
+from it by the owner. The request
 adds `org/u4ia/index.md` (layout: org, title: u4ia) and `1209/5354/index.md`, `1209/5355/index.md` (layout: pid,
 title: "Strata for FM-1" / "Strata Update for FM-1", owner: u4ia, license: GPL-3.0-only, site: the Strata site,
 source: the Strata repository), each with a short description. Firmware for existing hardware may be asked why it
 needs a PID: the answer is that Strata presents its own USB MIDI, audio and serial functions and its own update
 loader, and must not reuse M-VAVE's ids or a test id. If pid.codes assigns other numbers, change the two defines and
 rebuild.
+
+## Where it is published
+
+- The source: <https://github.com/u4ia-dev/strata>, branch `main` (pushed from the local release branch).
+- The site: <https://u4ia-dev.github.io/strata/>, GitHub Pages from the branch `gh-pages`, which holds only the built
+  site (`build/site`), one commit a publish. To publish again: build the book (`npm run build` in `book/`), then
+  (WSL) `make_flasher.py` and `make_site.py https://github.com/u4ia-dev/strata`, then push `build/site` as a new
+  commit on `gh-pages` (clone that branch, replace its files with `build/site`'s, commit as u4ia, push).
+  The public site leaves out the internal hardware test (make_site.py: the INTERNAL parts, test.html, usb_check.html,
+  FLASHING.md, serve.py).
 
 ## The checklist
 
