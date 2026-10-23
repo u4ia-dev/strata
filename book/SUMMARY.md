@@ -4,7 +4,7 @@
 
 ## Guide
 
-* [Guide](guide/README.md)
+* [Guide](guide/guide.md)
 * [Cheat sheet](guide/cheatsheet.md)
 
 ## Manual

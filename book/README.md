@@ -14,7 +14,7 @@ Kuroshita (Hügelton Instruments), under the GNU General Public License, version
 
 ## This book
 
-- **[Guide](guide/README.md)**: get started and see every feature on one page.
+- **[Guide](guide/guide.md)**: get started and see every feature on one page.
 - **[Cheat sheet](guide/cheatsheet.md)**: every button and knob.
 - **Manual**: each feature in depth, starting with [The panel](manual/panel.md).
 

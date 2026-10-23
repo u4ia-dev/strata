@@ -4,7 +4,7 @@
   "description": "Strata's guide and manual, built with HonKit (the open-source GitBook toolchain) into build/book",
   "license": "GPL-3.0-only",
   "scripts": {
-    "build": "honkit build . ../build/book",
+    "build": "honkit build . ../build/book && node fix_links.mjs ../build/book",
     "serve": "honkit serve ."
   },
   "devDependencies": {

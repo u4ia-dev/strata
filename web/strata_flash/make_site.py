@@ -96,8 +96,8 @@ def page(repo, version, sha):
   <p class="mute">Wavetable synth, 8-track looper and drum machine firmware for the M-VAVE FM-1. By u4ia, a fork of
     Felucca. Free software, GPL-3.0-only. Package {html.escape(version)}, SHA-256 <code>{html.escape(sha[:16])}…</code></p>
   <div class="row">
-    <a class="btn go" href="flash/">Install</a>
-    <a class="btn" href="book/">Guide &amp; manual</a>
+    <a class="btn go" href="flash/index.html">Install</a>
+    <a class="btn" href="book/index.html">Guide &amp; manual</a>
     <a class="btn" href="{r}">Source</a>
   </div>
   <section class="warn">
