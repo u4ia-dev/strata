@@ -18,12 +18,12 @@ ex.web_master(700);
 ex.web_boot();
 ex.web_test_set_get(0, 0);                      // (HELP's hints off)
 const run = (s) => { for (let n = Math.max(1, Math.round(s * 44118 / 128)); n > 0; n--) ex.web_render(128); };
-const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, PLAY: 10, REC: 11, OCTDN: 12,
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12,
             OCTUP: 13 };                                                                     // panel.c B_*
 const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };                    // panel.c EN_*
 const SEC = { OSCA: 0, OSCB: 1, SUB: 2, NOISE: 3, FILTER: 4, ENV1: 5, LFO1: 7, VOICE: 9, MACRO: 10, MATRIX: 11,
               CHAIN: 36, MENU: 37, GLOBAL: 38, KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, LTRK: 47,
-              LCLIP: 48, LSONG: 49, KIT: 50, LGRID: 51 };   // SEC_*
+              LCLIP: 48, LSONG: 49, KIT: 50, LGRID: 51, DRUM: 52, DEBUG: 53 };   // SEC_*
 const FXC1 = 180;                                                                            // sy_param.c SP_FXC1
 const KEY = { F3: 0, G3: 2, A3: 4, C4: 7, E4: 11, G4: 14 };                                 // the keys, F3 = 0
 const tap = (b) => { ex.web_buttons(1 << b); run(0.05); ex.web_buttons(0); run(0.35); };   // (two within 300 ms latch)
@@ -42,6 +42,7 @@ function chain(insts) {                         // the FX chain: these instances
   run(0.05);
 }
 const turn = (k, n) => { ex.web_enc(E.K1 + k, n); run(0.08); };
+const twice = (b) => { for (let i = 0; i < 2; i++) { ex.web_buttons(1 << b); run(0.03); ex.web_buttons(0); run(0.08); } run(0.3); };   // (V0.87)
 
 function crc32(buf) {
   let crc = 0xffffffff;
@@ -427,17 +428,18 @@ shot("HelpMap");
 ex.web_buttons(0);
 run(0.1);
 ex.web_test_power(575, 0);                      // (V0.86: the battery 3 of 4 on POWER)
-for (const [nm, id] of [["SCREEN", "SetScreen"], ["PANEL", "SetPanel"], ["MIDI", "SetMidi"], ["BENCH", "SetBench"],
-                        ["CORE 2", "SetCore2"], ["KEY SCAN", "SetKeyScan"], ["POWER", "SetPower"]]) {
-  go(SEC.MENU, nm);
+for (const [sec, nm, id] of [[SEC.MENU, "SCREEN", "SetScreen"], [SEC.MENU, "PANEL", "SetPanel"], [SEC.MENU, "MIDI", "SetMidi"],
+                             [SEC.DEBUG, "BENCH", "SetBench"], [SEC.DEBUG, "CORE 2", "SetCore2"], [SEC.DEBUG, "KEY SCAN", "SetKeyScan"],
+                             [SEC.MENU, "POWER", "SetPower"], [SEC.MENU, "WIPE", "SetWipe"]]) {   // (V0.87: DEBUG, WIPE)
+  go(sec, nm);
   shot(id);
 }
 ex.web_test_c2(4, 1);                           // CORE 2 as a unit shows it after a test (example figures: the
 ex.web_test_c2(0, 1);                           // emulator has one core and measures nothing)
 ex.web_test_c2(1, 1);
 ex.web_test_c2(3, 412);
-go(SEC.MENU, "BENCH");
-go(SEC.MENU, "CORE 2");
+go(SEC.DEBUG, "BENCH");
+go(SEC.DEBUG, "CORE 2");
 shot("SetCore2Done");
 ex.web_test_c2(4, 0);
 ex.web_test_c2(0, 5);
@@ -738,15 +740,16 @@ run(3.2);
   run(2.2);
   lp(0, 2); lp(1, 0);
   lp(8, 1);
-  go(SEC.LSONG, "SONG");
+  go(SEC.SEQ, "SONG");                          // (V0.87, U21: SONG in LOOP)
   run(0.1);
   shot("LoopSong");
   lp(8, 0);
   ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
   run(3.8);                                     // (stopped: 3 s of quiet, the project kept)
-  go(SEC.LSONG, "PROJECT");
-  run(0.1);
-  shot("LoopProject");
+  for (let i = 0; i < 2; i++) { ex.web_buttons(1 << 9); run(0.03); ex.web_buttons(0); run(0.08); }   // (V0.87, S2: SEQ
+  run(0.3);                                     // twice, the projects' list)
+  shot("LoopProjects");
+  run(5.2);
   lp(0, 2); lp(1, 0);
   for (const t of [0, 1, 2]) ex.web_test_lp_launch(t, 0);
   ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
@@ -758,10 +761,9 @@ run(3.2);
   run(0.2);
   ex.web_buttons(1 << B.PLAY); run(0.03); ex.web_buttons(0);
   run(0.3);
-  go(SEC.SEQ, "CLIPS");
-  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); run(0.03);
-  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons(0); run(0.2);
-  shot("LoopNextTrack");                        // (SEQ + OCT+: the next track, its word)
+  go(SEC.MACRO, "SOUND");                       // (V0.87: SELECT on HOME, the next track, its word)
+  ex.web_enc(E.SELECT, 1); run(0.2);
+  shot("LoopNextTrack");
   rest();
 }
 {                                               // ---- V0.85, the drums: T8 DRUMS, a beat on its grid, the kit's pages
@@ -855,18 +857,73 @@ run(3.2);
   turn(0, 50); turn(3, -20);                    // (AMOUNT 50 %, MIX 80 %)
   rest();
   shot("DrumComp");
-  go(SEC.MACRO, "SOUND");                       // (V0.86: HOME twice on a drum track: the kits)
+  go(SEC.KIT, "COMP");                          // (V0.87, U6: EDIT twice on a drum track: the kits)
   run(0.1);
-  ex.web_buttons(1 << B.HOME); run(0.03); ex.web_buttons(0); run(0.08);
-  ex.web_buttons(1 << B.HOME); run(0.03); ex.web_buttons(0); run(0.2);
+  twice(B.EDIT);
   ex.web_enc(2, 1);
   run(0.1);
   shot("DrumKits");
-  run(3.2);
+  run(5.2);
   go(SEC.MACRO, "SOUND");                       // (V0.86, D1-D3: HOME on a drum track, its drums lit as they sound)
   for (const l of [0, 3, 1]) ex.web_test_drum_hit(l, 7, 110, 0);
   run(0.12);
   shot("DrumHome");
+}
+{                                               // V0.87: the windows, the lists, the questions, the reset's countdown
+  ex.web_test_lp(0, 0);
+  ex.web_test_lp(1, 0);
+  go(SEC.OSCA, "WAVE");
+  run(0.1);
+  twice(B.LFO);
+  shot("AssignLfo");
+  ex.web_enc(E.ALGO, 1); run(0.1);
+  turn(1, 6); rest();
+  shot("AssignLfo2");
+  tap(B.LFO);
+  go(SEC.FILTER, "TONE");
+  run(0.1);
+  twice(B.ENV);
+  shot("AssignEnv");
+  tap(B.ENV);
+  go(SEC.OSCA, "WAVE");
+  tap(B.SAVE); run(0.4);
+  shot("SaveWindow");
+  tap(B.HOME);
+  go(SEC.OSCA, "WAVE");
+  twice(B.EDIT);
+  shot("TablesList");
+  ex.web_enc(E.SELECT, 1); run(0.1);
+  shot("TablesCategory");
+  run(5.2);
+  ex.web_enc(E.PRESET, 1); run(0.1);
+  shot("PresetsList");
+  run(5.2);
+  ex.web_buttons(1 << B.EDIT); run(0.05); ex.web_buttons((1 << B.EDIT) | (1 << B.OCTDN)); run(3.0);
+  shot("ResetCountdown");
+  ex.web_buttons(1 << B.EDIT); run(0.05); ex.web_buttons(0); run(0.4);
+  ex.web_test_lp_put(0, 0, 0, 48, 60, 100);
+  go(SEC.SEQ, "CLIPS");
+  run(0.1);
+  shot("LoopClips87");
+  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons((1 << B.SEQ) | (1 << B.OCTDN)); run(0.03);
+  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons(0); run(0.35);
+  shot("AskDelete");
+  tap(B.HOME);
+  go(SEC.SEQ, "CLIPS");
+  turn(0, 3); run(0.6);
+  shot("AskType");
+  tap(B.EDIT);
+  go(SEC.MENU, "WIPE");
+  turn(0, 1); run(0.1);
+  shot("AskWipe");
+  tap(B.HOME);
+  go(SEC.SEQ, "CLIPS");
+  ex.web_test_lp(1, 1);                         // (scene B: empty)
+  ex.web_buttons(1 << B.SEQ); run(0.03); ex.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); run(0.03);
+  ex.web_buttons(1 << B.SEQ); run(0.03);
+  ex.web_enc(E.PRESET, 1); run(0.1);
+  shot("NewClip");
+  ex.web_buttons(0); run(0.4);
 }
 console.log(`shots ${shots.length}: ${out}; the check: ${lints.length ? lints.length + " with findings" : "clean"}`);
 writeFileSync(`${out}/lint.txt`, lints.join("\n"));

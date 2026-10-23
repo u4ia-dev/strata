@@ -28,6 +28,8 @@
 #             bounded and ended; DECAY's time to -60 dB; TUNE; CLAP's bursts; the choke; ACCENT, VELOCITY, PAN, a muted
 #             track; the WT lanes' tables; the duck (AMOUNT, ATTACK, RELEASE, SHAPE, the synth only); 40 random kits;
 #             golden renders (tests/sy_drum_golden.txt; GOLDEN_UPDATE=1 rewrites it); the host's cost.
+#   LEDS      (tests/sy_led_test.c, V0.87) hal/fm1_input.h with FM1_LED_Q: lit, mid, the glow and the breath for
+#             LIGHTS OFF .. HIGH, each LED's lit time a frame from a trace of the line writes; steady, own column only.
 #   MIDI OUT  (tests/sy_midi_out_test.c, V0.81) usb.c's out ring: a note lost to a full ring marks its channel, an
 #             All Notes Off on each once there is room (and the half's poll), as before when nothing is lost.
 set -e
@@ -65,6 +67,8 @@ run "drums: every lane, DECAY, TUNE, the bursts, the choke, ACCENT, VELOCITY, PA
 
 cc -O2 -w -o "$OUT/sy_midi_out_test" tests/sy_midi_out_test.c
 run "USB MIDI out: notes lost to a full ring ended (All Notes Off), as before with room (V0.81)"     "$OUT/sy_midi_out_test"
+$CC -o "$OUT/sy_led_test" tests/sy_led_test.c
+run "LEDs: LIGHTS' levels in quarters of the scan's tick, steady every frame, the breath a step at a time (V0.87)"     "$OUT/sy_led_test"
 
 [ $fail = 0 ] && echo "sy_tests: all passed" || echo "sy_tests: FAILED"
 exit $fail

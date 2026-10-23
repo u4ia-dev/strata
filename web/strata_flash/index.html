@@ -10,62 +10,73 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strata Flasher</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
 <style>
+  /* V0.87 (U22): the STRATA theme's colours (firmware/src/sy_gfx.c): ground, ink, label, mid, line, vermilion */
   :root {
-    --bg: #f4f2ee; --card: #ffffff; --raise: #ebe8e2; --line: #dcd8d0; --text: #1c1d20; --mute: #63666d;
-    --amber: #a85d00; --amber-bg: #fff1dc; --blue: #1f63d1; --red: #b3261e; --red-bg: #fde8e6; --green: #1d7a46;
-    --green-bg: #e3f4ea; --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
-    color-scheme: light;
+    --bg: #0b0b0b; --card: #131312; --raise: #1d1c1a; --line: #2c2a27; --text: #f4f1ea; --mute: #bab7b1;
+    --dim: #7a766e; --hot: #ff4d2e; --hot-bg: #2a1410; --hot-ink: #0b0b0b; --red: #ff6b57; --red-bg: #2e1512;
+    --green: #8fd6a4; --green-bg: #13241a; --amber: var(--hot); --amber-bg: var(--hot-bg); --blue: var(--hot);
+    --mono: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    color-scheme: dark;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #131416; --card: #1b1c1f; --raise: #24262a; --line: #33363b; --text: #ecebe7; --mute: #9b9ea5;
-      --amber: #ffab4a; --amber-bg: #3a2a14; --blue: #6aa2ff; --red: #ff8a80; --red-bg: #3b1d1b; --green: #6fd69a;
-      --green-bg: #17301f; color-scheme: dark;
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f1ea; --card: #fbfaf6; --raise: #e9e5dc; --line: #d6d1c6; --text: #0b0b0b; --mute: #55524c;
+      --dim: #7a766e; --hot: #d93a1c; --hot-bg: #fbe3dc; --hot-ink: #ffffff; --red: #b3261e; --red-bg: #fde8e6;
+      --green: #1d7a46; --green-bg: #e3f4ea; color-scheme: light;
     }
   }
-  :root[data-theme="dark"] {
-    --bg: #131416; --card: #1b1c1f; --raise: #24262a; --line: #33363b; --text: #ecebe7; --mute: #9b9ea5;
-    --amber: #ffab4a; --amber-bg: #3a2a14; --blue: #6aa2ff; --red: #ff8a80; --red-bg: #3b1d1b; --green: #6fd69a;
-    --green-bg: #17301f; color-scheme: dark;
+  :root[data-theme="light"] {
+    --bg: #f4f1ea; --card: #fbfaf6; --raise: #e9e5dc; --line: #d6d1c6; --text: #0b0b0b; --mute: #55524c;
+    --dim: #7a766e; --hot: #d93a1c; --hot-bg: #fbe3dc; --hot-ink: #ffffff; --red: #b3261e; --red-bg: #fde8e6;
+    --green: #1d7a46; --green-bg: #e3f4ea; color-scheme: light;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }     /* (over every display a rule below gives: the confirmations stay hidden) */
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.55 "Inter Tight", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+         font: 14px/1.6 var(--mono); }
   main { max-width: 700px; margin: 0 auto; padding-block: 36px 56px;
          padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
          display: grid; gap: 16px; }
   header { display: grid; gap: 6px; padding-bottom: 4px; }
   .brand { display: flex; align-items: center; gap: 12px; }
   .mark { width: 30px; height: 22px; display: grid; grid-template-rows: repeat(3, 1fr); gap: 3px; }
-  .mark i { display: block; border-radius: 2px; background: var(--amber); }
+  .mark i { display: block; border-radius: 0; background: var(--hot); }
   .mark i:nth-child(2) { margin-right: 6px; opacity: .75; } .mark i:nth-child(3) { margin-right: 12px; opacity: .5; }
-  h1 { margin: 0; font-size: 28px; letter-spacing: .02em; font-weight: 650; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: .18em; font-weight: 700; }
   .sub { margin: 0; color: var(--mute); }
   .facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 8px 0 0; font-size: 13px; }
   .facts dt { color: var(--mute); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; padding-top: 2px; }
   .facts dd { margin: 0; font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
-  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 16px;
-                 display: grid; gap: 12px; min-width: 0; }
-  h2 { margin: 0; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 10px; text-wrap: balance; }
-  h2 .n { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px;
-          background: var(--amber-bg); color: var(--amber); flex: none; }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 2px; padding: 18px 18px 16px;
+                 display: grid; gap: 12px; min-width: 0; transition: border-color .15s; }
+  section.card:hover, section.card:focus-within { border-color: var(--dim); }
+  section.card.next { border-color: var(--hot); }
+  h2 { margin: 0; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 10px; text-wrap: balance;
+       text-transform: uppercase; letter-spacing: .14em; }
+  h2 .n { padding: 2px 7px; display: inline-grid; place-items: center; font-size: 11px; letter-spacing: .08em;
+          border: 1px solid var(--line); color: var(--mute); flex: none; }
+  section.card.next h2 .n { border-color: var(--hot); color: var(--hot); }
   p { margin: 0; max-width: 64ch; }
   .small { font-size: 13px; color: var(--mute); }
   ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   ul.checks label { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer; }
   ul.checks input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--amber); }
-  .aside { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 8px; background: var(--raise); font-size: 13.5px;
+  .aside { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 2px; background: var(--raise); font-size: 13.5px;
            display: grid; gap: 8px; }
   li.backup { display: grid; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
   li.backup .aside { margin-left: 0; }
   #bk-status { overflow-wrap: anywhere; }
   #bk-status[data-ok="1"] { color: var(--green); font-weight: 600; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 8px; padding: 9px 16px; cursor: pointer;
-           border: 1px solid var(--line); background: var(--raise); color: var(--text); }
-  button.primary { background: var(--amber); border-color: var(--amber); color: #1c1407; }
+  button { font: inherit; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+           border-radius: 2px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--raise);
+           color: var(--text); transition: border-color .12s, transform .12s; }
+  button:not(:disabled):hover { border-color: var(--hot); }
+  button:not(:disabled):active { transform: translateY(1px); }
+  button.primary { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+  button.primary:not(:disabled):hover { filter: brightness(1.08); }
   button.danger { background: var(--red); border-color: var(--red); color: #fff; }
   button:disabled { opacity: .38; cursor: default; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -77,9 +88,13 @@
   #status { font-weight: 600; }
   progress { width: 100%; height: 6px; accent-color: var(--amber); }
   details summary { cursor: pointer; color: var(--mute); font-size: 13px; }
-  pre { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--raise); font: 12px/1.45 var(--mono);
+  details summary:hover { color: var(--hot); }
+  details.flipper { border: 1px solid var(--line); padding: 8px 12px; }
+  details.flipper[open] { border-color: var(--dim); }
+  details.flipper ol { margin-top: 8px; }
+  pre { margin: 8px 0 0; padding: 10px 12px; border-radius: 2px; background: var(--raise); font: 12px/1.45 var(--mono);
         white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
-  .confirm { padding: 12px; border-radius: 8px; border: 1px solid var(--amber); background: var(--amber-bg); display: grid;
+  .confirm { padding: 12px; border-radius: 2px; border: 1px solid var(--amber); background: var(--amber-bg); display: grid;
              gap: 10px; }
   .warn { color: var(--red); font-weight: 600; }
   ol.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
@@ -108,20 +123,22 @@
     <details><summary>Log</summary><pre id="log"></pre></details>
   </section>
 
-  <section class="card">
-    <h2><span class="n">1</span>Before you start</h2>
+  <section class="card" id="s1">
+    <h2><span class="n">1 / 3</span>Before you start</h2>
     <ul class="checks">
       <li class="backup">
-        <p><b>A full flash backup, made now</b> (all 1 MiB, read twice, the two copies identical, checked as an FM-1's
-        flash). This page makes it and writes nothing without one from the last 12 hours. Press <b>Back up now</b>,
-        then put the FM-1 in backup mode the Flipper Zero way:</p>
+        <p><b>A full flash backup (recommended).</b> All 1 MiB, read twice, the two copies identical, checked as an
+        FM-1's flash: the way back to exactly what you have now. The install no longer needs one; make one before your
+        first Strata and whenever your presets matter. Press <b>Back up now</b>, then put the FM-1 in backup mode the
+        Flipper Zero way.</p>
+        <details class="flipper"><summary>The Flipper Zero steps</summary>
         <ol class="steps small">
           <li>The Flipper unplugged from this computer: Apps &gt; Tools &gt; <b>FM1 Recovery</b>. The FM-1 switched
             off, a USB-C data cable from the Flipper to the FM-1.</li>
           <li><b>OK</b> on the Flipper, then switch the FM-1 on. At <i>Move FM1 cable to PC now</i>, move the cable to
             this computer without switching the FM-1 off.</li>
           <li>If Windows offers to format a disk: <b>Cancel</b>. This page reads it by itself, then lets it go.</li>
-        </ol>
+        </ol></details>
         <div class="row"><button id="bk-start" class="primary" disabled>Back up now</button>
           <button id="bk-cancel" hidden>Stop</button></div>
         <progress id="bk-bar" max="32" value="0" hidden></progress>
@@ -149,8 +166,8 @@
     </ul>
   </section>
 
-  <section class="card">
-    <h2><span class="n">2</span>Install</h2>
+  <section class="card" id="s2">
+    <h2><span class="n">2 / 3</span>Install</h2>
     <p>The FM-1's own update path, as Felucca's installer uses it: the firmware running now reads the package and
     starts the update loader, the loader writes the app area only (<code>0x4000</code>&ndash;<code>0x92FFF</code>;
     the boot head and your settings' sectors are never written), then the FM-1 restarts into Strata. About a
@@ -164,10 +181,10 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2><span class="n">3</span>Test and report</h2>
+  <section class="card" id="s3">
+    <h2><span class="n">3 / 3</span>Test and report</h2>
     <p>Work through the checklist in <a href="FLASHING.md" target="_blank" rel="noopener">FLASHING.md</a> (section
-    4). On the FM-1, hold HOME 5&nbsp;s for the SETTINGS; the last page, BENCH, shows the measurements. This reads the
+    4). On the FM-1, hold HOME 5&nbsp;s for DEBUG; its first page, BENCH, shows the measurements. This reads the
     same figures from Strata's USB serial console, ready to paste back.</p>
     <div class="row">
       <button id="report" disabled>Read the device report&hellip;</button>
@@ -247,7 +264,8 @@ const WHY = {
 let image = null, midi = null, writing = false, pending = null, stock = null, stockPending = null, report = "";
 let ubootAsked = false;                                  // (backup mode: its confirmation shown first)
 const TOKEN = "__STRATA_TOKEN__";                        // (serve.py puts this run's token here)
-let bk = null, backupOk = false;                         // serve.py's backup report; a backup from the last 12 h
+let bk = null, backupOk = false;                         // serve.py's backup report; a backup from the last 12 h (V0.87:
+                                                         // recommended, no longer required)
 let justBackedUp = false;                                // one made from this page, no FM-1 on MIDI since
 
 const log = (t) => { $("log").textContent += t + "\n"; };
@@ -269,20 +287,22 @@ function describe(id) {
 }
 function gate() {
   const backingUp = !!bk && (bk.state === "waiting" || bk.state === "reading");
-  const ready = !!image && backupOk && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
+  const ready = !!image && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
   $("find").disabled = !ready || writing || !$("confirm").hidden;
   $("uboot").disabled = writing || !navigator.requestMIDIAccess;
-  $("stock-go").disabled = !stock || writing || !backupOk || backingUp || !$("c-power").checked;
+  $("stock-go").disabled = !stock || writing || backingUp || !$("c-power").checked;
   $("bk-start").disabled = !bk || !!bk.why_not || backingUp || writing;
   $("bk-cancel").hidden = !backingUp;
   $("report").disabled = $("run").disabled = writing || !navigator.serial;
   $("stock-file").disabled = writing;
+  const next = !ready ? "s1" : !writing && !$("confirm").hidden ? "s2" : $("find").disabled ? "s3" : "s2";
+  for (const id of ["s1", "s2", "s3"]) $(id).classList.toggle("next", id === next);   // (the next step's page)
 }
 document.querySelectorAll(".pre").forEach((c) => c.addEventListener("change", gate));
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = ""; } });
 
 // step 1's backup, made by serve.py (it reads the backup-mode disk with flipper-fm1-recovery's pc_backup.py): its
-// state polled once a second; the install waits for a backup from the last 12 hours whose files still check out
+// state polled once a second; shown with the last backup's date (V0.87: the install no longer waits for one)
 function ageText(h) { return h < 1 / 60 ? "just now" : h < 1 ? `${Math.round(h * 60)} min ago` : `${h.toFixed(1)} h ago`; }
 function showBackup() {
   const st = $("bk-status"), bar = $("bk-bar"), r = bk, L = r && r.latest;
@@ -300,11 +320,12 @@ function showBackup() {
     failed: `The backup did not finish: ${r.message}. Nothing was written.`,
     cancelled: `Stopped: ${r.message}.`,
   }[r.state] || "";
-  const have = !L ? "No backup yet." : L.ok
-    ? `Backup ready (${ageText(L.age_h)}): ${L.dir}, SHA-256 ${L.sha256.slice(0, 16)}…` +
+  const when = L && L.made ? ` on ${new Date(L.made * 1000).toLocaleString()}` : "";
+  const have = !L ? "No backup yet (recommended, not required)." : L.ok
+    ? `Backup ready (${ageText(L.age_h)}${when}): ${L.dir}, SHA-256 ${L.sha256.slice(0, 16)}…` +
       (r.state === "verified" ? " The FM-1 is still in backup mode: switch it off and on, then install." : "")
-    : !L.files_ok ? `The last backup (${L.dir}) no longer checks out: make a new one.`
-    : `The last backup is ${ageText(L.age_h)}, older than ${r.max_age_h} h: make a new one.`;
+    : !L.files_ok ? `The last backup (${L.dir}) no longer checks out: making a new one is recommended.`
+    : `The last backup is ${ageText(L.age_h)}${when}: making a new one is recommended.`;
   st.textContent = [job, have].filter(Boolean).join(" ");
 }
 async function backupPoll() {
@@ -355,7 +376,7 @@ async function getMidi() {
       return;
     }
     image = logicalImage(pkg);
-    say("Package checked. Make the backup (step 1) and tick the three boxes to install.", "");
+    say("Package checked. Tick the three boxes to install (a backup first is recommended, step 1).", "");
   } catch (e) { showErr(e); }
   gate();
 })();
@@ -427,8 +448,7 @@ $("write").addEventListener("click", async () => {
   $("confirm").hidden = true;
   writing = true; gate();
   try {
-    if (!backupOk) throw new Error("no backup from the last 12 hours (step 1)");
-    log(`backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}`);
+    log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
     const up = new Updater(await getMidi(), log), step = stepper();
     if (job.loader) {
       if (!await up.resume(image, step, meta.product)) throw codeErr("stopped");
@@ -501,8 +521,7 @@ $("stock-write").addEventListener("click", async () => {
   $("stock-confirm").hidden = true;
   writing = true; gate();
   try {
-    if (!backupOk) throw new Error("no backup from the last 12 hours (step 1)");
-    log(`backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}`);
+    log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
     const up = new Updater(await getMidi(), log), step = stepper();
     if (job.loader) {
       if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");

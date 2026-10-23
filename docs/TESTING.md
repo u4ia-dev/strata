@@ -423,7 +423,7 @@ bit as `tests/sy_golden.txt`; patch codes round trip (the test sounds, INIT, an 
 is refused; a load is taken, a second one held while it fades (2 quanta), then played as sent; values as text. The
 workbench draws no LFO shape: its codes keep the drawn shapes they bring, and SHAPE DRAWN plays them.
 
-### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 166 checks)
+### 6.3 The app on the simulated FM-1 (`web/emu`, `strata_emu_test.mjs`, 171 checks)
 
 `sy_app.c` and the UI (`sy_ui.c`, `sy_ui_draw.c`, `sy_ui_fx.c`, `sy_ui_save.c`, `sy_gfx.c`) with the engine, `sy_store.c`,
 Felucca's `panel.c` and `gfx.c`, compiled against a simulated FM-1 (`strata_web.c`, after Felucca's): the clock, the
@@ -578,6 +578,23 @@ DRUM: "DRUM: RESET", the drum's DRIVE at rest; a power cycle: INDUSTRIAL back wi
 checks before on the new pages (V0.85's drum check on DRUM's SOUND, MIX, KIT's DUCK on KNOB 2). Screens: 159 (DRUM's
 five pages, KIT's four, the kits' list, PRESETS' delete question; the drum shots before redone on the new pages), the
 check clean; the knob sweep 681 turns (639 before), none with findings.
+
+V0.87 step 1 (171 checks; the tests start on sound 0, `web_test_sound_set`, since a unit now boots on INIT): the
+checks of removed controls rewritten for their replacements: the resets by a button + OCT− held 5 s (`octHold`: LFO,
+EDIT, DRUM, SEQ's CLIP), HOME held 5 s DEBUG and twice the SETTINGS (LIGHTS MED kept through a power cycle), PRESETS'
+list INIT first then A to Z and gone at 5 s, EDIT twice the wavetables' list (a table loaded) and on a drum track the
+kits, ENV twice and LFO twice the assign window (its source, shut by its button), the SAVE window (SAVE AS NEW to NAME
+IT, SAVE over USER 2, CANCEL, a knob shutting it, a starter's SAVE row closed), CORE 2 in DEBUG, the MATRIX in EDIT,
+SELECT on HOME the track, SEQ + OCT+ a clip of a bar and PRESETS its length, SEQ + OCT− DELETE? then deleted, the
+projects' list by SEQ twice through a power cycle, TYPE's question (no time out, turned again, SAVE yes, EDIT kept),
+REC's tap after 300 ms and a second tap after a stop doing nothing. New: a new unit on INIT (its macros in slots
+1-4, LIGHTS HIGH), TAKE (3 notes, a bar), tap tempo (150 BPM from 0.4 s taps, the transport stopped), the assign
+window's page 2 (a slot, AMOUNT, UNIPOLAR's bit), WIPE (asked, SAVE: the palette and LIGHTS back). Screens: 173 (the
+windows, the lists, the questions, the reset's countdown, a new clip, DEBUG, WIPE), the check clean (the windows'
+"cannot" rows raised from MID to LABEL for it); the knob sweep 679 turns, none with findings; the stress test 24 x
+3000, clean. The LEDs: `tests/sy_led_test.c` (host) traces the scan's line writes in quarters: every level steady
+frame to frame (+-1 us), HIGH 90.7 / MED 39.7 / LOW 14.7 us lit a frame, the glow 3.4 / 2.4 / 1.7 us, OFF dark, the
+breath 8 steps a period; how it looks **needs a hardware test** (FLASHING.md step 53).
 
 ### 6.4 The emulator's page in a browser (`strata_browser_test.mjs`, 6 checks)
 

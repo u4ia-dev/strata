@@ -19,6 +19,8 @@ static struct {
     int16_t key[3 * NSLOT];        /* the slot parameters this was made from */
     uint8_t nz[2], z[2][NSLOT];    /* V0.81: each pass's offsets (0 the voices' and the effects', 1 the macros') */
     uint8_t na[2], as[2][NSLOT];   /* .. and its slots, in slot order (mod_offsets: the sums as before, bit for bit) */
+    int16_t kpol;                  /* V0.87: the POLARITY it was made from; the slots turned the other way */
+    uint8_t pol;
 } mm;
 static uint8_t mod_idx[SP_COUNT];  /* a parameter's index in the offsets (0xFF: none) */
 static float sy_src_g[SRC_COUNT];  /* global sources (macros, wheel, bend, aftertouch, expression, fixed) */
@@ -30,7 +32,7 @@ static void mod_map(void)
     uint32_t s, i;
     for (s = 0; s < 3u * NSLOT && sy_patch.p[SP_M1_SRC + s] == mm.key[s]; s++)
         ;
-    if (s == 3u * NSLOT)
+    if (s == 3u * NSLOT && sy_patch.p[SP_M_POL] == mm.kpol)
         return;
     for (i = 0; i < SP_COUNT; i++)
         mod_idx[i] = 0xFF;
@@ -60,6 +62,13 @@ static void mod_map(void)
         }
     for (s = 0; s < 3u * NSLOT; s++)
         mm.key[s] = sy_patch.p[SP_M1_SRC + s];
+    mm.kpol = sy_patch.p[SP_M_POL];
+    mm.pol = (uint8_t)mm.kpol;
+}
+static int mod_src_bip(uint32_t src)            /* a source that swings both ways as it is (-1 .. 1) */
+{
+    return src == SRC_LFO1 || src == SRC_LFO2 || src == SRC_NOTE || src == SRC_RAND || src == SRC_ALT ||
+           src == SRC_BEND;
 }
 
 /* offsets for one voice (vs: its per-voice sources, indexed by SRC_*) or the global set (vs = 0: the newest
@@ -72,6 +81,8 @@ static void mod_offsets(float *off, const float *vs, int macros)
     for (k = 0; k < mm.na[m]; k++) {
         uint32_t s = mm.as[m][k], src = mm.src[s];
         float v = src <= SRC_VOICE_LAST ? (vs ? vs[src] : 0.0f) : sy_src_g[src];
+        if ((mm.pol >> s) & 1u)                 /* (V0.87: POLARITY turned: bipolar to 0 .. 1, unipolar to -1 .. 1) */
+            v = mod_src_bip(src) ? 0.5f * v + 0.5f : 2.0f * v - 1.0f;
         off[mm.slot[s]] += v * (float)sy_patch.p[SP_M1_AMT + 3u * s] * 0.001f;
     }
 }

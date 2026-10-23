@@ -375,6 +375,36 @@ static void t_matrix(void)
     mod_map();
     mod_offsets(off, vs, 0);
     check("matrix: 100 % moves across the whole range (clamped at the top)", mod_get(off, SP_F_CUT) == 1.0f);
+    {                                                     /* V0.87: POLARITY, a bit a slot (the source turned) */
+        float o0[3], o1[3];
+        uint32_t k;
+        static const float LV[3] = {-1.0f, 0.0f, 1.0f}, EV[3] = {0.0f, 0.5f, 1.0f};
+        eng_reset();
+        set(SP_M1_SRC, SRC_LFO1);
+        set(SP_M1_DST, SP_F_CUT);
+        set(SP_M1_AMT, 400);
+        set(SP_M2_SRC, SRC_ENV2);
+        set(SP_M2_DST, SP_F_RES);
+        set(SP_M2_AMT, 400);
+        snap();
+        for (k = 0; k < 3u; k++) {                        /* (as they are, then both turned) */
+            vs[SRC_LFO1] = LV[k], vs[SRC_ENV2] = EV[k];
+            set(SP_M_POL, 0);
+            mod_map();
+            mod_offsets(off, vs, 0);
+            o0[k] = off[mod_idx[SP_F_CUT]] + 10.0f * off[mod_idx[SP_F_RES]];
+            set(SP_M_POL, 3);
+            mod_map();
+            mod_offsets(off, vs, 0);
+            o1[k] = off[mod_idx[SP_F_CUT]];
+            o1[k] += 10.0f * off[mod_idx[SP_F_RES]];
+        }
+        check("matrix POLARITY: 0 every source as it is (LFO -1 .. 1 x 40 %: -0.4 .. 0.4; ENV 0 .. 1: 0 .. 0.4)",
+              fabsf(o0[0] - (-0.4f)) < 1e-6f && fabsf(o0[2] - (0.4f + 4.0f)) < 1e-5f);
+        check("matrix POLARITY turned: the LFO 0 .. 1 (never under the knob: 0 .. 0.4), the ENV -1 .. 1 (-0.4 .. 0.4)",
+              fabsf(o1[0] - (0.0f - 4.0f)) < 1e-5f && fabsf(o1[1] - (0.2f + 0.0f)) < 1e-5f &&
+              fabsf(o1[2] - (0.4f + 4.0f)) < 1e-5f);
+    }
     eng_reset();
     set(SP_MAC1, 1000);
     set(SP_M1_SRC, SRC_MAC1);

@@ -373,7 +373,7 @@ static void ui_save_ms(void)                        /* every millisecond: a pres
         if (ui_sec() == SEC_BROWSE)
             ui_save_open();
         else
-            ui_save_new();
+            ui_sw_open();                           /* (V0.87, U17: the SAVE window) */
     }
     if (ui.sv_key != 0xFF && fm1_ms - ui.sv_key_t > 300u) {
         ui.sv_key = 0xFF;
@@ -541,4 +541,34 @@ static void ui_p_browse(void)
     ui_H(0, 8.0f, 49.0f);
     ui_H(1, 8.0f, sy + 2.0f);
     ui_H(2, 8.0f, 24.0f);
+}
+
+/* V0.87 (U17): the SAVE window (SAVE once): SAVE over the sound's own slot (none: a starter, INIT, a sound not saved:
+ * shown, not to be picked), SAVE AS NEW (NAME IT on its next version's name), CANCEL; OCT- and OCT+ move, SAVE does it */
+static void ui_p_sw(void)
+{
+    static const char *const R[3] = {"SAVE", "SAVE AS NEW", "CANCEL"};
+    char t[40], nm[24], r0[24];
+    int own = sy_app_slot() >= 0;
+    uint32_t i;
+    lk_frame(14.5f, 44.5f, 211.0f, 150.0f, 1.5f, sk.hot);
+    sp_put(sp_put(t, "SAVE "), sy_patch.name);
+    lk_text(26.0f, 56.0f, T14B, lk_fit(nm, sizeof nm, t, T14B, 0, 190.0f), sk.hot, sk.ground, 0, 17);
+    ui_save_version(sy_patch.name, nm);
+    if (own)
+        sp_fix(sp_put(r0, "OVER USER "), sy_app_slot() + 1, 0u, 0);
+    else
+        sp_put(r0, "STARTERS STAY");
+    for (i = 0; i < 3u; i++) {
+        float y = 80.0f + 30.0f * (float)i;
+        int on = i == ui.sw_pos;
+        uint16_t bg = on ? sk.ink : sk.ground;
+        const char *rt = i == 0u ? r0 : i == 1u ? nm : 0;
+        if (on)
+            lk_box(22.0f, y, 218.0f, y + 25.0f, sk.ink);
+        lk_text(30.0f, y + 5.0f, T12B, R[i], on ? sk.ground : !own && !i ? sk.lab : sk.ink, bg, 0, 15);
+        if (rt)
+            lk_text_r(212.0f, y + 8.0f, T9, lk_fit(t, sizeof t, rt, T9, 20, 100.0f), on ? sk.ground : sk.lab, bg, 20, 0);
+    }
+    lk_text(26.0f, 176.0f, T9, "OCT- OCT+ PICK \xB7 SAVE: DO IT", sk.lab, sk.ground, 20, 0);
 }

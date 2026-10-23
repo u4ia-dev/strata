@@ -138,8 +138,8 @@ static int st_prog(uint32_t off, const void *src, uint32_t n)
 #define CV_MAX (240u * 114u)                       /* (strata.c's: the canvas Strata's largest strip needs) */
 #include "../../firmware/src/gfx.c"                /* (its fonts, palettes and keycaps: build/gen) */
 static uint8_t fx_lowcut;                        /* (panel.c's settings_init sets Felucca's low cut: not Strata's) */
-static uint32_t web_dim_lo;
-static void fm1_led_dim_level(uint32_t lo) { web_dim_lo = lo != 0; }   /* (the HAL's: the glow's level) */
+static uint32_t web_dim_lo = 3;
+static void fm1_led_level(uint32_t lv) { web_dim_lo = lv & 3u; }   /* (V0.87, the HAL's: LIGHTS 0 OFF .. 3 HIGH) */
 #include "../../firmware/src/panel.c"
 #include "../../firmware/src/sy_core.h"
 #include "../../firmware/src/sy_wt.c"
@@ -165,7 +165,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_loop.c"
 #include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.86 UI"                        /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.87 UI"                        /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
@@ -429,6 +429,35 @@ EXPORT void web_test_set(uint32_t id, int32_t v)
 }
 EXPORT const char *web_test_patch_name(void) { return sy_patch.name; }
 EXPORT uint32_t web_test_sound(void) { return sy_sound; }
+EXPORT int32_t web_test_win(uint32_t f)   /* (V0.87's windows: assign, SAVE, a question) */
+{
+    return f == 0u ? ui.asg : f == 1u ? ui.sw : f == 2u ? ui.sw_pos : f == 3u ? ui.qk : f == 4u ? ui.asg_src : f == 5u ? ui.asg_k
+         : f == 6u ? sy_patch.p[SP_M_POL] : -1;
+}
+EXPORT int32_t web_test_pl_id(uint32_t pos)   /* (the presets' list: its entry at pos; 0xFFFF: INIT's id) */
+{
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids);
+    return pos == 0xFFFFu ? (int32_t)(SY_NFACT - 1u) : pos < n ? ids[pos] : -1;
+}
+EXPORT int32_t web_test_pl_user(uint32_t slot)   /* (.. where user slot sits in it) */
+{
+    uint16_t ids[SY_NFACT + SS_NUSER];
+    uint32_t n = sy_app_list(0, 0, ids), i;
+    for (i = 0; i < n; i++)
+        if (ids[i] == SY_USER + slot)
+            return (int32_t)i;
+    return -1;
+}
+EXPORT void web_test_sound_set(uint32_t k)   /* (V0.87: the tests start on sound k, the boot's INIT before) */
+{
+    sy_patch_t p;
+    sy_sound_patch(k, &p);
+    sy_patch_load(&p);
+    sy_sound = k;
+    ui.edited = 0;
+    sy_ui_touch();
+}
 EXPORT uint32_t web_test_mod(void) { return ui.mod; }
 EXPORT uint32_t web_test_mod_src(void) { return ui.mod_src; }
 EXPORT int32_t web_test_slot(uint32_t s, uint32_t field) { return s < NSLOT && field < 3u ? sy_patch.p[SP_M1_SRC + 3u * s + field] : 0; }
@@ -770,7 +799,7 @@ EXPORT uint32_t web_test_scr(void) { return ui.scr_st; }
 /* PRESETS' list (V0.86): f 0 open, 1 the one picked (its place), 2 SAVE + OCT-'s delete asked (the user slot + 1) */
 EXPORT int32_t web_test_pl(uint32_t f)   /* (3: the kits' list) */
 {
-    return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : f == 3u ? ui.pl_kits : -1;
+    return f == 0u ? ui.pl_open : f == 1u ? ui.pl_pos : f == 2u ? ui.pl_ask : f == 3u ? ui.pl_kind : f == 4u ? ui.pl_osc : -1;
 }
 EXPORT const char *web_test_kit_name(void) { return dkk.name; }
 EXPORT uint32_t web_test_lcd_off(void) { return web_lcd_off; }

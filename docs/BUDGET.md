@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17, V0.87's in §18)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,23 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 18. V0.87 step 1 (the interface's changes, the LEDs)
+
+| | V0.87 step 1 | |
+|---|---:|---|
+| App image | 491,644 B | +9,580 on V0.86 step 2; of the app slot's 581,564 B: 89,920 B free |
+| RAM .data + .bss | 65,908 B | of 73,728 |
+| Pool | 362,036 B | of 380,928 |
+| Interrupt stack | ~3,056 B | of 4,096 allowed |
+| Main stack | ~5,276 B | of 8,192 allowed |
+
+What it added: the windows (assign, SAVE, the questions) and the lists by kind (presets, wavetables, kits, projects)
+in the UI's own state (a few dozen bytes: no buffers); TAKE's ring of the last 256 notes (`lpk`, ~1.3 KB of .bss,
+the one buffer of size); POLARITY a parameter (2 bytes a preset); the LED scan's quarters (TIMER5 at 40 kHz, three
+short interrupts between ticks: a compare and at most one line write each; the tick's work unchanged, so the main
+loop and the audio see the same load; **needs a hardware test** for how it looks). JUMP, the PROJECT page and the
+held-5-s resets went. The size and RAM review after V0.87 (step 2 first) looks at what can go.
 
 ## 17. V0.86 step 2 (the drum editor)
 

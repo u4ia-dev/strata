@@ -79,6 +79,15 @@
  * ~8.8 ms, ~114 Hz) or with DIM LO FM1_LED_MID_N_LO (12: ~8 % + ~1.6 %, ~76 Hz); fm1_led_dim_level sets it. No breath,
  * no sigma-delta: a fixed frame count, the same frames for every column. An LED lit does not need it; one breathing
  * and mid is lit on the mid frames as well.
+ * Strata V0.87 (FM1_LED_Q 1, u4ia): the tick in quarters. TIMER5 at 40 kHz (FM1_T5_PRD_V 150); every fourth
+ * interrupt is the tick above, the three between call fm1_input_quarter(q), which only takes the LED lines whose level
+ * ends at quarter q dark. A level is the quarters of the column's tick an LED is lit: lit, mid and the breath each one
+ * of 0 (the glow's pulse instead) .. 4 (the whole tick), every frame: no frame lit or dark by turns, so nothing
+ * flickers (on V0.86 the mid level, 1 frame in 8 or 12, and the breath's low end, 1 frame in 10 .. 40, did: 22 ..
+ * 114 Hz). fm1_led_level(0 OFF, 1 LOW, 2 MED, 3 HIGH) sets lit 0 / 1 / 2 / 4 quarters, mid 0 / 0 / 1 / 2 (0: the
+ * glow), the glow's pulse none / FM1_LED_DIM_LO_NS / 2.4 us / FM1_LED_DIM_NS; OFF lights nothing. The breath steps
+ * through 0 .. lit's quarters and back (FM1_LED_BREATH_FRAMES, the smoothstep as above, no sigma-delta). A quarter's
+ * work is one compare and at most one line write; the lines are written only there and in the tick.
  * The power-on sweep (1.1, hal/fm1_led_anim.h: a light running over the keys, then the buttons): a level per LED,
  * 0..64 /64 of lit, as whole lit frames, each LED its own first order sigma-delta (lit when its sum passes 64: the
  * lit frames as evenly spread as can be, a dark run at most 64 / level frames, <= 16 (~18 ms, ~57 Hz) from the
@@ -132,6 +141,9 @@
 #endif
 #ifndef FM1_LED_TICK_US
 #define FM1_LED_TICK_US 100u          /* fm1_input_tick's period (TIMER5, 10 kHz): a lit LED's time a frame */
+#endif
+#ifndef FM1_LED_Q
+#define FM1_LED_Q 0                   /* Strata V0.87: 1, the tick in quarters (see top) */
 #endif
 #ifndef FM1_LED_TRACE
 #define FM1_LED_TRACE(rowmask) ((void)0)   /* input_test.c: every write of the LED lines */
@@ -416,6 +428,20 @@ static void fm1_led_dim_level(uint32_t lo)
     fm1__br_sel = lo != 0u;
     fm1__mid_n = (uint8_t)(lo ? FM1_LED_MID_N_LO : FM1_LED_MID_N);
 }
+#if FM1_LED_Q
+/* V0.87 (Strata): the quarters (see top) */
+static uint8_t fm1__lq_lit = 4u, fm1__lq_mid = 2u, fm1__lq_br;   /* lit's, mid's quarters (0: the glow); the breath's */
+static uint8_t fm1__lq_off[3], fm1__lq_on;        /* the column lit: its rows that end after quarter 1 .. 3; lit now */
+static void fm1_led_level(uint32_t lv)            /* 0 OFF, 1 LOW, 2 MED, 3 HIGH (main loop, any time) */
+{
+    static const uint8_t LIT[4] = {0, 1, 2, 4}, MID[4] = {0, 0, 1, 2};
+    static const uint16_t DIM[4] = {0, FM1__DIM_T(FM1_LED_DIM_LO_NS), FM1__DIM_T(2400u), FM1__DIM_T(FM1_LED_DIM_NS)};
+    lv &= 3u;
+    fm1__lq_lit = LIT[lv];
+    fm1__lq_mid = MID[lv];
+    fm1__dim_t = DIM[lv];
+}
+#endif
 /* column c's lit lines this frame: lit, a breath's lit frame (not dim), the mid level's lit frame */
 #define FM1__LIT(c) (fm1_led[c] | (fm1__br_lit ? fm1_led_breath[c] & ~fm1_led_dim[c] : 0u) | \
                      (!fm1__mid_ph ? fm1_led_mid[c] : 0u))
@@ -439,6 +465,13 @@ static void fm1__breath_frame(void)               /* (a new frame, before column
     x = x * 512u / FM1_LED_BREATH_FRAMES;          /* 0..511 */
     x = x & 256u ? 511u - x : x;                   /* a triangle 0..255 */
     x = x * x * (768u - 2u * x) >> 16;             /* smoothstep, 0..255 */
+#if FM1_LED_Q
+    fm1__lq_br = (uint8_t)((x * fm1__lq_lit + 128u) >> 8);   /* (V0.87: lit's quarters, a step at a time) */
+    fm1__br_lit = 0;
+    fm1__br_lv = 0;
+    (void)q;
+    return;
+#endif
     x = x * x * q[0] >> 8;                         /* squared (the eye), x the peak: B, of lit /65536 */
     if (x <= q[1]) {                               /* up to the glow: a share of the pulse */
         fm1__br_lv = (uint16_t)(x * q[2] >> 16);
@@ -519,6 +552,41 @@ static int fm1_led_anim_on(void) { return fm1__an_f != 0u; }
 static void fm1_led_idle_start(uint32_t glow) { fm1__anim_begin(glow, 1); }
 static int fm1_led_idle_on(void) { return fm1__an_f != 0u && fm1__an_idle; }
 static void fm1_led_anim_stop(void) { fm1__an_f = 0; }   /* (the LEDs as the last frame left them: the UI writes them) */
+#if FM1_LED_Q
+/* column c in quarters: the rows lit at its tick's start (returned), those ending after quarter 1 .. 3 (off), those
+ * the glow's pulse lights (glow: dim, and a level of 0 quarters; none with OFF) */
+static uint32_t fm1__lq_masks(uint32_t c, uint8_t *off, uint32_t *glow)
+{
+    uint32_t lit = fm1_led[c], mid = fm1_led_mid[c] & ~lit, br = fm1__br_on ? fm1_led_breath[c] & ~(lit | mid | fm1_led_dim[c]) : 0u;
+    uint32_t m[3], L[3], on = 0, g = fm1__lq_lit ? fm1_led_dim[c] : 0u, i;
+    m[0] = lit, m[1] = mid, m[2] = br;
+    L[0] = fm1__lq_lit, L[1] = fm1__lq_mid, L[2] = fm1__lq_br;
+    off[0] = off[1] = off[2] = 0;
+    for (i = 0; i < 3u; i++) {
+        if (!m[i])
+            continue;
+        if (!L[i]) {
+            if (fm1__lq_lit)
+                g |= m[i];
+            continue;
+        }
+        on |= m[i];
+        if (L[i] < 4u)
+            off[L[i] - 1u] |= (uint8_t)m[i];
+    }
+    *glow = g & ~on;
+    return on;
+}
+/* a quarter of the tick (q 1 .. 3, from the timer ISR between ticks): the rows whose level ends here dark */
+static void fm1_input_quarter(uint32_t q)
+{
+    uint32_t off = fm1__lq_off[(q - 1u) % 3u] & fm1__lq_on;
+    if (off) {
+        fm1__lq_on = (uint8_t)(fm1__lq_on & ~off);
+        fm1__led_lines(fm1__lq_on);
+    }
+}
+#endif
 static void fm1_input_tick(void)
 {
     uint32_t p = fm1__tick_col, n = p + 1u == FM1_NCOL ? 0u : p + 1u;
@@ -538,6 +606,15 @@ static void fm1_input_tick(void)
     fm1_in.raw[p] = (uint8_t)fm1__rows();          /* column p has been latched one tick (the lines dark) */
     if (p == 0u)
         fm1__breath_frame();
+#if FM1_LED_Q
+    {                                              /* (V0.87: the pulse lights the rows still lit, those of the glow) */
+        uint8_t off[3];
+        uint32_t gl;
+        fm1__lq_masks(p, off, &gl);
+        lit = fm1__lq_on;
+        dim = gl & ~lit;
+    }
+#else
     lit = FM1__LIT(p);                             /* (a lit frame: as lit) */
 #if FM1_LED_DIM_DIV > 1
     if (p == 0u)                                   /* a new frame: the dim LEDs' turn on 1 in FM1_LED_DIM_DIV */
@@ -551,6 +628,7 @@ static void fm1_input_tick(void)
             br = kb ? fm1_led_breath[p] & ~(lit | dim) : 0u;
         }
     }
+#endif
     if (dim | br) {                                /* the dim pulse of column p: over the first k bits */
         uint32_t t1, d, T = fm1__dim_t;
         t1 = fm1_ticks();                          /* (before the write: d spans one write and the bits) */
@@ -576,7 +654,15 @@ static void fm1_input_tick(void)
     fm1__sr_latch();                               /* column n, the lines dark */
     if (n == 0u)                                   /* (a new frame: the mid level's turn, before column 0 lights) */
         fm1__mid_ph = (uint8_t)(fm1__mid_ph + 1u >= fm1__mid_n ? 0u : fm1__mid_ph + 1u);
+#if FM1_LED_Q
+    {
+        uint32_t gl;
+        fm1__lq_on = (uint8_t)fm1__lq_masks(n, fm1__lq_off, &gl);
+        fm1__led_lines(fm1__lq_on);
+    }
+#else
     fm1__led_lines(FM1__LIT(n));
+#endif
     fm1__tick_col = (uint8_t)n;
     fm1__keys(p);                                  /* its keys now: no wait for the frame's end */
     if (n == 0u) {

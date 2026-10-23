@@ -300,8 +300,11 @@ static void sy_sound_patch(uint32_t k, sy_patch_t *p)
 {
     uint32_t i, n;
     sp_defaults(p);
-    if (k >= sizeof SOUNDS / sizeof SOUNDS[0])
+    if (k >= sizeof SOUNDS / sizeof SOUNDS[0]) {  /* (INIT. V0.87, U19: the matrix's first four slots MACRO 1-4, */
+        for (i = 0; i < 4u; i++)                  /* going nowhere yet: a macro's place picked is all it takes) */
+            p->p[SP_M1_SRC + 3u * i] = (int16_t)(SRC_MAC1 + i);
         return;
+    }
     for (i = 0; SOUNDS[k].kv[i][0] >= 0; i++)
         p->p[SOUNDS[k].kv[i][0]] = sp_clamp((uint32_t)SOUNDS[k].kv[i][0], SOUNDS[k].kv[i][1]);
     sp_chain_from_old(p);                        /* (their effects as the six were: those ON, the chain) */
@@ -378,11 +381,20 @@ static const char *sy_app_entry(uint32_t id, uint8_t *cat)
     return id + 1u == SY_NFACT ? INIT : 0;
 }
 
-/* the presets of a bank (0 all, 1 factory, 2 user) and category (0 all, else CAT_* + 1), in order, into ids: their
- * count */
+/* two presets' names in A-Z order, letters' case aside: < 0 a first */
+static int sy_name_cmp(const char *a, const char *b)
+{
+    for (;; a++, b++) {
+        int x = *a >= 'a' && *a <= 'z' ? *a - 32 : *a, y = *b >= 'a' && *b <= 'z' ? *b - 32 : *b;
+        if (x != y || !x)
+            return x - y;
+    }
+}
+/* the presets of a bank (0 all, 1 factory, 2 user) and category (0 all, else CAT_* + 1), into ids: their count.
+ * V0.87 (U12, P1): INIT first, then A-Z, the starters and the user's together (the same name: the starter first) */
 static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids)
 {
-    uint32_t k, n = 0;
+    uint32_t k, n = 0, i, j, from;
     uint8_t c;
     for (k = 0; bank != 2u && k < SY_NFACT; k++)
         if (sy_app_entry(k, &c) && (!cat || c + 1u == cat))
@@ -390,6 +402,21 @@ static uint32_t sy_app_list(uint32_t bank, uint32_t cat, uint16_t *ids)
     for (k = 0; bank != 1u && k < SS_NUSER; k++)
         if (sy_uidx[k].used && (!cat || sy_uidx[k].cat + 1u == cat))
             ids[n++] = (uint16_t)(SY_USER + k);
+    for (k = 0; k < n && ids[k] != SY_NFACT - 1u; k++)
+        ;
+    if (k < n) {                                 /* (INIT to the front) */
+        for (; k > 0u; k--)
+            ids[k] = ids[k - 1u];
+        ids[0] = (uint16_t)(SY_NFACT - 1u);
+    }
+    from = n && ids[0] == SY_NFACT - 1u;
+    for (i = from + 1u; i < n; i++) {            /* (the rest by name: an insertion sort, stable) */
+        uint16_t x = ids[i];
+        const char *nx = sy_app_entry(x, &c);
+        for (j = i; j > from && sy_name_cmp(sy_app_entry(ids[j - 1u], &c), nx) > 0; j--)
+            ids[j] = ids[j - 1u];
+        ids[j] = x;
+    }
     return n;
 }
 static uint32_t sy_app_entry_now(void) { return sy_slot >= 0 ? SY_USER + (uint32_t)sy_slot : sy_sound; }
@@ -814,9 +841,9 @@ static SY_NOINLINE void sy_app_boot(void)
     uint32_t k;
     panel_init();
     sy_init();
-    sy_sound_patch(0, &p);
+    sy_sound_patch(SY_NFACT - 1u, &p);           /* (V0.87, U11: INIT, until the flash brings the sound kept back) */
     sy_patch = p;
-    sy_sound = 0;
+    sy_sound = SY_NFACT - 1u;
     sy_slot = -1;
     sy_ui_boot();
     sy_flash_boot();

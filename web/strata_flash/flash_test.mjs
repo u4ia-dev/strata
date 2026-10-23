@@ -269,16 +269,16 @@ try {
     await tick(sid);
     const after = await ev(sid, "document.getElementById('find').disabled"), bks = await ev(sid, "document.getElementById('bk-status').textContent");
     check(`the package checked (${facts}); a backup 5 min old ("${bks.slice(0, 26)}..."); Find off, off with one box, on with three`,
-          /Package checked/.test(st) && /FM-1_900/.test(facts) && /610,090/.test(facts) && /^Backup ready \(5 min ago\)/.test(bks) &&
+          /Package checked/.test(st) && /FM-1_900/.test(facts) && /610,090/.test(facts) && /^Backup ready \(5 min ago/.test(bks) &&
           before && one && !after);
     await shot(sid, "flasher_light.png");
     check(`no exceptions on load${exceptions(sid).map((x) => " | " + x.slice(0, 160)).join("")}`, exceptions(sid).length === 0);
     await send("Target.closeTarget", { targetId });
   }
-  {   // no backup yet: Find off with every box; Back up now (the token sent), waiting, reading, verified; Find on
+  {   // no backup yet: Find on with every box (V0.87: recommended only); Back up now (the token sent), waiting, reading, verified
     const { sid, targetId, session } = await open({ mode: "stock", backup: "none" });
     await tick(sid);
-    const off = await ev(sid, "document.getElementById('find').disabled && document.getElementById('stock-go').disabled");
+    const off = await ev(sid, "!document.getElementById('find').disabled && document.getElementById('stock-go').disabled");
     const first = await ev(sid, "document.getElementById('bk-status').textContent");
     await click(sid, "bk-start");
     await until(sid, "/^Waiting for the FM-1/.test(document.getElementById('bk-status').textContent)", 4000);
@@ -286,13 +286,13 @@ try {
                                   "start: document.getElementById('bk-start').disabled, stop: !document.getElementById('bk-cancel').hidden })");
     await until(sid, "!document.getElementById('bk-bar').hidden", 4000);
     const reading = await ev(sid, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled })");
-    const done = await until(sid, "!document.getElementById('find').disabled", 6000);
+    const done = await until(sid, "/^Backup ready/.test(document.getElementById('bk-status').textContent)", 6000);
     const final = await ev(sid, "document.getElementById('bk-status').textContent"), s = sessions.get(session);
-    check(`no backup: "${first}", Find and V15 off with every box ticked`, off && /^No backup yet/.test(first));
+    check(`no backup: "${first}", Find on with every box ticked (V15 off: no file)`, off && /^No backup yet \(recommended/.test(first));
     check(`Back up now: "${waiting.t.slice(0, 44)}...", Find off, Stop shown; a device Windows could not read named`,
           waiting.find && waiting.start && waiting.stop && /Windows could not read a USB device/.test(waiting.t));
-    check(`then "${reading.t.slice(0, 30)}...", Find still off; then "${final.slice(0, 40)}...", Find on`,
-          /^Reading the flash, twice/.test(reading.t) && reading.find && done && /^Backup ready \(just now\)/.test(final) &&
+    check(`then "${reading.t.slice(0, 30)}...", Find off while it reads; then "${final.slice(0, 40)}..."`,
+          /^Reading the flash, twice/.test(reading.t) && reading.find && done && /^Backup ready \(just now/.test(final) &&
           /switch it off and on/.test(final));
     check(`the start asked once, with the token and this page's Origin (${s.starts} start, ${s.refused} refused)`, s.starts === 1 && s.refused === 0);
     const top = await status(sid);
@@ -303,14 +303,14 @@ try {
     const { sid, targetId } = await open({ backup: "none" });
     await tick(sid);
     await click(sid, "bk-start");
-    await until(sid, "!document.getElementById('find').disabled", 8000);
+    await until(sid, "/^Backup ready/.test(document.getElementById('bk-status').textContent)", 8000);
     await click(sid, "find");
     await until(sid, "document.getElementById('status-card').dataset.kind === 'err'", 8000);
     const st = await status(sid);
     check(`Find with the FM-1 still in backup mode: "${st.slice(0, 64)}..."`, /still in backup mode .*Switch it off, then on/.test(st));
     await send("Target.closeTarget", { targetId });
   }
-  {   // the server not an administrator, or a backup 20 h old: the reason shown, Find off
+  {   // the server not an administrator, or a backup 20 h old: the reason shown, Find still on (V0.87)
     const { sid, targetId } = await open({ mode: "stock", backup: "noadmin" });
     await tick(sid);
     const a = await ev(sid, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled, start: document.getElementById('bk-start').disabled })");
@@ -318,8 +318,8 @@ try {
     const { sid: sid2, targetId: t2 } = await open({ mode: "stock", backup: "stale" });
     await tick(sid2);
     const b = await ev(sid2, "({ t: document.getElementById('bk-status').textContent, find: document.getElementById('find').disabled })");
-    check(`no administrator: "${a.t.slice(0, 56)}...", Back up now and Find off`, /^Backups are off: .*administrator/.test(a.t) && a.find && a.start);
-    check(`a backup 20 h old: "${b.t.slice(0, 56)}...", Find off`, /older than 12 h: make a new one/.test(b.t) && b.find);
+    check(`no administrator: "${a.t.slice(0, 56)}...", Back up now off, Find on`, /^Backups are off: .*administrator/.test(a.t) && !a.find && a.start);
+    check(`a backup 20 h old: "${b.t.slice(0, 56)}...", its date shown, Find on`, /20\.0 h ago on .*making a new one is recommended/.test(b.t) && !b.find);
     await send("Target.closeTarget", { targetId: t2 });
   }
   {   // an install over the official firmware: step 1, the loader, step 2, Strata back

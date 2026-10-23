@@ -32,7 +32,7 @@ const E = { SELECT: 0, ALGO: 1, PRESET: 2, K1: 3, K2: 4, K3: 5, K4: 6 };        
 const SEC = { OSCA: 0, LFO1: 7, LFO2: 8, VOICE: 9, MACRO: 10, MATRIX: 11, DRIVE: 12, CHORUS: 13, DELAY: 14, REVERB: 15,
               OTT: 16, EQ: 17, EQ2: 21, PHASER: 24, PHASER2: 25, CHAIN: 36, MENU: 37, GLOBAL: 38, SAVE: 39, BROWSE: 40,
               KEYS: 41, ARP: 42, CHORD: 43, CMID: 44, STEPS: 45, SEQ: 46, LTRK: 47, LCLIP: 48, LSONG: 49, ENV1: 5,
-              ENV2: 6 };   // SEC_*
+              ENV2: 6, KIT: 50, DRUM: 52, DEBUG: 53 };   // SEC_*
 const ID = { A_TABLE: 1, A_POS: 2, A_WARP: 3, A_WAMT: 4, L1_SHAPE: 78, L1_NOTE: 166, DL_NOTE: 168,   // sy_param.c SP_*
              EQ_ON: 169, EQ_LOW: 170, EQ_MID: 171, EQ_HIGH: 172, EQ_LFREQ: 173, EQ_MFREQ: 174, EQ_Q: 175, EQ_HFREQ: 176,
              FX_ORDER: 177, EQ_LQ: 178, EQ_HQ: 179, FXC1: 180, A_ON: 0, CH_ON: 135, CH_MIX: 140, OT_ON: 158,
@@ -59,6 +59,7 @@ async function boot() {
   ex.web_master(700);
   ex.web_boot();
   ex.web_test_set_get(0, 0);                    // (HELP's hints off: the tests read the footer; one test turns them on)
+  ex.web_test_sound_set(0);                     // (V0.87: the boot plays INIT; the tests below start on sound 0)
   return ex;
 }
 const splash = (ex) => play(ex, 2.1);           // (V0.86, P4: the splash held 2 s, then HOME)
@@ -84,6 +85,16 @@ const tap = (ex, b) => { ex.web_buttons(1 << b); play(ex, 0.03); ex.web_buttons(
 const saveTwice = (x) => {                      // SAVE twice (V0.86: PRESETS' list loads the one picked)
   for (let i = 0; i < 2; i++) { x.web_buttons(1 << B.SAVE); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
   play(x, 0.3);
+};
+const twiceB = (x, b) => {                      // a menu button tapped twice (V0.87: HOME the SETTINGS, EDIT the lists)
+  for (let i = 0; i < 2; i++) { x.web_buttons(1 << b); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
+  play(x, 0.3);
+};
+const octHold = (x, b, secs) => {               // V0.87 (U2): a menu button + OCT- held secs (5: what it shows reset)
+  x.web_buttons(1 << b); play(x, 0.05); x.web_buttons((1 << b) | (1 << B.OCTDN)); play(x, secs);
+  const r = [cstr(x, x.web_test_cd()), cstr(x, x.web_test_toast())];
+  x.web_buttons(1 << b); play(x, 0.05); x.web_buttons(0); play(x, 0.4);
+  return r;
 };
 const slots = (ex) => Array.from({ length: 8 }, (_, s) => [0, 1, 2].map((f) => ex.web_test_slot(s, f)));
 const fxTwice = (x) => {                        // FX tapped twice: the chain view <-> the module picked
@@ -169,17 +180,20 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
         s4 === SEC.CHORUS && ex.web_test_page_section() === SEC.CHAIN && ex.web_test_cslot() === 0);
 }
 {                                               // PRESETS' list (V0.86, the renders' note): PRESETS moves through it,
-  ex.web_enc(E.PRESET, 1);                      // nothing loading; 3 s untouched it goes; SAVE twice loads the one picked
+  ex.web_enc(E.PRESET, 1);                      // nothing loading; V0.87: 5 s untouched it goes, INIT first then A-Z
   play(ex, 0.3);
-  const o0 = [ex.web_test_pl(0), ex.web_test_pl(1), cstr(ex, ex.web_test_patch_name())];
+  const o0 = [ex.web_test_pl(0), ex.web_test_pl(1), cstr(ex, ex.web_test_patch_name())], at0 = ex.web_test_pl_id(o0[1]);
   play(ex, 3.0);
+  const o3 = ex.web_test_pl(0);
+  play(ex, 2.2);
   const o1 = [ex.web_test_pl(0), cstr(ex, ex.web_test_patch_name())];
   ex.web_enc(E.PRESET, 1);
   play(ex, 0.3);
+  const want = ex.web_test_pl_id(ex.web_test_pl(1));
   saveTwice(ex);
-  check(`PRESETS: the list opens, PLUCK picked (${o0}), nothing loaded; 3 s untouched, gone (${o1}); again, SAVE twice: "${cstr(ex, ex.web_test_patch_name())}" loaded, the list gone (${ex.web_test_pl(0)})`,
-        o0.join() === "1,1,SUPERSAW" && o1.join() === "0,SUPERSAW" && ex.web_test_sound() === 1 &&
-        cstr(ex, ex.web_test_patch_name()) === "PLUCK" && ex.web_test_pl(0) === 0);
+  check(`PRESETS: the list opens, the next picked (${o0}, id ${at0}), nothing loaded; open at 3 s (${o3}), gone at 5 s (${o1}); again, SAVE twice: "${cstr(ex, ex.web_test_patch_name())}" loaded (${ex.web_test_sound()}), the list gone (${ex.web_test_pl(0)}); INIT first (${ex.web_test_pl_id(0)})`,
+        o0[0] === 1 && at0 > 0 && o0[2] === "SUPERSAW" && o3 === 1 && o1.join() === "0,SUPERSAW" && ex.web_test_sound() === want &&
+        ex.web_test_pl(0) === 0 && ex.web_test_pl_id(0) === ex.web_test_pl_id(0xFFFF));
 }
 {                                               // the MOD layer, on OSC A's WAVE page
   tap(ex, B.EDIT);
@@ -235,11 +249,13 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   play(ex, 0.1);
   const after = [ex.web_test_page(), toast()];
   check(`HOME held: the help map, its countdown ("${count}"); let go at 1.5 s, nothing opens (section ${early}, the page kept, the footer "${after[1]}")`,
-        count === "HELP: SETTINGS 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "" && cstr(ex, ex.web_test_cd()) === "");
-  ex.web_buttons(1 << B.HOME);
+        count === "HELP: DEBUG 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "" && cstr(ex, ex.web_test_cd()) === "");
+  ex.web_buttons(1 << B.HOME);                  // (V0.87, U4, U5: held 5 s the DEBUG menu, twice the SETTINGS)
   play(ex, 5.2);
   ex.web_buttons(0);
   play(ex, 0.05);
+  const dbg = [ex.web_test_page_section(), cstr(ex, ex.web_test_page_name())];
+  twiceB(ex, B.HOME);
   const sec = ex.web_test_page_section(), p0 = ex.web_test_palette(-1);
   const screen = () => new Uint16Array(ex.memory.buffer, ex.web_screen(), 240 * 240).slice();
   const before = screen();
@@ -258,8 +274,8 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   }).length;
   ex.web_enc(E.K1, 5);
   play(ex, 0.05);
-  check(`HOME held 5 s: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); round to the twelfth, ${neon} (${p11}); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
-        sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p11 === 11 && neon === "NEON" && p7 === 7 &&
+  check(`HOME held 5 s: DEBUG (${dbg}); twice: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); round to the twelfth, ${neon} (${p11}); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
+        dbg.join() === `${SEC.DEBUG},BENCH` && sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p11 === 11 && neon === "NEON" && p7 === 7 &&
         mono === "MONO" && grey === 0 && ex.web_test_palette(-1) === 0);
   tap(ex, B.EDIT);
 }
@@ -279,7 +295,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
         p0 === "WAVE" && off[0] === 0 && off[1] === "OSC A: OFF" && on[0] === 1 && on[1] === "OSC A: ON" &&
         off[2] === "WAVE" && on[2] === "WAVE" && name() === "WAVE" && ex.web_test_page_section() === SEC.OSCA &&
         ex.web_test_oct() === oct0);
-  ex.web_buttons(1 << B.ENV);                   // V0.75: ENV + OCT+: ENV 2's MOD layer latched; ENV + OCT-: let go
+  ex.web_buttons(1 << B.ENV);                   // V0.87 (U3): ENV + OCT+ / OCT-: nothing (no layer)
   play(ex, 0.05);
   chord(B.ENV, B.OCTUP);
   const lat = ex.web_test_mod();
@@ -291,8 +307,8 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   chord(B.ENV, B.OCTDN);
   ex.web_buttons(0);
   play(ex, 0.4);
-  check(`ENV + OCT+: ENV 2's MOD layer latched (${lat}; ENV let go: ${still}); ENV + OCT-: let go (${ex.web_test_mod()}); the page stays (${p4}, ${name()}), no tap`,
-        lat === 2 && still === 2 && ex.web_test_mod() === 0 && p4 === "WAVE" && name() === "WAVE" &&
+  check(`ENV + OCT+: no layer (${lat}; ENV let go: ${still}); ENV + OCT-: none (${ex.web_test_mod()}); the page stays (${p4}, ${name()}), no tap`,
+        lat === 0 && still === 0 && ex.web_test_mod() === 0 && p4 === "WAVE" && name() === "WAVE" &&
         ex.web_test_page_section() === SEC.OSCA);
   ex.web_buttons(1 << B.OCTUP); play(ex, 0.03); ex.web_buttons(0); play(ex, 0.03);
   const o1 = ex.web_test_oct();
@@ -390,28 +406,13 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   ex.web_enc(E.K1, -1);                         // the first point: it stays
   play(ex, 0.03);
   const ends = del(), n1 = n();
-  ex.web_buttons(1 << B.LFO);                   // held: MOMENTARY, then the reset's countdown from 2 s
-  play(ex, 2.5);
-  const count = cstr(ex, ex.web_test_cd());
-  ex.web_buttons(0);
-  play(ex, 0.1);
+  const [count] = octHold(ex, B.LFO, 2.5);      // (V0.87, U2: LFO + OCT- held, its countdown from 2 s; let go: kept)
   const kept = [ex.web_test_value(ID.L1_SHAPE), n()];
-  ex.web_buttons(1 << B.LFO);                   // a knob turned during the countdown stops it
-  play(ex, 2.2);
-  ex.web_enc(E.K3, 1);
-  play(ex, 3.2);
-  ex.web_buttons(0);
-  play(ex, 0.1);
-  const kept2 = ex.web_test_value(ID.L1_SHAPE);
-  ex.web_buttons(1 << B.LFO);
-  play(ex, 5.3);
-  const reset = toast();
-  ex.web_buttons(0);
-  play(ex, 0.4);
+  const [, reset] = octHold(ex, B.LFO, 5.3);
   const r = [ex.web_test_value(ID.L1_SHAPE), n()];
-  check(`.. the first point picked: "${ends}" (${n1}); held: "${count}", let go at 2.5 s: kept (SHAPE ${kept[0]}, ${kept[1]} points); a knob turned stops it (${kept2}); held 5 s: "${reset}" (SHAPE ${r[0]}, ${r[1]} points)`,
+  check(`.. the first point picked: "${ends}" (${n1}); LFO + OCT- held: "${count}", let go at 2.5 s: kept (SHAPE ${kept[0]}, ${kept[1]} points); held 5 s: "${reset}" (SHAPE ${r[0]}, ${r[1]} points)`,
         ends === "THE END POINTS STAY" && n1 === 15 && count.startsWith("RESET LFO 1") && kept[0] === ID.DRAWN &&
-        kept[1] === 15 && kept2 === ID.DRAWN && reset === "LFO 1: RESET" && r[0] === 0 && name() === "POINTS");
+        kept[1] === 15 && reset === "LFO 1: RESET" && r[0] === 0 && name() === "POINTS");
   ex.web_buttons(1 << B.SAVE);                  // SAVE + OCT-: the reset undone, SAVE + OCT+: again
   play(ex, 0.05);
   chord(B.SAVE, B.OCTDN);
@@ -496,7 +497,10 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   tap(ex, B.EDIT);
 }
 {                                               // undo, redo: a knob's gesture, a sound's load
-  const toast = () => cstr(ex, ex.web_test_toast()), pos = ex.web_test_page_param(0), v0 = ex.web_test_value(pos);
+  const toast = () => cstr(ex, ex.web_test_toast()), pos = ex.web_test_page_param(0);
+  ex.web_test_set(pos, 500);                    // (V0.87: the sound the list loaded may sit at its top)
+  play(ex, 1.2);
+  const v0 = ex.web_test_value(pos);
   const undo = (b) => { ex.web_buttons(1 << B.SAVE); play(ex, 0.05); chord(B.SAVE, b); ex.web_buttons(0); play(ex, 0.4); };
   for (let i = 0; i < 3; i++) { ex.web_enc(E.K1, 1); play(ex, 0.12); }
   for (let i = 0; i < 3; i++) { ex.web_enc(E.K1, 1); play(ex, 0.12); }
@@ -513,7 +517,7 @@ const chord = (held, b) => { ex.web_buttons((1 << held) | (1 << b)); play(ex, 0.
   check(`SAVE + OCT-: a gesture at a time (WT POS ${v0} -> ${v1}, a second later ${v2}; undone ${u1}, ${u2[0]}, "${u2[1]}"); SAVE + OCT+ redoes (${ex.web_test_value(pos)})`,
         v1 === v0 + 6 && v2 === v1 + 1 && u1 === v1 && u2[0] === v0 && u2[1] === "UNDO" && ex.web_test_value(pos) === v1);
   const s0 = cstr(ex, ex.web_test_patch_name());
-  ex.web_enc(E.PRESET, 1);                      // (V0.86: the list, SAVE twice)
+  ex.web_enc(E.PRESET, -1);                     // (V0.86: the list, SAVE twice)
   play(ex, 0.1);
   saveTwice(ex);
   const s1 = cstr(ex, ex.web_test_patch_name());
@@ -662,8 +666,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   splash(m);
   mtap(B.SEQ);
   const seq = [cstr(m, m.web_test_page_name()), m.web_test_page_section()];
-  mtap(B.GLO);                                  // (V0.86: GLO, VOICE; the MATRIX's SLOTS by SELECT)
-  m.web_enc(E.SELECT, 1);
+  goPage(m, SEC.MATRIX, "SLOTS");               // (V0.87, U14: the MATRIX in EDIT, after the FILTER)
   play(m, 0.1);
   const sec = m.web_test_page_section(), pg = cstr(m, m.web_test_page_name()), first = m.web_test_page_virt(1);
   m.web_enc(E.K1, -1);                          // KNOB 1: the slot before slot 1, round: slot 8
@@ -677,7 +680,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   for (let i = 0; i < 6; i++) { m.web_enc(E.K4, 1); play(m, 0.004); }   // KNOB 4: how much, quickly
   play(m, 0.1);
   const b = mscr(), src = m.web_test_value(SRC8), dst = m.web_test_value(DST8), amt = m.web_test_value(AMT8);
-  check(`SEQ: its menu (section ${seq[1]}, ${seq[0]}); GLO: the matrix (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b)} pixels`,
+  check(`SEQ: its menu (section ${seq[1]}, ${seq[0]}); EDIT's MATRIX (section ${sec}, ${pg}); KNOB 1 picks a slot, round (slot 1's source ${first}, slot 8's ${SRC8}); KNOB 2 its source (${s0} -> ${src}), KNOB 3 where it goes (${dst}), KNOB 4 how much (${amt}); ${changed(a, b)} pixels`,
         seq[0] === "CLIPS" && seq[1] === SEC.SEQ && sec === SEC.MATRIX && pg === "SLOTS" && SRC8 === first + 21 && DST8 === SRC8 + 1 && AMT8 === SRC8 + 2 &&
         s0 === 0 && src === SRC.LFO1 && dst > 0 && amt > 0 && changed(a, b) > 300);
 }
@@ -794,25 +797,15 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   letGo();
   check(`LFO held on OSC A's ${pg}: MOMENTARY (layer ${mom}); KNOB 1 moves its value ${p0} -> ${p1}; LFO let go: back to ${h.web_test_value(K1)}`,
         mom === 3 && K1 >= 0 && K1 < 1000 && p1 !== p0 && h.web_test_value(K1) === p0);
-  hold(B.EDIT);                                 // EDIT: JUMP; C#4 opens KEYS, A#3 GLOBAL; the knobs do nothing
-  const jmp = [h.web_test_lay(), (h.web_dim_keys() >> 8) & 1, (h.web_lit_keys() >> 0) & 1];
-  h.web_keys(1 << 8);
+  goPage(h, SEC.OSCA, "WAVE");                  // V0.87 (U6): JUMP gone; EDIT twice: the tables of the oscillator shown
   play(h, 0.05);
-  h.web_keys(0);
-  play(h, 0.05);
-  const s1 = h.web_test_page_section();
-  h.web_keys(1 << 5);
-  play(h, 0.05);
-  h.web_keys(0);
-  play(h, 0.05);
-  const s2 = h.web_test_page_section(), bpm = h.web_test_tempo(0);
-  h.web_enc(E.K1, 3);
-  play(h, 0.13);
-  const bpm2 = h.web_test_tempo(0);
-  letGo();
-  check(`EDIT held: JUMP (layer ${jmp[0]}; C#4 glowing ${jmp[1]}, F3 lit: OSC A shown ${jmp[2]}); C#4: section ${s1} (KEYS), A#3: ${s2} (GLOBAL); KNOB 1 under it: BPM ${bpm} -> ${bpm2}; let go: on GLOBAL (${h.web_test_page_section()})`,
-        jmp[0] === 4 && jmp[1] === 1 && jmp[2] === 1 && s1 === SEC.KEYS && s2 === SEC.GLOBAL && bpm2 === bpm &&
-        h.web_test_page_section() === SEC.GLOBAL && h.web_test_lay() === 0);
+  const t0 = h.web_test_value(ID.A_TABLE);
+  twiceB(h, B.EDIT);
+  const tl = [h.web_test_pl(0), h.web_test_pl(3), h.web_test_pl(4), h.web_test_lay()];
+  h.web_enc(E.PRESET, 1); play(h, 0.1);
+  saveTwice(h);
+  check(`EDIT twice on OSC A: its tables' list (open ${tl[0]}, kind ${tl[1]}, OSC ${tl[2]}, no layer ${tl[3]}); PRESETS, SAVE twice: OSC A's TABLE ${t0} -> ${h.web_test_value(ID.A_TABLE)}, the list gone (${h.web_test_pl(0)})`,
+        tl.join() === "1,2,0,0" && h.web_test_value(ID.A_TABLE) !== t0 && h.web_test_pl(0) === 0);
 }
 {                                               // PLAY: the transport (the FREE LFOs from the beat), its LEDs; ARP
   const r = await boot(), rt = () => cstr(r, r.web_test_toast());
@@ -844,13 +837,10 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
 {                                               // the SETTINGS: SCREEN, PANEL, MIDI (its channel, program changes,
   const g = await boot(), gt = () => cstr(g, g.web_test_toast()), gn = () => cstr(g, g.web_test_page_name());   // LEARN)
   const gb = (b) => { g.web_buttons(1 << b); play(g, 0.03); g.web_buttons(0); play(g, 0.05); };
-  play(g, 0.2);
-  g.web_buttons(1 << B.HOME);                   // HOME held 5 s: the SETTINGS
-  play(g, 5.2);
-  g.web_buttons(0);
-  play(g, 0.1);
+  splash(g);
+  twiceB(g, B.HOME);                            // HOME twice (V0.87, U4): the SETTINGS
   const pages = [gn()];
-  g.web_enc(E.K3, 1);                           // SCREEN: KNOB 3 the LEDs' glow, low
+  g.web_enc(E.K3, -1);                          // SCREEN: KNOB 3 the LEDs' LIGHTS (V0.87, U9), HIGH -> MED
   play(g, 0.13);
   const glow = [g.web_test_set_get(1, -1), g.web_dim_level()];
   g.web_enc(E.ALGO, 1);                       // PANEL: KNOB 2 the hold time, 500 ms
@@ -879,8 +869,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   g.web_midi(0xC1, 3, 0);                       // a program change, 3: the fourth starter sound
   play(g, 0.3);
   const snd = [g.web_test_sound(), cstr(g, g.web_test_patch_name())];
-  check(`the SETTINGS' pages (${pages.join(", ")}); GLOW low (${glow[0]}, the LEDs' level ${glow[1]}); HOLD ${hold} (500 ms); MIDI on channel ${ch}: channel 1's note not heard (${v1} voices), channel 2's played (${v2}); PROGRAM ${pc}: program change 3, the fourth starter sound (${snd[0]}, "${snd[1]}")`,
-        pages.join() === "SCREEN,PANEL,MIDI" && glow[0] === 1 && glow[1] === 1 && hold === 2 && ch === 2 && v1 === 0 &&
+  check(`the SETTINGS' pages (${pages.join(", ")}); LIGHTS MED (${glow[0]}, the LEDs' level ${glow[1]}); HOLD ${hold} (500 ms); MIDI on channel ${ch}: channel 1's note not heard (${v1} voices), channel 2's played (${v2}); PROGRAM ${pc}: program change 3, the fourth starter sound (${snd[0]}, "${snd[1]}")`,
+        pages.join() === "SCREEN,PANEL,MIDI" && glow[0] === 2 && glow[1] === 2 && hold === 2 && ch === 2 && v1 === 0 &&
         v2 === 1 && pc === 1 && snd[0] === 3);
   g.web_enc(E.K2, 1);                           // LEARN on; on a sound's page KNOB 1 picks its parameter, a CC is
   play(g, 0.13);                                // learned to it; OCT+ done; the CC then sets it
@@ -918,13 +908,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   g2.web_boot();
   play(g2, 0.3);
   const back = [0, 1, 2, 3, 4].map((f) => g2.web_test_set_get(f, -1));
-  check(`HELP: entering the effects, the footer's hint ("${hint}"); after a power cycle: HELP ${back[0]}, GLOW ${back[1]}, HOLD ${back[2]}, the channel ${back[3]}, PROGRAM ${back[4]}, CC 20 learned (${g2.web_test_learned(20)})`,
-        hint === "AGAIN: THE MODULE" && back.join() === "0,1,2,2,1" && g2.web_test_learned(20) === K1);
-  g.web_buttons(1 << B.HOME);                   // CLEAR: turned once, a word; again within 2 s, every learned CC
-  play(g, 5.2);
-  g.web_buttons(0);
-  play(g, 0.1);
-  g.web_enc(E.ALGO, 2);
+  check(`HELP: entering the effects, the footer's hint ("${hint}"); after a power cycle: HELP ${back[0]}, LIGHTS ${back[1]}, HOLD ${back[2]}, the channel ${back[3]}, PROGRAM ${back[4]}, CC 20 learned (${g2.web_test_learned(20)})`,
+        hint === "AGAIN: THE MODULE" && back.join() === "0,2,2,2,1" && g2.web_test_learned(20) === K1);
+  goPage(g, SEC.MENU, "MIDI");                  // CLEAR: turned once, a word; again within 2 s, every learned CC
   play(g, 0.1);
   g.web_enc(E.K3, 1);
   play(g, 0.13);
@@ -1002,28 +988,41 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const w0 = ex.web_flash_writes_count(), name0 = name();        // (a starter sound)
   btn(B.SAVE);
   play(ex, 0.5);
-  const s1 = [toast(), ex.web_test_page_section(), ex.web_test_user_slot(), slotName(0), name()];
-  check(`SAVE once: saved at once as a new preset ("${s1[0]}"): "${name0}" is "${s1[4]}" in USER ${s1[2] + 1}; the page stays (section ${s1[1]}); ${ex.web_flash_writes_count() - w0} flash writes, ${ex.web_test_refused()} refused`,
-        s1[0] === `SAVED: ${name0} v2 · USER 1` && s1[1] === SEC.OSCA && s1[2] === 0 && s1[3] === `${name0} v2` &&
-        s1[4] === `${name0} v2` && ex.web_flash_writes_count() > w0 && ex.web_test_refused() === 0);
+  const sw0 = [ex.web_test_win(1), ex.web_test_win(2), ex.web_test_page_section()];
+  btn(B.SAVE);                                  // (SAVE AS NEW picked: NAME IT, the name's next version)
+  play(ex, 0.4);
+  const nm0 = [ex.web_test_page_section(), sname()];
   btn(B.SAVE);
   play(ex, 0.5);
-  check(`.. once more: its next version, "${name()}" in USER ${ex.web_test_user_slot() + 1} ("${toast()}"); USER 1 kept ("${slotName(0)}")`,
-        name() === `${name0} v3` && ex.web_test_user_slot() === 1 && slotName(0) === `${name0} v2` &&
+  const s1 = [toast(), ex.web_test_page_section(), ex.web_test_user_slot(), slotName(0), name()];
+  check(`SAVE once on a starter: the SAVE window (${sw0[0]}), SAVE AS NEW picked (${sw0[1]}), over the page (${sw0[2]}); SAVE: NAME IT (${nm0}); SAVE: "${s1[0]}", "${s1[4]}" in USER ${s1[2] + 1}, back on the page (${s1[1]}); ${ex.web_flash_writes_count() - w0} flash writes, ${ex.web_test_refused()} refused`,
+        sw0.join() === `1,1,${SEC.OSCA}` && nm0[0] === SEC.SAVE && nm0[1] === `${name0} v2` && s1[0] === `SAVED: ${name0} v2 · USER 1` &&
+        s1[1] === SEC.OSCA && s1[2] === 0 && s1[3] === `${name0} v2` && s1[4] === `${name0} v2` && ex.web_flash_writes_count() > w0 &&
+        ex.web_test_refused() === 0);
+  btn(B.SAVE);                                  // (on USER 1: SAVE over it picked first; OCT+ SAVE AS NEW)
+  play(ex, 0.5);
+  const sw1 = [ex.web_test_win(2)];
+  btn(B.OCTUP);
+  sw1.push(ex.web_test_win(2), ex.web_test_oct());
+  btn(B.SAVE); play(ex, 0.4); btn(B.SAVE); play(ex, 0.5);
+  check(`.. SAVE on USER 1: SAVE over it picked (row ${sw1[0] + 1}), OCT+ SAVE AS NEW (row ${sw1[1] + 1}, the octave kept ${sw1[2]}): "${name()}" in USER ${ex.web_test_user_slot() + 1} ("${toast()}"); USER 1 kept ("${slotName(0)}")`,
+        sw1.join() === "0,1,0" && name() === `${name0} v3` && ex.web_test_user_slot() === 1 && slotName(0) === `${name0} v2` &&
         slotName(1) === `${name0} v3`);
-  const POS = ID.A_POS, p0 = ex.web_test_slot_value(1, POS);    // held: WT POS changed first
+  const POS = ID.A_POS, p0 = ex.web_test_slot_value(1, POS);    // WT POS changed first
   ex.web_test_set(POS, p0 > 500 ? p0 - 40 : p0 + 40);
   const p1 = ex.web_test_value(POS);
-  hold(2.3);
-  const cd = cstr(ex, ex.web_test_cd());
-  ex.web_buttons(0);
-  play(ex, 0.4);
-  const early = [ex.web_test_slot_value(1, POS), toast()];
-  hold(5.3);
-  ex.web_buttons(0);
-  play(ex, 0.3);
-  check(`SAVE held: a countdown ("${cd}"); let go at 2.3 s, USER 2 untouched (WT POS ${early[0]}, the footer "${early[1]}"); held 5 s, over USER 2 ("${toast()}"): its WT POS ${p0} -> ${ex.web_test_slot_value(1, POS)}`,
-        cd === "SAVE OVER USER 2 3" && early[0] === p0 && early[1] === "" && toast() === "SAVED OVER USER 2" &&
+  btn(B.SAVE); play(ex, 0.5);
+  ex.web_enc(E.K1, 1); play(ex, 0.1);           // (a knob: the window shut, the turn taken)
+  const shut = [ex.web_test_win(1), ex.web_test_slot_value(1, POS), ex.web_test_value(POS)];
+  btn(B.SAVE); play(ex, 0.5);
+  btn(B.OCTUP); btn(B.OCTUP);                   // (CANCEL)
+  const cpos = ex.web_test_win(2);
+  btn(B.SAVE); play(ex, 0.3);
+  const cancel = [ex.web_test_win(1), ex.web_test_slot_value(1, POS)];
+  btn(B.SAVE); play(ex, 0.5);
+  btn(B.SAVE); play(ex, 0.6);
+  check(`.. the SAVE window: a knob shuts it (${shut[0]}, USER 2 ${shut[1]}, the sound ${shut[2]}); CANCEL (row ${cpos + 1}): nothing (${cancel}); SAVE: over USER 2 ("${toast()}"), its WT POS ${p0} -> ${ex.web_test_slot_value(1, POS)}`,
+        shut[0] === 0 && shut[1] === p0 && shut[2] === p1 && cpos === 2 && cancel[0] === 0 && cancel[1] === p0 &&
         ex.web_test_slot_value(1, POS) === p1);
   ex.web_test_set(POS, p1 > 500 ? p1 - 20 : p1 + 20);   // (a change USER 2 does not have)
   const p3 = ex.web_test_value(POS);
@@ -1072,7 +1071,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`.. SAVE writes it ("${saved[0]}"): USER 2 renamed ("${saved[2]}"), the sound "${saved[3]}"; back in the browser (section ${saved[1]})`,
         saved[0] === "SAVED: WARM PAD · USER 2" && saved[1] === SEC.BROWSE && saved[2] === "WARM PAD" &&
         saved[3] === "WARM PAD" && saved[4] === 1);
-  ex.web_enc(E.K2, -1);                         // a load, undone there (SAVE held + OCT-), the browser staying
+  ex.web_enc(E.K2, ex.web_test_pl_user(0) - ex.web_test_pl_user(1));   // a load (USER 1, the list A-Z), undone there (SAVE held + OCT-), the browser staying
   play(ex, 0.3);
   const ld = name();
   hold(0.7);
@@ -1095,7 +1094,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   btn(B.SAVE);                                  // the browser: OCT- held 3 s deletes the user preset playing
   btn(B.SAVE);
   play(ex, 0.4);
-  ex.web_enc(E.K2, -1);                         // (USER 1)
+  ex.web_enc(E.K2, ex.web_test_pl_user(0) - ex.web_test_pl_user(1));   // (USER 1)
   play(ex, 0.3);
   const del0 = [name(), ex.web_test_user_slot(), slotName(0), ex.web_test_oct()];
   ex.web_buttons(1 << B.OCTDN);
@@ -1129,11 +1128,12 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   play(ex, 0.1);                                // SAVE twice
   saveTwice(ex);
   const st = [name(), ex.web_test_user_slot()];
-  hold(1.0);
-  ex.web_buttons(0);
-  play(ex, 0.1);
-  check(`SAVE held on a starter sound ("${st[0]}", user slot ${st[1]}): nothing to save over ("${toast()}"), nothing saved (USER 3 "${slotName(2)}")`,
-        st[1] === -1 && toast() === "NOTHING TO SAVE OVER: TAP SAVE" && slotName(2) === "");
+  btn(B.SAVE); play(ex, 0.5);
+  btn(B.OCTDN);
+  const sst = [ex.web_test_win(1), ex.web_test_win(2)];
+  btn(B.HOME); play(ex, 0.1);
+  check(`SAVE once on a starter sound ("${st[0]}", user slot ${st[1]}): OCT- stays on SAVE AS NEW (${sst}), no SAVE over it; HOME shuts it (${ex.web_test_win(1)}), nothing saved (USER 3 "${slotName(2)}")`,
+        st[1] === -1 && sst.join() === "1,1" && ex.web_test_win(1) === 0 && slotName(2) === "");
   {                                             // (V0.86: in PRESETS' list, SAVE + OCT+ saves the sound as a new
     const listChord = (b) => { ex.web_buttons(1 << B.SAVE); play(ex, 0.05); chord(B.SAVE, b); ex.web_buttons(0); play(ex, 0.4); };
     const pg0 = ex.web_test_page();             // preset, named first; SAVE + OCT- deletes the one picked, asked)
@@ -1144,7 +1144,10 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     tap(ex, B.SAVE);                            // (SAVE on NAME IT: written)
     play(ex, 0.6);
     const saved = [slotName(nm[2]), ex.web_test_page() === pg0, toast()];
-    ex.web_enc(E.PRESET, 99);                   // (the last user preset: the one just saved)
+    ex.web_enc(E.PRESET, 1);                    // (V0.87: the list A-Z: to the one just saved)
+    play(ex, 0.1);
+    const upos = ex.web_test_pl_user(nm[2]);
+    ex.web_enc(E.PRESET, upos - ex.web_test_pl(1));
     play(ex, 0.1);
     listChord(B.OCTDN);
     const ask = [ex.web_test_pl(2), slotName(nm[2])];
@@ -1157,8 +1160,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     const starter = [toast(), ex.web_test_pl(2)];
     play(ex, 3.2);
     check(`PRESETS' list: SAVE + OCT+ names a new preset (section ${nm[0]}, "${nm[1]}", USER ${nm[2] + 1}); SAVE: "${saved[0]}" saved, back to the page (${saved[1]}); SAVE + OCT- on it asks (${ask[0]}, kept "${ask[1]}"), again deletes ("${gone[0]}", "${gone[1]}"); on a starter: "${starter[0]}" (${starter[1]})`,
-          nm[0] === SEC.SAVE && nm[1] === "SUPERSAW v2" && saved[0] === "SUPERSAW v2" && saved[1] === true &&
-          ask[0] === nm[2] + 1 && ask[1] === "SUPERSAW v2" && gone[0] === "" && gone[1] === `DELETED USER ${nm[2] + 1}` &&
+          nm[0] === SEC.SAVE && nm[1] === "INIT v2" && saved[0] === "INIT v2" && saved[1] === true &&
+          ask[0] === upos + 1 && ask[1] === "INIT v2" && gone[0] === "" && gone[1] === `DELETED USER ${nm[2] + 1}` &&
           starter[0] === "A STARTER SOUND STAYS" && starter[1] === 0);
   }
   const ra = ex.web_test_erase(0), rb = ex.web_test_erase(0xE8000);
@@ -1698,13 +1701,13 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   e.push([sec(), name()]);
   tap(g, B.ENV);
   e.push([sec(), name()]);
+  tap(g, B.EDIT);                               // (V0.87, U15: twice, the assign window over the page before)
   twice(B.ENV);
-  e.push([sec(), name()]);
-  twice(B.ENV);
-  e.push([sec(), name()]);
-  check(`a tap opens ENV (${e[0]}); on SHAPE (${e[1]}) again its first page (${e[2]}); twice ENV 2 (${e[3]}), twice again ENV 1 (${e[4]})`,
-        e[0].join() === "5,ADSR" && e[1].join() === "5,SHAPE" && e[2].join() === "5,ADSR" && e[3].join() === "6,ADSR" &&
-        e[4].join() === "5,ADSR");
+  const aw = [g.web_test_win(0), sec(), g.web_test_win(4)];
+  tap(g, B.ENV);
+  check(`a tap opens ENV (${e[0]}); on SHAPE (${e[1]}) again its first page (${e[2]}); on OSC A twice: the assign window (${aw}); ENV: shut (${g.web_test_win(0)}, ${sec()})`,
+        e[0].join() === "5,ADSR" && e[1].join() === "5,SHAPE" && e[2].join() === "5,ADSR" && aw.join() === `1,${SEC.OSCA},2` &&
+        g.web_test_win(0) === 0 && sec() === SEC.OSCA);
   const n0 = cstr(g, g.web_test_patch_name());  // HOME + OCT+: the next sound, OCT-: back; twice: the presets
   combo(B.HOME, B.OCTUP);
   const n1 = cstr(g, g.web_test_patch_name());
@@ -1714,23 +1717,20 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   twice(B.HOME);
   const br = sec();
   tap(g, B.HOME);
-  check(`HOME + OCT+: the next sound ("${n0}" -> "${n1}"), OCT-: back ("${n2}"); HOME twice: the presets (section ${br}); a tap there: back (${sec()})`,
-        n1 !== n0 && n2 === n0 && br === SEC.BROWSE && sec() !== SEC.BROWSE);
+  check(`HOME + OCT+: the next sound ("${n0}" -> "${n1}"), OCT-: back ("${n2}"); HOME twice: the SETTINGS (section ${br}); a tap there: back (${sec()})`,
+        n1 !== n0 && n2 === n0 && br === SEC.MENU && sec() !== SEC.MENU);
   tap(g, B.EDIT);                               // EDIT held 5 s: the section shown reset; SAVE + OCT- undoes it
   const POS = ID.A_POS, set = 400;
   g.web_test_set(POS, set);
   play(g, 0.6);
-  g.web_buttons(1 << B.EDIT);
-  play(g, 5.3);
-  const rs = [toast(), g.web_test_value(POS), g.web_test_lay()];
-  g.web_buttons(0);
-  play(g, 0.4);
+  const [, rst] = octHold(g, B.EDIT, 5.3);      // (V0.87, U2: EDIT + OCT- held 5 s)
+  const rs = [rst, g.web_test_value(POS), g.web_test_lay()];
   g.web_buttons(1 << B.SAVE);
   play(g, 0.05);
   g.web_buttons((1 << B.SAVE) | (1 << B.OCTDN)); play(g, 0.03); g.web_buttons(1 << B.SAVE); play(g, 0.03);
   g.web_buttons(0);
   play(g, 0.4);
-  check(`EDIT held 5 s: "${rs[0]}" (WT POS ${set} -> ${rs[1]}, INIT's; JUMP closed: ${rs[2]}); SAVE + OCT-: back (${g.web_test_value(POS)})`,
+  check(`EDIT + OCT- held 5 s: "${rs[0]}" (WT POS ${set} -> ${rs[1]}, INIT's; no layer: ${rs[2]}); SAVE + OCT-: back (${g.web_test_value(POS)})`,
         rs[0] === "OSC A: RESET" && rs[1] === 0 && rs[2] === 0 && g.web_test_value(POS) === set);
   combo(B.SCL, B.OCTUP);                        // SCL + OCT+: the chords on (KEY), OCT-: off
   const ch = [g.web_test_chd(0, -1), toast()];
@@ -1896,8 +1896,9 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   //    E4 at 2.0 for a quarter; REC at 4.1: one bar, it loops (the next pass plays them)
   lp(0, 2); lp(1, 1); tr(2, 3, 1); tr(2, 1, 2);
   press(B.REC);
+  play(q, 0.33);                                // (V0.87: a single tap acts after the double tap's time)
   const cnt = [lp(10), lp(14) > 0, lp(15)];
-  for (let i = 0; i < 2000 && lp(10) !== 3; i++) play(q, 0.003);
+  for (let i = 0; i < 2000 && lp(10) !== 3; i++) { play(q, 0.003); cnt[1] = cnt[1] || lp(14) > 0; }
   const take = [lp(10), lp(15), (q.web_test_arp(1) / 1000).toFixed(2)];
   until(500); key(60, 1); until(1000); key(60, 0);
   until(2000); key(64, 1); until(3000); key(64, 0);
@@ -2026,17 +2027,30 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const deleted = [notesOf(2, 1), qt()];
   check(`.. NOTES (page ${npg}): PITCH +2, START +1/16: ${edited}; EDIT, the last note DELETEd: ${deleted[0]} ("${deleted[1]}")`,
         npg >= 0 && edited.includes(`${n0[0] + 2}@${n0[1] + 24}/${n0[2]}`) && deleted[1] === "NOTE DELETED" && !deleted[0].includes("64@192"));
-  // 12. SEQ + OCT+ selects the next track; SEQ held 5 s on CLIP clears the clip shown
-  q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); play(q, 0.03);
-  q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons(0); play(q, 0.35);
+  // 12. V0.87: SELECT on HOME the next track; SEQ + OCT+ a new clip of a bar (PRESETS, SEQ held: its length); SEQ + OCT-
+  //     DELETE? asked, again: deleted; SEQ + OCT- held 5 s on CLIP: its settings reset
+  goPage(q, SEC.MACRO, "SOUND"); play(q, 0.05);
+  q.web_enc(E.SELECT, 1); play(q, 0.1);
   const nextT = [lp(0), qt()];
   lp(0, 6); lp(1, 3);
-  q.web_test_lp_put(6, 3, 0, 48, 60, 100);
+  q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); play(q, 0.03);
+  q.web_buttons(1 << B.SEQ); play(q, 0.03);
+  const made = [q.web_test_lp_clip(6, 3, 0, -1), qt()];
+  q.web_enc(E.PRESET, 1); play(q, 0.05);
+  q.web_buttons(0); play(q, 0.35);
+  const longer = [q.web_test_lp_clip(6, 3, 0, -1), qt()];
+  const sdel = () => { q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons((1 << B.SEQ) | (1 << B.OCTDN)); play(q, 0.03);
+                       q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons(0); play(q, 0.35); };
+  sdel();
+  const asked = [q.web_test_win(3), q.web_test_lp_clip(6, 3, 0, -1)];
+  sdel();
+  const gone = [q.web_test_win(3), q.web_test_lp_clip(6, 3, 0, -1), qt()];
   goPage(q, SEC.LCLIP, "CLIP");
-  q.web_buttons(1 << B.SEQ); play(q, 5.4); q.web_buttons(0); play(q, 0.1);
-  const cleared = [q.web_test_lp_clip(6, 3, 0, -1), qt()];
-  check(`.. SEQ + OCT+: track ${nextT[0] + 1} ("${nextT[1]}"); SEQ held 5 s on CLIP: T7 D's clip ${cleared[0]} ("${cleared[1]}")`,
-        nextT[0] === 3 && nextT[1] === "T4 SYNTH+MIDI" && cleared[0] === 0 && cleared[1] === "CLIP T7 D CLEARED");
+  const [, rst] = octHold(q, B.SEQ, 5.3);
+  check(`.. SELECT on HOME: track ${nextT[0] + 1} ("${nextT[1]}"); SEQ + OCT+: a new clip (${made[0]}, "${made[1]}"), PRESETS 2 bars (${longer[0]}, "${longer[1]}"); SEQ + OCT-: asked (${asked}), again: deleted (${gone[0]}, ${gone[1]}, "${gone[2]}"); SEQ + OCT- held 5 s on CLIP: "${rst}"`,
+        nextT[0] === 3 && nextT[1] === "T4 SYNTH+MIDI" && made[0] === 384 && made[1] === "T7 D: NEW, 1 BAR" && longer[0] === 768 &&
+        longer[1] === "T7 D: 2 BARS" && asked.join() === "2,768" && gone[0] === 0 && gone[1] === 0 && gone[2] === "T7 D DELETED" &&
+        rst === "CLIP: RESET");
   // 13. the project: through a power cycle (the clips, the tracks, the chords, SONG, the settings); PROJECT 2 empty, 1 back
   lp(0, 0);
   q.web_test_chd(0, 2);
@@ -2054,16 +2068,18 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const n2 = (t, s) => { const r = []; for (let i = 0; i < 64; i++) { const n = q2.web_test_lp_note(t, s, i, 0); if (n < 0) break; r.push(`${n}@${q2.web_test_lp_note(t, s, i, 2)}`); } return r.join(" "); };
   const back = [n2(0, 0), n2(2, 1), q2.web_test_lp_trk(1, 0, -1), q2.web_test_lp_trk(1, 1, -1), q2.web_test_lp_trk(3, 2, -1), q2.web_test_chd(0, -1),
                 q2.web_test_lp_song(1, 0, -1), q2.web_test_lp(2, -1), q2.web_test_lp_clip(0, 2, 0, -1)];
-  const pj = goPage(q2, SEC.LSONG, "PROJECT");
-  q2.web_enc(E.K1, 1); play(q2, 0.05);
-  q2.web_enc(E.K2, 1); play(q2, 0.5);
+  twiceB(q2, B.SEQ);                            // (V0.87, S2: SEQ twice, the projects' list; SAVE twice loads)
+  const pj = [q2.web_test_pl(0), q2.web_test_pl(3)];
+  q2.web_enc(E.PRESET, 1); play(q2, 0.1);
+  saveTwice(q2); play(q2, 0.5);
   const p2 = [q2.web_test_lp(7, -1), n2(0, 0), q2.web_test_lp_clip(0, 0, 0, -1)];
-  q2.web_enc(E.K1, -1); play(q2, 0.05);
-  q2.web_enc(E.K2, 1); play(q2, 0.5);
+  twiceB(q2, B.SEQ);
+  q2.web_enc(E.PRESET, -1); play(q2, 0.1);
+  saveTwice(q2); play(q2, 0.5);
   const p1 = [q2.web_test_lp(7, -1), n2(0, 0)];
-  check(`.. after a power cycle: T1 A ${back[0]}; T3 B ${back[1]}; T2 MIDI ${back[2]} channel ${back[3] + 1}; T4 IN ${back[4]}; T1's chords ${back[5]}; SONG's slot 2 ${back[6]}; QUANTIZE ${back[7]}; T1 C ${back[8]} ticks; PROJECT (page ${pj}) 2: ${p2.join(", ")}; back to 1: ${p1.join(", ")}`,
+  check(`.. after a power cycle: T1 A ${back[0]}; T3 B ${back[1]}; T2 MIDI ${back[2]} channel ${back[3] + 1}; T4 IN ${back[4]}; T1's chords ${back[5]}; SONG's slot 2 ${back[6]}; QUANTIZE ${back[7]}; T1 C ${back[8]} ticks; PROJECTS' list (${pj}) 2: ${p2.join(", ")}; back to 1: ${p1.join(", ")}`,
         back[0] === "60@0 64@96 67@192 72@288" && back[1] === n2s && back[2] === 1 && back[3] === 4 && back[4] === 6 &&
-        back[5] === 2 && back[6] === 2 && back[7] === 3 && back[8] === 768 && pj >= 0 && p2[0] === 1 && p2[1] === "" && p2[2] === 0 &&
+        back[5] === 2 && back[6] === 2 && back[7] === 3 && back[8] === 768 && pj.join() === "1,3" && p2[0] === 1 && p2[1] === "" && p2[2] === 0 &&
         p1[0] === 0 && p1[1] === back[0]);
 }
 
@@ -2227,20 +2243,20 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     const kt = [ek(0, 40), ek(0, 41), ek(0, 43), ek(0, 46), ek(0, 42)];
     check(`KIT's pages: the duck's SOURCE KICK (${kt[0]}), HOLD ${kt[1]}; COMP AMOUNT ${kt[2]}, MIX ${kt[3]}; ACCENT's TONE ${kt[4]}`,
           kt[0] === 1 && kt[1] > 0 && kt[2] > 20 && kt[3] < 100 && kt[4] > 0);
-    etap(B.HOME);                               // (HOME twice on a drum track: the kits)
-    etwice(B.HOME);
+    etap(B.HOME);                               // (V0.87, U6: EDIT twice on a drum track: the kits)
+    etwice(B.EDIT);
     const kl = [e.web_test_pl(0), e.web_test_pl(3), e.web_test_pl(1)];
     e.web_enc(E.PRESET, 2); play(e, 0.1);       // (PUNCH -> INDUSTRIAL from where it opens; SAVE twice: loaded)
     const want = e.web_test_pl(1);
     saveTwice(e);
     const ld = [ek(0, 47), cstr(e, e.web_test_kit_name()), ek(0, 48), e.web_test_pl(0), ek(0, 30), ek(0, 31)];
-    check(`HOME twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, SAVE twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
+    check(`EDIT twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, SAVE twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
           kl.join() === "1,1,0" && ld[0] === want && ld[1] === "INDUSTRIAL" && ld[2] === 0 && ld[3] === 0 && ld[4] === 1 && ld[5] === 70);
     etap(B.EDIT);                               // (EDIT held 5 s on DRUM: the drum picked as a kit starts)
     goPage(e, 52, "SOUND"); play(e, 0.05);
-    e.web_buttons(1 << B.EDIT); play(e, 5.4); e.web_buttons(0); play(e, 0.3);
-    const rs = [cstr(e, e.web_test_toast()), ek(ek(0, 49), 30), ek(ek(0, 49), 31)];
-    check(`EDIT held 5 s on DRUM: "${rs[0]}", the drum picked's DRIVE back to rest (${rs[1]}, ${rs[2]})`,
+    const [, drs] = octHold(e, B.EDIT, 5.3);     // (V0.87, U2: EDIT + OCT- held 5 s)
+    const rs = [drs, ek(ek(0, 49), 30), ek(ek(0, 49), 31)];
+    check(`EDIT + OCT- held 5 s on DRUM: "${rs[0]}", the drum picked's DRIVE back to rest (${rs[1]}, ${rs[2]})`,
           rs[0] === "DRUM: RESET" && rs[2] === 0);
     play(e, 7.0);                               // (stopped, quiet: the project written, an object at a time) a power cycle
     const nor2 = new Uint8Array(e.memory.buffer, e.web_nor(), e.web_nor_size()).slice();
@@ -2260,7 +2276,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
 
 {                                               // V0.8 BENCH: CORE 2 (sy_c2.c): the emulator has one core
   const k = await boot(), kt = () => cstr(k, k.web_test_toast());
-  const pg = goPage(k, SEC.MENU, "CORE 2");
+  const pg = goPage(k, SEC.DEBUG, "CORE 2");     // (V0.87, U5: in DEBUG)
   play(k, 0.1);
   const st = k.web_test_c2(0, -1), load = k.web_test_c2(2, -1);
   k.web_enc(E.K2, 1);                           // TEST: refused, one core here
@@ -2299,25 +2315,25 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   b.web_enc(E.ALGO, 2); play(b, 0.05);
   btap(B.EDIT);                                 // (once in its menu: its first page)
   const w2 = [sec(), name()];
-  twice(B.EDIT);                                // (twice: JUMP latched; a key opens its module and closes it)
-  const j = [b.web_test_lay(), toast()];
-  b.web_keys(1 << 8); play(b, 0.05); b.web_keys(0); play(b, 0.1);
-  const j2 = [b.web_test_lay(), sec()];
-  check(`EDIT once: OSC A ${w[1]} (${w[0]}); on a later page, once: its first (${w2}); twice: JUMP latched (layer ${j[0]}); C#4: SCALE (section ${j2[1]}), the layer closed (${j2[0]})`,
-        w.join() === `${SEC.OSCA},WAVE` && w2.join() === `${SEC.OSCA},WAVE` && j[0] === 4 && j2[0] === 0 && j2[1] === SEC.KEYS);
+  twice(B.EDIT);                                // (V0.87: twice, the tables' list; untouched 5 s it goes)
+  const j = [b.web_test_pl(0), b.web_test_pl(3), b.web_test_lay()];
+  play(b, 5.2);
+  const j2 = [b.web_test_pl(0), sec()];
+  check(`EDIT once: OSC A ${w[1]} (${w[0]}); on a later page, once: its first (${w2}); twice: the tables' list (${j}); 5 s: gone (${j2})`,
+        w.join() === `${SEC.OSCA},WAVE` && w2.join() === `${SEC.OSCA},WAVE` && j.join() === "1,2,0" && j2.join() === `0,${SEC.OSCA}`);
   btap(B.EDIT);
   const K1 = b.web_test_page_virt(0), v0 = b.web_test_value(K1);
-  twice(B.LFO);                                 // (LFO twice: MOMENTARY latched; a knob for now; LFO closes it)
-  const m = b.web_test_lay();
-  for (let i = 0; i < 3; i++) { b.web_enc(E.K1, -1); play(b, 0.13); }
-  const v1 = b.web_test_value(K1);
+  twice(B.LFO);                                 // (V0.87, U16: LFO twice, the assign window; KNOB 1 its source; LFO shuts it)
+  const m = [b.web_test_win(0), b.web_test_win(4)];
+  b.web_enc(E.K1, 1); play(b, 0.13);
+  const v1 = b.web_test_value(K1), src1 = b.web_test_win(4);
   btap(B.LFO);
-  const m2 = [b.web_test_lay(), b.web_test_value(K1)];
+  const m2 = [b.web_test_win(0), b.web_test_value(K1)];
   twice(B.GLO);                                 // (GLO twice: PERFORM latched; GLO closes it)
   const p = b.web_test_lay();
   btap(B.GLO);
-  check(`LFO twice on OSC A: MOMENTARY latched there (layer ${m}), KNOB 1 ${v0} -> ${v1}, LFO: closed (${m2[0]}), back to ${m2[1]}; GLO twice: PERFORM latched (${p}), GLO: closed (${b.web_test_lay()})`,
-        m === 3 && v1 !== v0 && m2[0] === 0 && m2[1] === v0 && p === 1 && b.web_test_lay() === 0);
+  check(`LFO twice on OSC A: the assign window (${m}), KNOB 1 its source (${src1}), the value kept (${v0} -> ${v1}); LFO: shut (${m2[0]}, ${m2[1]}); GLO twice: PERFORM latched (${p}), GLO: closed (${b.web_test_lay()})`,
+        m.join() === `1,${SRC.LFO1}` && src1 === SRC.LFO2 && v1 === v0 && m2[0] === 0 && m2[1] === v0 && p === 1 && b.web_test_lay() === 0);
   twice(B.SCL);                                 // (SCL twice: the chords on; again off. ARP twice: on, again off)
   const c1 = b.web_test_chd(0, -1);
   twice(B.SCL);
@@ -2337,23 +2353,25 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   btap(B.SEQ);
   const q4 = [sec(), name()];
   twice(B.SEQ);
-  check(`SEQ once: ${q1} (then ${q1b}); from ENV once: the page left in LOOP and CLIP (${q3}); once in its menu: ${q4}; twice: TRACK's ${sec()},${name()}`,
+  const pjl = [b.web_test_pl(0), b.web_test_pl(3)];
+  play(b, 5.2);
+  check(`SEQ once: ${q1} (then ${q1b}); from ENV once: the page left in LOOP and CLIP (${q3}); once in its menu: ${q4}; twice: the projects' list (${pjl})`,
         q1.join() === `${SEC.SEQ},CLIPS` && q1b === "MIXER" && q3.join() === `${SEC.SEQ},MIXER` && q4.join() === `${SEC.SEQ},CLIPS` &&
-        sec() === SEC.LTRK && name() === "RECORD");
-  btap(B.ENV);                                  // (ENV twice: the other envelope, from the one shown before)
+        pjl.join() === "1,3");
+  btap(B.EDIT);                                 // (ENV twice on OSC A: the assign window, ENV 2 first; EDIT shuts it)
   twice(B.ENV);
-  const e2 = sec();
-  twice(B.ENV);
-  const e1 = sec();
-  btap(B.REC);                                  // (REC twice: nothing more till V0.87's TAKE)
+  const e2 = [b.web_test_win(0), b.web_test_win(4)];
+  btap(B.EDIT);
+  const e1 = [b.web_test_win(0), sec()];
+  btap(B.REC);                                  // (REC twice after a tap that stopped it: nothing; V0.87's TAKE)
   const r1 = b.web_test_lp(10, -1);
   twice(B.REC);
   const r2 = b.web_test_lp(10, -1);
   btap(B.REC);
-  check(`ENV twice from ENV 1: ENV 2 (${e2}); twice again: ENV 1 (${e1}); REC: the count-in (${r1}); REC twice: off, the second nothing (${r2}); REC: again (${b.web_test_lp(10, -1)})`,
-        e2 === SEC.ENV1 + 1 && e1 === SEC.ENV1 && r1 === 1 && r2 === 0 && b.web_test_lp(10, -1) === 1);
+  check(`ENV twice on OSC A: the assign window (${e2}); EDIT: shut (${e1}); REC: the count-in (${r1}); REC twice: off, the second nothing (${r2}); REC: again (${b.web_test_lp(10, -1)})`,
+        e2.join() === "1,2" && e1.join() === `0,${SEC.OSCA}` && r1 === 1 && r2 === 0 && b.web_test_lp(10, -1) === 1);
   btap(B.REC);
-  twice(B.HOME);                                // (HOME twice: the browser; a tap: back)
+  twice(B.HOME);                                // (HOME twice: the SETTINGS; a tap: back)
   const h1 = sec();
   btap(B.HOME);
   b.web_test_set_get(0, 1);                     // (HELP on: a menu opened from elsewhere says what twice does)
@@ -2361,15 +2379,15 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   btap(B.ENV);
   const hint = toast();
   b.web_test_set_get(0, 0);
-  check(`HOME twice: the browser (${h1}); a tap: back (${sec()}); HELP on: ENV opened from EDIT ("${hint}")`,
-        h1 === SEC.BROWSE && sec() !== SEC.BROWSE && hint === "AGAIN: ENV 2");
+  check(`HOME twice: the SETTINGS (${h1}); a tap: back (${sec()}); HELP on: ENV opened from EDIT ("${hint}")`,
+        h1 === SEC.MENU && sec() !== SEC.MENU && /^AGAIN: /.test(hint));
   b.web_buttons(1 << B.HOME);                   // (HOME held: the help map; held on: SETTINGS at 5 s)
   play(b, 1.0);
   const hm = cstr(b, b.web_test_cd());
   play(b, 4.3);
   b.web_buttons(0);
   play(b, 0.1);
-  check(`HOME held: the help map ("${hm}"); held 5 s: the SETTINGS (section ${sec()})`, hm.startsWith("HELP: SETTINGS") && sec() === SEC.MENU);
+  check(`HOME held: the help map ("${hm}"); held 5 s: DEBUG (section ${sec()})`, hm.startsWith("HELP: DEBUG") && sec() === SEC.DEBUG);
 }
 {                                               // V0.86: SEQ's TOOLS, SPEED, TYPE's guard, CLIPS' keys, the grid held
   const q = await boot(), qt = () => cstr(q, q.web_test_toast()), lp = (f, v = -1) => q.web_test_lp(f, v);
@@ -2444,15 +2462,21 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   lp(0, 0);
   turn(E.K1, 2);
   play(q, 0.6);
-  const ask = [qt(), q.web_test_lp_trk(0, 0, -1)];
-  turn(E.K1, 1);
-  const ty2 = q.web_test_lp_trk(0, 0, -1);
-  turn(E.K1, -2);                               // (asked, not answered: kept)
+  const ask = [q.web_test_win(3), q.web_test_lp_trk(0, 0, -1)];
+  turn(E.K1, -1);                               // (asked: turning again asks another; no time out)
+  play(q, 3.0);
+  const ask2 = [q.web_test_win(3), q.web_test_lp_trk(0, 0, -1)];
+  q.web_buttons(1 << B.SAVE); play(q, 0.03); q.web_buttons(0); play(q, 0.35);
+  const ty2 = [q.web_test_win(3), q.web_test_lp_trk(0, 0, -1), qt(), q.web_test_lp_trk(0, 3, -1)];
+  turn(E.K1, 1);                                // (asked again; another button: kept)
   play(q, 0.6);
-  play(q, 2.1);
-  check(`TYPE on an empty T2: OUT ${ty0} while turning, ${ty1} after; T1 (clips) asked ("${ask[0]}", type ${ask[1]}); the detent asked: MIDI (${ty2}); asked again, no answer: "${qt()}" (${q.web_test_lp_trk(0, 0, -1)})`,
-        ty0 === 0 && ty1 === 1 && ask[0] === "TURN ON: MIDI" && ask[1] === 0 && ty2 === 1 && qt() === "TYPE KEPT" &&
-        q.web_test_lp_trk(0, 0, -1) === 1);
+  tap(q, B.EDIT);
+  const tkept = [qt(), q.web_test_lp_trk(0, 0, -1), q.web_test_win(3)];
+  goPage(q, SEC.SEQ, "CLIPS");
+  q.web_test_lp_trk(0, 3, 0);
+  check(`TYPE on an empty T2: OUT ${ty0} while turning, ${ty1} after; T1 (clips) asked (window ${ask[0]}, type ${ask[1]}); turned again, still asked at 3 s (${ask2}); SAVE: yes (${ty2}); asked again, EDIT: "${tkept[0]}" (${tkept[1]}, ${tkept[2]})`,
+        ty0 === 0 && ty1 === 1 && ask.join() === "1,0" && ask2.join() === "1,0" && ty2[0] === 0 && ty2[3] === 1 && ty2[2] === "T1 SYNTH+MIDI" &&
+        tkept[0] === "TYPE KEPT" && tkept[1] === ty2[1] && tkept[2] === 0);
   q.web_test_lp_trk(0, 0, 0);
   const W = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26], BK = [1, 3, 5, 8, 10, 13, 15, 17, 20];
   const kn0 = q.web_test_key_note();
@@ -2543,5 +2567,45 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
         p2.web_test_set_get(7, -1) === 2 && p2.web_test_set_get(8, -1) === 1);
 }
 
+{                                               // V0.87: INIT at power-on; REC twice: TAKE; tap tempo; the assign window's slot
+  const r = (await WebAssembly.instantiate(bytes, {})).instance.exports;   // and POLARITY; WIPE
+  if (r._initialize) r._initialize();
+  r.web_nor_erase(); r.web_master(700); r.web_boot(); play(r, 2.2);
+  const init = [cstr(r, r.web_test_patch_name()), [0, 1, 2, 3].map((s) => r.web_test_slot(s, 0)).join(" ")];
+  check(`power-on on a new unit: "${init[0]}", its first four slots the macros (${init[1]}); the LEDs HIGH (${r.web_dim_level()})`,
+        init[0] === "INIT" && init[1] === "9 10 11 12" && r.web_dim_level() === 3);
+  const v = await boot(), vt = () => cstr(v, v.web_test_toast());
+  splash(v);
+  for (const k of [0, 4, 7]) { v.web_keys(1 << k); play(v, 0.2); v.web_keys(0); play(v, 0.2); }
+  twiceB(v, B.REC);
+  const tk = [vt(), v.web_test_lp_clip(0, 0, 0, -1), v.web_test_lp_clip(0, 0, 2, -1), v.web_test_lp(10, -1)];
+  twiceB(v, B.REC);
+  check(`REC twice: TAKE ("${tk[0]}": length ${tk[1]}, ${tk[2]} notes, not recording ${tk[3]}); again, nothing new played: "${vt()}"`,
+        tk[0] === "T1 A: TAKE OF 3 NOTES" && tk[1] > 0 && tk[2] === 3 && tk[3] === 0 && vt() === "NOTHING PLAYED TO TAKE");
+  v.web_buttons(1 << B.GLO); play(v, 0.7);      // (GLO held, PERFORM: PLAY taps the tempo, 0.4 s apart)
+  for (let i = 0; i < 4; i++) { v.web_buttons((1 << B.GLO) | (1 << B.PLAY)); play(v, 0.03); v.web_buttons(1 << B.GLO); play(v, 0.37); }
+  const tt = [vt(), v.web_test_tempo(0), v.web_test_run()];
+  v.web_buttons(0); play(v, 0.3);
+  check(`GLO held + PLAY tapped 4 times, 0.4 s apart: "${tt[0]}" (${tt[1]} BPM), the transport still stopped (${tt[2]})`,
+        tt[0] === "TAP: 150 BPM" && tt[1] === 150 && tt[2] === 0);
+  goPage(v, SEC.OSCA, "WAVE"); play(v, 0.05);
+  twiceB(v, B.LFO);                             // (the assign window: ALGORITHM its page 2, a slot taken; KNOB 2 AMOUNT,
+  v.web_enc(E.ALGO, 1); play(v, 0.05);          // KNOB 1 POLARITY: UNIPOLAR)
+  const pg2 = v.web_test_win(0);
+  for (let i = 0; i < 5; i++) { v.web_enc(E.K2, 1); play(v, 0.13); }
+  v.web_enc(E.K1, 1); play(v, 0.13);
+  const pol = v.web_test_win(6);
+  tap(v, B.LFO);
+  const sl = slots(v).findIndex(([a, d, m]) => a === SRC.LFO1 && d === ID.A_POS && m !== 0);
+  check(`LFO twice on WAVE, page 2 (${pg2}): LFO 1 > WT POS in slot ${sl + 1} (AMOUNT ${sl >= 0 ? slots(v)[sl][2] : "-"}), UNIPOLAR (POLARITY bits ${pol}); shut, kept (${v.web_test_win(0)})`,
+        pg2 === 2 && sl >= 0 && slots(v)[sl][2] > 0 && ((pol >> sl) & 1) === 1 && v.web_test_win(0) === 0);
+  v.web_test_palette(3);
+  goPage(v, SEC.MENU, "WIPE"); play(v, 0.05);
+  v.web_enc(E.K1, 1); play(v, 0.13);
+  const wq = v.web_test_win(3);
+  tap(v, B.SAVE);
+  check(`WIPE: asked (${wq}); SAVE: "${vt()}", the palette STRATA (${v.web_test_palette(-1)}), LIGHTS HIGH (${v.web_dim_level()}); the presets kept`,
+        wq === 3 && /^WIPED/.test(vt()) && v.web_test_palette(-1) === 0 && v.web_dim_level() === 3);
+}
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

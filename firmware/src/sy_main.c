@@ -33,8 +33,19 @@ static volatile uint32_t sy_t5_gap;              /* the longest between two tick
 void fm1_timer5_irq(void)
 {
     static uint32_t sub, owed, last;
+#if FM1_LED_Q
+    static uint32_t quarter;
+#endif
     uint32_t t0 = fm1_ticks(), usb_due = sub % 5u == 0u;
     fm1_timer5_ack();
+#if FM1_LED_Q
+    if (++quarter & 3u) {                        /* (V0.87, U9: quarters 1 .. 3 of the tick, 40 kHz: the LED lines */
+        fm1_input_quarter(quarter & 3u);         /* whose level ends there dark; everything else every fourth, the */
+        if (sy_in_audio)                         /* 10 kHz tick as before) */
+            t5_nested_ticks += fm1_ticks() - t0;
+        return;
+    }
+#endif
     if (last && t0 - last > sy_t5_gap)
         sy_t5_gap = t0 - last;
     last = t0;
@@ -319,6 +330,11 @@ static void sy_lcd_idle(void)
 }
 
 /* ---------------------------------------------------------------------------------- UBOOT, the update --- */
+/* V0.87 (W1): the chip's USB boot asked for (its key, the chord, the console): marked across the reset. Backup mode
+ * no computer reads ends by itself (~13 s: the ROM resets the chip); the boot after it then is no crash, and does not
+ * show SAFE START (on 2026-10-22 it did) */
+#define UBOOT_MARK 0x55424F54u                   /* "UBOT" */
+static uint32_t uboot_mark __attribute__((section(".noinit")));
 static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as it is (debug, a flash backup) */
 {
     fm1_audio_stop();
@@ -330,6 +346,7 @@ static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as 
     usb_detach();
     fm1_delay_ms(30);
     bootguard.pending = 0;                       /* (meant: no failed boot) */
+    uboot_mark = UBOOT_MARK;
     fm1_enter_uboot();
 }
 
@@ -427,10 +444,21 @@ static void sy_bench_run(void)
 }
 
 /* ------------------------------------------------------------------------------------------ power-on --- */
+/* V0.87 (U14): the theme the settings keep, read before the splash (it was drawn in STRATA's, then turned into the
+ * one kept): the settings' copy as sy_flash_boot reads it (its CRC checked), only its palette byte taken; nothing
+ * written. None kept, or the flash not the expected part: STRATA */
+static uint32_t sy_splash_pal(void)
+{
+    ss_hdr_t h;
+    if (!flash_ok || ss_current(SS_SETTINGS, &h) < 0 || h.len < 11u || ss_buf[0] != 'S' || ss_buf[1] != 'E' ||
+        ss_buf[2] != 'T' || ss_buf[3] != '1')
+        return 0;
+    return ss_buf[4] % SY_NPAL;
+}
 static void sy_splash(void)                      /* the design's power-on (sy_ui_draw.c ui_p_boot), a strip at a time */
 {
     uint32_t s;
-    sy_palette(0);
+    sy_palette(sy_splash_pal());
     for (s = 0; s < 240u; s += 80u) {
         lk_begin(0, (int32_t)s, 240u, 80u);
         ui_p_boot();
@@ -455,6 +483,9 @@ static void fm1_main(void)
     }
     clean = !(fm1_crash.magic == FM1_CRASH_MAGIC && fm1_crash.count != crash_seen) && !bootguard.failed &&
             !(fm1_boot.p3_rst & 4u);           /* no crash, failed boot or watchdog reset before this one */
+    if (uboot_mark == UBOOT_MARK)              /* (V0.87, W1: the reset was the USB boot asked for, or its end) */
+        clean = !(fm1_crash.magic == FM1_CRASH_MAGIC && fm1_crash.count != crash_seen);
+    uboot_mark = 0;
     crash_seen = fm1_crash.count;
     lcd_init();
     sy_splash();

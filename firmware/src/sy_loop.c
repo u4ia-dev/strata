@@ -163,6 +163,19 @@ static struct {
     uint16_t mv_id, mv_t;                        /* the move recorded last: its parameter, its tick */
     int16_t mv_v;                                /* .. its value */
 } lpr;                                           /* (V0.81: set in lp_boot, not .data's 1.6 KB of the image) */
+/* V0.87 (F09): TAKE, REC twice: what was just played on the selected track, kept as it comes (the newest LP_NTAKE
+ * notes and hits, 2 KB), made a clip on REC twice (lp_take_make). Each note's place in quarter notes of its clock:
+ * the transport's while it runs (its bars then the clip's), else a free one at the tempo */
+#define LP_NTAKE 256u
+static struct {
+    float q[LP_NTAKE];                           /* each one's start */
+    uint8_t note[LP_NTAKE], vel[LP_NTAKE];       /* .. its note (a hit: its drum's GM note), velocity (bit 7: the */
+                                                 /* transport's clock) */
+    uint16_t len[LP_NTAKE];                      /* .. ticks (0: still held); a hit LP_HIT, LP_ACC */
+    uint16_t head, n;
+    uint8_t trk;
+    float fq;                                    /* the free clock: quarter notes, every block */
+} lpk;
 enum { LP_REQ_NONE, LP_REQ_TAP, LP_REQ_UNDO, LP_REQ_STOPALL };
 
 /* ------------------------------------------------------------------------------------- the event pool --- */
@@ -992,6 +1005,9 @@ static void sy_loop_block(void)
 {
     uint32_t t;
     lp_gains();
+    lpk.fq += (float)SY_BLK * sy_tempo / (60.0f * SY_FS);   /* (V0.87: TAKE's free clock) */
+    if (lpk.fq > 1e6f)
+        lpk.fq = 0.0f, lpk.n = lpk.head = 0;
     if (lpr.req) {
         uint32_t r = lpr.req;
         lpr.req = LP_REQ_NONE;
@@ -1063,6 +1079,97 @@ static void sy_loop_block(void)
     lpx.lastq = cht.tq;
 }
 
+/* V0.87: TAKE's memory (the audio side): a note or a hit played into track t (another track's: it starts again) */
+static void lp_take_in(uint32_t t, uint32_t note, uint32_t vel, int down, uint32_t hit)
+{
+    uint32_t i, k;
+    if (note > 127u)
+        return;
+    if (t != lpk.trk) {
+        lpk.trk = (uint8_t)t;
+        lpk.n = lpk.head = 0;
+    }
+    if (down) {
+        i = lpk.head;
+        lpk.q[i] = cht.run ? cht.tq : lpk.fq;
+        lpk.note[i] = (uint8_t)note;
+        lpk.vel[i] = (uint8_t)(sy_clampi((int32_t)vel, 1, 127) | (cht.run ? 128 : 0));
+        lpk.len[i] = (uint16_t)hit;
+        lpk.head = (uint16_t)((i + 1u) % LP_NTAKE);
+        if (lpk.n < LP_NTAKE)
+            lpk.n++;
+        return;
+    }
+    for (k = 0; k < lpk.n; k++) {                /* (its end: the newest of that note still held) */
+        i = (lpk.head + LP_NTAKE - 1u - k) % LP_NTAKE;
+        if (lpk.note[i] == note && !lpk.len[i]) {
+            float d = ((lpk.vel[i] & 128u ? cht.tq : lpk.fq) - lpk.q[i]) * (float)LP_PPQ;
+            lpk.len[i] = (uint16_t)(d < 1.0f ? 1u : d > (float)(LP_HIT - 1u) ? LP_HIT - 1u : (uint32_t)(d + 0.5f));
+            return;
+        }
+    }
+}
+static uint32_t lp_take_len(uint32_t i)          /* .. note i's length in ticks (still held: to now) */
+{
+    float d;
+    if (lpk.len[i])
+        return lpk.len[i];
+    d = ((lpk.vel[i] & 128u ? cht.tq : lpk.fq) - lpk.q[i]) * (float)LP_PPQ;
+    return d < 1.0f ? 1u : d > (float)(LP_HIT - 1u) ? LP_HIT - 1u : (uint32_t)(d + 0.5f);
+}
+/* .. REC twice (the main loop): what TAKE kept, of the clock the newest was played on and of the last lp_max_bars()
+ * bars of it, a clip on the selected track in the scene picked (an empty one): from the bar it starts in (the
+ * transport's) or the quarter (the free clock), the bars it takes; its notes still held end now. 0: none kept; -1
+ * that scene has a clip; -2 the events ran out */
+static int lp_take_make(void)
+{
+    uint32_t t = lpp.sel % LP_NTRK, s = lpp.scn % LP_NSCN, k, i, n = 0, bars, fl, run;
+    float bq = sy_bar_q > 0.0f ? sy_bar_q : 4.0f, last, first, end, start;
+    lp_clip_t *c = &lpp.clip[t][s];
+    if (!lpk.n || lpk.trk != t)
+        return 0;
+    if (c->len)
+        return -1;
+    run = lpk.vel[(lpk.head + LP_NTAKE - 1u) % LP_NTAKE] & 128u;
+    last = lpk.q[(lpk.head + LP_NTAKE - 1u) % LP_NTAKE];
+    first = end = last;
+    for (k = 0; k < lpk.n; k++) {                /* (the newest back, its clock's, within the bars a clip holds) */
+        i = (lpk.head + LP_NTAKE - 1u - k) % LP_NTAKE;
+        if ((lpk.vel[i] & 128u) != run || last - lpk.q[i] >= bq * (float)lp_max_bars() - 1e-3f)
+            break;
+        first = lpk.q[i];
+        n++;
+    }
+    start = run ? (float)sy_floori(first / bq) * bq : (float)sy_floori(first);
+    for (k = 0; k < n; k++) {
+        i = (lpk.head + LP_NTAKE - 1u - k) % LP_NTAKE;
+        end = sy_maxf(end, lpk.q[i] + (lpk.len[i] & LP_HIT ? 0.25f : (float)lp_take_len(i) / (float)LP_PPQ));
+    }
+    bars = (uint32_t)sy_clampi(sy_floori((end - start) / bq - 1e-3f) + 1, 1, (int32_t)lp_max_bars());
+    fl = LP_LOCK();
+    c->len = (uint16_t)(bars * lp_bar_ticks());
+    LP_UNLOCK(fl);
+    for (k = n; k-- > 0;) {                      /* (oldest first: as they were played) */
+        uint32_t e, tk;
+        i = (lpk.head + LP_NTAKE - 1u - k) % LP_NTAKE;
+        tk = (uint32_t)sy_clampi(sy_floori((lpk.q[i] - start) * (float)LP_PPQ + 0.5f), 0, (int32_t)c->len - 1);
+        fl = LP_LOCK();
+        if ((e = lp_alloc()) == LP_END) {
+            LP_UNLOCK(fl);
+            return -2;
+        }
+        lp_ev[e].t = (uint16_t)tk;
+        lp_ev[e].len = (uint16_t)(lpk.len[i] & LP_HIT ? lpk.len[i] : lp_take_len(i));
+        lp_ev[e].a = lpk.note[i];
+        lp_ev[e].b = (uint8_t)(lpk.vel[i] & 127u);
+        lp_insert(c, e);
+        LP_UNLOCK(fl);
+    }
+    lpk.n = lpk.head = 0;
+    lpx.seq++;
+    return (int)n;
+}
+
 /* ---------------------------------------------------------------------------------------- the input --- */
 /* a panel key (0 .. 26) or a MIDI note (key 0xFF, chan its channel) in: to its track (a key: the selected track's,
  * its release to the same; a MIDI note: the track whose IN is its channel, else the selected), through its chords,
@@ -1106,11 +1213,13 @@ static void sy_loop_key(uint32_t key, uint32_t note, uint32_t vel, int down, uin
         if (down && row < DK_ROWS) {
             lp_drum_play(t, row, vel ? vel : 100u, acc, 0u);
             lp_rec_hit(t, row, vel ? vel : 100u, acc);
+            lp_take_in(t, DK_NOTE[row], vel ? vel : 100u, 1, LP_HIT | (acc ? LP_ACC : 0u));   /* (V0.87: TAKE's) */
         }
         return;
     }
     sy_chord_key_t(t, id, note, vel, down);
     lp_rec_input(t, note, vel, down);
+    lp_take_in(t, note, vel, down, 0u);          /* (V0.87: TAKE's) */
 }
 
 /* --------------------------------------------------------------------------------------- the UI's --- */

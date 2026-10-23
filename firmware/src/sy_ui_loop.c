@@ -34,6 +34,8 @@ static void ui_l_asks_off(void)                     /* .. the tools' and TYPE's 
     ui.paste_t = ui.halve_t = ui.clr_t2 = 0;
     ui.lt_want = 0;
     ui.lt_ask = 0;
+    if (ui.qk == Q_TYPE || ui.qk == Q_CLIPDEL)
+        ui.qk = Q_NONE, ui.dirty = D_ALL;
 }
 /* V0.85: the page shown as the selected track's TYPE wants it: a drum track's EDIT is its KIT, its CLIP the grid; a
  * synth's, the sound's and NOTES (the page of the same drawing where there is one) */
@@ -347,13 +349,15 @@ static void ui_l_clear(uint32_t t, int32_t s)
     ui_toast(m);
     ui.lmv = 0;
 }
-/* (C6) TYPE as turned to: set (the pages follow it) */
+/* (C6) TYPE as turned to: set (the pages follow it). V0.87 (S1): on a track with clips SAVE answers the question */
 static void ui_l_type_go(void)
 {
     uint32_t t = lpp.sel % LP_NTRK, v = (uint32_t)(ui.lt_want - 1);
     char m[32];
     ui.lt_want = 0;
     ui.lt_ask = 0;
+    if (ui.qk == Q_TYPE)
+        ui.qk = Q_NONE;
     if (v > 3u || v == ui_l_type3(t))
         return;
     lp_type_set(t, v == 3u ? LT_DRUM : v == 2u ? LT_MIDI : LT_SYNTH, v == 1u);
@@ -362,6 +366,132 @@ static void ui_l_type_go(void)
     ui_toast(m);
     ui.dirty = D_ALL;
 }
+static void ui_l_type_keep(void)                    /* .. the question answered no (anything but SAVE) */
+{
+    ui.lt_want = 0;
+    ui.lt_ask = 0;
+    if (ui.qk == Q_TYPE)
+        ui.qk = Q_NONE;
+    ui_toast("TYPE KEPT");
+    ui.dirty = D_ALL;
+}
+
+/* V0.87 (U1, S3, S4): SEQ + OCT+ an empty clip of 1 bar on the selected track in the scene picked (SEQ held on,
+ * PRESETS its length); SEQ + OCT- the clip there deleted, asked first (a second SEQ + OCT-) */
+static void ui_l_clip_new(void)
+{
+    uint32_t t = lpp.sel % LP_NTRK, s = lpp.scn % LP_NSCN;
+    char m[32];
+    ui_l_asks_off();
+    if (lpp.clip[t][s].len || (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s)) {
+        sp_put(ui_l_clip(m, t, s), " HAS A CLIP");
+        ui_toast(m);
+        return;
+    }
+    lp_clip_bars_set(1u);
+    ui.new_clip = 1;
+    sp_put(ui_l_clip(m, t, s), ": NEW, 1 BAR");
+    ui_toast(m);
+    ui.dirty = D_ALL;
+}
+static void ui_l_new_len(int32_t s)                 /* .. its length (PRESETS, SEQ still held) */
+{
+    uint32_t t = lpp.sel % LP_NTRK, b = (uint32_t)sy_clampi((int32_t)lp_clip_bars(t, lpp.scn) + s, 1, (int32_t)lp_max_bars());
+    char m[32];
+    lp_clip_bars_set(b);
+    sp_put(sp_fix(sp_put(ui_l_clip(m, t, lpp.scn), ": "), (int32_t)b, 0u, 0), b == 1u ? " BAR" : " BARS");
+    ui_toast(m);
+    ui.dirty = D_ALL;
+}
+static void ui_l_clip_del(void)
+{
+    uint32_t t = lpp.sel % LP_NTRK, s = lpp.scn % LP_NSCN, v = t * LP_NSCN + s + 1u;
+    char m[32];
+    if (!lpp.clip[t][s].len) {
+        sp_put(ui_l_clip(m, t, s), " IS EMPTY");
+        ui_toast(m);
+        return;
+    }
+    if (ui.qk != Q_CLIPDEL || ui.qv != v) {         /* (asked: DELETE?) */
+        ui.qk = Q_CLIPDEL;
+        ui.qv = (uint8_t)v;
+        ui.dirty = D_ALL;
+        return;
+    }
+    ui.qk = Q_NONE;
+    if (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s) {
+        ui_toast("RECORDING IT: STOP FIRST");
+        return;
+    }
+    lp_clip_clear(t, s);
+    ui.lnote = ui.lmv = 0;
+    sp_put(ui_l_clip(m, t, s), " DELETED");
+    ui_toast(m);
+    ui.dirty = D_ALL;
+}
+/* .. SEQ + OCT- held 5 s (U2): the page's settings as they start (its clips stay): MIXER the track's VOLUME, PAN, MUTE
+ * and SOLO; SONG its slots and SONG off; RECORD QUANTIZE, CHANNEL and MIDI IN; CLICK its four; CLIP's pages the clip's
+ * SPEED and NOTE+'s GRID; CLIPS nothing */
+static void ui_l_reset(void)
+{
+    uint32_t g = UI_PG[ui.page].graph, t = lpp.sel % LP_NTRK;
+    lp_trk_t *k = &lpp.trk[t];
+    char m[32];
+    if (g == G_LMIX) {
+        k->vol = 100, k->pan = 64, k->mute = 0, k->solo = 0;
+    } else if (g == G_LSONG) {
+        lp_song_defaults();
+        ui.lslot = 0;
+    } else if (g == G_LREC) {
+        lpg.quant = LQ_OFF;
+        k->ch = (uint8_t)t, k->cin = 0;
+    } else if (g == G_LCLICK) {
+        lpg.cin = 1, lpg.launch = LL_BAR, lpg.click = LC_REC, lpg.clvl = 6;
+    } else if (g == G_LCLIPS) {
+        ui_toast("NOTHING TO RESET HERE");
+        return;
+    } else {
+        lpp.speed[t][lpp.scn % LP_NSCN] = LS_1;
+        ui.lgrid = 2;
+        lps[t].resync = 1;
+    }
+    lpx.seq++;
+    sp_put(sp_put(m, UI_PG[ui.page].name), ": RESET");
+    ui_toast(m);
+    ui.dirty = D_ALL;
+}
+
+/* the question's window (V0.87, sy_ui.c Q_*): DELETE? a clip; T3: DRUMS? its TYPE (S1); WIPE? the settings (T1) */
+static void ui_p_q(void)
+{
+    char t[32], n[32];
+    const char *l1 = "SAVE+OCT- AGAIN: DELETE IT", *l2 = "ANYTHING ELSE: KEEP IT", *l3 = 0;
+    uint32_t tr = lpp.sel % LP_NTRK;
+    if (ui.qk == Q_TYPE) {
+        uint32_t want = ui.lt_want ? (uint32_t)(ui.lt_want - 1) & 3u : ui_l_type3(tr);
+        sp_put(sp_put(sp_put(sp_fix(sp_put(t, "T"), (int32_t)tr + 1, 0u, 0), ": "), LT_TYPE3[want]), "?");
+        sp_put(sp_put(n, "ANYTHING ELSE: STAYS "), LT_TYPE3[ui_l_type3(tr)]);
+        l1 = "SAVE: CHANGE IT", l2 = n, l3 = "ITS CLIPS STAY EITHER WAY";
+    } else if (ui.qk == Q_WIPE) {
+        sp_put(t, "WIPE?");
+        l1 = "SAVE: EVERY SETTING BACK", l2 = "ANYTHING ELSE: KEEP THEM", l3 = "PRESETS AND PROJECTS STAY";
+    } else {
+        uint32_t c = (uint32_t)(ui.qv ? ui.qv - 1u : 0u), b = lp_clip_bars(c / LP_NSCN, c % LP_NSCN);
+        sp_put(t, "DELETE?");
+        sp_put(sp_fix(sp_put(ui_l_clip(n, c / LP_NSCN, c % LP_NSCN), " \xB7 "), (int32_t)b, 0u, 0), b == 1u ? " BAR" : " BARS");
+        l1 = "SEQ+OCT- AGAIN: DELETE IT";
+        l3 = n;
+    }
+    lk_frame(14.5f, 44.5f, 211.0f, 128.0f, 1.5f, sk.hot);
+    lk_text(26.0f, 56.0f, T14B, t, sk.hot, sk.ground, 0, 17);
+    if (ui.qk == Q_CLIPDEL)
+        lk_text(26.0f, 82.0f, T12B, l3, sk.ink, sk.ground, 0, 15);
+    lk_text(26.0f, 108.0f, T9, l1, sk.ink, sk.ground, 20, 0);
+    lk_text(26.0f, 124.0f, T9, l2, sk.lab, sk.ground, 20, 0);
+    if (l3 && ui.qk != Q_CLIPDEL)
+        lk_text(26.0f, 148.0f, T9, l3, sk.lab, sk.ground, 20, 0);
+}
+
 static int sy_app_project(uint32_t p);              /* sy_app.c: the project saved, project p loaded */
 static void sy_app_project_new(void);               /* .. the project cleared */
 /* a turn of the looper's knobs (sy_ui.c ui_item_turn) */
@@ -386,8 +516,14 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
         break;
     }
     case UI_LTYPE:                                  /* (V0.85: DRUMS too. V0.86, C6: it goes when the turning stops; */
-        if (ui.lt_ask) {                            /* a track with clips asks for one more detent) */
-            ui_l_type_go();
+        if (ui.lt_ask) {                            /* a track with clips: V0.87 (S1), another type asked (back */
+            int32_t w = sy_clampi((int32_t)(ui.lt_want - 1) + s, 0, 3);   /* to its own: kept) */
+            if ((uint32_t)w == ui_l_type3(t)) {
+                ui_l_type_keep();
+                return;
+            }
+            ui.lt_want = (int8_t)(w + 1);
+            ui.dirty = D_ALL;
             return;
         }
         ui.lt_want = (int8_t)(sy_clampi((ui.lt_want ? ui.lt_want - 1 : (int32_t)ui_l_type3(t)) + s, 0, 3) + 1);
@@ -475,32 +611,6 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
     }
     case UI_LSREP: lpp.srep[ui.lslot % LP_NSONG] = (uint8_t)sy_clampi(lpp.srep[ui.lslot % LP_NSONG] + s, 1, 16); break;
     case UI_LSON: lpp.song_on = s > 0; break;
-    case UI_LPRJ: ui.lprj = (uint8_t)sy_clampi(ui.lprj + s, 0, LP_NPRJ - 1); break;
-    case UI_LLOAD:
-        if (s > 0) {
-            if (ui.lprj == lpg.prj) {
-                ui_toast("IT IS THE ONE LOADED");
-            } else if (sy_app_project(ui.lprj)) {
-                sp_fix(sp_put(m, "PROJECT "), (int32_t)ui.lprj + 1, 0u, 0);
-                ui_toast(m);
-            } else {
-                ui_toast("NOT SAVED: NOT LOADED");
-            }
-            ui.dirty = D_ALL;
-        }
-        break;
-    case UI_LNEW:
-        if (s > 0) {
-            if (ui.lnew_t && fm1_ms - ui.lnew_t < 2000u) {
-                ui.lnew_t = 0;
-                sy_app_project_new();
-                ui_toast("A NEW PROJECT");
-            } else {
-                ui.lnew_t = fm1_ms | 1u;
-                ui_toast("AGAIN: ALL ITS CLIPS GO");
-            }
-        }
-        break;
     default: break;
     }
     lpx.seq++;
@@ -609,7 +719,6 @@ static void sy_ui_project(int ok, int blocked)
     }
     lp_select_to(lpp.sel, ok == 2);
     ui.kedited = 0;                                 /* (V0.86: the project's kit as it was kept) */
-    ui.lprj = lpg.prj;
     ui.lnote = ui.lmv = ui.lslot = 0;
     if (!ok)
         ui_toast("NOT SAVED: NOT LOADED");
@@ -656,19 +765,14 @@ static void sy_ui_loop_ms(void)
             any |= lpp.clip[tr][sc].len != 0u;
         if ((uint32_t)(ui.lt_want - 1) == ui_l_type3(tr)) {
             ui.lt_want = 0;
-        } else if (any) {
+        } else if (any) {                           /* (V0.87, S1: the question, until answered) */
             ui.lt_ask = 1;
             ui.lt_t = fm1_ms;
-            sp_put(sp_put(m, "TURN ON: "), LT_TYPE3[(ui.lt_want - 1) & 3]);
-            ui_toast(m);
+            ui.qk = Q_TYPE;
+            ui.dirty = D_ALL;
         } else {
             ui_l_type_go();
         }
-        ui.dirty |= D_DISP | D_KNOBS;
-    } else if (ui.lt_ask && fm1_ms - ui.lt_t >= UI_ASK_MS) {
-        ui.lt_want = 0;
-        ui.lt_ask = 0;
-        ui_toast("TYPE KEPT");
         ui.dirty |= D_DISP | D_KNOBS;
     }
     if ((ui.paste_t && fm1_ms - ui.paste_t >= UI_ASK_MS) || (ui.halve_t && fm1_ms - ui.halve_t >= UI_ASK_MS) ||
@@ -787,9 +891,6 @@ static const char *ui_loop_nv(uint32_t id, char *v)
             sp_put(sp_fix(v, lpp.srep[ui.lslot % LP_NSONG], 0u, 0), " TIMES");
         return "REPEATS";
     case UI_LSON: sp_put(v, lpp.song_on ? "ON" : "OFF"); return "SONG";
-    case UI_LPRJ: sp_fix(v, (int32_t)ui.lprj + 1, 0u, 0); return "PROJECT";
-    case UI_LLOAD: sp_fix(sp_put(v, "TURN: "), (int32_t)ui.lprj + 1, 0u, 0); return "LOAD";
-    case UI_LNEW: sp_put(v, "TURN TWICE"); return "NEW";
     default: return "";
     }
 }
@@ -828,7 +929,7 @@ static void ui_l_head(const char *word, int ptag)
     lk_chip(230.0f - lk_tw(T10B, st, 20) - 10.0f, 24.0f, st, lpr.st != LR_OFF || cht.run);
 }
 
-/* CLIPS: the grid (columns the tracks, rows the scenes) */
+/* CLIPS: the grid. V0.87 (U20): a row a track, a column a scene (the tracks down the side, their clips across) */
 #define UI_LX0 30.0f
 #define UI_LCW 25.0f
 #define UI_LY0 62.0f
@@ -839,27 +940,27 @@ static void ui_p_lclips(void)
     uint32_t t, s, sel = lpp.sel % LP_NTRK, cs = lpp.scn % LP_NSCN, blink = (fm1_ms / 250u) & 1u;
     char n[4];
     ui_l_head(0, 1);
-    lk_box(UI_LX0 + UI_LCW * (float)sel + 1.0f, UI_LY0, UI_LX0 + UI_LCW * (float)(sel + 1u) - 1.0f,
-           UI_LY0 + UI_LRH * (float)LP_NSCN, sk.line);   /* (V0.86: the track selected's column lit) */
-    for (t = 0; t < LP_NTRK; t++) {                 /* (the tracks' numbers: the one selected boxed) */
-        float x = UI_LX0 + UI_LCW * (float)t;
-        sp_fix(n, (int32_t)t + 1, 0u, 0);
-        if (t == sel) {
-            lk_box(x + 3.0f, 46.0f, x + UI_LCW - 3.0f, 58.0f, sk.ink);
-            lk_text_c(x + 0.5f * UI_LCW, 47.0f, T9B, n, sk.ground, sk.ink, 0, 0);
-        } else {
-            lk_text_c(x + 0.5f * UI_LCW, 47.0f, T9, n, sk.lab, sk.ground, 0, 0);
-            if (lp_muted(t))                        /* (muted: a line under its number) */
-                lk_seg(x + 8.0f, 59.0f, x + UI_LCW - 8.0f, 59.0f, 1.0f, sk.mid);
-        }
-    }
-    for (s = 0; s < LP_NSCN; s++) {
-        float y = UI_LY0 + UI_LRH * (float)s;
+    lk_box(UI_LX0 - 26.0f, UI_LY0 + UI_LRH * (float)sel, UI_LX0 + UI_LCW * (float)LP_NSCN,
+           UI_LY0 + UI_LRH * (float)(sel + 1u), sk.line);   /* (the track selected's row lit) */
+    for (s = 0; s < LP_NSCN; s++) {                 /* (the scenes' letters: the one picked bold) */
         char l[2] = {ui_l_scn(s), 0};
-        lk_text_c(16.0f, y + 1.0f, s == cs ? T9B : T9, l, s == cs ? ui_ink(ui_hot(1)) : sk.lab, sk.ground, 0, 0);
-        for (t = 0; t < LP_NTRK; t++) {
+        lk_text_c(UI_LX0 + UI_LCW * ((float)s + 0.5f), 48.0f, s == cs ? T9B : T9, l,
+                  s == cs ? ui_ink(ui_hot(1)) : sk.lab, sk.ground, 0, 0);
+    }
+    for (t = 0; t < LP_NTRK; t++) {
+        float y = UI_LY0 + UI_LRH * (float)t;
+        sp_fix(sp_put(n, "T"), (int32_t)t + 1, 0u, 0);   /* (the tracks' numbers: the one selected boxed, a muted one */
+        if (t == sel) {                                     /* underlined) */
+            lk_box(5.0f, y + 1.0f, 25.0f, y + UI_LRH - 1.0f, sk.ink);
+            lk_text_c(15.0f, y + 1.5f, T9B, n, sk.ground, sk.ink, 0, 0);
+        } else {
+            lk_text_c(15.0f, y + 1.5f, T9, n, sk.lab, sk.ground, 0, 0);
+            if (lp_muted(t))
+                lk_seg(8.0f, y + UI_LRH - 1.5f, 22.0f, y + UI_LRH - 1.5f, 1.0f, sk.mid);
+        }
+        for (s = 0; s < LP_NSCN; s++) {
             const lp_clip_t *c = &lpp.clip[t][s];
-            float x = UI_LX0 + UI_LCW * (float)t, x0 = x + 3.0f, x1 = x + UI_LCW - 3.0f, y0 = y + 2.0f, y1 = y + UI_LRH - 2.0f;
+            float x = UI_LX0 + UI_LCW * (float)s, x0 = x + 3.0f, x1 = x + UI_LCW - 3.0f, y0 = y + 2.0f, y1 = y + UI_LRH - 2.0f;
             int rec = lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s, on = lps[t].play == s, nx = lps[t].next == s && blink;
             uint16_t bg = t == sel ? sk.line : sk.ground;
             if (rec) {
@@ -1292,35 +1393,6 @@ static void ui_p_lsong(void)
 
 /* PROJECT: the four (the one loaded filled, the one picked framed; each kept, empty, or in the way of old presets);
  * the events in use */
-static uint8_t ui_prj_state[LP_NPRJ];               /* sy_app.c: 0 empty, 1 kept, 2 old presets where it goes */
-static void ui_p_lprj(void)
-{
-    static const int32_t IDS[3] = {UI_LLOAD, UI_LNEW, -1};
-    static const char *const ST[3] = {"EMPTY", "KEPT", "PRESETS THERE"};
-    uint32_t i, used = LP_NEV - lp_nfree;
-    char t[40];
-    ui_l_head("PROJECTS", 0);
-    for (i = 0; i < LP_NPRJ; i++) {
-        float x = 26.0f + 102.0f * (float)(i % 2u), y = 50.0f + 52.0f * (float)(i / 2u);
-        int cur = i == lpg.prj, pick = i == ui.lprj;
-        sp_fix(t, (int32_t)i + 1, 0u, 0);
-        if (cur) {
-            lk_box(x, y, x + 92.0f, y + 42.0f, sk.ink);
-            lk_text(x + 8.0f, y + 5.0f, T14B, t, sk.ground, sk.ink, 0, 17);
-            lk_text(x + 8.0f, y + 25.0f, T9, "LOADED", sk.ground, sk.ink, 20, 0);
-        } else {
-            lk_text(x + 8.0f, y + 5.0f, T14B, t, sk.ink, sk.ground, 0, 17);
-            lk_text(x + 8.0f, y + 25.0f, T9, ST[ui_prj_state[i] % 3u], ui_prj_state[i] == 2u ? sk.hot : sk.lab, sk.ground, 20, 0);
-        }
-        if (pick)
-            lk_frame(x - 2.5f, y - 2.5f, 97.0f, 47.0f, 1.0f, ui_hot(0) ? sk.hot : cur ? sk.mid : sk.ink);
-    }
-    ui_H(0, 8.0f, 47.0f);
-    sp_put(sp_fix(sp_put(sp_fix(sp_put(t, "EVENTS "), (int32_t)used, 0u, 0), " OF "), LP_NEV, 0u, 0), " IN USE");
-    lk_text(UI_TITLE_X, 158.0f, T9, t, sk.lab, sk.ground, 20, 0);
-    ui_l_row(1u, IDS);
-}
-
 /* the launch pad (SEQ held): the keys, what each does (the white: the tracks' clips in the scene picked, the scenes;
  * the black: MUTE, STOP, SOLO, UNDO), the state of each */
 static void ui_p_pad(void)

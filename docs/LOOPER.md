@@ -58,6 +58,9 @@ the bench build no longer measures flash reads.
 
 ## Status
 
+- **V0.87 step 1**: built 2026-10-23, not installed: CLIPS with the tracks as rows; SONG on LOOP; the projects a list
+  (SEQ twice); SEQ + OCT+ a new clip of a bar (PRESETS its length), SEQ + OCT− its deletion, asked; TYPE on a track with
+  clips asked as a window (SAVE yes); REC twice TAKE; SELECT on HOME the track; GLO held + PLAY tap tempo.
 - **Stage 0, V0.8 BENCH**: built 2026-10-21 (commit "V0.8 BENCH"), not installed.
 - **Stage 1, V0.8 LOOPER**: built 2026-10-21, not installed; CONTROLS.md "The looper", FLASHING.md steps 26-29.
   Every synth track plays the one sound (a sound a track: V0.9). The defaults above are as built. V0.81 (its fixes,

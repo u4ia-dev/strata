@@ -55,6 +55,11 @@ a { color: inherit; }
 /* the DRUM grid's beats (hal/fm1_input.h fm1_led_mid): a steady level between the glow and lit, ~15 % (DIM LO ~10 %) */
 .mid .slit { fill: #9a9a9e; }
 .dimlo .mid .slit { fill: #8a8a8e; }
+/* V0.87 (Strata's LIGHTS): MED and LOW dimmer, OFF dark */
+.lv2 .lit .slit { fill: #b8b8bb; filter: none; } .lv2 .lit .face.btn { fill: #cfc5a6; }
+.lv1 .lit .slit { fill: #8e8e92; filter: none; } .lv1 .lit .face.btn { fill: #9c9480; } .lv1 .mid .slit { fill: #77777b; }
+.lv0 .lit .slit, .lv0 .dim .slit, .lv0 .mid .slit, .lv0 .breath .slit { fill: #3a3a3c; filter: none; animation: none; }
+.lv0 .lit .face.btn, .lv0 .dim .face.btn, .lv0 .breath .face.btn { fill: #3a3934; animation: none; }
 .held .face { stroke: var(--lit); stroke-width: 3; }
 .latched .face { stroke: #79b8ff; stroke-width: 3; }
 .start { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;
@@ -399,7 +404,10 @@ function drawAnim(anim) {
 }
 function drawLights([litB, litK, dimB, dimK, dimLo = 0, brB = 0, brK = 0, midK = 0], anim = null) {
   drawAnim(anim);
-  document.documentElement.classList.toggle("dimlo", !!dimLo);   // (the breath's lower peak)
+  // V0.87: Strata's LIGHTS (0 OFF .. 3 HIGH; Felucca's emulator: its glow, 0 HI, 1 LO)
+  const lv = typeof window.STRATA_LIGHTS === "number" ? window.STRATA_LIGHTS : null;
+  for (let i = 0; i < 4; i++) document.documentElement.classList.toggle("lv" + i, lv === null ? false : dimLo === i);
+  document.documentElement.classList.toggle("dimlo", lv === null ? !!dimLo : dimLo === 1);   // (the breath's lower peak)
   for (const b of buttons) {
     const bit = 1 << b.bit, green = b.bit === B.PLAY && (litB & (1 << PLAY_GREEN));
     b.g.classList.toggle("lit", !!(litB & bit) && !green);

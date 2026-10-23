@@ -32,9 +32,11 @@
                                   * build.py STRATA_CPU2=0: none of it (no stack, waiting loop or mailbox) */
 #endif
 #define FM1_CPU1_USED STRATA_CPU2   /* (hal/fm1_sys.h: every reset holds it first) */
+#define FM1_LED_Q 1              /* V0.87 (U9): the LED scan's tick in quarters, steady levels (hal/fm1_input.h) */
+#define FM1_T5_PRD_V 150u        /* .. TIMER5 at 40 kHz, the tick every fourth (sy_main.c fm1_timer5_irq) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.86 UI"                 /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums;
-                                                   * V0.86 the interface); build.py --strata --release X.Y */
+#define STRATA_VERSION "V0.87 UI"                 /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums;
+                                                   * V0.86 the interface, V0.87 its changes); build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
 #error "Strata keeps the update entry and the flash: they are the way back"

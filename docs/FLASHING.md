@@ -154,8 +154,8 @@ Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep i
 **the same day as the install, by a route that enters backup mode at power-on**: that route still works when the
 firmware's own USB does not, and making the backup proves it works on this computer.
 
-**The flasher page makes it,** and installs nothing (Strata or V15) without one from the last 12 hours: start its
-server in an administrator PowerShell (section 3, step 3), then its step 1.
+**The flasher page makes it** (V0.87: recommended, no longer required; the page shows the last backup's date): start
+its server in an administrator PowerShell (section 3, step 3), then its step 1 (the Flipper steps fold out).
 
 1. **Back up now** on the page. Then backup mode by the **Flipper Zero route**
    ([merthsoft/flipper-fm1-recovery](https://github.com/merthsoft/flipper-fm1-recovery), used on 2026-10-17): its
@@ -289,7 +289,7 @@ save as a file) is what to paste into the conversation. The list below is the wh
    board); BENCH's SCREEN row after a minute on HOME with a chord held (the bloom: V0.66's scope for comparison) and
    after turning a knob on FILTER TONE quickly; the PAPER theme (SETTINGS > SCREEN) in daylight; the countdowns (HOME
    held, SAVE held on a user preset); anything that flickers, tears or lags.
-7. **Saving.** SAVE once (a new version), SAVE twice (the browser), SAVE held 5 s (over its own slot), a rename in
+7. **Saving.** SAVE once (V0.87: the SAVE window: SAVE AS NEW names a new version; on a user preset SAVE over it), SAVE twice (the browser), a rename in
    NAME IT; switch off and on: the sound playing comes back, the user presets are listed. Undo/redo (SAVE + OCT−/+).
 8. **MIDI.** From a DAW over USB: notes, pitch bend, the mod wheel, CC 74 (the cutoff), a program change with
    PROGRAM on; MIDI LEARN. The TRS jack if you have a device for it.
@@ -370,7 +370,7 @@ New in V0.8 LOOPER (the test page's "Listen and look" has them as rows "take", "
 
 CORE 2 (V0.8 BENCH; the test page's row "core2"):
 
-30. **CORE 2.** HOME held 5 s (SETTINGS), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
+30. **CORE 2.** HOME held 5 s (V0.87: DEBUG), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
     wait 5 s in silence (the settings' write), switch off and on. CORE 2 again: STATE **ANSWERING** (else NO ANSWER:
     OFF, which is an answer too: this unit runs on one core). Hold a chord, or PLAY a pattern, and turn KNOB 2 (TEST):
     30 s, listening for clicks; then DONE. Note CORE 1, CORE 0, SLOWED, WAIT, JOBS (and BAD) and STACK, or read the
@@ -416,7 +416,7 @@ New in V0.86 UI ([CONTROLS.md](CONTROLS.md); the test page has no rows of its ow
     module's pages (the one shown in full and inverted, the others short: UNI, SPR ..), and the top right the menu's
     module dots (SEQ's four in two groups). Note any screen whose short names you cannot read at arm's length.
 39. **The buttons once and twice.** From OSC A: ENV once (the page left in ENV), again (ENV 1's ADSR), twice (ENV 2);
-    EDIT twice: JUMP stays open, a key opens its module and closes it; LFO twice on OSC A's WAVE: MOMENTARY latched
+    EDIT twice (V0.87): the wavetables' list; LFO twice on OSC A's WAVE (V0.87): the assign window; (V0.86's: MOMENTARY latched
     there, a knob moves, LFO puts it back; GLO twice: PERFORM latched, GLO closes it; SCL twice, ARP twice: on and
     off; SEQ once and twice; HOME twice: the browser. Whether 300 ms between the presses feels right, and whether a
     single press ever acts as a double (or the other way).
@@ -440,7 +440,7 @@ New in V0.86 UI ([CONTROLS.md](CONTROLS.md); the test page has no rows of its ow
     AFTER 1 MIN: after a minute untouched the panel goes dark while the sound goes on and the backlight stays lit;
     a button, a knob or a key wakes it, and that press does nothing else (**unverified** on this panel: Felucca's notes,
     found on its 1.1.5). If the panel ever stays dark, a power cycle brings it back with SCREEN OFF as you left it:
-    set it OFF again (dark, a first press only wakes it; then HOME held 5 s opens the SETTINGS).
+    set it OFF again (dark, a first press only wakes it; then HOME twice opens the SETTINGS).
 46. **SETTINGS > KEY SCAN.** Press keys slowly and hard: does any dotted cell turn vermilion? (It would mean the keybed
     has a second contact, as velocity needs; the matrix's spare cells say probably not.)
 47. **The help map.** HOME held on a few pages: what it says matches what the knobs and buttons do there; held on, the
@@ -458,12 +458,26 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     chord held under a beat (the synth ducks on each KICK, not on the DUCK row), BOTH; CURVE's HOLD (the duck stays
     down longer); COMP at AMOUNT 50 and 100 on a full beat (the beat denser, louder from 20 % on; any pumping you
     hear: note how fast).
-51. **The kits.** HOME twice on a drum track: the eight kits; PRESETS picks, SAVE twice loads; each kit by ear over the
-    same beat. Edit one, then HOME twice: its dot, and the bottom row warns before you load another. Power-cycle: the
+51. **The kits.** EDIT twice on a drum track (V0.87): the eight kits; PRESETS picks, SAVE twice loads; each kit by ear over the
+    same beat. Edit one, then EDIT twice: its dot, and the bottom row warns before you load another. Power-cycle: the
     kit as you left it.
 52. **The load with the effects.** HOME's CPU figure with the beat playing on a kit with effects (INDUSTRIAL: DRIVE on six
     drums, COMP 60), then with SUPERSAW chords over it (the model: every effect on all eight drums at once 11-15 %
     of a core more; a beat's usual two or three ~5 % more).
+53. **V0.87: the LEDs** (U9; **needs this hardware test**, verified on the host only: `tests/sy_led_test.c`). SETTINGS
+    (HOME twice) > SCREEN > LIGHTS: HIGH, MED, LOW, OFF. At each, look at a lit button, a mid key (CLIPS: a clip there)
+    and a glowing one, from the side too: steady, no flicker (V0.86's mid level and the breath's low end flickered);
+    each level clearly dimmer than the one above; OFF dark. REC's count-in breathing: smooth, no steps you can see.
+54. **V0.87: backup mode by hand** (W1; **needs this hardware test**). OCT− and OCT+ held 5 s: backup mode; leave it
+    alone until it times out and restarts (about a minute): Strata starts normally, **no STRATA CRASH screen, no SAFE
+    START** (V0.86 showed one). Photo either way.
+55. **V0.87: the splash and the theme.** Pick a theme other than STRATA, power-cycle: the splash in that theme. Then
+    SETTINGS > WIPE, SAVE: STRATA again, LIGHTS HIGH, your presets and projects still there.
+56. **V0.87: the new controls.** EDIT twice (the wavetables' list: SELECT the category, SAVE twice loads); LFO twice on
+    a WAVE page (the assign window: a source onto WT POS, ALGORITHM, AMOUNT and POLARITY, by ear); SAVE once (the SAVE
+    window); a reset by EDIT + OCT− held 5 s, stopped once by letting go of OCT−; REC twice after playing a phrase
+    (TAKE: it loops); GLO held + PLAY tapped in time (tap tempo); SEQ + OCT+ (a new clip, PRESETS its length), SEQ +
+    OCT− twice (DELETE?, deleted). Any one that does not do what CONTROLS.md says: note it.
 
 ## 5. The report
 
@@ -488,7 +502,7 @@ marked.
 - **To Felucca:** its installer, <https://hugelton.github.io/Felucca/>. It finds Strata's FM-1, because Strata keeps
   Felucca's update entry and USB name.
 - **To the official V15:** on the flasher page, pick M-VAVE's unmodified `FM-1.fwsc` (its SHA-256 is checked in the
-  page; nothing is uploaded), with a backup from the last 12 hours (section 2) and the power box ticked, **Return to
+  page; nothing is uploaded), with the power box ticked (a backup recommended, section 2), **Return to
   official V15**. M-VAVE's own updater works
   too.
 - **To exactly what you had,** from your backup, with jl-uboot-tool in backup mode (section 2). Every range below is
@@ -686,7 +700,7 @@ marked.
   preset deleted and put back), the workbench (5), the MASTER level path, BENCH's page. The keys read during a
   redraw's waits are the FM-1's alone (lcd.c's hook): **needs this hardware test**.
 - **Verified in a browser against a simulated FM-1** (`web/strata_flash/flash_test.mjs`, 26 checks): the install and
-  V15 off without a backup from the last 12 hours; Back up now (the token and the page's Origin sent; waiting,
+  V15 on without a backup (V0.87: recommended only, the last one's date shown); Back up now (the token and the page's Origin sent; waiting,
   reading, verified; a device Windows could not read named), the server not an administrator, a backup 20 h old;
   the install over the official firmware and the resume in update mode, every byte served checked, each Done only
   after the simulated FM-1 was switched off and on and answered; a Strata mute after that restart never Done, the

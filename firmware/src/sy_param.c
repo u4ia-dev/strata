@@ -301,7 +301,8 @@ enum {                           /* units: the display and the DSP's reading of 
     SP_TRM(X, TR, SEC_TREM) SP_TRM(X, TR2, SEC_TREM2)                                                     \
     SP_RNG(X, RG, SEC_RING) SP_RNG(X, RG2, SEC_RING2)                                                     \
     SP_TAP(X, TP, SEC_TAPE) SP_TAP(X, TP2, SEC_TAPE2)                                                     \
-    SP_XTRA_ROWS(X)
+    SP_XTRA_ROWS(X)                                                                                       \
+    SP_V087_ROWS(X)
 
 /* V0.86: the effects' rows added after the table's instances (a second instance's no longer its first's moved by
  * FXI_OFF: sp_fx_id, SP_XTRA). CHORUS's SPREAD (the right side's sweep against the left's: 100 % opposite, as before),
@@ -325,6 +326,12 @@ enum {                           /* units: the display and the DSP's reading of 
     X(EQ2_MTYPE, "MID TYPE", SEC_EQ2, 0, 2, 0, U_LIST, 0, 0)                                              \
     X(EQ2_HTYPE, "HI TYPE", SEC_EQ2, 0, 2, 0, U_LIST, 0, 0)                                               \
     X(EQ2_SHAPE, "SHAPE", SEC_EQ2, 0, 9, 0, U_LIST, 0, 0)
+
+/* V0.87: the matrix's POLARITY, a bit a slot: set, the slot's source turned the other way from its own (a bipolar
+ * one, an LFO's, 0 .. 1; a unipolar one, an envelope's, -1 .. 1). 0, every source as it is: a patch from before
+ * sounds as it did (the LFO and ENV assign windows set it, sy_ui.c) */
+#define SP_V087_ROWS(X)                                                                                   \
+    X(M_POL, "POLARITY", SEC_MATRIX, 0, 255, 0, U_INT, 0, 0)
 
 /* modulation sources: per voice, then global */
 enum { SRC_NONE, SRC_ENV1, SRC_ENV2, SRC_LFO1, SRC_LFO2, SRC_VEL, SRC_NOTE, SRC_RAND, SRC_ALT,
