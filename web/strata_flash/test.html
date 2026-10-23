@@ -78,7 +78,7 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
     <h2><span class="n">0</span>Before you start</h2>
     <ul>
       <li>Close the flasher's tab, M-Upgrade, DAWs and other MIDI apps: one app at a time can open the FM-1's ports.</li>
-      <li>On the FM-1, SETTINGS (HOME held 5 s) &gt; MIDI: <b>CHANNEL</b> ANY or 1, and <b>PROGRAM</b> ON (KNOB 4), so the
+      <li>On the FM-1, SETTINGS (HOME twice) &gt; MIDI: <b>CHANNEL</b> ANY or 1, and <b>PROGRAM</b> ON (KNOB 4), so the
         page can switch sounds. With PROGRAM off the load test runs on the sound playing only.</li>
       <li>The page changes the sound playing (it loads the starter sounds and moves the cutoff); it puts your preset
         back at the end if it came from a user slot. <b>SAVE anything you want to keep first.</b></li>
@@ -175,7 +175,7 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
 
     <div class="step" id="g-draw">
       <h3>D. The keys and the screen while it draws (items 15 and 19)</h3>
-      <p>First SETTINGS (HOME held 5 s), ALGORITHM to BENCH, and turn <b>KNOB 2</b>: it clears the peaks. Then press
+      <p>First DEBUG (HOME held 5 s): BENCH, and turn <b>KNOB 2</b>: it clears the peaks. Then press
         Start and for 25 s flick through pages (SELECT, ALGORITHM, the family buttons) and turn knobs on graph pages (an
         envelope, an LFO, the EQ, the FX FILTER, the chain view) while the page holds a chord. The page sends nothing
         to the console meanwhile, so it does not slow the FM-1's main loop.</p>
@@ -850,7 +850,7 @@ const LOOK = [
   ["dub", "V0.8 looper: REC again on the clip playing: overdub (what you add plays back from the next pass, never doubled); REC ends it; SEQ held, UN (the last black key): the pass taken back, again: back; turn FILTER > TONE's CUTOFF while it overdubs: the next pass moves it, stopped the knob's own"],
   ["tracks", "V0.8 looper: SEQ + OCT+ the next track; record on tracks 2 and 3 too; SEQ held (the launch pad): white keys 1-8 launch the tracks' clips at the bar, 9-16 the scenes, black 1-8 MUTE; MIXER's VOLUME and PAN by ear; a track TYPE MIDI on a DAW or synth over USB (its CHANNEL), with MIDI IN on a channel"],
   ["project", "V0.8 looper: SONG (A, B, C with repeats, ON, PLAY) plays its scenes in turn; stop, wait 5 s in silence, switch off and on: the clips, tracks, chords and SONG come back; PROJECT 2 LOAD: empty, back to 1: all there"],
-  ["core2", "V0.8: CORE 2 (SETTINGS > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
+  ["core2", "V0.8: CORE 2 (DEBUG, HOME held 5 s > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
   ["midiout", "V0.81: a track SYNTH+MIDI on channel 1, the FM-1 on a computer with no MIDI app open: play for a minute, then open a MIDI monitor and play a note: older notes may come first, then All Notes Off (CC 123) on channel 1, then yours; nothing left sounding"],
   ["drums", "V0.85 drums: TRACK's TYPE DRUMS on track 1; the white keys 1-8 play KICK .. WT 2, 9-16 the same accented (louder), the first black key DUCK (silent); EDIT: KIT's pages, each drum's TUNE, DECAY, TONE and its own by ear; HAT CL cuts a ringing HAT OP"],
   ["grid", "V0.85 grid: SEQ's CLIP on the drum track: GRID; black keys pick the row, white keys put steps in and out (stopped: heard as they go in); PLAY: the beat in time, the LEDs following; HIT: a step's CHANCE (it plays sometimes) and RATCHET (2-4 quick hits); TYPE SYNTH and back: the beat as it was"],
