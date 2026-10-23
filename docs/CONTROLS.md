@@ -92,7 +92,7 @@ Buttons). SELECT picks the module, ALGORITHM steps its pages, in every menu; bot
 | | STEPS | STEPS: STEP · KIND · LEVEL · OCTAVE; RATCHET: STEP · RATCHET · CHANCE · SLIDE |
 | SEQ once | LOOP | CLIPS: TYPE · SCENE (the keys launch; V0.87: the tracks as rows); MIXER: VOLUME · PAN · MUTE/SOLO; SONG: SLOT · SCENE · REPEATS · SONG (V0.87) |
 | | CLIP | NOTES: NOTE · PITCH · START · LENGTH; NOTE+: VELOCITY · GRID · DELETE; CLIP: LENGTH · SPEED · QUANTIZE · MOTION; TOOLS: COPY · PASTE · DOUBLE/HALVE · CLEAR (a drum track: GRID, HIT, CLIP, TOOLS) |
-| SEQ (CLIP's ALGORITHM on) | TRACK | RECORD: QUANTIZE · CHANNEL · MIDI IN; CLICK: CLICK · LEVEL · COUNT-IN · LAUNCH |
+| SEQ (SELECT: LOOP, CLIP, TRACK) | TRACK | RECORD: QUANTIZE · CHANNEL · MIDI IN; CLICK: CLICK · LEVEL · COUNT-IN · LAUNCH |
 | SEQ twice | the projects | a list as the presets' (PRESETS picks, SAVE twice loads; V0.87, S2) |
 | HOME twice | SETTINGS | SCREEN: COLOR · HELP · LIGHTS; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; POWER: SHOW BATTERY · SCREEN OFF AFTER; WIPE |
 | HOME held 5 s | DEBUG | BENCH: RUN · PEAKS; KEY SCAN; CORE 2: ON · TEST · LOAD |
@@ -193,7 +193,7 @@ own):
 | Button | Once (another menu / its own) | Twice | Held | + OCT− held 5 s | + OCT+ | + OCT− |
 | --- | --- | --- | --- | --- | --- | --- |
 | HOME | the page left / SOUND | the SETTINGS; a tap: back | the help map; 5 s: DEBUG | | the next sound | the sound before |
-| EDIT | the page left / OSC A > WAVE (a drum track: DRUM > SOUND) | the wavetables' list of the oscillator shown (a drum track: the kits) | | the section shown reset | the source or filter shown on | off |
+| EDIT | the page left / OSC A > WAVE (a drum track: DRUM > MODEL) | the wavetables' list of the oscillator shown (a drum track: the kits) | | the section shown reset | the source or filter shown on | off |
 | ENV | the page left / ENV 1 > ADSR | the assign window (an envelope or a macro onto a knob of the page before) | | the envelope shown reset | | |
 | LFO | the page left / LFO 1 > POINTS | the assign window (an LFO onto a knob of the page before) | MOMENTARY | the LFO shown reset (its points too) | a point added (left of the one picked; halfway) | the point picked deleted (not the ends) |
 | FX | the page left / the chain view | the chain view <-> the module picked | MACROS | the module shown reset (the chain view: the chain as INIT's) | the chain view: a module added; a module's page: it in | taken out; bypassed |
@@ -263,7 +263,7 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   16 characters. SAVE writes it and goes back to the browser, HOME goes back without.
 - **PRESETS' list** (V0.86, H4, changed after the renders): turning PRESETS opens a list of the presets (five rows
   round the one picked, the one playing marked) and moves through it; nothing loads while it turns. **SAVE twice**
-  loads the one picked and closes the list (undo takes the load back). **3 s untouched**, the list goes and nothing
+  loads the one picked and closes the list (undo takes the load back). **5 s untouched**, the list goes and nothing
   changed; another button closes it too. **SAVE + OCT+** saves the sound playing as a new preset: NAME IT opens on its
   next version's name ("WARM PAD v2") in the first free slot; SAVE writes it and goes back to the page (HOME: back,
   unsaved). **SAVE + OCT−** deletes the preset picked: a question first ("DELETE?" over its name), a second SAVE + OCT− deletes
@@ -283,7 +283,7 @@ A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRE
   lydian, locrian, blues, whole tone, the two diminished), ROOT, FIT: OFF (each key its own note), SNAP (a key off the
   scale plays the scale's note below it), WHITE (the white keys walk the scale from the root at C4; the black keys are
   silent). SCL held + a key: that key's note is the root. MIDI notes are not fitted.
-- What else the keys do: in REC's MOD layer they pick sources, in MACROS they bypass modules, in JUMP they open sections,
+- What else the keys do: in REC's MOD layer they pick sources, in MACROS they bypass modules,
   on NAME IT they type, with SCL held they set the root; with the chords on they play chords (below).
 
 ## Chords (V0.7; V0.75: knobs only, STRUM)
@@ -326,16 +326,15 @@ OCT+ turns the chords on (MODE as it was, KEY at first), SCL + OCT− off, from 
 
 The ARP button's menu: tap ARP for it (STYLE, GROOVE; twice: STEPS, RATCHET). ARP + OCT+ turns it on, ARP + OCT− off,
 from any page; hold a chord and ARP + OCT+: it arpeggiates what is held at once. It plays the chord CHORD makes (KEY,
-FREE) or, with MODE OFF, the keys held (and MIDI notes with MIDI IN ROOTS); BASS goes on under it; USB OUT sends what
-it plays.
+FREE) or, with MODE OFF, the keys held ; BASS goes on under it. (SCL's MIDI page, MIDI IN ROOTS, USB OUT, CHORDS CH and BASS CH, is in no menu in V0.87:
+its settings are kept but unused.)
 
 - **STYLE**: STYLE · RATE · MOVE · FEEL, each style with its own three.
   - **ARP** (the default): a step arpeggiator. RATE · MODE · OCTAVES.
   - **PATTERN**: the chord as stabs on one of 16 rhythms of 16 steps (MOVE), STRUMmed as a chord is; FEEL the ACCENT,
     how much softer the stabs off the beat are (20 %); the stabs as long as GROOVE's GATE, swung by its SWING.
   - **HARP**: every key a string over four octaves: each plays the chord's note at or under its place, so a finger run
-    along the keys plays the chord rising. The chord is CHORD's on SCALE's root (KNOB 2 changes it; a MIDI note in as
-    a root, with MIDI IN ROOTS, moves it there); with MODE OFF the strings are the scale's notes.
+    along the keys plays the chord rising. The chord is CHORD's on SCALE's root (KNOB 2 changes it); with MODE OFF the strings are the scale's notes.
   - **RATE**: a step, 5 to 120 ms or a note value of the tempo: 1/32, 1/16T, 1/16, 1/8T, 1/16D, 1/8, 1/4T, 1/8D, 1/4,
     1/4D, 1/2, 1 BAR (1/16 by default).
   - **MODE**, over the notes low to high and across OCTAVES (C E G, one octave): UP (C E G), DOWN (G E C), UP-DOWN
@@ -377,7 +376,8 @@ it plays.
 ## The looper (V0.8)
 
 The SEQ button's menu (V0.86, S1): **SEQ once: LOOP and CLIP** (playing and editing: LOOP's CLIPS, MIXER; CLIP's
-NOTES, NOTE+, CLIP, TOOLS), **SEQ twice: TRACK and SONG** (setting up: TRACK's RECORD, CLICK; SONG's SONG, PROJECT).
+NOTES, NOTE+, CLIP, TOOLS; TRACK's RECORD, CLICK: SELECT steps LOOP, CLIP, TRACK; V0.87: SONG is on LOOP),
+**SEQ twice: the projects' list** (V0.87).
 The top right shows both groups' dots, the other group dimmed. Eight tracks, eight scenes (A to H): each track a clip
 in each scene, a loop of notes and knob moves at the times they were played, one to sixteen bars long. The design and
 its decisions: [LOOPER.md](LOOPER.md).
@@ -392,7 +392,7 @@ its decisions: [LOOPER.md](LOOPER.md).
   turning stops (0.5 s); a track that has clips asks for one detent more ("TURN ON: MIDI"; 2 s, else "TYPE KEPT": C6).
   RECORD's CHANNEL: its channel out (1-16; tracks 1 to 8 start on 1 to 8); MIDI IN: SELECTED (notes in play whichever
   track is selected) or a channel (notes on it play and record this track, selected or not).
-- **CLIPS**: the grid, a column a track and a row a scene; the selected track's column lit. A clip playing is filled
+- **CLIPS**: the grid, a row a track and a column a scene (V0.87); the selected track's row lit. A clip playing is filled
   (its place a line along it), one launched blinks framed in vermilion until it starts, one recording is vermilion, an
   empty cell a dot; the scene picked bold, the selected cell framed. TYPE (KNOB 1), SCENE (KNOB 2). **The keys launch
   here** (V0.86, S5), SEQ not held: white keys 1-8 this scene's clips on tracks 1-8 (the one playing: it stops), black
@@ -436,9 +436,9 @@ its decisions: [LOOPER.md](LOOPER.md).
   None works on the clip recording ("RECORDING: REC ENDS IT").
 - **SONG**: sixteen slots, each a scene and its REPEATS; SONG ON: PLAY plays slot 1's scene its repeats (a scene as
   long as its longest clip), then slot 2's .., round again, from the first slot without a scene.
-- **PROJECT**: four, each everything above (the tracks, their chords and ARP, the clips and their SPEED, SONG). The one
-  loaded is kept when stopped and 3 s pass without sound; LOAD (right) saves it, stops the transport and loads the one
-  picked (empty: a new one); NEW (right twice within 2 s): the one loaded cleared. Projects 1 and 2 live where the 128
+- **The projects** (SEQ twice, V0.87: a list as the presets'): four, each everything above (the tracks, their chords and ARP, the clips and their SPEED, SONG). The one
+  loaded is kept when stopped and 3 s pass without sound; SAVE twice saves it, stops the transport and loads the one
+  picked (empty: a new one); SAVE + OCT− on the one loaded: cleared, asked first. Projects 1 and 2 live where the 128
   user presets used to end; 3 and 4 where presets 65 to 104 were (the user presets are 64 now): while an older build's
   presets are still there, those two are not saved ("PROJECT 3: OLD PRESETS THERE"). 2,048 notes and moves a project.
   A project saved by V0.8 to V0.85 loads with every clip at x1.
@@ -542,7 +542,7 @@ clips and scenes, VOLUME, PAN, MUTE, SOLO, recording, launching, SONG); a drum t
 
 | LED | Lit | Glowing | Mid / breathing |
 | --- | --- | --- | --- |
-| A key | held; the MOD layer's source; MACROS: a module that is in; JUMP: the section shown; the launch pad: a track's clip playing, the scene picked, a track not muted, SOLO on; GRID and HIT (V0.85): the row's hits, the row picked; CLIPS (V0.86): a clip playing, the scene picked; blinking: a clip launched or recording | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); a section's key (JUMP); the launch pad: a clip there, a scene with clips, STOP, SOLO, UNDO; a drum track: its eight drums and DUCK; GRID and HIT: rows with hits there; CLIPS: a clip there, a scene with clips | mid: the scale's root; a drum track's accented keys; GRID and HIT: the playhead's step |
+| A key | held; the MOD layer's source; MACROS: a module that is in; the launch pad: a track's clip playing, the scene picked, a track not muted, SOLO on; GRID and HIT (V0.85): the row's hits, the row picked; CLIPS (V0.86): a clip playing, the scene picked; blinking: a clip launched or recording | a scale's notes (a scale other than chromatic); the sources in use (MOD layer); a module bypassed (MACROS); the launch pad: a clip there, a scene with clips, STOP, SOLO, UNDO; a drum track: its eight drums and DUCK; GRID and HIT: rows with hits there; CLIPS: a clip there, a scene with clips | mid: the scale's root; a drum track's accented keys; GRID and HIT: the playhead's step |
 | A family button | the family shown | the others | |
 | REC | in its layer; the looper recording (dark the last quarter of each beat); counting in or waiting for the bar: blinking | otherwise | |
 | A layer's button | REC or ENV while their MOD layer is held | | breathing: GLO, FX, LFO or EDIT while their layer is open, and REC or ENV while their MOD layer is latched |

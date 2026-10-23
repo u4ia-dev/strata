@@ -1,7 +1,6 @@
 # Flashing Strata for a hardware test
 
-This is the procedure for putting Strata's **hardware test build** (`V0.86 UI`: V0.86's interface and drum editor,
-steps 1 and 2 of its plan, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes,
+This is the procedure for putting Strata's **hardware test build** (`V0.87 UI`: V0.87's controls and windows on V0.86's interface and drum editor, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes,
 its drum synth and sidechain, and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Buttons", "The
 looper", "The drums", "SETTINGS") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by
 the FM-1's own USB-MIDI update path, from a web page in Chrome or Edge. Installing custom firmware is at your own
@@ -12,15 +11,15 @@ back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the
 check and its report came back over USB, so bulk IN works after a power-on (**verified on hardware**, the V0.5
 report). `V0.6` is the build after that test: the FX chain, seven new effects and the UI changes the test asked for
 (section 1); it installed (2026-10-17), and its test waited for `V0.65`, the memory audit ([BUDGET.md](BUDGET.md)),
-which ran on the FM-1 on 2026-10-18 (the test page's report); `V0.66` is the build after that report, not yet run on an
-FM-1. Section 8 lists what was checked where.
+which ran on the FM-1 on 2026-10-18 (the test page's report); `V0.66` is the build after that report; V0.86 and V0.87 are
+not yet run on an FM-1. Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
-| Package | `build/strata.fwsc`, identity `FM-1_900` (Felucca's development identity, kept), 610,090 bytes |
+| Package | `build/strata.fwsc`, identity `FM-1_900` (Felucca's development identity, kept); its size and SHA-256 on the flasher page |
 | Writes | the app area `0x4000`–`0x92FFF` only, by Felucca's update loader (unchanged); never the boot head `0x0000`–`0x3FFF` |
 | Strata itself writes | its 64 presets `0x97000`–`0xB0FFF` (V0.8; 128 before, to `0xCAFFF`), the looper's projects 1 and 2 `0xCB000`–`0xDAFFF` and 3 and 4 `0xB1000`–`0xC0FFF` (V0.8; 3 and 4 never where older presets are), the sound playing `0xE5000`–`0xE6FFF`, its settings `0xFC000`–`0xFDFFF` (and, during an update, the loader's staging `0xE0000`–`0xE4FFF`): Felucca's own storage ranges, nothing else |
-| Shows itself on USB as | "Felucca" (Felucca's descriptors, unchanged: both installers find the FM-1 by that name) |
+| Shows itself on USB as | "Strata for FM-1" by u4ia, `1209:5354`; its update loader "Strata Update for FM-1", `1209:5355` (pid.codes; [RELEASE.md](RELEASE.md)). Both installers look for "FM-1" in the name (**needs hardware test**: step 58) |
 
 ## 1. What this build is
 
@@ -248,8 +247,7 @@ PowerShell):
    what it found (for example `FM-1_015`, the official firmware, or a Felucca identity) before anything is
    written. **Write Strata**: step 1 (the firmware running now reads the package and starts the update loader),
    the restart into the loader, step 2 (the loader writes the app area), the restart into Strata. About a minute.
-5. Strata starts: the splash (`STRATA`, `V0.66 HARDWARE TEST`; the UI build: two blooms over `STRATA` and
-   `WAVETABLE · FM-1 · V0.66 UI HARDWARE TEST`), then OSC A's WAVE page.
+5. Strata starts: the splash (two blooms over `STRATA` and `WAVETABLE · FM-1 · V0.87 UI`) for 2 s, then HOME.
 6. **The restart check.** The page asks you to switch the FM-1 off, then on. It says **Done** only when Strata
    answers again after that (section 9: the first start after an install is the one start that hid the 2026-10-16
    fault). If it says *Strata did not answer after the restart*, stop: section 6, by the Flipper route.

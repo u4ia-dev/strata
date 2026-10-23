@@ -2,3 +2,6 @@ build/
 .DS_Store
 __pycache__/
 *.fwsc
+
+# the book's build tool (book/package.json)
+node_modules/

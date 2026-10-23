@@ -1,0 +1,15 @@
+{
+  "title": "Strata for FM-1",
+  "description": "The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1.",
+  "author": "u4ia",
+  "language": "en",
+  "root": ".",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": ["-sharing", "-fontsettings", "-livereload"],
+  "styles": {
+    "website": "styles/website.css"
+  }
+}

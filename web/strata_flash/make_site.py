@@ -6,6 +6,7 @@
   flash/                      build/flasher as it is (the flasher, the package, the test page, the USB check, FLASHING.md,
                               README.md, NOTICE.md, LICENSE, LICENSING.md, LICENSES/: the licences beside the package)
   LICENSE, NOTICE.md, LICENSING.md, LICENSES/   (again at the top)
+  book/                       the guide and the manual (book/, built by `npm run build` there into build/book)
   .nojekyll                   (served as files)
 serve.py stays out (the backup step runs on the user's own computer, from the source).
   web/strata_flash/make_site.py REPO_URL [OUT_DIR]   (after make_flasher.py; OUT_DIR: build/site)
@@ -63,7 +64,7 @@ def page(repo, version, sha):
   <div class="row">
     <a class="btn go" href="flash/">Install</a>
     <a class="btn" href="flash/test.html">Test</a>
-    <a class="btn" href="flash/FLASHING.md">How to (FLASHING.md)</a>
+    <a class="btn" href="book/">Guide &amp; manual</a>
     <a class="btn" href="{r}">Source</a>
   </div>
   <section class="warn">
@@ -119,6 +120,9 @@ def main():
     shutil.copytree(FLASHER, out / "flash", ignore=shutil.ignore_patterns("serve.py", "__pycache__"))
     for doc in ("LICENSE", "LICENSING.md", "NOTICE.md", "README.md"):
         shutil.copy(ROOT / doc, out / doc)
+    if not (ROOT / "build" / "book" / "index.html").exists():
+        raise SystemExit("site: build the book first (npm run build in book/)")
+    shutil.copytree(ROOT / "build" / "book", out / "book")
     shutil.copytree(ROOT / "LICENSES", out / "LICENSES")
     for lic in (out / "LICENSES", out / "flash" / "LICENSES"):   # (Pages lists no folder: an index of the texts)
         items = "".join(f'<li><a href="{f.name}">{f.name}</a></li>' for f in sorted(lic.glob("*.txt")))

@@ -28,3 +28,7 @@ rebuild.
 4. The site rebuilt from the tagged build: `web/strata_flash/make_site.py` (the flasher, the package, the licence
    texts, the notices, links to the source).
 5. The release notes carry the disclaimer and the data warning (README.md).
+6. The book (the Guide and the Manual, `book/`) brought up to the release by the strata-docs agent
+   (`~/.claude/agents/strata-docs.md`: it reads the commits since the book's last update, refreshes the generated
+   parameter reference `tools/gen_param_ref.sh`, updates the pages and `book/changes.md`), then built:
+   `npm run build` in `book/` (HonKit, pinned; `npm install` once), before `make_site.py`.
