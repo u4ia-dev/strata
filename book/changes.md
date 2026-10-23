@@ -4,7 +4,7 @@ What each version changed, newest first.
 
 ## Book rewritten: condensed, one-page guide
 
-The book now matches Strata V0.87 at commit d0d7a5d. The Guide is one page of feature cards, the cheat sheet is laid out
+The book now matches Strata V0.87 at commit 3f869d7. The Guide is one page of feature cards, the cheat sheet is laid out
 wide, and the Manual is shorter, with steps first. SCL's unused MIDI page is gone from the firmware.
 
 ## V0.87
