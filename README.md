@@ -6,7 +6,7 @@ to play (the four knobs on each page's four values, one rule for every button, s
 software, GPL-3.0-only, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
 Instruments).
 
-**Install it in the browser:** <@SITE@> (Chrome or Edge on a computer).
+**Install it in the browser:** <https://u4ia-dev.github.io/strata/> (Chrome or Edge on a computer).
 
 ## Disclaimer
 
