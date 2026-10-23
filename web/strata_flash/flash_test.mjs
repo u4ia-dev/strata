@@ -463,7 +463,8 @@ try {
     await sleep(200);
     const dark = await ev(sid, "getComputedStyle(document.body).backgroundColor");
     await shot(sid, "flasher_phone_dark.png");
-    check(`at 390 px no sideways scroll (${sw} <= ${iw}); light ${light}, dark ${dark}`, sw <= iw && light !== dark);
+    check(`at 390 px no sideways scroll (${sw} <= ${iw}); dark in both schemes: ${light}, ${dark}`,
+          sw <= iw && light === dark && dark === "rgb(11, 11, 11)");
     await send("Target.closeTarget", { targetId });
   }
 } catch (err) {

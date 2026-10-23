@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 u4ia */
 /* Strata's book on HonKit's default theme, in the STRATA screen theme (firmware/src/sy_gfx.c): the ground, ink, label,
- * mid, line and vermilion; Space Mono for everything, as the panel's screen; dark first, the light one for a light
- * system. Only colours, type and spacing: the theme's layout (the side bar, the search, the page arrows) stays. */
+ * mid, line and vermilion; Space Mono for everything, as the panel's screen; dark always (as the panel's
+ * screen). Only colours, type and spacing: the theme's layout (the side bar, the search, the page arrows) stays. */
 @import url("https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap");
 
 :root {
@@ -10,13 +10,6 @@
   --st-lab: #bab7b1; --st-mid: #7a766e; --st-hot: #ff4d2e; --st-hot-ink: #0b0b0b;
   --st-mono: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
   color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --st-bg: #f4f1ea; --st-card: #fbfaf6; --st-raise: #e9e5dc; --st-line: #d6d1c6; --st-ink: #0b0b0b;
-    --st-lab: #55524c; --st-mid: #7a766e; --st-hot: #d93a1c; --st-hot-ink: #ffffff;
-    color-scheme: light;
-  }
 }
 
 html, body, .book, .book .book-body, .book .book-body .body-inner, .book .book-body .page-wrapper {

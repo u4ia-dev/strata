@@ -21,18 +21,6 @@
     --mono: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
     color-scheme: dark;
   }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --bg: #f4f1ea; --card: #fbfaf6; --raise: #e9e5dc; --line: #d6d1c6; --text: #0b0b0b; --mute: #55524c;
-      --dim: #7a766e; --hot: #d93a1c; --hot-bg: #fbe3dc; --hot-ink: #ffffff; --red: #b3261e; --red-bg: #fde8e6;
-      --green: #1d7a46; --green-bg: #e3f4ea; color-scheme: light;
-    }
-  }
-  :root[data-theme="light"] {
-    --bg: #f4f1ea; --card: #fbfaf6; --raise: #e9e5dc; --line: #d6d1c6; --text: #0b0b0b; --mute: #55524c;
-    --dim: #7a766e; --hot: #d93a1c; --hot-bg: #fbe3dc; --hot-ink: #ffffff; --red: #b3261e; --red-bg: #fde8e6;
-    --green: #1d7a46; --green-bg: #e3f4ea; color-scheme: light;
-  }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }     /* (over every display a rule below gives: the confirmations stay hidden) */
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -238,7 +226,8 @@
     <span><b>Your saved data:</b> saving in Strata can overwrite Felucca's projects and samples (the same flash);
     make a backup first and keep it.</span>
     <span>Strata (Copyright (C) 2026 u4ia, a modified Felucca, Copyright (C) 2026 Leo Kuroshita, Hügelton
-    Instruments): GPL-3.0-only, <b>no warranty</b>; a pre-release, installed at your own risk. The package also holds
+    Instruments): GPL-3.0-only, <b>no warranty</b>; a pre-release, created entirely with Claude (an AI model made by Anthropic), installed at your
+    own risk. The package also holds
     three JieLi AC79 SDK files (Apache-2.0). The source, its notices and every licence: <a href="README.md">README.md</a>,
     <a href="NOTICE.md">NOTICE.md</a>, <a href="LICENSING.md">LICENSING.md</a>, <a href="LICENSES/">LICENSES/</a>
     beside this page.</span>

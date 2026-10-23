@@ -5,7 +5,7 @@ loads the package and starts the update loader, which writes the firmware area o
 minute.
 
 > **Disclaimer.** Strata is unofficial and comes **without any warranty** (GPL-3.0). Installing firmware other than the
-> official one can leave the FM-1 unusable until it is recovered; you install it at your own risk.
+> official one can leave the FM-1 unusable until it is recovered; you install it at your own risk. Strata was created entirely with Claude, an AI model made by Anthropic.
 >
 > **Your data.** Saving anything in Strata can overwrite Felucca's projects and samples, which share the same flash.
 > Going back does not bring them back. A full backup does.

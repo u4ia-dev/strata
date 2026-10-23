@@ -16,7 +16,7 @@ say what Strata runs on and where it comes from.
 Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
 16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until
 it is recovered, and you install Strata at your own risk. Strata is a **pre-release**: its versions from V0.7 on are
-being tested on the hardware now.
+being tested on the hardware now. Strata was created entirely with Claude, an AI model made by Anthropic.
 
 ## What Strata changed (GPL-3.0, section 5(a))
 

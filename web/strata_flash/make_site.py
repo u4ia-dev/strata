@@ -69,8 +69,6 @@ def page(repo, version, sha):
 <style>
   :root {{ --bg: #0b0b0b; --card: #131312; --line: #2c2a27; --ink: #f4f1ea; --mute: #bab7b1; --hot: #ff4d2e;
           --hot-ink: #0b0b0b; color-scheme: dark; }}
-  @media (prefers-color-scheme: light) {{ :root {{ --bg: #f4f1ea; --card: #fbfaf6; --line: #d6d1c6; --ink: #0b0b0b;
-          --mute: #55524c; --hot: #d93a1c; --hot-ink: #fff; color-scheme: light; }} }}
   * {{ box-sizing: border-box; }}
   body {{ margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.65 "Space Mono", ui-monospace, Consolas, monospace;
          padding: 40px max(16px, env(safe-area-inset-left, 0px)) 64px max(16px, env(safe-area-inset-right, 0px)); }}
@@ -93,8 +91,9 @@ def page(repo, version, sha):
 <body>
 <main>
   <h1>STRATA</h1>
-  <p class="mute">Wavetable synth, 8-track looper and drum machine firmware for the M-VAVE FM-1. By u4ia, a fork of
-    Felucca. Free software, GPL-3.0-only. Package {html.escape(version)}, SHA-256 <code>{html.escape(sha[:16])}…</code></p>
+  <p class="mute">Firmware that makes the M-VAVE FM-1 a complete pocket instrument: a wavetable synth deep enough to
+    design sounds from scratch, an 8-track looper and a drum machine for whole songs without a computer, on a panel
+    built to stay quick to play. Free software (GPL-3.0-only), built on Felucca. Package {html.escape(version)}, SHA-256 <code>{html.escape(sha[:16])}…</code></p>
   <div class="row">
     <a class="btn go" href="flash/index.html">Install</a>
     <a class="btn" href="book/index.html">Guide &amp; manual</a>
@@ -117,6 +116,7 @@ def page(repo, version, sha):
     <p>Strata is provided <b>as is, without any warranty</b> (GPL-3.0, sections 15 and 16). Installing firmware other
       than the official one can leave the FM-1 unusable until it is recovered: you install it at your own risk. This is
       a <b>pre-release</b>, being tested on the hardware now.</p>
+    <p>Strata was created entirely with Claude, an AI model made by Anthropic.</p>
   </section>
   <section>
     <h2>Good to know</h2>

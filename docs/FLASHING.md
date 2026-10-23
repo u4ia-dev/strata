@@ -158,7 +158,7 @@ a sound a track, inserts and sends and voices on the second core (V0.9), the dru
 > **Disclaimer.** Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
 > 16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until
 > it is recovered, and you install Strata at your own risk. Strata is a **pre-release**: its versions from V0.7 on are
-> being tested on the hardware now.
+> being tested on the hardware now. Strata was created entirely with Claude, an AI model made by Anthropic.
 
 Make a full 1 MiB backup of the flash, read twice, both copies equal, and keep it. It holds what is on the FM-1 now
 (the firmware, and Felucca's projects if you have Felucca), and it is the way back to exactly this state. Make it
