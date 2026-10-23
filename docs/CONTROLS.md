@@ -193,7 +193,7 @@ own):
 | Button | Once (another menu / its own) | Twice | Held | + OCT− held 5 s | + OCT+ | + OCT− |
 | --- | --- | --- | --- | --- | --- | --- |
 | HOME | the page left / SOUND | the SETTINGS; a tap: back | the help map; 5 s: DEBUG | | the next sound | the sound before |
-| EDIT | the page left / OSC A > WAVE (a drum track: DRUM > MODEL) | the wavetables' list of the oscillator shown (a drum track: the kits) | | the section shown reset | the source or filter shown on | off |
+| EDIT | the page left / OSC A > WAVE (a drum track: DRUM > MODEL) | the wavetables' list of the oscillator shown (a drum track: on DRUM the drum presets, on KIT or HOME the kits) | | the section shown reset | the source or filter shown on | off |
 | ENV | the page left / ENV 1 > ADSR | the assign window (an envelope or a macro onto a knob of the page before) | | the envelope shown reset | | |
 | LFO | the page left / LFO 1 > POINTS | the assign window (an LFO onto a knob of the page before) | MOMENTARY | the LFO shown reset (its points too) | a point added (left of the one picked; halfway) | the point picked deleted (not the ends) |
 | FX | the page left / the chain view | the chain view <-> the module picked | MACROS | the module shown reset (the chain view: the chain as INIT's) | the chain view: a module added; a module's page: it in | taken out; bypassed |

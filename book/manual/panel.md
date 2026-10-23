@@ -1,115 +1,88 @@
-# The panel and the screen
+# The panel
+
+How Strata uses the FM-1's controls and screen, and the rules every menu follows. The
+[cheat sheet](../guide/cheatsheet.md) lists every button in one table.
 
 ## The controls
 
-| Control | What it does in Strata |
+| Control | What it does |
 | --- | --- |
-| 27 keys, F3 to G5 | Play notes on the selected track. In some layers and screens they pick, toggle, launch or type (see [Buttons and mappings](buttons.md#the-keys)). |
-| <kbd>OCT−</kbd> / <kbd>OCT+</kbd> | The keys' octave, −3 to +3 (SCL's top line shows it). Held with a menu button: off and on (the button's combos). |
-| KNOB 1–4 | The four values on the screen, left to right. Each has a numbered handle drawn on what it moves. |
-| SELECT | The next or previous **module** of the menu shown (OSC A, OSC B, SUB ..; an effect module ..), stopping at the first and the last. A menu of one module: nothing. On HOME: the track. On the FX chain view: the slot. |
-| ALGORITHM | The next or previous **page** of the module shown, everywhere, stopping at the first and the last. |
-| PRESETS | A list, by the page: the sounds (a list that opens as it turns), on the looper's pages the track, on a drum track the drum, in an open list its entry. |
-| MASTER | The output level. |
-| <kbd>HOME</kbd> <kbd>EDIT</kbd> <kbd>ENV</kbd> <kbd>LFO</kbd> <kbd>FX</kbd> <kbd>GLO</kbd> <kbd>SCL</kbd> <kbd>ARP</kbd> <kbd>SEQ</kbd> | The menus, one grammar for all ([Buttons and mappings](buttons.md)). |
-| <kbd>SAVE</kbd> | The SAVE window, the browser, undo and redo. |
-| <kbd>REC</kbd> | The looper's record; twice TAKE; held the MOD layer. |
-| <kbd>PLAY</kbd> | The transport: the looper's clips, the ARP's and PATTERN's beat, the LFOs' FREE phase from the beat. |
+| Keys (F3 to G5) | Play the selected track. On some screens they choose, launch or type instead. |
+| <kbd>OCT−</kbd> <kbd>OCT+</kbd> | Change the keys' octave (−3 to +3). Held with a menu button, they mean off and on. |
+| KNOB 1–4 | Set the four values on the screen, left to right. |
+| SELECT | Go to the next or previous module of the menu (<kbd>EDIT</kbd>: OSC A, OSC B, SUB, NOISE, FILTER, MATRIX). |
+| ALGORITHM | Go to the next or previous page of the module. |
+| PRESETS | Open the presets list (on looper pages: choose the track; on a drum track: choose the drum). |
+| MASTER | Output level. |
 
-The keys have no velocity on the FM-1: they play at SCL's VELOCITY (100 by default). MIDI notes keep their own.
-
-## The menus
-
-| Button | Its modules (SELECT) |
-| --- | --- |
-| <kbd>HOME</kbd> | HOME (SOUND, MIX 1-4, MIX 5-8) |
-| <kbd>EDIT</kbd> | OSC A, OSC B, SUB, NOISE, FILTER, MATRIX; on a drum track DRUM, KIT |
-| <kbd>ENV</kbd> | ENV 1, ENV 2 |
-| <kbd>LFO</kbd> | LFO 1, LFO 2 |
-| <kbd>FX</kbd> | the chain's modules in their order (the chain view: FX once in its own menu) |
-| <kbd>GLO</kbd> | VOICE, GLOBAL |
-| <kbd>SCL</kbd> | SCALE, CHORD |
-| <kbd>ARP</kbd> | ARP, STEPS |
-| <kbd>SEQ</kbd> | LOOP, CLIP, TRACK |
-| <kbd>HOME</kbd> twice | SETTINGS (SCREEN, PANEL, MIDI, POWER, WIPE) |
-| <kbd>HOME</kbd> held 5 s | DEBUG (BENCH, KEY SCAN, CORE 2) |
-
-Each menu remembers the page it was left on, and each module the page it showed last.
-
-## The knobs
-
-- **Speed-sensitive.** Turned slowly, a value moves 0.1 % of its range a detent; turned quickly, up to 5 %. With
-  SETTINGS > PANEL > ACCEL off, 1 % a detent at any speed. A list, a count or a short range moves one entry a detent.
-- **Centre detents.** On a knob with a middle (PAN, the tracks' and drums' PAN, TUNE, the kit's TONE, every bipolar
-  parameter: the EQ's gains, FOLLOW, the matrix's amounts ..), a turn through the middle stops there and holds for
-  three detents more the same way; a turn back leaves at once, and a new turn from the middle (after 0.6 s) holds
-  nothing.
-- **Showing the value.** The knob turning is lit: its handle goes vermilion, and on the filter's and the effects'
-  pages the part of the drawing it moves is lit, the shape before the turn dashed behind, until a second after its
-  last detent. Its value goes vermilion where the page shows it (a chip, a figure, a title); where the page does not,
-  the bottom row shows its name and value instead of the page names.
+The FM-1's keys have no velocity; they play at SCL's VELOCITY (100).
 
 ## The screen
 
-![A module's page: OSC A, WAVE](../images/Osc-2x.png)
+![A module page](../images/Osc-2x.png)
 
-Every menu screen has one layout:
+- **Top line**: the module's name, with a filled dot when it is on. The dots at the right are the menu's modules;
+  SELECT moves between them.
+- **Body**: a drawing of what the module does. The circled numbers are the knobs' handles, placed on what each knob
+  moves. A knob's handle and value turn vermilion while it turns; the shape before the turn stays dashed behind.
+- **Bottom row**: the module's pages; the one shown is highlighted. The last page, **VALUES**, shows the same knobs as
+  large numbers, and turns them in the finest steps: use it to set an exact value.
+- **P in a square**: what PRESETS chooses on this page.
+- **Vermilion dot after a name**: the sound or kit has unsaved changes.
 
-- **The top line**: the module's name, with its dot (filled: on; hollow: off). A word of status (HOME's tempo, SCL's
-  octave or chord, the looper's track, scene, bar and beat, REC or DUB). At the right, the menu's module dots
-  (SELECT's), or on an effect module its place in the chain as eight squares (filled: this one; outlined: in the chain;
-  dashed: bypassed). With SETTINGS > POWER > SHOW BATTERY, the battery.
-- **The body**: a drawing of what the module does, with the four knobs' numbered handles on what each moves.
-- **The bottom row**: the module's pages, the one shown inverted, the others by short names (UNI, SPR, PIT, OUT, VAL)
-  where they would not fit, with a < or > where the row goes on. A **toast**, a word for a moment (a vermilion dot
-  and a few words, 1.5 s), takes its place.
-- **A P in a square**: what PRESETS turns on this page (the sound on HOME, the drum on a drum track's HOME and DRUM,
-  the track on the looper's pages).
-- **The unsaved dot**: a small vermilion dot after the sound's or the kit's name (on HOME, in the presets' list, in
-  the browser) while it is edited since it was loaded or saved.
+A module that is switched off says so on its pages ("OSC B IS OFF · EDIT + OCT+ TURNS IT ON").
 
-The layers (MOD, PERFORM, MACROS, MOMENTARY, the launch pad, the help map) and the windows (the assign window, the SAVE
-window, the questions, the lists) keep their own look: [Layers and windows](layers.md).
+## Knobs
 
-## VALUES
+- Turned slowly, a knob moves its value in fine steps; turned quickly, in large ones. SETTINGS > PANEL > ACCEL off
+  makes every step the same size.
+- Knobs with a centre (PAN, TUNE, bipolar amounts) pause at the centre for a few detents, so you can find it.
 
-Every module (OSC A and B, SUB, NOISE, FILTER, ENV 1 and 2, LFO 1 and 2, VOICE, DRUM, KIT, each effect module) ends
-with **VALUES**: its pages' knobs again, a page each in the same order ("VALUES 1/5" holds WAVE's four, "2/5"
-UNISON's ..). Each value is large, with its bar, the range its modulation takes it to, and the source ("ENV 2
-+45.0%"). A knob on VALUES moves its parameter's finest step a detent (0.1 % of the range; a list one entry) however
-fast it turns: use it for an exact value. VALUES is always a module's last page; ALGORITHM reaches it.
+## Buttons
 
-![VALUES](../images/OscValues-2x.png)
+1. **Once**: opens the menu on the page you left. Pressed inside its own menu: goes to its first page.
+2. **Twice** (within 300 ms): its second job, such as <kbd>EDIT</kbd> twice for the wavetable list.
+3. **Held**: opens its layer until you let go.
+4. **With <kbd>OCT+</kbd> / <kbd>OCT−</kbd>**: hold the button, then press OCT+ to switch on or add, OCT− to switch off
+   or remove.
+5. **With <kbd>OCT−</kbd> held 5 s**: resets what the menu shows. A countdown appears after 2 s; let go of OCT− to
+   cancel. Sound changes can be undone afterwards with <kbd>SAVE</kbd> + <kbd>OCT−</kbd>.
 
-## Help
+**Help**: hold <kbd>HOME</kbd> to see what every control does on the current screen.
 
-- **HELP** (SETTINGS > SCREEN, on by default): a module opened from elsewhere shows a hint at the bottom for two
-  seconds ("ENV TWICE: AN ENVELOPE ONTO A KNOB"), and a menu opened from another says what pressing it again does
-  ("AGAIN: THE TABLES").
-- **The help map**: hold <kbd>HOME</kbd>. For the screen you are on it shows what SELECT, ALGORITHM, PRESETS and the
-  four knobs do, and every button's twice. Held on, a bar fills along the bottom and DEBUG opens at 5 s. Let go
-  before: nothing changes.
+## Layers
 
-![The help map](../images/HelpMap-2x.png)
+Hold a button to open its layer; let go to close it. REC's and GLO's layers can stay open: press the button with
+<kbd>OCT+</kbd> (GLO also: twice), and tap the button to close.
 
-## The themes
+![The MOD layer](../images/ModLayer-2x.png)
 
-SETTINGS > SCREEN > COLOR: twelve themes, each six colours (the ground, the ink, the labels, the lesser lines, the
-faint lines, and one accent for what is live). STRATA (warm white on black, vermilion: the default), CLASSIC, ICE,
-VIOLET, PAPER (light), NIGHT (dim by design), HI-CON, MONO, MOSS, DUSK, SAND (light) and NEON. The type is Space Mono,
-nothing under 9 pixels. **Needs a hardware test**: legibility at the panel's size, the themes on the panel.
+| Layer | Hold | Knobs | Keys |
+| --- | --- | --- | --- |
+| MOD | <kbd>REC</kbd> | Set the chosen source's depth on each knob's parameter | White keys choose the source |
+| PERFORM | <kbd>GLO</kbd> | Pitch bend, mod wheel, GLIDE, VOLUME | Play |
+| MACROS | <kbd>FX</kbd> | MACRO 1–4 | F3–F4 bypass effects 1–8 |
+| MOMENTARY | <kbd>LFO</kbd> | Change the page's values until you let go | Play |
+| LAUNCH PAD | <kbd>SEQ</kbd> | | Launch clips and scenes, mute tracks |
+
+Details: [MOD](modulation.md), [PERFORM, MACROS, MOMENTARY](playing.md), [the launch pad](looper.md).
+
+## Windows and lists
+
+Windows open over the page; the keys still play. Any other button, SELECT or PRESETS closes a window.
+
+| Window | Opens with | Use |
+| --- | --- | --- |
+| Assign window | <kbd>ENV</kbd> or <kbd>LFO</kbd> twice | Put a source onto a knob ([how](modulation.md#put-a-modulator-on-a-knob)) |
+| SAVE window | <kbd>SAVE</kbd> | SAVE, SAVE AS NEW or CANCEL: <kbd>OCT−</kbd>/<kbd>OCT+</kbd> choose, <kbd>SAVE</kbd> confirms |
+| Questions (DELETE?, T1: DRUMS?, WIPE?) | an action that removes something | Confirm as the window says; anything else cancels |
+
+Lists (presets, wavetables, drum presets, kits, projects) all work the same way: turn PRESETS to move, press
+<kbd>SAVE</kbd> twice to load, <kbd>SAVE</kbd> + <kbd>OCT+</kbd> to save a new entry, <kbd>SAVE</kbd> +
+<kbd>OCT−</kbd> to delete (it asks first). A list closes after 5 seconds untouched.
 
 ## Power-on
 
-1. The splash for two seconds, then HOME's SOUND.
-2. The sound playing at power-off comes back, with the settings and the project loaded.
-3. **<kbd>HOME</kbd> held at power-on**: the last sound is not brought back (a way out should a sound ever stop the
-   unit).
-4. **SAFE START**: after a crash or a hang Strata starts the same way by itself, on INIT, and says so.
-
-## Screen sleep
-
-SETTINGS > POWER > SCREEN OFF AFTER (OFF, 1, 5, 15 MIN) darkens the panel after that long with no control touched. Any
-control wakes it, and the press, turn or key that wakes it does nothing else. The backlight stays lit (on the FM-1 its
-pin also enables the key and knob scan, so with it off nothing could wake the screen). The sound, the looper, MIDI and
-USB go on; it never darkens under a countdown or a count-in. **Unverified on the FM-1.**
+Strata shows its splash for two seconds, then HOME, with the sound, settings and project you had. Hold
+<kbd>HOME</kbd> while switching on to start without the last sound. After a crash Strata does this by itself and shows
+SAFE START.

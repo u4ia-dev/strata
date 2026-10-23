@@ -95,3 +95,47 @@ body, .book, .book .book-body .page-wrapper .page-inner section.normal, .book .b
 /* the search's results */
 .book .book-body .page-wrapper .page-inner section.search-results { color: var(--st-ink); }
 .book .book-body .search-results .search-results-item h3 a { color: var(--st-hot); }
+
+/* ------------------------------------------------------------------ layout: the width used, side by side ---- */
+/* the page up to 1200 px; a screenshot at half size (240 px) floated beside its text, cleared at each heading; tables
+ * as wide as they need beside it; two tables side by side after <div class="cols"></div> (or inside a
+ * <div class="cols"> of HTML); feature cards in <div class="cards">. One column under 700 px. */
+.book .book-body .page-wrapper .page-inner { max-width: 1200px; padding-left: 72px; padding-right: 72px; }   /* (room for the page arrows) */
+.markdown-section h1, .markdown-section h2, .markdown-section h3 { clear: both; }
+.markdown-section img {
+  float: right; width: 240px; height: auto; margin: 4px 0 14px 22px;
+}
+.markdown-section table { width: auto; max-width: 100%; }
+.markdown-section table td, .markdown-section table th { padding: 5px 10px; vertical-align: top; }
+.markdown-section div.cols:empty { display: none; }
+.markdown-section div.cols:empty + table, .markdown-section div.cols:empty + table + table {
+  display: inline-table; width: calc(50% - 20px); vertical-align: top; margin: 0 0 16px 0;
+}
+.markdown-section div.cols:empty + table { margin-right: 18px; }
+.markdown-section div.cols:not(:empty) {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-bottom: 16px;
+}
+.markdown-section div.cols:not(:empty) > table { width: 100%; margin: 0; }
+.markdown-section .cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 14px 0 22px;
+}
+.markdown-section .card {
+  background: var(--st-card); border: 1px solid var(--st-line); padding: 12px 14px 10px; display: flex;
+  flex-direction: column; gap: 6px; min-width: 0;
+}
+.markdown-section .card:hover { border-color: var(--st-mid); }
+.markdown-section .card h3 { margin: 0; font-size: 12px; color: var(--st-ink); }
+.markdown-section .card p { margin: 0; font-size: 12.5px; line-height: 1.55; }
+.markdown-section .card ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.6; }
+.markdown-section .card .more { margin-top: auto; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+.markdown-section ol, .markdown-section ul { padding-left: 2.4em; }
+
+@media (max-width: 700px) {
+  .book .book-body .page-wrapper .page-inner { padding-left: 16px; padding-right: 16px; }
+  .markdown-section img { float: none; display: block; margin: 8px auto 14px; }
+  .markdown-section div.cols:empty + table, .markdown-section div.cols:empty + table + table {
+    display: table; width: 100%; margin-right: 0;
+  }
+  .markdown-section div.cols:not(:empty) { grid-template-columns: 1fr; }
+  .markdown-section table { display: block; overflow-x: auto; }
+}
