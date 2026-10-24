@@ -4,7 +4,7 @@ What each version changed, newest first.
 
 ## V0.875
 
-The book matches Strata V0.875 at commit 1eb4ac6. It is a pre-release, and it includes everything V0.87.1 changed (that
+The book matches Strata V0.875 at its release. It is a pre-release, and it includes everything V0.87.1 changed (that
 build was never public).
 
 **Panel.**
@@ -31,7 +31,9 @@ ever saved, "TEST · NOT SAVED" shows while one is loaded, and the sound you had
 
 **Sound engine.** Chords can use more voices before Strata limits them, and the limit now keeps up better, so there are
 fewer dropouts. A new note first takes unison voices from the others before it steals one. The effects' low-cost mode and
-HALL's extra lines fade in and out instead of clicking. The MASTER knob ignores its own noise. PROJECT NEW keeps CLOCK IN.
+HALL's extra lines fade in and out instead of clicking. The MASTER knob ignores its own noise. PROJECT NEW keeps CLOCK IN. OTT no
+longer buzzes on held notes (about 10 dB less), which was most of OTT GROWL's crackle; the rest of the crackle on some
+sounds is in their wavetables and is fixed in V0.88.
 
 **Backup mode.** Entering backup mode from Strata works again: <kbd>OCT−</kbd> + <kbd>OCT+</kbd> held 5 s, or the SysEx
 message. Tested on one FM-1.
