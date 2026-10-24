@@ -7,7 +7,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="description" content="">
         <meta name="generator" content="HonKit 6.2.2">
-        <meta name="author" content="u4ia">
+        
         
         
     
@@ -410,7 +410,7 @@
 </tr>
 <tr>
 <td>PRESETS</td>
-<td>Open the presets list (on looper pages: choose the track; on a drum track: choose the drum).</td>
+<td>Open the presets list (on looper pages: choose the track, except on CLIPS; on a drum track: choose the drum).</td>
 </tr>
 <tr>
 <td>MASTER</td>
@@ -441,14 +441,15 @@ makes every step the same size.</li>
 <h2 id="buttons">Buttons</h2>
 <ol>
 <li><strong>Once</strong>: opens the menu on the page you left. Pressed inside its own menu: goes to its first page.</li>
-<li><strong>Twice</strong> (within 300 ms): its second job, such as <kbd>EDIT</kbd> twice for the wavetable list.</li>
+<li><strong>Twice</strong> (within 300 ms): its second job, such as <kbd>EDIT</kbd> twice for the wavetable list. Pressed twice again, it loads the one you chose.</li>
 <li><strong>Held</strong>: opens its layer until you let go.</li>
 <li><strong>With <kbd>OCT+</kbd> / <kbd>OCT−</kbd></strong>: hold the button, then press OCT+ to switch on or add, OCT− to switch off
 or remove.</li>
 <li><strong>With <kbd>OCT−</kbd> held 5 s</strong>: resets what the menu shows. A countdown appears after 2 s; let go of OCT− to
 cancel. Sound changes can be undone afterwards with <kbd>SAVE</kbd> + <kbd>OCT−</kbd>.</li>
 </ol>
-<p><strong>Help</strong>: hold <kbd>HOME</kbd> to see what every control does on the current screen.</p>
+<p><strong>Help</strong>: hold <kbd>HOME</kbd> to see what every control does on the current screen. The map stays for as long as you hold
+the button, on every page. DEBUG has its own four-corner press: see <a href="settings.html#debug">DEBUG</a>.</p>
 <h2 id="layers">Layers</h2>
 <p>Hold a button to open its layer; let go to close it. REC's and GLO's layers can stay open: press the button with
 <kbd>OCT+</kbd> (GLO also: twice), and tap the button to close.</p>
@@ -518,17 +519,43 @@ cancel. Sound changes can be undone afterwards with <kbd>SAVE</kbd> + <kbd>OCT�
 <td>SAVE, SAVE AS NEW or CANCEL: <kbd>OCT−</kbd>/<kbd>OCT+</kbd> choose, <kbd>SAVE</kbd> confirms</td>
 </tr>
 <tr>
-<td>Questions (DELETE?, T1: DRUMS?, WIPE?)</td>
-<td>an action that removes something</td>
+<td>Questions (DELETE?, TYPE, WIPE?, test projects)</td>
+<td>an action that removes or replaces something</td>
 <td>Confirm as the window says; anything else cancels</td>
 </tr>
 </tbody>
 </table>
-<p>Lists (presets, wavetables, drum presets, kits, projects) all work the same way: turn PRESETS to move, press
-<kbd>SAVE</kbd> twice to load, <kbd>SAVE</kbd> + <kbd>OCT+</kbd> to save a new entry, <kbd>SAVE</kbd> +
-<kbd>OCT−</kbd> to delete (it asks first). A list closes after 5 seconds untouched.</p>
+<p>Lists (presets, wavetables, drum presets, kits, projects) all work the same way: turn PRESETS to move, then press
+twice <strong>the button that opened the list</strong> to load. In the presets list that is <kbd>SAVE</kbd>; in the wavetable, drum
+preset and kit lists it is <kbd>EDIT</kbd>; in the projects list it is <kbd>SEQ</kbd>. <kbd>SAVE</kbd> + <kbd>OCT+</kbd>
+saves a new entry and <kbd>SAVE</kbd> + <kbd>OCT−</kbd> deletes (it asks first). A list closes after 5 seconds
+untouched, or when you press its opener once or any other button.</p>
+<p><strong>Answering a question</strong>: press twice the button that opened it, or the menu button of the page whose knob asked.</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer yes with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A track's TYPE (CLIPS, KNOB 1)</td>
+<td><kbd>SEQ</kbd> twice</td>
+</tr>
+<tr>
+<td>WIPE? and a test project (DEBUG)</td>
+<td><kbd>HOME</kbd> twice</td>
+</tr>
+<tr>
+<td>A clip's DELETE?</td>
+<td><kbd>SEQ</kbd> + <kbd>OCT−</kbd> again</td>
+</tr>
+</tbody>
+</table>
+<p>One press of that button, or any other button, says no.</p>
 <h2 id="power-on">Power-on</h2>
-<p>Strata shows its splash for two seconds, then HOME, with the sound, settings and project you had. Hold
+<p>Strata shows its logo for two seconds, then HOME, with the sound, settings and project you had. Hold
 <kbd>HOME</kbd> while switching on to start without the last sound. After a crash Strata does this by itself and shows
 SAFE START.</p>
 
@@ -574,7 +601,7 @@ SAFE START.</p>
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"The panel","level":"3.1","depth":1,"next":{"title":"The sound","level":"3.2","depth":1,"path":"manual/sound.md","ref":"manual/sound.md","articles":[]},"previous":{"title":"Cheat sheet","level":"2.2","depth":1,"path":"guide/cheatsheet.md","ref":"guide/cheatsheet.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/panel.md","mtime":"2026-10-24T03:54:00.895Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T04:02:04.974Z"},"basePath":"..","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"The panel","level":"3.1","depth":1,"next":{"title":"The sound","level":"3.2","depth":1,"path":"manual/sound.md","ref":"manual/sound.md","articles":[]},"previous":{"title":"Cheat sheet","level":"2.2","depth":1,"path":"guide/cheatsheet.md","ref":"guide/cheatsheet.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/panel.md","mtime":"2026-10-24T08:39:10.325Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T10:23:00.358Z"},"basePath":"..","book":{"language":""}});
         });
     </script>
 </div>

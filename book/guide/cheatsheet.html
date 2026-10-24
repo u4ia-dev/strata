@@ -7,7 +7,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="description" content="">
         <meta name="generator" content="HonKit 6.2.2">
-        <meta name="author" content="u4ia">
+        
         
         
     
@@ -398,7 +398,7 @@ letting go of OCT− stops it.</p>
 <td><kbd>HOME</kbd></td>
 <td>HOME: SOUND, MIX 1-4, MIX 5-8</td>
 <td>SETTINGS</td>
-<td>help map; 5 s: DEBUG</td>
+<td>help map</td>
 <td>next sound</td>
 <td>previous sound</td>
 <td></td>
@@ -406,7 +406,7 @@ letting go of OCT− stops it.</p>
 <tr>
 <td><kbd>EDIT</kbd></td>
 <td>OSC A, OSC B, SUB, NOISE, FILTER, MATRIX (drum track: DRUM, KIT)</td>
-<td>wavetable list (drum track: drum presets; from KIT or HOME: kits)</td>
+<td>wavetable list (drum track: drum presets; from KIT or HOME: kits); twice again: load the one chosen</td>
 <td></td>
 <td>module shown on</td>
 <td>module shown off</td>
@@ -469,7 +469,7 @@ letting go of OCT− stops it.</p>
 <tr>
 <td><kbd>SEQ</kbd></td>
 <td>LOOP, CLIP, TRACK</td>
-<td>projects</td>
+<td>projects; twice again: load the one chosen</td>
 <td>launch pad</td>
 <td>new 1-bar clip (keep SEQ held, turn PRESETS: length)</td>
 <td>delete the clip (asks; press again)</td>
@@ -478,6 +478,10 @@ letting go of OCT− stops it.</p>
 </tbody>
 </table>
 <p>A latched layer closes with a tap on its button.</p>
+<p><strong>Answering a list or a question</strong>: press twice the button that opened it. <kbd>EDIT</kbd> twice loads from the
+wavetable, kit and drum-preset lists; <kbd>SEQ</kbd> twice loads a project or changes a track's TYPE; <kbd>SAVE</kbd>
+twice loads from the presets list; <kbd>HOME</kbd> twice answers WIPE and the test projects. One press, or any other
+button, says no.</p>
 <h2 id="other-buttons-and-controls">Other buttons and controls</h2>
 <div class="cols"></div>
 
@@ -495,7 +499,7 @@ letting go of OCT− stops it.</p>
 </tr>
 <tr>
 <td><kbd>SAVE</kbd> twice</td>
-<td>the browser (again: back); in a list: load</td>
+<td>the browser (again: back); in the presets list: load</td>
 </tr>
 <tr>
 <td><kbd>SAVE</kbd> + <kbd>OCT−</kbd> / <kbd>OCT+</kbd></td>
@@ -518,8 +522,8 @@ letting go of OCT− stops it.</p>
 <td>transport on/off</td>
 </tr>
 <tr>
-<td><kbd>GLO</kbd> held + <kbd>PLAY</kbd> ×3</td>
-<td>tap tempo</td>
+<td><kbd>GLO</kbd> held + F3 (lowest key) ×3</td>
+<td>tap tempo (F3 does not sound)</td>
 </tr>
 <tr>
 <td><kbd>OCT−</kbd> / <kbd>OCT+</kbd></td>
@@ -528,6 +532,10 @@ letting go of OCT− stops it.</p>
 <tr>
 <td><kbd>OCT−</kbd> + <kbd>OCT+</kbd> 5 s</td>
 <td>backup mode (USB BOOT)</td>
+</tr>
+<tr>
+<td><kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held together</td>
+<td>DEBUG, from any page</td>
 </tr>
 <tr>
 <td><kbd>HOME</kbd> held at power-on</td>
@@ -557,14 +565,14 @@ letting go of OCT− stops it.</p>
 </tr>
 <tr>
 <td>PRESETS</td>
-<td>the presets list; on looper pages: the track; on a drum track: the drum; in a list: the entry</td>
+<td>the presets list; on looper pages: the track (on CLIPS: the track's sound); on a drum track: the drum; in a list: the entry</td>
 </tr>
 <tr>
 <td>MASTER</td>
 <td>output level</td>
 </tr>
 <tr>
-<td>In a list</td>
+<td>In the presets list</td>
 <td>PRESETS moves, <kbd>SAVE</kbd> twice loads, <kbd>SAVE</kbd> + <kbd>OCT+</kbd> saves new, <kbd>SAVE</kbd> + <kbd>OCT−</kbd> deletes (asks first)</td>
 </tr>
 <tr>
@@ -597,7 +605,7 @@ letting go of OCT− stops it.</p>
 <tr>
 <td>PERFORM (<kbd>GLO</kbd>)</td>
 <td>bend, mod wheel, GLIDE, VOLUME</td>
-<td>play</td>
+<td>play; F3 taps the tempo</td>
 </tr>
 <tr>
 <td>MACROS (<kbd>FX</kbd>)</td>
@@ -628,7 +636,7 @@ letting go of OCT− stops it.</p>
 <tr>
 <td>CLIPS page</td>
 <td>1–8: launch this scene's clips</td>
-<td>1–8: scenes A–H</td>
+<td>1–8: scenes A–H (<kbd>OCT−</kbd>/<kbd>OCT+</kbd> step the scene)</td>
 </tr>
 <tr>
 <td>Drum track</td>
@@ -648,6 +656,61 @@ letting go of OCT− stops it.</p>
 <tr>
 <td>MOD sources</td>
 <td>F3 ENV 1, G3 ENV 2, A3 LFO 1, B3 LFO 2, C4–F4 MACRO 1–4, G4 VELOCITY, A4 NOTE, B4 RANDOM, C5 ALTERNATE, D5 MOD WHEEL, E5 BEND, F5 AFTERTOUCH, G5 EXPRESSION</td>
+</tr>
+</tbody>
+</table>
+<h2 id="looper-clips-page-and-debug">Looper CLIPS page and DEBUG</h2>
+<div class="cols"></div>
+
+<table>
+<thead>
+<tr>
+<th>CLIPS</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KNOB 1</td>
+<td>track TYPE (<kbd>SEQ</kbd> twice confirms)</td>
+</tr>
+<tr>
+<td>KNOB 2</td>
+<td>selected track: PLAYS, MUTE or SOLO</td>
+</tr>
+<tr>
+<td>KNOB 4</td>
+<td>track T1 to T8</td>
+</tr>
+<tr>
+<td><kbd>OCT−</kbd> / <kbd>OCT+</kbd></td>
+<td>scene A to H</td>
+</tr>
+<tr>
+<td><kbd>PRESETS</kbd></td>
+<td>the track's sound (drum track: its drums)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>DEBUG (<kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held together)</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BENCH, KEY SCAN, CORE 2</td>
+<td>measurements</td>
+</tr>
+<tr>
+<td>TESTS</td>
+<td>KNOB 1 picks a test project, <kbd>HOME</kbd> twice loads it; KNOB 2 stops it</td>
+</tr>
+<tr>
+<td>WIPE</td>
+<td>KNOB 1 asks, <kbd>HOME</kbd> twice resets every setting</td>
 </tr>
 </tbody>
 </table>
@@ -694,7 +757,7 @@ letting go of OCT− stops it.</p>
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"Cheat sheet","level":"2.2","depth":1,"next":{"title":"The panel","level":"3.1","depth":1,"path":"manual/panel.md","ref":"manual/panel.md","articles":[]},"previous":{"title":"Guide","level":"2.1","depth":1,"path":"guide/guide.md","ref":"guide/guide.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"guide/cheatsheet.md","mtime":"2026-10-24T03:54:00.884Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T04:02:04.974Z"},"basePath":"..","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"Cheat sheet","level":"2.2","depth":1,"next":{"title":"The panel","level":"3.1","depth":1,"path":"manual/panel.md","ref":"manual/panel.md","articles":[]},"previous":{"title":"Guide","level":"2.1","depth":1,"path":"guide/guide.md","ref":"guide/guide.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"guide/cheatsheet.md","mtime":"2026-10-24T08:39:10.306Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T10:23:00.358Z"},"basePath":"..","book":{"language":""}});
         });
     </script>
 </div>

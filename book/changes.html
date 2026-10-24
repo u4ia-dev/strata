@@ -7,7 +7,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="description" content="">
         <meta name="generator" content="HonKit 6.2.2">
-        <meta name="author" content="u4ia">
+        
         
         
     
@@ -376,6 +376,45 @@
                                 
                                 <h1 id="changes">Changes</h1>
 <p>What each version changed, newest first.</p>
+<h2 id="v0875">V0.875</h2>
+<p>The book matches Strata V0.875 at its release. It is a pre-release, and it includes everything V0.87.1 changed (that
+build was never public).</p>
+<p><strong>Panel.</strong></p>
+<ul>
+<li><strong>DEBUG opens with four buttons</strong>: hold <kbd>OCT−</kbd>, F3 (the lowest key), G5 (the highest key) and <kbd>GLO</kbd>
+together, on any page. While <kbd>OCT−</kbd> is down, F3 and G5 make no note and do nothing else, and their release
+does nothing. A button pressed before the fourth lands does its usual job until then; when DEBUG opens, Strata takes
+that back: the octave and CLIPS scene <kbd>OCT−</kbd> stepped, MIDI LEARN's CC it took away, NAME IT's characters, a
+tap-tempo run, a drum step and the one-bar clip it made, a CLIPS launch and the PLAY it started, a held note or hit
+(cut off and taken out of what you were recording), and a latched chord that F3 or G5 replaced (it comes back). What a
+key did inside a layer (a MACROS bypass, the launch pad, SCL's root, a MOD source) is not taken back, and a CLIPS launch the bar
+already played starts again from the clip's start. <kbd>HOME</kbd>
+held shows the help map on every page, with no countdown, and no longer opens DEBUG.</li>
+<li>WIPE moved from SETTINGS into DEBUG. Press <kbd>HOME</kbd> twice to confirm.</li>
+<li>A list or question is confirmed by pressing twice the button that opened it: <kbd>EDIT</kbd> for the wavetable, kit and
+drum-preset lists, <kbd>SEQ</kbd> for the projects list and a track's TYPE, <kbd>HOME</kbd> for WIPE. One press, or
+any other button, says no.</li>
+<li>CLIPS: <kbd>OCT−</kbd> and <kbd>OCT+</kbd> step through the scenes, KNOB 2 sets PLAYS, MUTE or SOLO, KNOB 4 chooses the
+track, and PRESETS opens the track's sound list again.</li>
+<li>Tap tempo is <kbd>GLO</kbd> held + F3, the lowest key (it does not sound). <kbd>GLO</kbd> + <kbd>PLAY</kbd> is PLAY's own
+again. PERFORM shows a dot for each tap, then the tempo as it settles.</li>
+</ul>
+<p><strong>Screens.</strong> STRATA, the default theme, is darker: a black ground, bright warm ink and a vermilion accent. AMBER (amber
+on black) replaces NIGHT; a saved NIGHT loads as AMBER. Strata starts with its logo. The POLARITY dial points up at rest.
+ARP STEPS shows each step's CHANCE as a fader. TAPE moves with the sound. The drum grid's row names are shorter. KEY SCAN
+names KNOB 1's lines instead of flagging them.</p>
+<p><strong>Test projects.</strong> DEBUG &gt; TESTS has four built-in projects (VOICES, FX, DRUMS, LOOPER) that stress the voices, every
+effect, the drums and the looper for 60 to 90 seconds. Loading one saves your open project first; nothing from a test is
+ever saved, "TEST · NOT SAVED" shows while one is loaded, and the sound you had comes back when it ends.</p>
+<p><strong>Sound engine.</strong> Chords can use more voices before Strata limits them. A new note first takes unison voices from the others before it steals one. The effects' low-cost mode and
+HALL's extra lines fade in and out instead of clicking. The MASTER knob ignores its own noise. PROJECT NEW keeps CLOCK IN. OTT's buzz
+on held notes, most of OTT GROWL's crackle, is about 10 dB lower in the emulator (unverified on the FM-1). The rest of
+the crackle on some sounds is in their wavetables, which V0.88 redoes. A long chain of heavy effects can still overload
+the chip and drop notes.</p>
+<p><strong>Backup mode.</strong> Entering backup mode from Strata works again: <kbd>OCT−</kbd> + <kbd>OCT+</kbd> held 5 s, or the SysEx
+message. Tested on one FM-1.</p>
+<h2 id="v0871-not-released-on-its-own">V0.87.1 (not released on its own)</h2>
+<p>Its changes are in V0.875 above.</p>
 <h2 id="book-rewritten-condensed-one-page-guide">Book rewritten: condensed, one-page guide</h2>
 <p>The book now matches Strata V0.87 at commit 3f869d7. The Guide is one page of feature cards, the cheat sheet is laid out
 wide, and the Manual is shorter, with steps first. SCL's unused MIDI page is gone from the firmware.</p>
@@ -481,7 +520,7 @@ held + <kbd>PLAY</kbd>).</li>
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"Changes","level":"4.1","depth":1,"previous":{"title":"Parameter reference","level":"3.14","depth":1,"path":"manual/parameters.md","ref":"manual/parameters.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"changes.md","mtime":"2026-10-24T03:54:00.883Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T04:02:04.974Z"},"basePath":".","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"Changes","level":"4.1","depth":1,"previous":{"title":"Parameter reference","level":"3.14","depth":1,"path":"manual/parameters.md","ref":"manual/parameters.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"changes.md","mtime":"2026-10-24T10:21:55.086Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T10:23:00.358Z"},"basePath":".","book":{"language":""}});
         });
     </script>
 </div>

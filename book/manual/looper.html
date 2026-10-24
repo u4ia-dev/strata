@@ -7,7 +7,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="description" content="">
         <meta name="generator" content="HonKit 6.2.2">
-        <meta name="author" content="u4ia">
+        
         
         
     
@@ -380,13 +380,14 @@
 <p>Eight tracks (T1–T8) and eight scenes (A–H). Each track can hold one clip per scene: a loop of notes and knob moves,
 1 to 16 bars long. A scene is a row of clips that play together; SONG chains scenes. Four projects keep it all.</p>
 <p><kbd>SEQ</kbd> opens three modules (SELECT): <strong>LOOP</strong> (CLIPS, MIXER, SONG), <strong>CLIP</strong> (NOTES, NOTE+, CLIP, TOOLS) and
-<strong>TRACK</strong> (RECORD, CLICK). On every looper page, PRESETS chooses the track. The top line shows the track, the scene, the
+<strong>TRACK</strong> (RECORD, CLICK). On every looper page but CLIPS, PRESETS chooses the track. The top line shows the track, the scene, the
 bar and beat, and REC or DUB while recording.</p>
 <h2 id="how-to">How to</h2>
 <p><img src="../images/LoopClips87-2x.png" alt="CLIPS"></img></p>
 <p><strong>Record a loop</strong></p>
 <ol>
-<li>Press <kbd>SEQ</kbd>. Turn PRESETS to choose a track and KNOB 2 to choose a scene with an empty place.</li>
+<li>Press <kbd>SEQ</kbd>. On CLIPS, turn KNOB 4 to choose a track and press <kbd>OCT−</kbd> or <kbd>OCT+</kbd> to choose a
+scene with an empty place.</li>
 <li>Tap <kbd>REC</kbd>. If the transport is stopped, one bar of count-in clicks plays first; if it is running,
 recording starts at the next bar.</li>
 <li>Play. Notes are recorded as played (or quantized, see RECORD), and so are turns of any knob that can be modulated.</li>
@@ -458,7 +459,7 @@ to set its length). <kbd>SEQ</kbd> + <kbd>OCT−</kbd> asks DELETE?; press it ag
 </tr>
 </tbody>
 </table>
-<p>Set TYPE with KNOB 1 on CLIPS. A track with clips asks first; <kbd>SAVE</kbd> confirms. Clips are kept whatever the
+<p>Set TYPE with KNOB 1 on CLIPS. A track with clips asks first; press <kbd>SEQ</kbd> twice to confirm. Clips are kept whatever the
 type.</p>
 <h2 id="pages">Pages</h2>
 <p><img src="../images/LoopRecord-2x.png" alt="TRACK > RECORD"></img></p>
@@ -473,8 +474,8 @@ type.</p>
 <tbody>
 <tr>
 <td>CLIPS</td>
-<td>TYPE, SCENE</td>
-<td>Tracks as rows, scenes as columns. Filled: playing; framed: there; dot: empty; blinking: launched; vermilion: recording.</td>
+<td>TYPE, PLAYS/MUTE/SOLO, (none), TRACK</td>
+<td><kbd>OCT−</kbd> and <kbd>OCT+</kbd> choose the scene; KNOB 2 sets the selected track to PLAYS, MUTE or SOLO; KNOB 4 chooses the track; PRESETS opens the track's sound list (a drum track: its drums). Tracks as rows, scenes as columns. Filled: playing; framed: there; dot: empty; blinking: launched; vermilion: recording.</td>
 </tr>
 <tr>
 <td>MIXER</td>
@@ -522,8 +523,8 @@ type.</p>
 The sound itself is not changed.</p>
 <h2 id="projects">Projects</h2>
 <p><img src="../images/LoopProjects-2x.png" alt="Projects"></img></p>
-<p>Press <kbd>SEQ</kbd> twice for the projects list. Turn PRESETS to choose one and press <kbd>SAVE</kbd> twice to load it;
-the current project is saved first. <kbd>SAVE</kbd> + <kbd>OCT−</kbd> clears the loaded project (it asks first).</p>
+<p>Press <kbd>SEQ</kbd> twice for the projects list. Turn PRESETS to choose one and press <kbd>SEQ</kbd> twice to load it
+(once, or another button, closes the list); the current project is saved first. <kbd>SAVE</kbd> + <kbd>OCT−</kbd> clears the loaded project (it asks first).</p>
 <p>A project keeps the tracks (type, channels, mix, scale, chords and ARP), the clips, SONG and the drum kit, up to 2,048
 notes and moves in all. It is saved by itself when the transport is stopped and nothing has sounded for 3 seconds.</p>
 <blockquote>
@@ -573,7 +574,7 @@ slot 1 to A ×4 and slot 2 to B ×4, turn SONG ON and press <kbd>PLAY</kbd>.</p>
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"The looper","level":"3.6","depth":1,"next":{"title":"The drums","level":"3.7","depth":1,"path":"manual/drums.md","ref":"manual/drums.md","articles":[]},"previous":{"title":"Playing","level":"3.5","depth":1,"path":"manual/playing.md","ref":"manual/playing.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/looper.md","mtime":"2026-10-24T03:54:00.894Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T04:02:04.974Z"},"basePath":"..","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"The looper","level":"3.6","depth":1,"next":{"title":"The drums","level":"3.7","depth":1,"path":"manual/drums.md","ref":"manual/drums.md","articles":[]},"previous":{"title":"Playing","level":"3.5","depth":1,"path":"manual/playing.md","ref":"manual/playing.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/looper.md","mtime":"2026-10-24T05:53:07.731Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T10:23:00.358Z"},"basePath":"..","book":{"language":""}});
         });
     </script>
 </div>
