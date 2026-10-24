@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata for FM-1 · Info</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
+<style>
+  :root { --bg: #0b0b0b; --card: #131312; --line: #2c2a27; --ink: #f4f1ea; --mute: #bab7b1; --hot: #ff4d2e;
+          --hot-ink: #0b0b0b; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.65 "Space Mono", ui-monospace, Consolas, monospace;
+         padding: 28px max(16px, env(safe-area-inset-left, 0px)) 64px max(16px, env(safe-area-inset-right, 0px)); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 18px; }
+  h1 { margin: 0; font-size: 32px; letter-spacing: .18em; }
+  h2 { margin: 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+  p { margin: 0; } .mute { color: var(--mute); }
+  section { background: var(--card); border: 1px solid var(--line); padding: 16px 18px; display: grid; gap: 10px; }
+  section:hover { border-color: var(--mute); }
+  section.warn { border-left: 3px solid var(--hot); }
+  nav.site { display: flex; flex-wrap: wrap; gap: 8px; }
+  nav.site a { text-decoration: none; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+          padding: 9px 13px; border: 1px solid var(--line); color: var(--ink); background: var(--bg); }
+  nav.site a:hover, nav.site a:focus-visible { border-color: var(--hot); outline: none; }
+  nav.site a[aria-current="page"] { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+  a { color: var(--hot); }
+  code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+<canvas id="fx" aria-hidden="true"></canvas><script src="fx.js" defer></script>
+<main>
+  <nav class="site" aria-label="Site"><a href="index.html">Install</a><a href="book/index.html">Guide &amp; manual</a><a href="info.html" aria-current="page">Info</a><a href="https://github.com/u4ia-dev/strata">Source</a></nav>
+  <h1>STRATA</h1>
+  <p class="mute">Strata turns the M-VAVE FM-1 into a complete pocket instrument: a deep wavetable synth, an 8-track
+    looper and a drum machine. Free software, built on Felucca. Package V0.87 UI, SHA-256
+    <code>d61322a66e2a5a38…</code></p>
+  <section class="warn">
+    <h2>Before you install</h2>
+    <p><b>Saving anything in Strata can overwrite Felucca's projects and samples</b> (the same flash), and going back
+      does not bring them back. Make a full flash backup first and keep it (<a href="book/manual/install.html#back-up-first">how</a>):
+      it is the only way back to exactly what you had. Strata never writes the boot area, the calibration and trim data,
+      Bluetooth pairing or the unit's own keys.</p>
+    <p class="mute">Chrome or Edge on a computer, the FM-1 on a USB data cable straight into it. Backups are made with a
+      backup tool on your computer, not on this site.</p>
+  </section>
+  <section class="warn">
+    <h2>Disclaimer</h2>
+    <p>Strata is independent, unofficial firmware: not affiliated with, endorsed by or supported by M-VAVE or the
+      owners of the FM-1, nor by Felucca's author or Hügelton Instruments. "M-VAVE" and "FM-1" are trademarks of their
+      respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments.</p>
+    <p>Strata is provided <b>as is, without any warranty</b> (GPL-3.0, sections 15 and 16). Installing firmware other
+      than the official one can leave the FM-1 unusable until it is recovered: you install it at your own risk. This is
+      a <b>pre-release</b>, being tested on the hardware now.</p>
+    <p>Strata was created entirely with Claude, an AI model made by Anthropic.</p>
+  </section>
+  <section>
+    <h2>Good to know</h2>
+    <p>The SysEx message <code>F0 22 24 35 7D F7</code> on the FM-1's USB MIDI port (as on the official firmware)
+      restarts it into backup mode; any program that can send SysEx can send it. Switching the FM-1 off and on returns
+      to Strata. OCT− and OCT+ held 5 s do the same.</p>
+    <p>The USB serial console, the DEBUG menu (HOME held 5 s) and CORE 2 (off by default) are in every build.</p>
+    <p>Going back: M-VAVE's updater or the installer's "Return to official V15" with M-VAVE's own file; Felucca's
+      installer; or your backup, written back in backup mode.</p>
+  </section>
+  <section>
+    <h2>Licences</h2>
+    <p>Strata is a modified version of <a href="https://github.com/hugelton/Felucca">Felucca</a>, Copyright (C) 2026
+      Leo Kuroshita (@kurogedelic), Hügelton Instruments, and is licensed GPL-3.0-only like it. The complete source,
+      with the Felucca-Engines submodule: <a href="https://github.com/u4ia-dev/strata">https://github.com/u4ia-dev/strata</a>. The package also holds three JieLi AC79 SDK files
+      (Apache-2.0). <a href="NOTICE.md">NOTICE.md</a>, <a href="LICENSING.md">LICENSING.md</a>,
+      <a href="LICENSE">LICENSE</a>, <a href="LICENSES/">LICENSES/</a>.</p>
+  </section>
+</main>
+</body>
+</html>

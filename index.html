@@ -1,4 +1,11 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     (Its markers say what make_site.py does with each part for the public site: the INTERNAL ones it leaves out
+     (the test and report), the LOCAL ones it hides (the local backup server's step), the site-only ones it shows.)
+     After Felucca's web/index_pkg.html (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
+     GPL-3.0); its update protocol (fm1ota.js) and package code (fm1pkg.js) are Felucca's, unchanged.
+     STRATA's flasher: a page on this computer (Web MIDI's SysEx needs a secure context: localhost). make_flasher.py
+     fills in the libraries and the package's facts and copies the package beside it. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -6,74 +13,1011 @@
 <title>Strata for FM-1</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
 <style>
-  :root { --bg: #0b0b0b; --card: #131312; --line: #2c2a27; --ink: #f4f1ea; --mute: #bab7b1; --hot: #ff4d2e;
-          --hot-ink: #0b0b0b; color-scheme: dark; }
+  /* V0.87 (U22): the STRATA theme's colours (firmware/src/sy_gfx.c): ground, ink, label, mid, line, vermilion */
+  :root {
+    --bg: #0b0b0b; --card: #131312; --raise: #1d1c1a; --line: #2c2a27; --text: #f4f1ea; --mute: #bab7b1;
+    --dim: #7a766e; --hot: #ff4d2e; --hot-bg: #2a1410; --hot-ink: #0b0b0b; --red: #ff6b57; --red-bg: #2e1512;
+    --green: #8fd6a4; --green-bg: #13241a; --amber: var(--hot); --amber-bg: var(--hot-bg); --blue: var(--hot);
+    --mono: "Space Mono", ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.65 "Space Mono", ui-monospace, Consolas, monospace;
-         padding: 40px max(16px, env(safe-area-inset-left, 0px)) 64px max(16px, env(safe-area-inset-right, 0px)); }
-  main { max-width: 760px; margin: 0 auto; display: grid; gap: 18px; }
-  h1 { margin: 0; font-size: 32px; letter-spacing: .18em; }
-  h2 { margin: 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
-  p { margin: 0; } .mute { color: var(--mute); }
-  section { background: var(--card); border: 1px solid var(--line); padding: 16px 18px; display: grid; gap: 10px; }
-  section:hover { border-color: var(--mute); }
-  section.warn { border-left: 3px solid var(--hot); }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; }
-  a.btn { text-decoration: none; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
-          padding: 10px 14px; border: 1px solid var(--line); color: var(--ink); }
-  a.btn:hover, a.btn:focus-visible { border-color: var(--hot); outline: none; }
-  a.btn.go { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
-  a { color: var(--hot); }
-  code { font-size: 12.5px; }
+  [hidden] { display: none !important; }     /* (over every display a rule below gives: the confirmations stay hidden) */
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 var(--mono); }
+  main { max-width: 700px; margin: 0 auto; padding-block: 36px 56px;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+         display: grid; gap: 16px; }
+  header { display: grid; gap: 6px; padding-bottom: 4px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 30px; height: 22px; display: grid; grid-template-rows: repeat(3, 1fr); gap: 3px; }
+  .mark i { display: block; border-radius: 0; background: var(--hot); }
+  .mark i:nth-child(2) { margin-right: 6px; opacity: .75; } .mark i:nth-child(3) { margin-right: 12px; opacity: .5; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: .18em; font-weight: 700; }
+  .sub { margin: 0; color: var(--mute); }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 8px 0 0; font-size: 13px; }
+  .facts dt { color: var(--mute); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; padding-top: 2px; }
+  .facts dd { margin: 0; font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 2px; padding: 18px 18px 16px;
+                 display: grid; gap: 12px; min-width: 0; transition: border-color .15s; }
+  section.card:hover, section.card:focus-within { border-color: var(--dim); }
+  section.card.next { border-color: var(--hot); }
+  h2 { margin: 0; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 10px; text-wrap: balance;
+       text-transform: uppercase; letter-spacing: .14em; }
+  h2 .n { padding: 2px 7px; display: inline-grid; place-items: center; font-size: 11px; letter-spacing: .08em;
+          border: 1px solid var(--line); color: var(--mute); flex: none; }
+  section.card.next h2 .n { border-color: var(--hot); color: var(--hot); }
+  p { margin: 0; max-width: 64ch; }
+  .small { font-size: 13px; color: var(--mute); }
+  ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  ul.checks label { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer; }
+  ul.checks input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--amber); }
+  .aside { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 2px; background: var(--raise); font-size: 13.5px;
+           display: grid; gap: 8px; }
+  li.backup { display: grid; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  li.backup .aside { margin-left: 0; }
+  #bk-status { overflow-wrap: anywhere; }
+  #bk-status[data-ok="1"] { color: var(--green); font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: inherit; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+           border-radius: 2px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--raise);
+           color: var(--text); transition: border-color .12s, transform .12s; }
+  button:not(:disabled):hover { border-color: var(--hot); }
+  button:not(:disabled):active { transform: translateY(1px); }
+  button.primary { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+  button.primary:not(:disabled):hover { filter: brightness(1.08); }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  button:disabled { opacity: .38; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .status { border-left: 4px solid var(--line); }
+  .status[data-kind="busy"] { border-left-color: var(--blue); }
+  .status[data-kind="ok"] { border-left-color: var(--green); background: var(--green-bg); }
+  .status[data-kind="err"] { border-left-color: var(--red); background: var(--red-bg); }
+  .status[data-kind="warn"] { border-left-color: var(--amber); background: var(--amber-bg); }
+  #status { font-weight: 600; }
+  progress { width: 100%; height: 6px; accent-color: var(--amber); }
+  details summary { cursor: pointer; color: var(--mute); font-size: 13px; }
+  details summary:hover { color: var(--hot); }
+  details.flipper { border: 1px solid var(--line); padding: 8px 12px; }
+  details.flipper[open] { border-color: var(--dim); }
+  details.flipper ol { margin-top: 8px; }
+  pre { margin: 8px 0 0; padding: 10px 12px; border-radius: 2px; background: var(--raise); font: 12px/1.45 var(--mono);
+        white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+  .confirm { padding: 12px; border-radius: 2px; border: 1px solid var(--amber); background: var(--amber-bg); display: grid;
+             gap: 10px; }
+  .warn { color: var(--red); font-weight: 600; }
+  ol.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+  code, kbd { font-family: var(--mono); font-size: 12.5px; background: var(--raise); border-radius: 4px; padding: 1px 5px; }
+  a { color: var(--blue); }
+  input[type="file"] { font: inherit; font-size: 13px; max-width: 100%; }
+  footer { font-size: 12px; color: var(--mute); display: grid; gap: 6px; padding-top: 8px; }
+  nav.site { display: flex; flex-wrap: wrap; gap: 8px; }   /* (the site's pages: the public build only) */
+  nav.site a { font: 700 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none;
+    padding: 9px 13px; border: 1px solid var(--line); color: var(--text); background: var(--bg); }
+  nav.site a:hover, nav.site a:focus-visible { border-color: var(--hot); outline: none; }
+  nav.site a[aria-current="page"] { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 </style>
 </head>
 <body>
+<canvas id="fx" aria-hidden="true"></canvas><script src="fx.js" defer></script>
 <main>
-  <h1>STRATA</h1>
-  <p class="mute">Firmware that makes the M-VAVE FM-1 a complete pocket instrument: a wavetable synth deep enough to
-    design sounds from scratch, an 8-track looper and a drum machine for whole songs without a computer, on a panel
-    built to stay quick to play. Free software (GPL-3.0-only), built on Felucca. Package V0.87 UI, SHA-256 <code>d61322a66e2a5a38…</code></p>
-  <div class="row">
-    <a class="btn go" href="flash/index.html">Install</a>
-    <a class="btn" href="book/index.html">Guide &amp; manual</a>
-    <a class="btn" href="https://github.com/u4ia-dev/strata">Source</a>
-  </div>
-  <section class="warn">
-    <h2>Before you install</h2>
-    <p><b>Saving anything in Strata can overwrite Felucca's projects and samples</b> (the same flash), and going back
-      does not bring them back. Make a full flash backup first and keep it (<a href="book/manual/install.html#back-up-first">how</a>): it is the only way
-      back to exactly what you had. Strata never writes the boot area, the calibration and trim data, Bluetooth pairing
-      or the unit's own keys.</p>
-    <p class="mute">Chrome or Edge on a computer, the FM-1 on a USB data cable straight into it. Backups are made on your
-      computer (the source's <code>serve.py</code>, or the Flipper Zero route), not on this site.</p>
+  <nav class="site" aria-label="Site"><a href="index.html" aria-current="page">Install</a><a href="book/index.html">Guide &amp; manual</a><a href="info.html">Info</a><a href="https://github.com/u4ia-dev/strata">Source</a></nav>
+  <header>
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>Strata</h1></div>
+    <p class="sub">Installer for the M-VAVE FM-1 &middot; Chrome or Edge on a computer</p>
+    <dl class="facts">
+      <dt>Build</dt><dd id="f-version">&hellip;</dd>
+      <dt>Identity</dt><dd id="f-product">&hellip;</dd>
+      <dt>Package</dt><dd id="f-size">&hellip;</dd>
+      <dt>SHA-256</dt><dd id="f-sha">&hellip;</dd>
+    </dl>
+  </header>
+
+  <section class="card status" id="status-card" data-kind="">
+    <div id="status">Loading the package&hellip;</div>
+    <progress id="bar" max="100" value="0" hidden></progress>
+    <details><summary>Log</summary><pre id="log"></pre></details>
   </section>
-  <section class="warn">
-    <h2>Disclaimer</h2>
-    <p>Strata is independent, unofficial firmware: not affiliated with, endorsed by or supported by M-VAVE or the
-      owners of the FM-1, nor by Felucca's author or Hügelton Instruments. "M-VAVE" and "FM-1" are trademarks of their
-      respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments.</p>
-    <p>Strata is provided <b>as is, without any warranty</b> (GPL-3.0, sections 15 and 16). Installing firmware other
-      than the official one can leave the FM-1 unusable until it is recovered: you install it at your own risk. This is
-      a <b>pre-release</b>, being tested on the hardware now.</p>
-    <p>Strata was created entirely with Claude, an AI model made by Anthropic.</p>
+
+  <section class="card" id="s1">
+    <h2><span class="n">1 / 2</span>Before you start</h2>
+    <ul class="checks">
+      <li class="backup">
+        <p><b>Back up first (recommended).</b> A full copy of the FM-1's flash is the only way back to
+        exactly what you have now, Felucca's projects and samples included. Put the FM-1 in backup mode with the
+        button below, or hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s, then read the flash with a
+        backup tool on your computer: <a href="book/manual/install.html#back-up-first">how to back up</a>.</p>
+        <div hidden>
+        <p><b>A full flash backup (recommended).</b> All 1 MiB, read twice, the two copies identical, checked as an
+        FM-1's flash: the way back to exactly what you have now. The install no longer needs one; make one before your
+        first Strata and whenever your presets matter. Press <b>Back up now</b>, then put the FM-1 in backup mode the
+        Flipper Zero way.</p>
+        <details class="flipper"><summary>The Flipper Zero steps</summary>
+        <ol class="steps small">
+          <li>The Flipper unplugged from this computer: Apps &gt; Tools &gt; <b>FM1 Recovery</b>. The FM-1 switched
+            off, a USB-C data cable from the Flipper to the FM-1.</li>
+          <li><b>OK</b> on the Flipper, then switch the FM-1 on. At <i>Move FM1 cable to PC now</i>, move the cable to
+            this computer without switching the FM-1 off.</li>
+          <li>If Windows offers to format a disk: <b>Cancel</b>. This page reads it by itself, then lets it go.</li>
+        </ol></details>
+        <div class="row"><button id="bk-start" class="primary" disabled>Back up now</button>
+          <button id="bk-cancel" hidden>Stop</button></div>
+        <progress id="bk-bar" max="32" value="0" hidden></progress>
+        <p id="bk-status" class="small">Asking this page's server about backups&hellip;</p>
+        </div>
+        <div class="aside">
+          <p>Backup mode from here: this asks the firmware running now to restart into it (nothing is written). If the
+          computer doesn't see the FM-1 then, a Flipper Zero enters backup mode at power-on, whatever the firmware
+          does.</p>
+          <div class="row"><button id="uboot" disabled>Put the FM-1 in backup mode&hellip;</button></div>
+          <div class="confirm" id="uboot-confirm" hidden>
+            <p id="uboot-what">The FM-1 will stop its firmware and wait for jl-uboot-tool. Nothing is written.</p>
+            <div class="row"><button id="uboot-go" class="primary">Go to backup mode</button>
+              <button id="uboot-cancel">Cancel</button></div>
+          </div>
+        </div>
+      </li>
+      <li><label><input type="checkbox" class="pre" id="c-power">
+        <span>The battery is <b>charged</b>, and the FM-1 is plugged <b>straight into the computer</b> with a USB
+        data cable (no hub). I will not unplug it or touch its power switch while it writes.</span></label></li>
+      <li><label><input type="checkbox" class="pre" id="c-apps">
+        <span>Every other app that uses MIDI is closed (DAWs, M-UPGRADE, Felucca's editor).</span></label></li>
+      <li><label><input type="checkbox" class="pre" id="c-store">
+        <span>I know Strata keeps its presets where Felucca keeps projects and samples: saving a preset can overwrite
+        them. My backup has them.</span></label></li>
+    </ul>
   </section>
-  <section>
-    <h2>Good to know</h2>
-    <p>The SysEx message <code>F0 22 24 35 7D F7</code> on the FM-1's USB MIDI port (as on the official firmware)
-      restarts it into backup mode; any program that can send SysEx can send it. Switching the FM-1 off and on returns
-      to Strata. OCT− and OCT+ held 5 s do the same.</p>
-    <p>The USB serial console, the DEBUG menu (HOME held 5 s) and CORE 2 (off by default) are in every build.</p>
-    <p>Going back: M-VAVE's updater or the flasher's "Return to official V15" with M-VAVE's own file; Felucca's
-      installer; or your backup by the Flipper Zero route.</p>
+
+  <section class="card" id="s2">
+    <h2><span class="n">2 / 2</span>Install</h2>
+    <p>The FM-1's own update path, as Felucca's installer uses it: the firmware running now reads the package and
+    starts the update loader, the loader writes the app area only (<code>0x4000</code>&ndash;<code>0x92FFF</code>;
+    the boot head and your settings' sectors are never written), then the FM-1 restarts into Strata. About a
+    minute. Then switch the FM-1 off and on when the page asks: it says Done only when Strata answers again after
+    that restart.</p>
+    <div class="row"><button id="find" class="primary" disabled>Find the FM-1&hellip;</button></div>
+    <div class="confirm" id="confirm" hidden>
+      <p id="found"></p>
+      <p class="warn">Do not unplug the FM-1 or switch it off until this page says Done.</p>
+      <div class="row"><button id="write" class="primary">Write Strata</button><button id="cancel">Cancel</button></div>
+    </div>
   </section>
-  <section>
-    <h2>Licences</h2>
-    <p>Strata, Copyright (C) 2026 u4ia, is a modified version of <a href="https://github.com/hugelton/Felucca">Felucca</a>,
-      Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments: both GPL-3.0-only. The complete source,
-      with the Felucca-Engines submodule: <a href="https://github.com/u4ia-dev/strata">https://github.com/u4ia-dev/strata</a>. The package also holds three JieLi AC79 SDK files
-      (Apache-2.0). <a href="NOTICE.md">NOTICE.md</a>, <a href="LICENSING.md">LICENSING.md</a>,
-      <a href="LICENSE">LICENSE</a>, <a href="LICENSES/">LICENSES/</a>.</p>
+
+
+  <section class="card">
+    <h2>Going back</h2>
+    <ol class="steps">
+      <li><b>To Felucca:</b> its own installer, <a href="https://hugelton.github.io/Felucca/" target="_blank"
+        rel="noopener">hugelton.github.io/Felucca</a>. It finds Strata's FM-1: Strata keeps Felucca's update entry, and its USB
+        name has "FM-1" in it, which the installer looks for.</li>
+      <li><b>To the official V15:</b> pick M-VAVE's unmodified <code>FM-1.fwsc</code> (checked here by its SHA-256,
+        never uploaded), then write it with the same update path. M-VAVE's own updater works too.</li>
+      <li><b>To exactly what you had,</b> or when Strata does not answer: write your backup or the official V15 back by
+        the Flipper Zero route (<a href="book/manual/install.html#recovery">the manual</a>).</li>
+    </ol>
+    <label class="small">Official FM-1.fwsc (V15): <input id="stock-file" type="file" accept=".fwsc"></label>
+    <div class="row"><button id="stock-go" class="danger" disabled>Return to official V15&hellip;</button></div>
+    <div class="confirm" id="stock-confirm" hidden>
+      <p id="stock-what"></p>
+      <div class="row"><button id="stock-write" class="danger">Write V15</button><button id="stock-cancel">Cancel</button></div>
+    </div>
   </section>
+
+  <section class="card">
+    <h2>If something goes wrong</h2>
+    <ul class="checks small">
+      <li>A write stopped (cable, browser): replug and press <b>Find the FM-1</b> again. The FM-1 stays in update mode
+        and the page finishes the write.</li>
+      <li>Strata shows <b>STRATA CRASH</b>: take a photo. It restarts; a second crash within 30&nbsp;s puts it in backup
+        mode by itself, where your backup can be written back.</li>
+      <li>Backup mode by hand, while Strata runs: hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s (a
+        countdown shows from 2&nbsp;s). If the computer then reports a USB device it can't recognise, use a Flipper
+        Zero instead: it enters backup mode at power-on.</li>
+      <li>Strata does not answer any updater (it plays, but Find gets no answer): the Flipper Zero route
+        (<a href="book/manual/install.html#recovery">the manual</a>) or the FM-1 Transporter. Both enter backup mode at power-on, whatever the firmware
+        does.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span><b>Your saved data:</b> saving in Strata can overwrite Felucca's projects and samples (the same flash);
+    make a backup first and keep it.</span>
+    <span>Strata (a modified Felucca, Copyright (C) 2026 Leo Kuroshita, Hügelton
+    Instruments): GPL-3.0-only, <b>no warranty</b>; a pre-release, created entirely with Claude (an AI model made by Anthropic), installed at your
+    own risk. The package also holds
+    three JieLi AC79 SDK files (Apache-2.0). The source, its notices and every licence: <a href="README.md">README.md</a>,
+    <a href="NOTICE.md">NOTICE.md</a>, <a href="LICENSING.md">LICENSING.md</a>, <a href="LICENSES/">LICENSES/</a>
+    beside this page.</span>
+    <span>M-VAVE and FM-1 are trademarks of their respective owners. Strata is independent: not affiliated with,
+    endorsed by or supported by them, nor by Felucca's author or Hügelton Instruments.</span>
+  </footer>
 </main>
+<script type="module">
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+//
+// FM-1 .fwsc packages in the browser: the package identity and the image the
+// device reads during an update.
+
+const BLOCKS = 20, BLK = 0x30, KEEP = 0x2F;
+const STOCK_V15_SHA256 = "db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a";
+const STOCK_APP_SIZE = 0x8DFBC;
+const STOCK_V15_SIZE = 699956;
+
+const T = new Uint16Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i << 8;
+  for (let k = 0; k < 8; k++) c = c & 0x8000 ? (c << 1) ^ 0x1021 : c << 1;
+  T[i] = c & 0xFFFF;
+}
+
+function crc16(d, crc = 0) {
+  for (let i = 0; i < d.length; i++) crc = ((crc << 8) & 0xFFFF) ^ T[((crc >> 8) ^ d[i]) & 0xFF];
+  return crc;
+}
+
+function enc(buf, off, size, key = 0xFFFF) {
+  for (let i = 0; i < size; i++) {
+    buf[off + i] ^= key & 0xFF;
+    key = ((key * 2) ^ (key & 0x8000 ? 0x1021 : 0)) & 0xFFFF;
+  }
+}
+
+function sfc(buf, off, size, base, key) {
+  for (let i = 0; i < size; i += 32) enc(buf, off + i, Math.min(size - i, 32), key ^ ((off + i - base) >> 2));
+}
+
+function chipkeyDecode(d) {
+  let sum = 0;
+  for (let i = 0; i < 16; i++) sum += d[i];
+  sum &= 0xFF;
+  sum = sum >= 0xE0 ? 0xAA : sum <= 0x10 ? 0x55 : sum;
+  let k = 0;
+  for (let i = 0; i < 16; i++) if ((d[16 + i] ^ d[15 - i]) < sum) k |= 1 << i;
+  return k;
+}
+
+const align32 = (v) => (v + 31) & ~31;
+const u16 = (b, o) => b[o] | (b[o + 1] << 8);
+const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+function w16(b, o, v) { b[o] = v & 0xFF; b[o + 1] = (v >> 8) & 0xFF; }
+function w32(b, o, v) { w16(b, o, v & 0xFFFF); w16(b, o + 2, (v >>> 16) & 0xFFFF); }
+
+class Entry {                                   // JLFS head, 32 bytes
+  constructor(raw, off) {
+    this.hdrOff = off;
+    this.hcrc = u16(raw, off);
+    this.dcrc = u16(raw, off + 2);
+    this.offset = u32(raw, off + 4);
+    this.size = u32(raw, off + 8);
+    this.flags = raw[off + 12];
+    this.resvd = raw[off + 13];
+    this.index = u16(raw, off + 14);
+    this.rawName = raw.slice(off + 16, off + 32);
+    const z = this.rawName.indexOf(0);
+    this.name = String.fromCharCode(...this.rawName.slice(0, z < 0 ? 16 : z));
+    if (crc16(raw.subarray(off + 2, off + 32)) !== this.hcrc) throw new Error(`JLFS header CRC mismatch @${off.toString(16)}`);
+  }
+  packInto(buf) {
+    const o = this.hdrOff;
+    w16(buf, o + 2, this.dcrc); w32(buf, o + 4, this.offset); w32(buf, o + 8, this.size);
+    buf[o + 12] = this.flags; buf[o + 13] = this.resvd; w16(buf, o + 14, this.index);
+    buf.set(this.rawName, o + 16);
+    this.hcrc = crc16(buf.subarray(o + 2, o + 32));
+    w16(buf, o, this.hcrc);
+  }
+}
+
+class Package {
+  constructor(bytes) {
+    this.raw = new Uint8Array(bytes);
+    this.parseUfw();
+    this.flash = this.raw.slice(this.flashFileOff, this.flashFileOff + this.flashSize);
+    this.parseFlash();
+  }
+
+  get product() { return productOf(this.raw); }
+
+  setProduct(name) {
+    if (name.length > BLOCKS) throw new Error("product name too long");
+    for (let i = 0; i < BLOCKS; i++) {
+      const m = i < name.length ? (name.charCodeAt(i) + i + 1) & 0xFF : 0x7D;
+      if (i < name.length && m === 0x7D) throw new Error("product name encodes to the unused marker");
+      this.raw[i * BLK + KEEP] = m;
+    }
+  }
+
+  headerBytes() {
+    const h = new Uint8Array(BLOCKS * KEEP);
+    for (let i = 0; i < BLOCKS; i++) h.set(this.raw.subarray(i * BLK, i * BLK + KEEP), i * KEEP);
+    return h;
+  }
+
+  hdrFileOff(i) { return Math.floor(i / KEEP) * BLK + (i % KEEP); }
+
+  parseUfw() {
+    const h = this.headerBytes();
+    enc(h, 0, 0x40);
+    const hcrc = u16(h, 0), lcrc = u16(h, 2), nent = u16(h, 8);
+    if (crc16(h.subarray(2, 0x40)) !== hcrc) throw new Error("not an FM-1 .fwsc (UFW header CRC mismatch)");
+    this.skew = BLOCKS * BLK - h.length;
+    this.ufw = h;
+    this.nent = nent;
+    const hsize = 0x40 + nent * 0x50;
+    if (crc16(h.subarray(0x40, hsize)) !== lcrc) throw new Error("UFW entry list CRC mismatch");
+    this.entries = [];
+    for (let off = 0x40; off < hsize; off += 0x50) {
+      const e = h.slice(off, off + 0x50);
+      enc(e, 0, 0x50);
+      const z = e.subarray(0x40, 0x50).indexOf(0);
+      this.entries.push({ off, type: u16(e, 0), dcrc: u16(e, 4), dataOff: u32(e, 8), size: u32(e, 12),
+        name: String.fromCharCode(...e.subarray(0x40, z < 0 ? 0x50 : 0x40 + z)), plain: e });
+    }
+    const fl = this.entries.find((e) => e.type === 0);
+    if (!fl) throw new Error("no flash.bin in the package");
+    this.flashEntry = fl;
+    this.flashFileOff = fl.dataOff + this.skew;
+    this.flashSize = fl.size;
+    if (crc16(this.raw.subarray(this.flashFileOff, this.flashFileOff + fl.size)) !== fl.dcrc) throw new Error("flash.bin CRC mismatch");
+  }
+
+  parseFlash() {
+    const dec = this.flash.slice();
+    const h = dec.slice(0, 32);
+    enc(h, 0, 32);
+    if (crc16(h.subarray(2, 32)) !== u16(h, 0)) throw new Error("flash header CRC mismatch");
+    this.chipKey = null; this.appBase = null;
+    for (let off = 32; ; off += 32) {
+      enc(dec, off, 32);
+      const e = new Entry(dec, off);
+      if (e.name === "isd_config.ini") {
+        const blob = dec.subarray(e.offset, e.offset + 34);
+        if (crc16(blob.subarray(0, 32)) === u16(blob, 32)) this.chipKey = chipkeyDecode(blob.subarray(0, 32));
+      }
+      if (e.flags === 0x81 && e.name === "app_dir_head" && this.appBase === null) this.appBase = e.offset;
+      if (e.index) break;
+    }
+    if (this.chipKey === null || this.appBase === null) throw new Error("chip key or app_dir_head not found");
+    const b = this.appBase, k = this.chipKey, end = align32(b + 32);
+    sfc(dec, b, end - b, b, k);
+    const head = new Entry(dec, b);
+    const blkEnd = b + head.size;
+    if (blkEnd > end) sfc(dec, end, blkEnd - end, b, k);
+    this.sfcEnd = Math.max(end, blkEnd);
+    this.cfgLen = 0;
+    const probe = this.flash.slice(b, align32(blkEnd) + 32);
+    sfc(probe, 0, probe.length, 0, k);
+    try {
+      const cfg = new Entry(probe, blkEnd - b);
+      if (cfg.name === "cfg" && blkEnd + cfg.size <= this.flash.length) this.cfgLen = cfg.size;
+    } catch (_) { /* no cfg block */ }
+    if (this.cfgLen) {
+      const region = this.flash.slice(b, blkEnd + this.cfgLen);
+      sfc(region, 0, region.length, 0, k);
+      dec.set(region, b);
+      this.sfcEnd = blkEnd + this.cfgLen;
+    }
+    this.head = head;
+    this.app = null;
+    for (let off = b + 32; ; off += 32) {
+      const e = new Entry(dec, off);
+      if (e.flags === 0x82 && e.name === "app.bin") this.app = e;
+      if (e.index) break;
+    }
+    if (!this.app) throw new Error("app.bin not found in app area");
+    this.appOff = b + this.app.offset;
+    this.dec = dec;
+  }
+
+  // the new app, padded to the stock size (Felucca never changes the layout)
+  setApp(app) {
+    if (app.length > this.app.size) throw new Error(`app is ${app.length} B, the slot is ${this.app.size} B`);
+    const nw = new Uint8Array(this.app.size).fill(0xFF);
+    nw.set(app);
+    const a = this.app, h = this.head, b = this.appBase;
+    this.dec.set(nw, this.appOff);
+    a.dcrc = crc16(nw);
+    a.packInto(this.dec);
+    h.dcrc = crc16(this.dec.subarray(h.hdrOff + 32, h.hdrOff + h.size));
+    h.packInto(this.dec);
+    this.sfcEnd = Math.max(align32(b + 32), b + h.size + this.cfgLen);
+    const region = this.dec.slice(b, this.sfcEnd);
+    sfc(region, 0, region.length, 0, this.chipKey);
+    this.flash.set(region, b);
+  }
+
+  serialize() {
+    const out = this.raw.slice();
+    out.set(this.flash, this.flashFileOff);
+    const fl = this.flashEntry, e = fl.plain.slice();
+    w16(e, 4, crc16(this.flash));
+    enc(e, 0, 0x50);
+    const h = this.ufw.slice();
+    h.set(e, fl.off);
+    const hsize = 0x40 + this.nent * 0x50;
+    w16(h, 2, crc16(h.subarray(0x40, hsize)));
+    w16(h, 0, crc16(h.subarray(2, 0x40)));
+    enc(h, 0, 0x40);
+    for (let i = 0; i < hsize; i++) out[this.hdrFileOff(i)] = h[i];
+    return out;
+  }
+}
+
+// the package identity ("FM-1_904"): one marker byte after each of the first 20 blocks
+function productOf(fwsc) {
+  if (fwsc.length < BLOCKS * BLK) throw new Error("not an FM-1 package (too short)");
+  let s = "";
+  for (let i = 0; i < BLOCKS; i++) {
+    const m = fwsc[i * BLK + KEEP];
+    if (m !== 0x7D) s += String.fromCharCode((m - i - 1) & 0xFF);
+  }
+  return s;
+}
+
+// the image the device addresses during an update: the .fwsc without the 20 marker bytes
+function logicalImage(fwsc) {
+  const out = new Uint8Array(fwsc.length - BLOCKS);
+  for (let i = 0; i < BLOCKS; i++) out.set(fwsc.subarray(i * BLK, i * BLK + KEEP), i * KEEP);
+  out.set(fwsc.subarray(BLOCKS * BLK), BLOCKS * KEEP);
+  return out;
+}
+
+async function sha256hex(bytes) {
+  const d = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+// Only the user's unmodified official V15 is accepted for a return to stock.
+// The digest pins every file, loader and flash layout; filenames are not evidence.
+async function validateStockPackage(bytes) {
+  if (bytes.length !== STOCK_V15_SIZE || await sha256hex(bytes) !== STOCK_V15_SHA256)
+    throw new Error("Select the unmodified official FM-1 V15 file (FM-1.fwsc).");
+  const pkg = new Package(bytes);
+  if (pkg.product !== "FM-1_015" || pkg.flashFileOff !== 1044 || pkg.flashSize !== 602112 ||
+      pkg.appBase !== 16384 || pkg.appOff !== 16672 || pkg.app.size !== STOCK_APP_SIZE ||
+      !pkg.entries.some((e) => e.type === 100 && e.name === "ota.bin" && e.size === 19969))
+    throw new Error("The official firmware has an unsupported FM-1 layout.");
+  return { product: pkg.product, image: logicalImage(bytes), sha256: STOCK_V15_SHA256 };
+}
+
+// official V15 + Felucca app -> installable package (Uint8Array)
+async function buildFeluccaPackage(stockBytes, appBytes, product) {
+  const sha = await sha256hex(stockBytes);
+  if (sha !== STOCK_V15_SHA256) throw new Error("this is not the official FM-1 V15 firmware file (FM-1.fwsc)");
+  const pkg = new Package(stockBytes);
+  pkg.setApp(appBytes);
+  pkg.setProduct(product);
+  return pkg.serialize();
+}
+
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+//
+// The FM-1 USB-MIDI update protocol over WebMIDI (after tools/fm1_install.py).
+// Step 1: the running firmware (official
+// or Felucca) reads parts of the package and stages the update loader. Step 2:
+// the loader reads the whole image and writes it. Both steps are "the device
+// asks, we answer": cmd 0x30 read requests on the logical image.
+
+const HS_QUERY = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7];
+const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
+const MAXDATA = 512;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const IS_OTA = (id) => /^ota-/i.test(id.model);
+
+// errors carry a code the pages translate: notfound, model, stopped, noloader, lost, noreturn,
+// mismatch (detail: the identity the device reports), badreq
+function fail(code, msg, detail = "") { const e = new Error(msg); e.code = code; e.detail = detail; return e; }
+
+function pack7(data) {
+  const out = []; let acc = 0, nb = 0;
+  for (const b of data) {
+    acc |= b << nb; nb += 8;
+    while (nb >= 7) { out.push(acc & 0x7F); acc >>>= 7; nb -= 7; }
+  }
+  if (nb) out.push(acc & 0x7F);
+  return out;
+}
+
+function unpack7(s) {
+  const out = []; let acc = 0, nb = 0;
+  for (const b of s) {
+    acc |= (b & 0x7F) << nb; nb += 7;
+    while (nb >= 8) { out.push(acc & 0xFF); acc >>>= 8; nb -= 8; }
+  }
+  return out;
+}
+
+function response(addr, data, fl = 0) {
+  const len = data.length;
+  const body = [0x00, 0x59, 0x30, (len + 8) & 0xFF, ((len + 8) >> 8) & 0xFF, 0, fl,
+    addr & 0xFF, (addr >>> 8) & 0xFF, (addr >>> 16) & 0xFF, (addr >>> 24) & 0xFF,
+    len & 0xFF, (len >> 8) & 0xFF, 0, ...data];
+  let s = 0;
+  for (let i = 6; i < body.length; i++) s += body[i];
+  body.push(~s & 0xFF);
+  return [0xF0, ...pack7(body), 0xF7];
+}
+
+function parseRequest(pkt) {
+  if (pkt[0] !== 0xF0 || pkt[pkt.length - 1] !== 0xF7) return null;
+  const u = unpack7(pkt.slice(1, -1));
+  if (u.length !== 15 || u[0] !== 0 || u[1] !== 0x59 || u[2] !== 0x30) return null;
+  let s = 0;
+  for (let i = 6; i < 14; i++) s += u[i];
+  if ((~s & 0xFF) !== u[14]) return null;
+  return { fl: u[6], addr: (u[7] | (u[8] << 8) | (u[9] << 16) | (u[10] << 24)) >>> 0, len: u[11] | (u[12] << 8) | (u[13] << 16) };
+}
+
+function parseIdentity(pkt) {
+  const d = unpack7(pkt.slice(1, -1));
+  if (d.length !== 34 || d[0] !== 0 || d[1] !== 0x59 || d[2] !== 0x11) return null;
+  const txt = String.fromCharCode(...d.slice(6, 33)).replace(/\0+$/, "");
+  const m = /^([^_]+)_(\d+)$/.exec(txt);
+  return m ? { text: txt, model: m[1], version: parseInt(m[2], 10) } : null;
+}
+
+// one MIDI in/out pair with a SysEx queue
+class Link {
+  constructor(input, output) {
+    this.input = input; this.output = output; this.q = []; this.waiter = null;
+    input.onmidimessage = (ev) => {
+      if (ev.data[0] !== 0xF0) return;
+      this.q.push(Array.from(ev.data));
+      if (this.waiter) { const w = this.waiter; this.waiter = null; w(); }
+    };
+  }
+  get lost() { return this.input.state === "disconnected" || this.output.state === "disconnected"; }
+  // false when the port is gone (unplugged): WebMIDI throws on a disconnected output
+  send(bytes) {
+    try { this.output.send(bytes); return true; } catch (_) { return false; }
+  }
+  drain() { this.q.length = 0; }
+  async read(ms) {
+    if (!this.q.length) {
+      let tm;
+      await Promise.race([new Promise((r) => { this.waiter = r; }), new Promise((r) => { tm = setTimeout(r, ms); })]);
+      clearTimeout(tm);
+      this.waiter = null;
+    }
+    return this.q.shift() || null;
+  }
+  close() { this.input.onmidimessage = null; }
+}
+
+async function handshake(link, tries = 3) {
+  link.drain();
+  for (let t = 0; t < tries; t++) {
+    if (!link.send(HS_QUERY)) return null;
+    const end = Date.now() + 1000;
+    while (Date.now() < end) {
+      const p = await link.read(end - Date.now());
+      if (!p) break;
+      const id = parseIdentity(p);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+class Updater {
+  constructor(access, log) {
+    this.access = access;
+    this.log = log || (() => {});
+  }
+
+  // every in/out pair with the same port name that answers the handshake
+  async find(filter) {
+    const outs = [...this.access.outputs.values()];
+    for (const input of this.access.inputs.values()) {
+      if (input.state === "disconnected") continue;
+      if (!/fm-1|felucca|ota|composite|sinco|usb-midi/i.test(input.name || "")) continue;   // never probe other gear
+      const output = outs.find((o) => o.name === input.name && o.state !== "disconnected");
+      if (!output) continue;
+      try { await input.open(); await output.open(); } catch (_) { continue; }
+      const link = new Link(input, output);
+      const id = await handshake(link, 2);
+      if (id && (!filter || filter(id))) return { link, id, name: input.name };
+      link.close();
+    }
+    return null;
+  }
+
+  async waitFor(filter, ms) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const dev = await this.find(filter);
+      if (dev) return dev;
+      await sleep(1000);
+    }
+    return null;
+  }
+
+  // serve read requests until the device asks for one of the finish addresses; stops early
+  // when the port disappears (lost: true) instead of waiting out idleMs
+  async serve(link, image, finishAddr, idleMs, onProgress) {
+    let served = 0, last = Date.now();
+    for (;;) {
+      const pkt = await link.read(1000);
+      if (!pkt) {
+        if (link.lost) return { served, finished: false, lost: true };
+        if (Date.now() - last > idleMs) return { served, finished: false };
+        continue;
+      }
+      const r = parseRequest(pkt);
+      if (!r) continue;
+      last = Date.now();
+      if (r.addr === 0xE0000000 || r.addr === 0xF0000000) {
+        link.send(response(r.addr, [...new TextEncoder().encode("success"), 0]));
+        if (r.addr === finishAddr) return { served, finished: true };
+        continue;
+      }
+      if (r.len > MAXDATA || r.addr + r.len > image.length) throw fail("badreq", `bad request ${r.addr.toString(16)}+${r.len}`);
+      await sleep(10);
+      if (!link.send(response(r.addr, Array.from(image.subarray(r.addr, r.addr + r.len)), r.fl))) {
+        return { served, finished: false, lost: true };
+      }
+      served++;
+      if (onProgress) onProgress(served, r.addr);
+    }
+  }
+
+  // full install: running firmware -> loader -> new firmware
+  async install(image, product, onStep) {
+    const step = onStep || (() => {});
+    const dev = await this.find((id) => !IS_OTA(id));
+    if (!dev) throw fail("notfound", "FM-1 not found (USB cable, and no other app using it?)");
+    const [model] = product.split("_");
+    if (dev.id.model !== model) { dev.link.close(); throw fail("model", `the device is ${dev.id.text}, the package is for ${product}`); }
+    step("start", dev.id.text);
+    dev.link.send(UPGRADE);
+    await sleep(2000);
+    const s1 = await this.serve(dev.link, image, 0xE0000000, 8000, (n) => step("verify", n));
+    dev.link.close();
+    if (!s1.finished) throw fail(s1.lost ? "lost" : "stopped", `the device ${s1.lost ? "was disconnected" : "stopped"} after ${s1.served} requests: nothing was written`);
+    step("loader");
+    await sleep(3000);
+    const ota = await this.waitFor((id) => id.model === "ota-" + model, 30000);
+    if (!ota) throw fail("noloader", "the update loader did not appear. Replug the USB cable and press Install again: the device stays in update mode until it is finished.");
+    const s2 = await this.write(ota, image, step);
+    if (!s2.finished) throw fail(s2.lost ? "lost" : "stopped", `the loader ${s2.lost ? "was disconnected" : "stopped"} after ${s2.served} requests. Replug and press Install again to resume.`);
+    step("reboot");
+    await sleep(3000);
+    const back = await this.waitFor((id) => !IS_OTA(id), 40000);
+    if (!back) throw fail("noreturn", "the device did not come back: power-cycle it");
+    back.link.close();
+    if (back.id.text !== product) throw fail("mismatch", `installed, but the device reports ${back.id.text}`, back.id.text);
+    step("done", back.id.text);
+    return back.id.text;
+  }
+
+  // step 2 with the loader found by find()/waitFor()
+  async write(ota, image, step) {
+    ota.link.send(UPGRADE);
+    await sleep(2000);
+    const s2 = await this.serve(ota.link, image, 0xF0000000, 180000, (n) => step("write", n));
+    ota.link.close();
+    return s2;
+  }
+
+  // resume: the device is already in update mode (loader) -> true when the write finished
+  async resume(image, onStep, product = null) {
+    const model = product && product.split("_")[0];
+    const ota = await this.find((id) => model ? id.model === "ota-" + model : IS_OTA(id));
+    if (!ota) return false;
+    const step = onStep || (() => {});
+    const result = await this.write(ota, image, step);
+    if (!result.finished) return false;
+    if (product) {
+      step("reboot");
+      await sleep(3000);
+      const back = await this.waitFor((id) => id.model === model, 40000);
+      if (!back) throw fail("noreturn", "The FM-1 did not return after resuming the write.");
+      back.link.close();
+      if (back.id.text !== product) throw fail("mismatch", "The FM-1 reports a different firmware after resuming.", back.id.text);
+      step("done", back.id.text);
+    }
+    return true;
+  }
+}
+
+const meta = {"version": "V0.87 UI", "product": "FM-1_900", "pkg": "strata.fwsc", "size": 610073, "sha256": "d61322a66e2a5a380f555487bddff064f0cc046a137c04d00f7b6f4108e493b1"};
+const $ = (id) => document.getElementById(id);   // (sleep: fm1ota.js's)
+const SOFT_KEY = [0xF0, 0x22, 0x24, 0x35, 0x7D, 0xF7];   // the FM-1's UBOOT soft key (stock, Felucca, Strata)
+const WHY = {
+  nomidi: "This browser cannot reach the FM-1 by Web MIDI. Use Chrome or Edge on a computer.",
+  denied: "MIDI (with SysEx) was not allowed. Allow MIDI for this site (the address bar's site settings) and try again.",
+  notfound: "No FM-1 answered. Check the cable (a data cable, straight into the computer), close other MIDI apps, and try again.",
+  inbackup: "No FM-1 answered: after the backup it is still in backup mode (a USB disk, no MIDI). Switch it off, then " +
+    "on, wait for its screen, and press Find the FM-1 again.",
+  model: "The device that answered is not an FM-1",
+  stopped: "The FM-1 stopped answering. Replug the cable and press Find the FM-1: it stays in update mode until a write is finished.",
+  lost: "The USB connection was lost. Replug the cable and press Find the FM-1 to finish.",
+  noloader: "The FM-1 in update mode did not appear. Replug the cable and press Find the FM-1: it stays in update mode until finished.",
+  noreturn: "The FM-1 did not come back after the write. Switch it off and on.",
+  norestart: "Strata did not answer after the restart: the FM-1 takes in USB but sends nothing back, so no updater can " +
+    "reach it now. Do not keep it: put the official V15 or your backup back by the Flipper Zero route (the manual's " +
+    "Recovery), and keep the log.",
+  mismatch: "Written, but the FM-1 reports another firmware",
+  badreq: "The FM-1 asked for something outside the package: stopped, nothing more sent. Press Find the FM-1 again.",
+  badpkg: "The package beside this page is not the one it was made for (size, SHA-256 or identity). Run make_flasher.py again.",
+};
+let image = null, midi = null, writing = false, pending = null, stock = null, stockPending = null, report = "";
+let ubootAsked = false;                                  // (backup mode: its confirmation shown first)
+const TOKEN = "__STRATA_TOKEN__";                        // (serve.py puts this run's token here)
+let bk = null, backupOk = false;                         // serve.py's backup report; a backup from the last 12 h (V0.87:
+                                                         // recommended, no longer required)
+let justBackedUp = false;                                // one made from this page, no FM-1 on MIDI since
+
+const log = (t) => { $("log").textContent += t + "\n"; };
+function say(text, kind = "") { $("status").textContent = text; $("status-card").dataset.kind = kind; }
+function showErr(e) {
+  const code = e && e.code;
+  say(code && WHY[code] ? WHY[code] + (e.detail ? ` (${e.detail})` : "") : "Error: " + (e && e.message || e), "err");
+  log(String(e && e.stack || e));
+}
+function codeErr(code, detail = "") {
+  if (code === "notfound" && justBackedUp) code = "inbackup";   // (a backup made from this page: the FM-1 not switched off yet)
+  const e = new Error(WHY[code] || code); e.code = code; e.detail = detail; return e;
+}
+function describe(id) {
+  if (/^ota-/i.test(id.model)) return "in update mode (an earlier write did not finish)";
+  if (id.version === 15 || id.version < 900) return "the official firmware";
+  return id.text === meta.product ? "Felucca, Strata or another firmware of this family (development identity)"
+                                  : "Felucca or another firmware of its family";
+}
+function gate() {
+  document.body.toggleAttribute("data-busy", writing);   // (the site's background animation pauses while it writes)
+  const backingUp = !!bk && (bk.state === "waiting" || bk.state === "reading");
+  const ready = !!image && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
+  $("find").disabled = !ready || writing || !$("confirm").hidden;
+  $("uboot").disabled = writing || !navigator.requestMIDIAccess;
+  $("stock-go").disabled = !stock || writing || backingUp || !$("c-power").checked;
+  $("bk-start").disabled = !bk || !!bk.why_not || backingUp || writing;
+  $("bk-cancel").hidden = !backingUp;
+    $("stock-file").disabled = writing;
+  const next = !ready ? "s1" : !writing && !$("confirm").hidden ? "s2" : "s2";
+  for (const id of ["s1", "s2", "s3"]) $(id)?.classList.toggle("next", id === next);   // (the next step's; s3 internal)
+}
+document.querySelectorAll(".pre").forEach((c) => c.addEventListener("change", gate));
+window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = ""; } });
+
+// step 1's backup, made by serve.py (it reads the backup-mode disk with flipper-fm1-recovery's pc_backup.py): its
+// state polled once a second; shown with the last backup's date (V0.87: the install no longer waits for one)
+function ageText(h) { return h < 1 / 60 ? "just now" : h < 1 ? `${Math.round(h * 60)} min ago` : `${h.toFixed(1)} h ago`; }
+function showBackup() {
+  const st = $("bk-status"), bar = $("bk-bar"), r = bk, L = r && r.latest;
+  backupOk = !!(L && L.ok);
+  st.dataset.ok = backupOk ? "1" : "";
+  bar.hidden = !(r && r.state === "reading");
+  if (r) bar.value = r.progress || 0;
+  if (!r) { st.textContent = location.hostname.endsWith("github.io")   // (the site: no local server, no backup step)
+    ? "Backups are made on your computer, not on this site: use a backup tool (the manual: Back up first), or keep the one you made with the Flipper Zero."
+    : "This page's server cannot make backups: use a backup tool (the manual: Back up first)."; return; }
+  if (r.why_not) { st.textContent = `Backups are off: ${r.why_not}.`; return; }
+  const failed = r.failed && r.failed.length ? ` Windows could not read a USB device (${r.failed.length}×): if that was ` +
+    "the FM-1, switch it off and do the Flipper steps again." : "";
+  const job = {
+    waiting: "Waiting for the FM-1 in backup mode (the Flipper steps above)…" + failed,
+    reading: `Reading the flash, twice (${r.progress || 0} of 32)… Leave the FM-1 connected and on.`,
+    failed: `The backup did not finish: ${r.message}. Nothing was written.`,
+    cancelled: `Stopped: ${r.message}.`,
+  }[r.state] || "";
+  const when = L && L.made ? ` on ${new Date(L.made * 1000).toLocaleString()}` : "";
+  const have = !L ? "No backup yet (recommended, not required)." : L.ok
+    ? `Backup ready (${ageText(L.age_h)}${when}): ${L.dir}, SHA-256 ${L.sha256.slice(0, 16)}…` +
+      (r.state === "verified" ? " The FM-1 is still in backup mode: switch it off and on, then install." : "")
+    : !L.files_ok ? `The last backup (${L.dir}) no longer checks out: making a new one is recommended.`
+    : `The last backup is ${ageText(L.age_h)}${when}: making a new one is recommended.`;
+  st.textContent = [job, have].filter(Boolean).join(" ");
+}
+async function backupPoll() {
+  const was = bk && bk.state;
+  try { const r = await fetch("api/backup", { cache: "no-store" }); bk = r.ok ? await r.json() : null; }
+  catch (_) { bk = null; }
+  if ((was === "waiting" || was === "reading") && bk && bk.state === "verified") {
+    justBackedUp = true;
+    if (!writing) say("Backup made and checked. The FM-1 is still in backup mode: switch it off, then on, then Find the FM-1.", "warn");
+  }
+  showBackup();
+  gate();
+}
+async function backupPost(what) {
+  try {
+    const r = await fetch(`api/backup/${what}`, { method: "POST", headers: { "X-Strata-Token": TOKEN } });
+    if (!r.ok) throw new Error(`the server refused (HTTP ${r.status})`);
+    log(`backup ${what}`);
+  } catch (e) { $("bk-status").textContent = `Could not ${what === "start" ? "start" : "stop"} the backup: ${e.message}.`; return; }
+  await backupPoll();
+}
+$("bk-start").addEventListener("click", () => backupPost("start"));
+$("bk-cancel").addEventListener("click", () => backupPost("cancel"));
+backupPoll();
+setInterval(backupPoll, 1000);
+
+async function getMidi() {
+  if (!navigator.requestMIDIAccess) throw codeErr("nomidi");
+  if (!midi) {
+    try { midi = await navigator.requestMIDIAccess({ sysex: true }); } catch (_) { throw codeErr("denied"); }
+  }
+  return midi;
+}
+
+// the package: as make_flasher.py described it, else nothing is offered
+(async () => {
+  $("f-version").textContent = meta.version;
+  $("f-product").textContent = meta.product;
+  $("f-size").textContent = `${meta.pkg} · ${meta.size.toLocaleString("en")} bytes`;
+  $("f-sha").textContent = meta.sha256;
+  if (!window.isSecureContext || !navigator.requestMIDIAccess) { say(WHY.nomidi, "err"); gate(); return; }
+  try {
+    const r = await fetch(meta.pkg, { cache: "no-store" });
+    if (!r.ok) throw new Error(`${meta.pkg}: HTTP ${r.status}`);
+    const pkg = new Uint8Array(await r.arrayBuffer());
+    if (pkg.length !== meta.size || await sha256hex(pkg) !== meta.sha256 || productOf(pkg) !== meta.product) {
+      say(WHY.badpkg, "err");
+      return;
+    }
+    image = logicalImage(pkg);
+    say("Package checked. Tick the three boxes to install (a backup first is recommended, step 1).", "");
+  } catch (e) { showErr(e); }
+  gate();
+})();
+
+// the steps fm1ota.js reports, on the bar: step 1's reads (~74), then the loader's (~1167)
+function stepper() {
+  $("bar").hidden = false;
+  $("bar").value = 0;
+  const total = 74 + 1167;
+  return (k, a) => {
+    log(`${k} ${a ?? ""}`);
+    if (k === "start") say(`Starting: the FM-1 reports ${a}`, "busy");
+    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); $("bar").value = (a / total) * 100; }
+    if (k === "loader") say("Restarting into the update loader…", "busy");
+    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); $("bar").value = ((74 + a) / total) * 100; }
+    if (k === "reboot") say("Restarting the FM-1…", "busy");
+    if (k === "done") $("bar").value = 100;
+  };
+}
+
+// the last check: Strata answers after a real restart. Its first start comes straight from the update loader (a core
+// reset: the USB controller keeps the loader's settings), every later one from a chip reset, and on 2026-10-16 only
+// the first could send (docs/FLASHING.md §9). So Done waits for the FM-1 to leave USB, come back, and answer.
+const FM1_PORT = /fm-1|felucca|ota|composite|sinco|usb-midi/i;   // (fm1ota.js find's)
+const fm1Ports = () => [...midi.inputs.values()].filter((p) => p.state !== "disconnected" && FM1_PORT.test(p.name || "")).length;
+async function restartCheck(product) {
+  say("Written, and Strata answered from its first start. Last check: switch the FM-1 off, then on again.", "warn");
+  while (fm1Ports()) await sleep(250);
+  log("restart check: the FM-1 left USB");
+  say("The FM-1 is off. Switch it on again.", "warn");
+  while (!fm1Ports()) await sleep(250);
+  log("restart check: the FM-1 is back on USB");
+  say("Checking Strata after the restart…", "busy");
+  const dev = await new Updater(midi, log).waitFor((id) => !IS_OTA(id), 15000);
+  if (dev) dev.link.close();
+  log(`restart check: ${dev ? dev.id.text + " answered" : "no answer"}`);
+  if (!dev || dev.id.text !== product) throw codeErr("norestart", dev ? dev.id.text : "");
+}
+
+// Find: what answers, shown before anything is written
+$("find").addEventListener("click", async () => {
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    say("Looking for the FM-1…", "busy");
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
+    dev.link.close();
+    const loader = /^ota-/i.test(dev.id.model);
+    if ((loader ? dev.id.model.slice(4) : dev.id.model) !== "FM-1") throw codeErr("model", dev.id.text);
+    pending = { loader };
+    stockPending = null;
+    $("stock-confirm").hidden = true;
+    $("found").textContent = loader
+      ? `The FM-1 on “${dev.name}” is in update mode (${dev.id.text}): an earlier write did not finish. Finish it with Strata (${meta.product})?`
+      : `Found ${dev.id.text} on “${dev.name}”: ${describe(dev.id)}. Write Strata (${meta.version}, ${meta.product}) over it?`;
+    $("confirm").hidden = false;
+    say("Found the FM-1. Confirm to write.", "warn");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+$("cancel").addEventListener("click", () => { $("confirm").hidden = true; pending = null; say("Cancelled: nothing was written.", ""); gate(); });
+
+$("write").addEventListener("click", async () => {
+  if (!pending) return;
+  const job = pending;
+  pending = null;
+  $("confirm").hidden = true;
+  writing = true; gate();
+  try {
+    log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
+    const up = new Updater(await getMidi(), log), step = stepper();
+    if (job.loader) {
+      if (!await up.resume(image, step, meta.product)) throw codeErr("stopped");
+    } else {
+      await up.install(image, meta.product, step);
+    }
+    await restartCheck(meta.product);
+    say(`Done: Strata answers after a restart (${meta.product}).`, "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+// backup mode: the soft key to whatever answers (nothing is written)
+$("uboot").addEventListener("click", () => { ubootAsked = true; $("uboot-confirm").hidden = false; });
+$("uboot-cancel").addEventListener("click", () => { ubootAsked = false; $("uboot-confirm").hidden = true; });
+$("uboot-go").addEventListener("click", async () => {
+  if (!ubootAsked) return;
+  ubootAsked = false;
+  $("uboot-confirm").hidden = true;
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
+    dev.link.send(SOFT_KEY);
+    await sleep(200);
+    dev.link.close();
+    log(`soft key sent to ${dev.id.text} (${dev.name})`);
+    say(`Sent to ${dev.id.text}: the FM-1 should now be the USB disk “WL82 UBOOT1.00” (Cancel any format offer). ` +
+        "Make the backup, then switch it off and on.", "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+// the official V15, checked here, then the same update path
+$("stock-file").addEventListener("change", async () => {
+  stock = null; gate();
+  const file = $("stock-file").files[0];
+  if (!file) return;
+  try {
+    if (file.size !== STOCK_V15_SIZE) throw new Error("this is not M-VAVE's FM-1.fwsc V15 (its size)");
+    stock = await validateStockPackage(new Uint8Array(await file.arrayBuffer()));
+    say("Official V15 checked (SHA-256). Make the backup and tick the power box above to use it.", "");
+  } catch (e) { say("Cannot use this file: " + e.message, "err"); }
+  gate();
+});
+$("stock-go").addEventListener("click", async () => {
+  writing = true; gate();
+  try {
+    const up = new Updater(await getMidi(), log);
+    const dev = await up.find();
+    if (!dev) throw codeErr("notfound");
+    justBackedUp = false;
+    dev.link.close();
+    stockPending = { loader: /^ota-/i.test(dev.id.model) };
+    pending = null;
+    $("confirm").hidden = true;
+    $("stock-what").textContent = `Write the official V15 (FM-1_015) over ${dev.id.text}? Strata's presets stay in the ` +
+      "flash but V15 does not read them; your backup has everything.";
+    $("stock-confirm").hidden = false;
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+$("stock-cancel").addEventListener("click", () => { $("stock-confirm").hidden = true; stockPending = null; gate(); });
+$("stock-write").addEventListener("click", async () => {
+  if (!stockPending || !stock) return;
+  const job = stockPending;
+  stockPending = null;
+  $("stock-confirm").hidden = true;
+  writing = true; gate();
+  try {
+    log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
+    const up = new Updater(await getMidi(), log), step = stepper();
+    if (job.loader) {
+      if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");
+    } else {
+      await up.install(stock.image, stock.product, step);
+    }
+    say("Done: the FM-1 runs the official V15.", "ok");
+  } catch (e) { showErr(e); }
+  writing = false; gate();
+});
+
+gate();
+</script>
 </body>
 </html>

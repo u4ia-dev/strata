@@ -1,6 +1,6 @@
 # Strata: notices
 
-Strata, firmware for the M-VAVE FM-1. Copyright (C) 2026 u4ia. Strata is free software under the GNU General Public
+Strata, firmware for the M-VAVE FM-1, is free software under the GNU General Public
 License, version 3 only (`GPL-3.0-only`, full text in [LICENSE](LICENSE)). It is a modified version of **Felucca**,
 Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, also `GPL-3.0-only`:
 <https://github.com/hugelton/Felucca>. Strata forked from Felucca 1.6.1 (commit `a53ecf428c29c780108fd70a31b71a32a6b5c313`, 2026-10-15) and keeps
@@ -10,8 +10,7 @@ Felucca's history, its copyright notices and its licences.
 
 Strata is independent, unofficial firmware. It is not affiliated with, endorsed by or supported by M-VAVE or the
 owners of the FM-1, nor by Felucca's author or Hügelton Instruments. "M-VAVE" and "FM-1" are trademarks of their
-respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments. They are used here only to
-say what Strata runs on and where it comes from.
+respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments.
 
 Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
 16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until
@@ -21,8 +20,8 @@ being tested on the hardware now. Strata was created entirely with Claude, an AI
 ## What Strata changed (GPL-3.0, section 5(a))
 
 Strata's own files (the STRATA engine and UI `firmware/src/sy_*.c`, `firmware/src/strata.c`, its tests `tests/sy_*`,
-the browser emulator's Strata build, the Strata flasher `web/strata_flash/`, its tools and docs) carry
-`Copyright (C) 2026 u4ia`. These files of Felucca were modified for Strata from 2026-10-14 on (each code file says so
+the browser emulator's Strata build, the Strata flasher `web/strata_flash/`, its tools and docs) are licensed
+`GPL-3.0-only`. These files of Felucca were modified for Strata from 2026-10-14 on (each code file says so
 in its header):
 
 - `CREDITS.md`
@@ -58,7 +57,7 @@ in its header):
 
 | Part | Licence | Notes |
 |---|---|---|
-| Strata (`sy_*.c`, `strata.c`) | GPL-3.0-only | Copyright (C) 2026 u4ia |
+| Strata (`sy_*.c`, `strata.c`) | GPL-3.0-only | Strata's own code, created with Claude |
 | Felucca's platform code compiled into Strata (the HAL `firmware/hal/`, `libc.c`, `lcd.c`, `gfx.c`, `panel.c`, `usb.c`, `midi_uart.c`, `ota.c`, the update loader `firmware/loader/`) | GPL-3.0-only | Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments; modified as listed above |
 | Space Mono, rasterised into the UI's text at build time (`tools/gen_aa_font.py`) | SIL OFL 1.1 | Copyright 2016 The Space Mono Project Authors; [LICENSES/OFL-SpaceMono.txt](LICENSES/OFL-SpaceMono.txt). The generated tables are not offered as a font |
 | JieLi AC79 SDK files in every `.fwsc` package (`uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin`, unmodified, read from the builder's SDK) | Apache-2.0 | Copyright JieLi Technology; [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt); no NOTICE file. Not in this tree |
