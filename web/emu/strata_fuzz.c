@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The firmware (web/emu/strata_web.c, natively) driven at random under the sanitizers, its invariants checked after
  * each step: the panel's buttons (taps, holds, chords with OCT), the keys, the knobs, MIDI in (notes on every channel,
  * controllers, clock, start and stop), the looper's own (launches, scenes, REC, UNDO PASS, notes and moves put in,

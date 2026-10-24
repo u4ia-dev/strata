@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The Strata DSP for the target listing (tools/costprobe/sy_cost.sh): the firmware's sy_* sources compiled as one
  * unit by the JieLi clang, each kernel reached from an exported function so the compiler keeps its loop as the
  * firmware will have it. Not linked: only counted. */

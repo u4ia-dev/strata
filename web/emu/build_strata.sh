@@ -1,6 +1,5 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # STRATA on the simulated FM-1 in the browser: the app (web/emu/strata_web.c) compiled to WebAssembly with Emscripten,
 # played by Felucca's page and worklet (web/emu/index.html, worklet.js), the page's name and its storage keys made
 # Strata's (so it keeps nothing of a Felucca emulator's on the same site).

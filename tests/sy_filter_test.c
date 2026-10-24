@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The voice filter alone (src/sy_filter.c: flt_block):
  *   build/host/sy_filter_test
  * 1. responses (sines at -20 dBFS, the gain after 0.2 s): LP12 / HP12 flat far from the cutoff and -3 dB at it

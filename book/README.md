@@ -1,11 +1,9 @@
 # Strata for FM-1
 
-**Strata** is firmware that makes the **M-VAVE FM-1** a complete pocket instrument rather than a toy. It is designed
-around three ideas: a wavetable synth voice deep enough to design sounds from scratch; an 8-track looper and a drum
-machine, so whole songs can be made without a computer; and a panel that stays quick to play. Most pages put their
-four values on the four knobs, every button follows one rule (once, twice, held, with OCT+ or OCT−), and the screens
-are drawn to be read at a glance. Strata is free software (GPL-3.0-only), built on
-[Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments).
+**Strata** turns the **M-VAVE FM-1** into a complete pocket instrument: a deep wavetable synth, an 8-track looper
+and a drum machine. The knobs control what's on the screen, every button works the same way, and the screens are easy
+to read. It's free software, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
+Instruments).
 
 ![HOME](images/Home-2x.png)
 
@@ -25,7 +23,7 @@ It matches Strata V0.87. Buttons look like <kbd>EDIT</kbd>; the knobs under the 
 
 ## Install
 
-Open the site's **[Install](../flash/)** page in Chrome or Edge on a computer, with the FM-1 on a USB data cable.
+Open the site's **[Install](../index.html)** page in Chrome or Edge on a computer, with the FM-1 on a USB data cable.
 Steps and recovery: [Installing and recovery](manual/install.md).
 
 > **Back up first.** Strata keeps its presets, projects and drum library in the flash area where Felucca keeps its
@@ -37,10 +35,10 @@ Steps and recovery: [Installing and recovery](manual/install.md).
 ## Disclaimer
 
 Strata is independent, unofficial firmware, not affiliated with or endorsed by M-VAVE or the FM-1's owners, nor by
-Felucca's author or Hügelton Instruments; their names are used only to say what Strata runs on and where it comes from.
+Felucca's author or Hügelton Instruments.
 It is provided **as is, without any warranty** (GPL-3.0, sections 15 and 16). Installing firmware other than the
 official one can leave the FM-1 unusable until it is recovered; you install it at your own risk. Strata is a
 pre-release. Strata was created entirely with Claude, an AI model made by Anthropic.
 
-Strata, Copyright (C) 2026 u4ia, is a modified version of Felucca, Copyright (C) 2026 Leo Kuroshita (@kurogedelic),
-Hügelton Instruments. The screen uses Space Mono (SIL OFL 1.1). Source, notices and licences are on the site.
+Strata is a modified version of Felucca, Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
+licensed GPL-3.0-only like it. The screen uses Space Mono (SIL OFL 1.1). Source, notices and licences are on the site.

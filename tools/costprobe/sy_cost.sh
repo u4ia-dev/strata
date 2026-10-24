@@ -1,6 +1,5 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # The Strata DSP as the FM-1 will run it: tools/costprobe/sy_probe.c (every sy_* source) compiled by the JieLi
 # clang for the pi32v2 with the FPU (-mcpu=r3 -mfprev1), and the instructions in each kernel's inner loop counted
 # from the compiler's own assembly (count_asm.py). tools/costprobe/budget.py turns them into voices.

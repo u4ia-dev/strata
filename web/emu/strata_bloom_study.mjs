@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 u4ia
 // HOME's bloom on the simulated FM-1 over time, as one sheet: a note's swirl as it starts and unwinds, the bloom
 // opening, a second note higher (the other way), the release closing it to a bud; a saw (the starter sound) and a
 // single sine-like voice. Each frame the bloom's box at 3x, its time under it.

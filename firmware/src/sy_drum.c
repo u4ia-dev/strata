@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA's drum synth (V0.85; docs/LOOPER.md stage 2, docs/CONTROLS.md "The drums"): the project's kit of eight lanes,
  * each its own model, and the sidechain's duck.
  *   KICK    a sine swept down to its pitch from PUNCH's height; TONE drives it and adds a click

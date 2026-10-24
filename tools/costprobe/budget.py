@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 """The CPU budget on the FM-1 from the target cost model (tools/costprobe/sy_dyn.sh writes DIR/dyn_N.json, one a
 scenario of sy_profile.c): each scenario's share of one core, the parts (the engine idle, a voice, a unison
 instance, the effects), and how many voices x unison fit.

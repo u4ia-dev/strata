@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * After Felucca's src/storage.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0). */
 /* STRATA's flash (docs/ARCHITECTURE.md §16): the user presets, the settings and the sound playing (back at power-on),
  * each an object as Felucca keeps its own: an A/B sector pair. A save goes to the copy that is not the current one:

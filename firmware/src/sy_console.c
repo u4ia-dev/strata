@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * After Felucca's src/console.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0):
  * its line editor, number parsing, memr, flr, inp, crash and uboot are kept as they were. */
 /* STRATA's serial console on the CDC-ACM function (FELUCCA_CDC=1): read-only diagnostics, in the main loop

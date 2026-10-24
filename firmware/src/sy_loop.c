@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA's looper (V0.8; docs/LOOPER.md, docs/CONTROLS.md "The looper"): eight tracks, each a synth (the sound playing:
  * V0.9 gives each its own) or MIDI only (USB, its channel), with SCALE, the chords and the ARP of its own (sy_chord.c:
  * a side a track); eight scenes, A to H: each track a clip a scene; SONG, a chain of scenes.

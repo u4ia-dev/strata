@@ -12,24 +12,18 @@ minute.
 
 ## Back up first
 
-A full flash backup is the whole 1 MiB of flash, read twice and checked. It is the only way back to exactly what you
-have now. Backups are made on your own computer, not on the website: run the installer from Strata's source, and enter
-backup mode by the Flipper Zero route.
+A full backup is a copy of the FM-1's whole flash (1 MiB). It's the only way back to exactly what you have now,
+Felucca's projects and samples included. It's recommended, not required, and it's made with a backup tool on your
+computer, not on this site.
 
-1. On the computer, in an **administrator** PowerShell, start the installer's server from Strata's source
-   (`py build\flasher\serve.py`) and open **http://127.0.0.1:8000/** in Chrome or Edge. The server reads the backup with
-   the flipper-fm1-recovery tools; if it can't, the page says why.
-2. Press **Back up now**.
-3. On the Flipper Zero (not connected to the computer), open Apps > Tools > **FM1 Recovery**. With the FM-1 switched
-   off, connect a USB-C data cable from the Flipper to the FM-1.
-4. Press **OK** on the Flipper, then switch the FM-1 on. When the Flipper says *Move FM1 cable to PC now*, move the
-   cable to the computer without switching the FM-1 off.
-5. If Windows offers to format a disk, press **Cancel**. Never format the `WL82 UBOOT1.00` disk.
-6. The page reads the flash twice, checks it, and saves both copies with a receipt in a dated backup folder.
-7. Switch the FM-1 off and on. Copy the backup folder somewhere safe as well.
-
-Other backup tools make the same image (MvaveFM1Unbricker, the FM-1 Transporter, or jl-uboot-tool reading
-`0 0x100000` twice and comparing the two files' SHA-256).
+1. Put the FM-1 in **backup mode** (Recovery, below): the Install page's **Put the FM-1 in backup mode** button, or
+   <kbd>OCT−</kbd> + <kbd>OCT+</kbd> held for 5 seconds. If the computer doesn't see it, a Flipper Zero with
+   [flipper-fm1-recovery](https://github.com/merthsoft/flipper-fm1-recovery) enters backup mode at power-on.
+2. In backup mode the FM-1 appears as a USB disk named `WL82 UBOOT1.00`. If the computer offers to format it,
+   cancel. Never format it.
+3. Read the whole flash with a backup tool: flipper-fm1-recovery's, MvaveFM1Unbricker, the FM-1 Transporter, or
+   jl-uboot-tool (`read 0 0x100000`). Read it twice and keep it only if both copies are identical.
+4. Switch the FM-1 off and on to leave backup mode. Keep the backup somewhere safe.
 
 ## Install
 
@@ -62,7 +56,7 @@ USB:
 - **The SysEx message** `F0 22 24 35 7D F7` on the FM-1's USB MIDI port (as on the official firmware), or the Install
   page's **Put the FM-1 in backup mode**.
 - **<kbd>OCT−</kbd> and <kbd>OCT+</kbd> held for 5 seconds** on Strata or Felucca (a countdown shows from 2 s).
-- **The Flipper Zero route** (steps 3–5 above), which works at power-on whatever the firmware does. Use it if the
+- **A Flipper Zero** with flipper-fm1-recovery, which works at power-on whatever the firmware does. Use it if the
   other two don't make the FM-1 appear as a disk on the computer.
 
 Switching the FM-1 off and on leaves backup mode. In backup mode, the flipper-fm1-recovery restore tool rewrites only

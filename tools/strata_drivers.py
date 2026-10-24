@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # After tools/size_fns.py (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0).
 """STRATA (build.py --strata): Felucca's drivers built as Felucca builds them, the rest at Strata's -O2. strata.c goes
 to LLVM IR without the optimizer; every function that usb.c, midi_uart.c or ota.c defines gets 'optsize' (-Os, per

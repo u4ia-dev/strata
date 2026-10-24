@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* V0.81: USB MIDI out's recovery (firmware/src/usb.c midi_out_event, midi_out_recover), as the official firmware's
  * MIDI router recovers: a note the full ring dropped marks its channel, nothing more goes in until the ring has room,
  * then an All Notes Off on each channel marked (in channel order) before the next packet; the half's poll sends them

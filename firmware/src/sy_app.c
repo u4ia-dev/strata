@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * Its audio interrupt follows Felucca's src/audio.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton
  * Instruments, GPL-3.0). */
 /* STRATA on the FM-1: the app around the synth (docs/ARCHITECTURE.md §3).

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 u4ia
 // Every knob on every page turned, one at a time (V0.75): the screen as it shows the turn (the value's flag, or the
 // value itself HOT where the page shows it) put through the screens' check (strata_web.c web_lint: text on a drawing,
 // on text, at the edges, in MID or LINE; two handles on one place), then turned back. The pages SAVE's and the

@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA wavetable generator: builds a factory table into an oscillator's frames from its recipe
  * (tools/gen_wavetables.py writes the recipes, names and keyframes as build/gen/strata_wt.h, and the reference
  * renders tests/sy_wt_test.c holds this file to; the math below is that script's, in single precision).

@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA UI's chord pages (V0.7, SCL's family after SCALE; the chords themselves: sy_chord.c):
  *   - CHORD: the chord playing named large ("Cm7/G"), a row a knob: MODE's chips, TYPE's (KEY: SHAPE's) strip from
  *     the one before the current (its place in the list at the right), VOICING's AUTO chip and ruler, SPREAD's chips;

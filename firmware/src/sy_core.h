@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA core: sizes, the sample rate, the pool section, and the few math functions the DSP needs.
  * The FM-1 has no libm and its doubles are software: everything here is single precision, written for the
  * pi32v2 FPU (-mcpu=r3 -mfprev1), and every float constant carries its f. Every sy_* DSP file

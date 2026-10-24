@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * Power-on, the guards, the UBOOT entries, the update entry, the TIMER5 tick and the crash screen follow Felucca's
  * src/main.c, MASTER its src/master.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
  * GPL-3.0). */

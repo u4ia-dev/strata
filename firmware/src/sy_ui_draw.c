@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA UI's screen (docs/UI.md; the design: the "Strata UI Overhaul" gallery; V0.67: nothing under 9 px, the
  * labels in LAB, a module's VALUES pages): a page is one picture of 240 x 240, drawn with sy_gfx.c's kit:
  *   - its top line (the module's name and its dot, the module dots or the chain's squares, a word at the right) or a

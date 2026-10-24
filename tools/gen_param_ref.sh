@@ -1,6 +1,5 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # The manual's parameter reference from the firmware's table: sh tools/gen_param_ref.sh (WSL or Linux, from the repo)
 set -e
 mkdir -p build/gen build/tools

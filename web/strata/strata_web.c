@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA's workbench: the synth's DSP (firmware/src/sy_*) as WebAssembly for the browser page web/strata/index.html.
  * Two instances of it run there: the AudioWorklet's plays (sw_render a render quantum at a time, the notes, the
  * parameters the page sends, a patch load faded as on the FM-1), and the page's own answers what the page needs to

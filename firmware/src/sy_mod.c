@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA modulation matrix (docs/ARCHITECTURE.md §11): eight slots of SOURCE, DESTINATION, AMOUNT (-100..100 %).
  * An amount of 100 % moves a destination across its whole range (the parameters' normalised values). Each block,
  * per voice, the slots add source x amount into the voice's offsets, one per modulated destination; destinations

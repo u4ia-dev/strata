@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 """STRATA's emulator as one page: Felucca's page as build_strata.sh branded it (DIR/index.html) with what it fetched
 put in, for a host that serves the page alone or with few files beside it:
   - the WebAssembly module (DIR/strata.wasm) as base64, in place of fetch("strata.wasm");
@@ -58,7 +57,7 @@ def main(argv):
 
     assert "</script" not in worklet.lower(), "make_page_strata: the worklet's source would end the page's script"
     notice = page[page.index("<!--"):page.index("-->") + 3] + (
-        "\n<!-- Changed for Strata, 2026-10-15 (Copyright (C) 2026 u4ia, GPL-3.0-only): its name and storage"
+        "\n<!-- Changed for Strata, 2026-10-15 (GPL-3.0-only): its name and storage"
         " keys (web/emu/build_strata.sh); the module, the worklet's helpers and the font put in, the gutters"
         " (web/emu/make_page_strata.py). -->")
     style = page[page.index("<style>"):page.index("</style>") + len("</style>")]

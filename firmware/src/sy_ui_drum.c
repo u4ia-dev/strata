@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA UI's drums (V0.85; the drum synth: sy_drum.c, the looper's side: sy_loop.c; docs/CONTROLS.md "The drums"):
  *   - EDIT on a drum track (V0.86, step 2; K1, K2, K7): DRUM, the drum PRESETS picks: SOUND (TUNE, DECAY, TONE (WT 1,
  *     WT 2: FRAME), its own: PUNCH, SNAP, SPREAD, METAL or BEND; its fall drawn), DRIVE (TYPE, DRIVE, MIX: what comes

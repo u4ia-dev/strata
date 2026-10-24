@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 """How far a change moves the golden renders: the engine test's float renders (GOLDEN_RAW=DIR) before and after.
 
     GOLDEN_RAW=build/golden_a build/host/sy_engine_test        (before the change)

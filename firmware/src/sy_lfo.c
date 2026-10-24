@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA LFOs (docs/ARCHITECTURE.md §10): twelve shapes and a drawn one (the patch's points, sy_param.c sp_draw_t),
  * a rate in Hz or a note value of the tempo, three modes (FREE: one phase for every voice; RETRIG: a phase per voice
  * from PHASE at each note; ENV: one cycle from the note, then its last value), a delay and a rise (fade in) from

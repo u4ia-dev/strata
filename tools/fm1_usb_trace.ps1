@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # Windows' own USB trace (the USBXHCI, UCX and USBHUB3 providers, keyword Default: transfer and enumeration
 # events with their status codes, no data payloads), to see how the FM-1's transfers end: completed, refused,
 # broken on the wire, or never answered. Nothing is sent to the FM-1. Needs an administrator PowerShell.

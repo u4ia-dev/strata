@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
- * Modified for Strata by u4ia, 2026-10 (NOTICE.md) */
+ * Modified for Strata, 2026-10 (NOTICE.md) */
 /* FM-1 input HAL: key/button/encoder matrix and LEDs.
  *
  * One 11-column x 6-row diode matrix behind a 2x74HC595 chain (PA4 SER, PA3

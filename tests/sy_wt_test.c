@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The wavetable generator (src/sy_wtgen.c) against tools/gen_wavetables.py's reference renders, and the format
  * (src/sy_wt.c):
  *   build/host/sy_wt_test build/gen/strata_wt_ref.bin

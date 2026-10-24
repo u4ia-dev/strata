@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 u4ia
 // After `honkit build`: HonKit links a folder's README as the folder ("../", "./"), which a web server opens but a
 // page opened from disk cannot. Point those links at the folder's index.html, so the book works both ways.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 """STRATA factory wavetables: their definitions, and everything made from them.
 
 Every factory table is original: made from the formulas below and from keyframes designed here, with no

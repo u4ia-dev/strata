@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The wavetable oscillator alone (src/sy_osc.c: osc_block, no voice, filter or effects):
  *   build/host/sy_osc_test [quick]
  * 1. aliasing: every factory table at positions 0, 1/2, 1, notes C0..C8 every 6 semitones: the power away from

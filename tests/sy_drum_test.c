@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* V0.85: the drum synth (firmware/src/sy_drum.c) through sy_block, as the audio interrupt runs it:
  *   build/host/sy_drum_test tests/sy_drum_golden.txt [DEMODIR]       GOLDEN_UPDATE=1 rewrites the golden file
  * every lane sounds, stays under its bounds and ends; DECAY is the time to -60 dB; TUNE the KICK's pitch; CLAP's four

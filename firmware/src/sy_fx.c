@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA effects (docs/ARCHITECTURE.md §14): a chain of up to eight modules in the patch's order (FX CHAIN, sy_param.c
  * FXC1 .. FXC8), then the LIMITER; global, stereo, float. A module is an instance of a type (sy_param.c FXI_*: two of
  * each, one DELAY and one REVERB) with its ON (in the chain or bypassed) and a MIX (OTT: DEPTH; EQ, TREMOLO: none). A

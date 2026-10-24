@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* A first sound from the whole engine: the default patch, a chord, a release; build/sy_demo/smoke.wav. */
 #define SY_ENGINE 1
 #include "sy_host.h"

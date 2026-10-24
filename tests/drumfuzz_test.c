@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
- * Modified for Strata by u4ia, 2026-10 (NOTICE.md) */
+ * Modified for Strata, 2026-10 (NOTICE.md) */
 /* #211 stress: a synth sequence playing on track 1 while the DRUM grid of track 4 is programmed at random (grid keys,
  * held steps + knobs = locks, lanes, HIT / ACC, EDIT, pages, SEQ TOOLS, undo, engine switches, kits, buttons, menus),
  * the MENU at random (HELP, LARGE, STEP PREVIEW ..), the audio rendered between the inputs (24 blocks a frame, as the

@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA UI's looper (V0.8; the looper itself: sy_loop.c; docs/LOOPER.md), the SEQ button's menu. SEQ once:
  * LOOP and CLIP; twice: TRACK and SONG (V0.86, S1). PRESETS picks the track on every page (C1):
  *   - LOOP: CLIPS (the eight tracks' clips in the eight scenes: the one playing filled with its place, launched

@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Strata's book on HonKit's default theme, in the STRATA screen theme (firmware/src/sy_gfx.c): the ground, ink, label,
  * mid, line and vermilion; Space Mono for everything, as the panel's screen; dark always (as the panel's
  * screen). Only colours, type and spacing: the theme's layout (the side bar, the search, the page arrows) stays. */

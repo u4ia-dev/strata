@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # Wait for the FM-1's backup mode (the chip's USB boot: a USB disk "WL82 UBOOT1.00"), then start MvaveFM1Unbricker
 # at once. Entered from a running firmware (OCT- + OCT+ held 5 s, the SysEx key, the console's "uboot yes"), backup
 # mode lasts only ~13 s unless a tool connects; started by hand, the unbricker's one scan usually misses it.

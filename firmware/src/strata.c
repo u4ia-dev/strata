@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * After Felucca's src/felucca.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, GPL-3.0). */
 /* STRATA: one compilation unit, as Felucca is built (the HAL is header-only; each file uses what the files above it
  * define, so the order matters). tools/build.py --strata compiles this one in place of felucca.c.

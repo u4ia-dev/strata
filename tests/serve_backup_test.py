@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 """The flasher's backup step (web/strata_flash/serve.py) without an FM-1: a fake pc_backup.py (the real one's log and
 files, from a flash image made of build/strata.fwsc's), a fake disk watcher, and the real recovery_plan.py from
 flipper-fm1-recovery beside the strata checkout. The job's outcomes (verified; reads that differ; a backup that stops;

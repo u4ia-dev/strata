@@ -1,19 +1,29 @@
-# Strata
+<p align="center"><img src="docs/media/banner.png" alt="STRATA: wavetable synth, 8-track looper and drum machine firmware for the M-VAVE FM-1"></p>
 
-Firmware that makes the **M-VAVE FM-1** a complete pocket instrument: a wavetable synth deep enough to design sounds
-from scratch, an 8-track looper and a drum machine for whole songs without a computer, on a panel built to stay quick
-to play (the four knobs on each page's four values, one rule for every button, screens read at a glance). Free
-software, GPL-3.0-only, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
+**Strata** turns the **M-VAVE FM-1** into a complete pocket instrument: a deep wavetable synth, an 8-track looper and a
+drum machine. The knobs control what's on the screen, every button works the same way, and the screens are easy to
+read. It's free software, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
 Instruments).
 
-**Install it in the browser:** <https://u4ia-dev.github.io/strata/> (Chrome or Edge on a computer).
+**Install it in the browser:** <https://u4ia-dev.github.io/strata/> (Chrome or Edge on a computer) ·
+**Guide and manual:** <https://u4ia-dev.github.io/strata/book/index.html>
+
+## The screens
+
+| | | | |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/media/screen-home.png" width="200" alt="HOME: the sound, its bloom and four macros"> | <img src="docs/media/screen-wave.png" width="200" alt="OSC A's WAVE page"> | <img src="docs/media/screen-lfo.png" width="200" alt="An LFO's drawn shape"> | <img src="docs/media/screen-assign.png" width="200" alt="The window that assigns an LFO to a parameter"> |
+| **HOME**: the sound and its bloom | **WAVE**: 54 wavetables | **LFO**: shapes you draw | **Assign**: an LFO onto a knob |
+| <img src="docs/media/screen-fx.png" width="200" alt="The effects chain"> | <img src="docs/media/screen-clips.png" width="200" alt="The looper's clips: tracks down, scenes across"> | <img src="docs/media/screen-drums.png" width="200" alt="HOME on a drum track: the kit"> | <img src="docs/media/screen-drum-model.png" width="200" alt="A drum's model"> |
+| **FX**: a chain of eight | **CLIPS**: 8 tracks × 8 scenes | **Drums**: a kit on HOME | **MODEL**: seven drum models |
+
+The screens are rendered by Strata's own emulator, which runs the firmware's drawing code.
 
 ## Disclaimer
 
 Strata is independent, unofficial firmware. It is not affiliated with, endorsed by or supported by M-VAVE or the
 owners of the FM-1, nor by Felucca's author or Hügelton Instruments. "M-VAVE" and "FM-1" are trademarks of their
-respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments. They are used here only to
-say what Strata runs on and where it comes from.
+respective owners; "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments.
 
 Strata is provided **as is, without any warranty**, under the GNU General Public License version 3 (sections 15 and
 16: no warranty, no liability). Installing any firmware other than the official one can leave the FM-1 unusable until

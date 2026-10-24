@@ -1,7 +1,7 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: GPL-3.0-only
-     Copyright (C) 2026 u4ia
-     (INTERNAL ... /INTERNAL marks what make_site.py leaves out of the public site: the test and report.)
+     (Its markers say what make_site.py does with each part for the public site: the INTERNAL ones it leaves out
+     (the test and report), the LOCAL ones it hides (the local backup server's step), the site-only ones it shows.)
      After Felucca's web/index_pkg.html (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments,
      GPL-3.0); its update protocol (fm1ota.js) and package code (fm1pkg.js) are Felucca's, unchanged.
      STRATA's flasher: a page on this computer (Web MIDI's SysEx needs a secure context: localhost). make_flasher.py
@@ -91,10 +91,18 @@
   a { color: var(--blue); }
   input[type="file"] { font: inherit; font-size: 13px; max-width: 100%; }
   footer { font-size: 12px; color: var(--mute); display: grid; gap: 6px; padding-top: 8px; }
+  nav.site { display: flex; flex-wrap: wrap; gap: 8px; }   /* (the site's pages: the public build only) */
+  nav.site a { font: 700 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none;
+    padding: 9px 13px; border: 1px solid var(--line); color: var(--text); background: var(--bg); }
+  nav.site a:hover, nav.site a:focus-visible { border-color: var(--hot); outline: none; }
+  nav.site a[aria-current="page"] { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 </style>
 </head>
 <body>
+<!--PUBLIC:<canvas id="fx" aria-hidden="true"></canvas><script src="fx.js" defer></script>:PUBLIC-->
 <main>
+  <!--PUBLIC:<nav class="site" aria-label="Site"><a href="index.html" aria-current="page">Install</a><a href="book/index.html">Guide &amp; manual</a><a href="info.html">Info</a><a href="@REPO@">Source</a></nav>:PUBLIC-->
   <header>
     <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>Strata</h1></div>
     <p class="sub">Hardware test flasher for the M-VAVE FM-1 &middot; Chrome or Edge, on this computer only</p>
@@ -116,6 +124,11 @@
     <h2><span class="n">1 / 3</span>Before you start</h2>
     <ul class="checks">
       <li class="backup">
+        <!--PUBLIC:<p><b>Back up first (recommended).</b> A full copy of the FM-1's flash is the only way back to
+        exactly what you have now, Felucca's projects and samples included. Put the FM-1 in backup mode with the
+        button below, or hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s, then read the flash with a
+        backup tool on your computer: <a href="book/manual/install.html#back-up-first">how to back up</a>.</p>:PUBLIC-->
+        <!--LOCAL-->
         <p><b>A full flash backup (recommended).</b> All 1 MiB, read twice, the two copies identical, checked as an
         FM-1's flash: the way back to exactly what you have now. The install no longer needs one; make one before your
         first Strata and whenever your presets matter. Press <b>Back up now</b>, then put the FM-1 in backup mode the
@@ -132,10 +145,11 @@
           <button id="bk-cancel" hidden>Stop</button></div>
         <progress id="bk-bar" max="32" value="0" hidden></progress>
         <p id="bk-status" class="small">Asking this page's server about backups&hellip;</p>
+        <!--/LOCAL-->
         <div class="aside">
-          <p>Another way into backup mode, where it works: this button asks the firmware running now to go there (the
-          soft key). It does not reach backup mode on every computer; the Flipper's way works at power-on, whatever
-          the firmware does.</p>
+          <p>Backup mode from here: this asks the firmware running now to restart into it (nothing is written). If the
+          computer doesn't see the FM-1 then, a Flipper Zero enters backup mode at power-on, whatever the firmware
+          does.</p>
           <div class="row"><button id="uboot" disabled>Put the FM-1 in backup mode&hellip;</button></div>
           <div class="confirm" id="uboot-confirm" hidden>
             <p id="uboot-what">The FM-1 will stop its firmware and wait for jl-uboot-tool. Nothing is written.</p>
@@ -145,7 +159,7 @@
         </div>
       </li>
       <li><label><input type="checkbox" class="pre" id="c-power">
-        <span>The battery is <b>charged</b>, and the FM-1 is plugged <b>straight into this computer</b> with a USB
+        <span>The battery is <b>charged</b>, and the FM-1 is plugged <b>straight into the computer</b> with a USB
         data cable (no hub). I will not unplug it or touch its power switch while it writes.</span></label></li>
       <li><label><input type="checkbox" class="pre" id="c-apps">
         <span>Every other app that uses MIDI is closed (DAWs, M-UPGRADE, Felucca's editor).</span></label></li>
@@ -214,8 +228,8 @@
       <li>Strata shows <b>STRATA CRASH</b>: take a photo. It restarts; a second crash within 30&nbsp;s puts it in backup
         mode by itself, where your backup can be written back.</li>
       <li>Backup mode by hand, while Strata runs: hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s (a
-        countdown shows from 2&nbsp;s). If Windows then reports a USB device it cannot recognise, this way in does not
-        work on this computer: use the Flipper Zero route.</li>
+        countdown shows from 2&nbsp;s). If the computer then reports a USB device it can't recognise, use a Flipper
+        Zero instead: it enters backup mode at power-on.</li>
       <li>Strata does not answer any updater (it plays, but Find gets no answer): the Flipper Zero route
         (FLASHING.md, section 6) or the FM-1 Transporter. Both enter backup mode at power-on, whatever the firmware
         does.</li>
@@ -225,7 +239,7 @@
   <footer>
     <span><b>Your saved data:</b> saving in Strata can overwrite Felucca's projects and samples (the same flash);
     make a backup first and keep it.</span>
-    <span>Strata (Copyright (C) 2026 u4ia, a modified Felucca, Copyright (C) 2026 Leo Kuroshita, Hügelton
+    <span>Strata (a modified Felucca, Copyright (C) 2026 Leo Kuroshita, Hügelton
     Instruments): GPL-3.0-only, <b>no warranty</b>; a pre-release, created entirely with Claude (an AI model made by Anthropic), installed at your
     own risk. The package also holds
     three JieLi AC79 SDK files (Apache-2.0). The source, its notices and every licence: <a href="README.md">README.md</a>,
@@ -283,6 +297,7 @@ function describe(id) {
                                   : "Felucca or another firmware of its family";
 }
 function gate() {
+  document.body.toggleAttribute("data-busy", writing);   // (the site's background animation pauses while it writes)
   const backingUp = !!bk && (bk.state === "waiting" || bk.state === "reading");
   const ready = !!image && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
   $("find").disabled = !ready || writing || !$("confirm").hidden;

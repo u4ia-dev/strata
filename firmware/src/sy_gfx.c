@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA UI's drawing kit (the strata-ui build; the design: the "Strata UI Overhaul" gallery, docs/UI.md):
  *   - the palettes (SETTINGS > SCREEN, twelve since V0.67): six colours each, by role: GROUND, INK (the drawing and
  *     the values), LAB (the labels' text, V0.67), MID (the lesser lines), LINE (tracks, the faint), HOT (the one

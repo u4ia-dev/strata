@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The Strata engine on the host, built with --coverage, for the target cost model (tools/costprobe/sy_dyn.sh): one
  * scenario plays; after a warm-up the coverage counters are reset, so gcov's line counts are the audio path's work
  * for PROF_BLOCKS blocks (sy_block alone: the main loop's service is not the audio's). sy_dyncount.py weighs each

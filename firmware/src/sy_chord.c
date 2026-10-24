@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* STRATA's chords (V0.7; docs/CONTROLS.md "Chords"), SCL's family after the Orchid's ideas (our own design and code),
  * and the arpeggiator (V0.75; docs/CONTROLS.md "The ARP"):
  *   - CHORD: KEY, a key plays its in-key chord (SCALE's scale stacked from the key: SHAPE TRIAD, 7TH, 9TH, SUS2,

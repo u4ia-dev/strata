@@ -1,6 +1,5 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 u4ia
 # STRATA's workbench: the synth's DSP as WebAssembly (web/strata/strata_web.c) and the page, as one HTML file:
 #   web/strata/build.sh  ->  build/strata/strata_workbench.html (and strata.wasm, for web/strata/wb_test.mjs)
 # Open the page from a local web server (python3 -m http.server in build/strata) or, in Chrome / Edge, as a file.

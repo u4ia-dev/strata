@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The manual's parameter reference (book/manual/parameters.md), from the firmware's own table (sy_param.c SP[]):
  * every sound parameter, its section, its range and default as the screen shows them (sy_text.c sp_text), whether
  * the matrix can move it and its MIDI CC. Run by tools/gen_param_ref.sh; never edit its output by hand. */

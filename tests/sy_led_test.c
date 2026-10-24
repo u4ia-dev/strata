@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Host test of Strata's LED levels (V0.87, U9: hal/fm1_input.h with FM1_LED_Q 1): the scan's tick in quarters, TIMER5
  * at 40 kHz, fm1_input_tick every fourth interrupt and fm1_input_quarter(1 .. 3) between. The GPIO is memory, every
  * write of the LED lines is traced with its time (TIMER4 ticks, 24 a us: a read of the clock 1 us, a bus access 1/6),

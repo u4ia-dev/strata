@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* The STRATA DSP on the host: the firmware's sy_* sources compiled as one unit with gcc (tests/sy_tests.sh),
  * and what the tests share: checks, WAV output, a double-precision FFT, level and spectrum measures. */
 #include <math.h>

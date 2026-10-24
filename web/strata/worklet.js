@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2026 u4ia
 // STRATA's workbench in an AudioWorklet: the playing instance of the synth's DSP (web/strata/strata_web.c). Each
 // render quantum asks it for 128 frames (four of its 32-frame blocks) and gives a table being built one step, as the
 // FM-1's main loop would. The page sends notes, controllers and parameter values; about 30 times a second the

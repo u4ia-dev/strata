@@ -1,5 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* CORE 2 (SETTINGS > CORE 2; the console's `bench`, its c2_ lines): the FM-1's second core measured, before the
  * looper's V0.9 puts voices on it (docs/LOOPER.md, stage 0).
  *

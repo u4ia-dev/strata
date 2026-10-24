@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 u4ia
  * After Felucca's src/storage_hw.c and src/ota_hw.c (Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton
  * Instruments, GPL-3.0); their checks are kept as they were. */
 /* STRATA on the FM-1: the flash's hooks and the update entry's.
