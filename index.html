@@ -872,21 +872,36 @@ function fxState(progress, end = "") {
   document.body.dataset.progress = progress < 0 ? "" : String(Math.max(0, Math.min(1, progress)));
   document.body.dataset.fx = end;
 }
-// the steps fm1ota.js reports, on the bar beside the button that started them: step 1's reads (~74), then the
-// loader's (~1167)
+// how far a step has read: fm1ota.js (Felucca's, unchanged) reports a count of requests, and how many a step takes
+// depends on what answers (the official firmware reads the package's head at step 1, a Strata all of it: 193 % on the
+// old count). So the bar follows the furthest address requested, a share of the package: never past its end
+let reqTop = 0;
+const serve0 = Updater.prototype.serve;
+Updater.prototype.serve = function (link, img, fin, idle, onP) {
+  return serve0.call(this, link, img, fin, idle, (n, addr) => {
+    reqTop = Math.max(reqTop, Math.min(1, (addr || 0) / img.length));
+    if (onP) onP(n, addr);
+  });
+};
+// the steps fm1ota.js reports, on the bar beside the button that started them: step 1 its first fifth, the loader's
+// write the rest; the bar only moves forward and ends at 100 % with Done
 function stepper(near) {
   const prog = $("prog"), bar = $("bar"), pct = $("bar-pct");
   $(near).closest(".row").after(prog);
   prog.hidden = false;
-  const set = (f) => { bar.value = f * 100; pct.textContent = `${Math.floor(f * 100)} %`; fxState(f); };
+  let shown = 0, phase = "";
+  const set = (f) => {
+    shown = Math.max(shown, Math.min(1, f));
+    bar.value = shown * 100; pct.textContent = `${Math.floor(shown * 100)} %`; fxState(shown);
+  };
   set(0);
-  const total = 74 + 1167;
   return (k, a) => {
     log(`${k} ${a ?? ""}`);
+    if ((k === "verify" || k === "write") && k !== phase) { phase = k; reqTop = 0; }
     if (k === "start") say(`Starting: the FM-1 reports ${a}`, "busy");
-    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); set(a / total); }
+    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); set(0.2 * reqTop); }
     if (k === "loader") say("Restarting into the update loader…", "busy");
-    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); set((74 + a) / total); }
+    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); set(0.2 + 0.8 * reqTop); }
     if (k === "reboot") say("Restarting the FM-1…", "busy");
     if (k === "done") set(1);
   };
