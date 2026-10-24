@@ -876,6 +876,16 @@ run(5.4);                                       // (the list gone: its 5 s)
   run(0.1);
   shot("DrumKits");
   run(5.2);
+  go(SEC.KIT, "ACCENT");                        // (V0.87.1: the kit edited: the list opened on it, EDIT twice there only closes it; moved,
+  turn(0, 5);                                   // the hint says the edits go)
+  rest();
+  twice(B.EDIT);
+  run(0.1);
+  shot("DrumKitsEditedUnmoved");
+  ex.web_enc(2, 1);
+  run(0.1);
+  shot("DrumKitsEditedMoved");
+  run(5.2);
   go(SEC.MACRO, "SOUND");                       // (V0.86, D1-D3: HOME on a drum track, its drums lit as they sound)
   for (const l of [0, 3, 1]) ex.web_test_drum_hit(l, 7, 110, 0);
   run(0.12);

@@ -1142,7 +1142,7 @@ static void ui_tape_wins(void)
 {
     static uint32_t t, n;
     uint32_t dt = fm1_ms - t;
-    float pk = (float)sy_out_pk * (1.0f / 32768.0f), tgt = ui_sounding() ? sy_sqrtf(sy_minf(pk, 1.0f)) : 0.0f;
+    float was = ui_tape_lv, pk = (float)sy_out_pk * (1.0f / 32768.0f), tgt = ui_sounding() ? sy_sqrtf(sy_minf(pk, 1.0f)) : 0.0f;
     t = fm1_ms;
     if (dt >= 200u)
         dt = 50u;
@@ -1157,7 +1157,7 @@ static void ui_tape_wins(void)
     ui_tape_f -= (float)sy_floori(ui_tape_f);
     ui_win(26, 44, 61, 61, 0);
     ui_win(154, 44, 61, 61, 0);
-    if (n++ & 1u) {
+    if ((n++ & 1u) || (was > 0.0f && ui_tape_lv == 0.0f)) {   /* (V0.87.1: the frame it settles: both, or a dot or glow stays) */
         ui_win(52, 100, 136, 48, 0);
         ui_win(194, 138, 34, 34, 0);
     }

@@ -2614,12 +2614,12 @@ static void ui_p_plist(void)
             lk_disc(226.0f, y + 11.5f, 3.0f, ink);
     }
     if (ui.pl_kind == PL_DRUMS) {                   /* (V0.87) */
-        l1 = "SELECT: ANOTHER CATEGORY", l2 = "EDIT TWICE: INTO THE ROW PICKED";
+        l1 = "SELECT: ANOTHER CATEGORY", l2 = ui.pl_mv ? "EDIT TWICE: INTO THE ROW PICKED" : "NOT MOVED: EDIT TWICE CLOSES";   /* (V0.87.1) */
         bot = "SAVE+OCT+: THE ROW AS NEW";
     } else if (ui.pl_kind == PL_KITS) {
         l1 = "A KIT: ITS DRUMS, THEIR EFFECTS,", l2 = "THE DUCK AND COMP; KEPT IN THE PROJECT";
-        lose = ui.kedited && ui_kit_at(pos) != (int32_t)dkk.kit;
-        bot = lose ? "EDIT TWICE: THE KIT'S EDITS GO" : bot;
+        lose = ui.kedited && ui.pl_mv;                  /* (V0.87.1: a move loads, even back onto the one loaded) */
+        bot = lose ? "EDIT TWICE: THE KIT'S EDITS GO" : ui.pl_mv ? bot : "NOT MOVED: EDIT TWICE CLOSES";
     } else if (ui.pl_kind == PL_TABLES) {
         l1 = "SELECT: ANOTHER CATEGORY", l2 = "IT BUILDS AS IT LOADS";
     } else if (ui.pl_kind == PL_PROJECTS) {
@@ -3274,7 +3274,7 @@ static void sy_ui_leds(void)
                 ui_led(fm1_led, 14u + k);
             else if (UI_KEY_SRC[k] && ui_src_used(UI_KEY_SRC[k]))
                 ui_led(fm1_led_dim, 14u + k);
-        } else if (ui.lay == LAY_PERF && k == 0u) {   /* (V0.87.1: PERFORM: F3, the tap tempo's key, glowing) */
+        } else if (ui.lay == LAY_PERF && k == 0u && (ui.bt_down & (1u << B_GLO))) {   /* (V0.87.1: GLO held: F3, the tap tempo's key, glowing) */
             ui_led(fm1_led_dim, 14u + k);
         } else if (ui.lay == LAY_MAC && UI_KEY_FX[k] >= 0) {   /* MACROS: the modules' keys, lit when in, */
             int32_t in = sp_chain_at(sy_patch.p, (uint32_t)UI_KEY_FX[k]);   /* glowing when bypassed */

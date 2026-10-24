@@ -536,6 +536,7 @@ static struct {
     uint8_t del_list;                               /* .. the delete asked from the list */
     uint8_t pl_kind, pl_osc;                        /* .. V0.87: the list's kind (PL_*); the wavetables': its oscillator */
     uint8_t kedited;                                /* .. the kit edited since loaded: HOME's dot */
+    uint8_t pl_mv;                                  /* .. (V0.87.1) the list's cursor moved since it opened */
     uint32_t pl_t;                                  /* .. its last detent, or press */
     uint8_t cb_on, cb_t, cb_s;                      /* .. (S8) TOOLS: a copy kept; its clip (track, scene), */
     int8_t cb_bar;                                  /* .. the whole (-1) or a bar of it */
@@ -567,7 +568,7 @@ static struct {
     uint8_t qk, qv;                                 /* .. a question asked (Q_*), what about (a clip: its index + 1) */
     uint32_t q_t;                                   /* .. (V0.87.1) its owner button tapped once: the time | 1 (0 none) */
     uint32_t sv_eat;                                /* .. SAVE tapped in a list of another's, shutting it: a second tap now is not SAVE's (time | 1) */
-    uint8_t tp_k, tp_ask;                           /* .. DEBUG > TESTS: the test picked (0 .. 3); KNOB 1 turned, its question due */
+    uint8_t tp_k, tp_ask, tp_ld;                    /* .. DEBUG > TESTS: the test picked (0 .. 3); KNOB 1 turned, its question due; a load asked */
     uint32_t tp_t, tp_ms, tp_mt;                    /* .. its last detent; the test loaded's time, when it last moved */
     uint8_t new_clip;                               /* .. (S3) SEQ + OCT+ made a clip: SEQ still held, PRESETS its length */
     uint32_t rec_t;                                 /* .. (F09) REC tapped once, not recording: its time | 1 (a second: TAKE) */
@@ -1438,6 +1439,7 @@ static void ui_list_open(uint32_t kind, uint32_t pos)
     ui.pl_kind = (uint8_t)kind;
     ui.pl_pos = (uint16_t)pos;
     ui.pl_ask = 0;
+    ui.pl_mv = 0;
     ui.pl_t = fm1_ms;
     ui.dirty = D_ALL;
 }
@@ -1460,6 +1462,7 @@ static void ui_pl_turn(int32_t s)
     if (ui.pl_open && ui.pl_kind != PL_SOUNDS) {   /* (the kits', the tables', the projects') */
         ui.pl_pos = (uint16_t)sy_clampi((int32_t)ui.pl_pos + s, 0, (int32_t)ui_pl_n() - 1);
         ui.pl_ask = 0;
+        ui.pl_mv = 1;
         ui.pl_t = fm1_ms;
         ui.dirty = D_ALL;
         return;
@@ -1484,6 +1487,7 @@ static void ui_pl_cat(int32_t s)                    /* SELECT in the wavetables'
         ui.pl_dcat = (uint8_t)sy_clampi((int32_t)ui.pl_dcat + (s > 0 ? 1 : -1), 0, DC_N - 1);
         ui.pl_pos = 0;
         ui.pl_ask = 0;
+        ui.pl_mv = 1;
         ui.pl_t = fm1_ms;
         ui.dirty = D_ALL;
         return;
@@ -1518,6 +1522,11 @@ static void ui_pl_load(void)                        /* SAVE twice: the one picke
     uint16_t ids[SY_NFACT + SS_NUSER];
     uint32_t n;
     char t[32];
+    if ((ui.pl_kind == PL_KITS || ui.pl_kind == PL_DRUMS) && !ui.pl_mv) {   /* (V0.87.1: opened and confirmed with the cursor */
+        ui_toast(ui.pl_kind == PL_KITS ? "IT IS THE ONE LOADED" : "THE ROW IS KEPT");                /* unmoved: nothing */
+        ui_pl_close();                                                                               /* is loaded over what is) */
+        return;
+    }
     if (ui.pl_kind == PL_KITS) {                    /* (V0.86, K8: a factory kit as the project's; V0.87 a user's) */
         int32_t id = ui_kit_at(ui.pl_pos);
         if (id >= 0 && id < (int32_t)DK_NKIT) {
@@ -1994,8 +2003,10 @@ static int ui_win_knob(uint32_t k, int32_t s)       /* a knob with a window open
 /* WIPE (T1): every setting back to the firmware's (the palette STRATA, the panel's, MIDI's and LEARN's, the tempo,
  * SCL's and the chords', the ARP's, the looper's, CORE 2 off after a restart, POWER's); the presets and the projects
  * stay. Kept by the settings' save as any change is */
+static void sy_tp_end(int read);                    /* sy_testproj.c (V0.87.1) */
 static void ui_wipe(void)
 {
+    sy_tp_end(0);                                   /* (V0.87.1: a test loaded ends first: its tempo and sound back, then the wipe) */
     ui.pal = 0;
     ui.accel = 1;
     settings_hold = HOLD_DEF;
@@ -2031,6 +2042,7 @@ static void sy_tp_stop(void);
 static int sy_tp_active(void);
 static uint32_t sy_tp_ms(uint32_t k);
 #define UI_NTEST 4u
+#define UI_TP_LOAD_MS 1100u                         /* a load's wait at most (sy_testproj.c TP_WAIT_MS) and a tick */
 #define UI_TP_MS 600u                               /* the question comes this long after KNOB 1's last detent */
 static void ui_tp_go(void)
 {
@@ -2039,6 +2051,9 @@ static void ui_tp_go(void)
         ui_toast("NOT AVAILABLE");
         return;
     }
+    ui.tp_ld = 1;                                   /* (V0.87.1: its load takes up to a second: KNOB 2 stops that too) */
+    ui.tp_t = fm1_ms;
+    ui.tp_ask = 0;
     sp_put(sp_put(sp_fix(sp_put(t, "TEST "), (int32_t)ui.tp_k + 1, 0u, 0), ": "), sy_tp_name(ui.tp_k));
     ui_toast(t);
     ui.dirty = D_ALL;
@@ -2049,10 +2064,13 @@ static void ui_tp_turn(int32_t item, int32_t s)
         ui.tp_k = (uint8_t)sy_clampi((int32_t)ui.tp_k + s, 0, (int32_t)UI_NTEST - 1);
         ui.tp_ask = 1;
         ui.tp_t = fm1_ms;
-    } else if (sy_tp_active()) {
-        sy_tp_stop();
+        ui.tp_ld = 0;
+    } else if (sy_tp_active() || (ui.tp_ld && fm1_ms - ui.tp_t < UI_TP_LOAD_MS)) {   /* (V0.87.1: one loaded, or its load under way) */
+        sy_tp_stop();                               /* (a load not yet built: stopped, nothing loaded) */
+        ui.tp_ld = 0;
         ui_toast("TEST STOPPED");
     } else {
+        sy_tp_stop();
         ui_toast("NO TEST IS LOADED");
     }
     ui.dirty |= D_ALL;
@@ -2515,6 +2533,7 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         ui_set_turn(item, s);
     } else if (item == UI_WIPE) {                   /* (V0.87, T1: asked first; SAVE wipes) */
         ui.qk = Q_WIPE;
+        ui.bt_chord |= ui.bt_down;                  /* (V0.87.1: as TESTS' and TYPE's) */
         ui.dirty = D_ALL;
     } else if (item == UI_PBATT || item == UI_PSCR) {   /* (V0.86: POWER's) */
         if (item == UI_PBATT)
@@ -3079,6 +3098,7 @@ static void ui_reset(uint32_t b)
             ui.lpt[k] = 0;
         }
     } else if (sec == SEC_GLOBAL) {
+        sy_tp_end(0);                               /* (V0.87.1: a test loaded ends first, as WIPE's) */
         ui.bpm = 120;
         ui.tsb = 4;
         ui.tsn = 2;
@@ -3483,7 +3503,7 @@ static int sy_ui_key(uint32_t k)
         return 1;
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
-    if (ui.lay == LAY_PERF && k == 0u) {            /* (V0.87.1: PERFORM's layer: F3 taps the tempo, no note) */
+    if (ui.lay == LAY_PERF && k == 0u && (ui.bt_down & (1u << B_GLO))) {   /* (V0.87.1: GLO held: F3 taps the tempo, no note; latched, it plays) */
         ui_tap_tempo();
         return 1;
     }
@@ -3653,6 +3673,7 @@ static void sy_ui_ms(void)
         ui.tp_ask = 0;
         if (!ui.qk && UI_PG[ui.page].graph == G_TESTS) {
             ui.qk = Q_TEST;
+            ui.bt_chord |= ui.bt_down;              /* (V0.87.1: a press begun before it came is no tap of its owner's) */
             ui.dirty = D_ALL;
         }
     }

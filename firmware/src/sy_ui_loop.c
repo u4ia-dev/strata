@@ -511,6 +511,8 @@ static void ui_loop_turn(int32_t item, int32_t s, uint32_t e)
         lpp.scn = (uint8_t)sy_clampi((int32_t)lpp.scn + s, 0, LP_NSCN - 1);
         ui.lnote = 0;
         ui.paste_t = ui.halve_t = ui.clr_t2 = 0;
+        if (ui.qk == Q_CLIPDEL)                     /* (V0.87.1: the scene stepped: its clip's DELETE? is no more) */
+            ui.qk = Q_NONE;
         break;
     case UI_LVOL: k->vol = (uint8_t)sy_clampi(k->vol + ui_accel(e, s, 127), 0, 127); break;
     case UI_LPAN: k->pan = (uint8_t)ui_centre(item, s, k->pan, sy_clampi(k->pan + ui_accel(e, s, 127), 1, 127), 64); break;
@@ -774,6 +776,7 @@ static void sy_ui_loop_ms(void)
             ui.lt_ask = 1;
             ui.lt_t = fm1_ms;
             ui.qk = Q_TYPE;
+            ui.bt_chord |= ui.bt_down;              /* (V0.87.1: a press begun before it came is no tap of its owner's) */
             ui.dirty = D_ALL;
         } else {
             ui_l_type_go();

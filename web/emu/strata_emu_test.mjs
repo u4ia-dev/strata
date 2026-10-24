@@ -2898,5 +2898,140 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`KEY SCAN: PA5:9 and PA5:10 are encoder ${e[0]} and ${e[1]} (KNOB 1's, matrix encoder 2); PA0:1 ${e[2]}, PB7:2 ${e[3]}; PA5:8 (a key) ${e[4]}, PA6:9 (a key) ${e[5]}`,
         e.join() === "2,2,0,6,-1,-1");
 }
+// V0.87.1, the pre-build review's UI findings (DECISIONS.md item 24): each of these failed before its fix
+const loadedReal = (x) => x.web_test_tp(4, 0) >= 0;   // (the real test project, sy_testproj.c: its time, -1 none)
+const toDebug = (x) => { x.web_buttons(1 << B.HOME); play(x, 5.2); x.web_buttons(0); play(x, 0.1); };
+{                                               // 1. a question that opens by itself takes no press begun before it came
+  const t = await boot(), tt = () => cstr(t, t.web_test_toast());
+  splash(t); tap(t, B.HOME); toDebug(t);
+  goPage(t, SEC.DEBUG, "TESTS"); play(t, 0.05);
+  t.web_enc(E.K1, 1); play(t, 0.55);              // (the question comes at 0.6 s)
+  const q0 = t.web_test_win(3);
+  t.web_buttons(1 << B.HOME); play(t, 0.1); const qmid = t.web_test_win(3); t.web_buttons(0); play(t, 0.08);
+  t.web_buttons(1 << B.HOME); play(t, 0.03); t.web_buttons(0); play(t, 0.3);   // (this HOME is a first tap, not a second)
+  play(t, 3.0);
+  const a = [q0, qmid, t.web_test_win(3), loadedReal(t), t.web_test_page_section() === SEC.DEBUG, tt()];
+  const y = await boot();                         // (TYPE's question on CLIPS: SEQ pressed 0.45 s after KNOB 1, released after it came)
+  splash(y);
+  goPage(y, SEC.SEQ, "CLIPS"); play(y, 0.05);
+  y.web_buttons(1 << B.SEQ); play(y, 0.03); y.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); play(y, 0.03); y.web_buttons(0); play(y, 0.4);   // (a clip on T1)
+  y.web_enc(E.K1, 1); play(y, 0.45);
+  y.web_buttons(1 << B.SEQ); play(y, 0.15); const ymid = y.web_test_win(3); y.web_buttons(0); play(y, 0.08);
+  y.web_buttons(1 << B.SEQ); play(y, 0.03); y.web_buttons(0); play(y, 0.3);
+  play(y, 1.0);
+  const b = [ymid, y.web_test_win(3), y.web_test_lp_trk(0, 3, -1), y.web_test_lp(0, -1)];
+  check(`a question opened by itself takes no earlier press: HOME down 0.55 s after KNOB 1, up after TESTS' question (${a[0]} -> ${a[1]}), then one tap: question ${a[2]}, no test loaded (${a[3]}), still DEBUG (${a[4]}); the same on TYPE (${b[0]}, question ${b[1]}, T1 OUT ${b[2]} kept)`,
+        a[0] === 0 && a[1] !== 0 && a[2] === 0 && !a[3] && a[4] && b[0] !== 0 && b[1] === 0 && b[2] === 0);
+}
+{                                               // 2. a list opened and confirmed with its cursor unmoved loads nothing over what is there
+  const n = await boot(); splash(n);
+  n.web_test_lp_trk(0, 0, 2); n.web_test_lp(0, 0); play(n, 0.2);   // (T1 on drums)
+  goPage(n, SEC.DRUM, "MODEL"); play(n, 0.05);
+  const m0 = [n.web_test_dkm(0, 0), n.web_test_dkm(0, 1), n.web_test_dkm(0, 2)];
+  n.web_enc(E.K2, 3); play(n, 0.6);
+  const m1 = [n.web_test_dkm(0, 0), n.web_test_dkm(0, 1), n.web_test_dkm(0, 2)];
+  twiceB(n, B.EDIT);
+  const open = [n.web_test_pl(0), n.web_test_pl(3)];
+  twiceB(n, B.EDIT);
+  const m2 = [n.web_test_dkm(0, 0), n.web_test_dkm(0, 1), n.web_test_dkm(0, 2)];
+  const dt = cstr(n, n.web_test_toast()), shut = n.web_test_pl(0) === 0;
+  twiceB(n, B.EDIT);                              // (a cursor moved there and back: confirmed, loaded as ever)
+  n.web_enc(E.PRESET, 1); play(n, 0.1); n.web_enc(E.PRESET, -1); play(n, 0.1);
+  twiceB(n, B.EDIT);
+  const m3 = [n.web_test_dkm(0, 0), n.web_test_dkm(0, 1), n.web_test_dkm(0, 2)];
+  const k = await boot(); splash(k);
+  k.web_test_lp_trk(0, 0, 2); k.web_test_lp(0, 0); play(k, 0.2);
+  goPage(k, SEC.KIT, "ACCENT"); play(k, 0.05);
+  const a0 = k.web_test_kit(0, 10, -1);
+  k.web_enc(E.K1, 5); play(k, 0.6);
+  const a1 = k.web_test_kit(0, 10, -1);
+  twiceB(k, B.EDIT);
+  const kopen = [k.web_test_pl(0), k.web_test_pl(3)];
+  twiceB(k, B.EDIT);
+  const a2 = k.web_test_kit(0, 10, -1), kt = cstr(k, k.web_test_toast());
+  twiceB(k, B.EDIT);
+  k.web_enc(E.PRESET, 1); play(k, 0.1); k.web_enc(E.PRESET, -1); play(k, 0.1);   // (moved away and back: it loads the kit again)
+  twiceB(k, B.EDIT);
+  const a3 = k.web_test_kit(0, 10, -1);
+  check(`a list confirmed unmoved: the drum row edited ${m0} -> ${m1}, EDIT twice (list ${open}), EDIT twice: the row kept (${m2}, list ${shut ? "shut" : "open"}, "${dt}"); moved and back: loaded (${m3}); the kit's ACCENT ${a0} -> ${a1}, the kits' list (${kopen}), confirmed unmoved: kept (${a2}, "${kt}"); moved and back: the kit loaded again (${a3})`,
+        m0.join() !== m1.join() && open.join() === "1,4" && m2.join() === m1.join() && shut && dt === "THE ROW IS KEPT" &&
+        m3.join() !== m1.join() && a1 !== a0 && kopen.join() === "1,1" && a2 === a1 && kt === "IT IS THE ONE LOADED" && a3 === a0);
+}
+{                                               // 3. F3 taps the tempo only while GLO is held; PERFORM latched, it plays
+  const t = await boot(); splash(t);
+  const bpm0 = t.web_test_tempo(0);
+  t.web_keys(1); play(t, 0.2); const v0 = t.web_test_voices(); t.web_keys(0); play(t, 0.5);
+  twiceB(t, B.GLO);
+  const lay = t.web_test_lay();
+  t.web_keys(1); play(t, 0.2); const v1 = t.web_test_voices(), tst = cstr(t, t.web_test_toast()); t.web_keys(0); play(t, 0.4);
+  t.web_buttons(1 << B.GLO); play(t, 0.03);       // (GLO held on the latched layer: F3 taps again, silent)
+  t.web_keys(1); play(t, 0.2); const v2 = t.web_test_voices(); t.web_keys(0); play(t, 0.05); t.web_buttons(0); play(t, 0.3);
+  check(`F3 with PERFORM latched (GLO twice, layer ${lay}): plays (${v1} voice, "${tst}", tempo ${bpm0} kept ${t.web_test_tempo(0) === bpm0}); plain F3 played (${v0}); with GLO held it taps, silent (${v2} voices)`,
+        lay === 1 && v0 === 1 && v1 === 1 && !/^TAP/.test(tst) && v2 === 0);
+}
+{                                               // 4. WIPE and GLOBAL's reset end a loaded test first; 5. KNOB 2 stops a load under way
+  const mk = async () => { const x = await boot(); splash(x); tap(x, B.HOME); toDebug(x); return x; };
+  const loadTest = (x) => { goPage(x, SEC.DEBUG, "TESTS"); play(x, 0.05); x.web_enc(E.K1, 1); play(x, 0.8); };
+  const w = await mk();
+  loadTest(w);
+  twiceB(w, B.HOME); play(w, 3.0);
+  const on = [loadedReal(w), w.web_test_tp(2, 0)];
+  goPage(w, SEC.DEBUG, "WIPE"); play(w, 0.05);
+  w.web_enc(E.K1, 1); play(w, 0.13);
+  twiceB(w, B.HOME);
+  const wiped = [cstr(w, w.web_test_toast()), w.web_test_tp(2, 0), w.web_test_tempo(0)];
+  const g = await mk();
+  loadTest(g);
+  twiceB(g, B.HOME); play(g, 3.0);
+  goPage(g, SEC.GLOBAL, "TEMPO"); play(g, 0.05);
+  g.web_enc(E.K1, -20); play(g, 0.3);
+  const bp = g.web_test_tempo(0);
+  const [, rst] = octHold(g, B.GLO, 5.3);
+  const reset = [rst, g.web_test_tp(2, 0), g.web_test_tempo(0)];
+  const s = await mk();
+  loadTest(s);
+  s.web_buttons(1 << B.HOME); play(s, 0.03); s.web_buttons(0); play(s, 0.08);
+  s.web_buttons(1 << B.HOME); play(s, 0.03); s.web_buttons(0); play(s, 0.003);   // (the load begins: about 9 ms to build)
+  const building = s.web_test_tp(2, 0) === 0;
+  s.web_enc(E.K2, 1); play(s, 0.003);
+  const stp = [cstr(s, s.web_test_toast()), loadedReal(s)];
+  play(s, 3.0);
+  const after = [loadedReal(s), s.web_test_tp(2, 0)];
+  check(`WIPE ends a loaded test first (loaded ${on}; after: "${wiped[0]}", test ${wiped[1]}, tempo ${wiped[2]}); GLOBAL's reset (tempo ${bp}): test ${reset[1]}, tempo ${reset[2]}; KNOB 2 while it loads (not yet built ${building}): "${stp[0]}", and 3 s on nothing is loaded (${after})`,
+        on[0] && on[1] === 2 && /^WIPED/.test(wiped[0]) && wiped[1] === 0 && wiped[2] === 120 &&
+        bp !== 120 && reset[1] === 0 && reset[2] === 120 && building && stp[0] === "TEST STOPPED" && !after[0] && after[1] === 0);
+}
+{                                               // 6. CLIPS: OCT- with DELETE? open closes it as the scene steps
+  const q = await boot(); splash(q);
+  goPage(q, SEC.SEQ, "CLIPS"); play(q, 0.05);
+  q.web_test_lp(1, 2);
+  q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons((1 << B.SEQ) | (1 << B.OCTUP)); play(q, 0.03); q.web_buttons(0); play(q, 0.4);
+  const sdel = () => { q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons((1 << B.SEQ) | (1 << B.OCTDN)); play(q, 0.03);
+                       q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons(0); play(q, 0.35); };
+  const clip0 = q.web_test_lp_clip(0, 2, 0, -1);
+  sdel();
+  const asked = [q.web_test_win(3), q.web_test_lp(1, -1)];
+  tap(q, B.OCTDN);
+  const after = [q.web_test_win(3), q.web_test_lp(1, -1), q.web_test_lp_clip(0, 2, 0, -1)];
+  check(`CLIPS: a clip made (${clip0}), SEQ + OCT-: DELETE? asked (${asked[0]}, scene ${asked[1]}); OCT- alone: the scene steps (${after[1]}) and the question is gone (${after[0]}), the clip kept (${after[2]})`,
+        clip0 > 0 && asked[0] !== 0 && asked[1] === 2 && after[0] === 0 && after[1] === 1 && after[2] === clip0);
+}
+{                                               // 7. TAPE: once the sound has died away nothing is left on the screen that a full redraw does not draw
+  const m = await boot(); splash(m);
+  m.web_test_set(180, 23); m.web_test_fx_on(22, 1);
+  const fb = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
+  const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i]), 0);
+  const left = [];
+  for (const gap of [0, 1, 2, 3, 4, 5, 6, 7]) {   // (the level settles at a different frame, an even or an odd one, each time)
+    goPage(m, 34, "TAPE"); play(m, 0.1);
+    m.web_keys((1 << 7) | (1 << 11) | (1 << 14)); play(m, 0.4 + gap * 0.013);
+    m.web_keys(0); play(m, 4.0);
+    const settled = fb();
+    goPage(m, SEC.MACRO, "SOUND"); play(m, 0.2);
+    goPage(m, 34, "TAPE"); play(m, 0.3);
+    left.push(diff(settled, fb()));
+  }
+  check(`TAPE: settled after sound, the screen equals a full redraw of it (differing pixels ${left})`, left.every((d) => d === 0));
+}
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);
