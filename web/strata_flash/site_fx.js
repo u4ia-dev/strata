@@ -3,7 +3,9 @@
 // panel's screen. A dense sunflower of dots on the golden angle inside the dial's ring of ticks, beside the page, with a
 // faint field of the same spiral filling the rest; the inner dots turn faster, the screen's ink with a vermilion dot
 // every few. The pointer pushes dots aside and they spring back; a click or a tap breathes the bloom out and in.
-// Still for prefers-reduced-motion; paused while the tab is hidden and while the installer writes (<body data-busy>).
+// It follows the installer: while it writes (<body data-progress>, 0..1) the bloom fills from the centre out and the
+// dial's ticks light round to the progress; Done breathes it out, an error lets it settle. Still for
+// prefers-reduced-motion; paused while the tab is hidden; 30 frames a second while the installer writes.
 (() => {
   const cv = document.getElementById("fx");
   if (!cv || !cv.getContext) return;
@@ -13,6 +15,7 @@
   const INK = "244,241,234", HOT = "255,77,46";
   let w = 0, h = 0, cx = 0, cy = 0, rr = 0, dim = 1, dots = [], raf = 0, last = 0, t = 0;
   let px = -1e9, py = -1e9, breath = 0, breathV = 0;
+  let prog = NaN, shown = 0, glow = 0, fxEnd = "";            // the install: its progress, as drawn (eased), Done's glow
 
   function build() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -39,9 +42,12 @@
   function frame(now) {
     raf = 0;
     if (document.hidden) return;
-    if (document.body.hasAttribute("data-busy")) { setTimeout(kick, 500); return; }
+    const busy = document.body.hasAttribute("data-busy");
+    if (busy && last && now - last < 32) { raf = requestAnimationFrame(frame); return; }   // (30 a second, writing)
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
-    last = now; t += dt;
+    last = now; t += dt * (busy ? 1 + 2 * (isNaN(prog) ? 0 : prog) : 1);   // (it turns faster as it writes)
+    shown += ((isNaN(prog) ? 0 : prog) - shown) * Math.min(1, dt * 4);
+    glow = Math.max(0, glow - dt / 3);
     breathV += (-breath * 40 - breathV * 7) * dt;   // the breath: a damped spring back to rest
     breath += breathV * dt;
     draw(true);
@@ -52,6 +58,7 @@
     ctx.clearRect(0, 0, w, h);
     const rad = Math.min(150, Math.max(80, w * 0.08)), rad2 = rad * rad;
     const ink = [[], [], [], []], hot = [];
+    const fill = isNaN(prog) && glow <= 0 ? -1 : glow > 0 ? 1 : shown;   // (the core's dots lit up to here, by radius)
     for (const d of dots) {
       const spin = move ? t * (d.core ? 0.06 + 0.16 * (1 - d.f) : 0.012 + 0.03 * (1 - d.f)) : 0;
       const r = d.f * d.R * (1 + breath * (d.core ? 0.45 : 0.2));
@@ -68,6 +75,10 @@
       const x = bx + d.ox, y = by + d.oy;
       if (x < -4 || y < -4 || x > w + 4 || y > h + 4) continue;
       if (d.hot) { hot.push(x, y, d.s + 0.6); continue; }
+      if (d.core && fill >= 0 && d.f * d.f <= fill) {            // (the install: lit, its leading edge vermilion)
+        if (fill < 1 && d.f * d.f > fill - 0.06) { hot.push(x, y, d.s + 0.4); continue; }
+        ink[3].push(x, y, d.s + 0.3); continue;
+      }
       const lift = Math.min(1, Math.hypot(d.ox, d.oy) / 14);
       const b = d.core ? Math.min(3, 2 + Math.round((1 - d.f) + lift)) : Math.min(3, Math.round((1 - d.f) * 1.4 + lift * 2));
       ink[b].push(x, y, d.s);
@@ -87,10 +98,31 @@
       ctx.lineTo(cx + Math.cos(a) * (ring + l), cy + Math.sin(a) * (ring + l));
     }
     ctx.stroke();
+    const lit = glow > 0 ? 60 : fill > 0 ? Math.round(fill * 60) : 0;   // (the install: the ticks lit round from 12)
+    if (lit) {
+      ctx.strokeStyle = `rgba(${HOT},${(glow > 0 ? Math.min(1, glow) : 0.95) * dim})`; ctx.lineWidth = 2.2; ctx.beginPath();
+      for (let i = 0; i < lit; i++) {
+        const a = -Math.PI / 2 + turn + (i / 60) * Math.PI * 2, l = i % 5 === 0 ? 13 : 7;
+        ctx.moveTo(cx + Math.cos(a) * ring, cy + Math.sin(a) * ring);
+        ctx.lineTo(cx + Math.cos(a) * (ring + l), cy + Math.sin(a) * (ring + l));
+      }
+      ctx.stroke();
+    }
+  }
+  function follow() {                                        // <body data-progress, data-fx> from the installer
+    const b = document.body.dataset, p = parseFloat(b.progress), end = b.fx || "";
+    prog = isNaN(p) ? NaN : p;
+    if (still.matches) shown = isNaN(prog) ? 0 : prog;
+    if (end !== fxEnd) {
+      fxEnd = end;
+      if (end === "done") { glow = 3; breathV += 2.4; prog = NaN; }
+      if (end === "err") { prog = NaN; shown = 0; }
+    }
+    kick();
   }
 
   function kick() {
-    if (still.matches) { draw(false); return; }
+    if (still.matches) { draw(false); return; }   // (reduced motion: the progress still drawn, without moving)
     if (!raf && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); }
   }
 
@@ -103,7 +135,7 @@
   }, { passive: true });
   document.addEventListener("visibilitychange", kick);
   if (still.addEventListener) still.addEventListener("change", kick);
-  new MutationObserver(kick).observe(document.body, { attributes: true, attributeFilter: ["data-busy"] });
+  new MutationObserver(follow).observe(document.body, { attributes: true, attributeFilter: ["data-busy", "data-progress", "data-fx"] });
   build();
   kick();
 })();

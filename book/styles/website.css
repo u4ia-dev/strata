@@ -131,3 +131,8 @@ body, .book, .book .book-body .page-wrapper .page-inner section.normal, .book .b
   .markdown-section div.cols:not(:empty) { grid-template-columns: 1fr; }
   .markdown-section table { display: block; overflow-x: auto; }
 }
+
+/* Strata's logo atop the contents (fix_links.mjs puts it in) */
+.book .book-summary .st-brand { display: flex; align-items: center; gap: 12px; padding: 18px 16px 10px; color: var(--st-ink);
+  font-weight: 700; font-size: 18px; letter-spacing: .2em; text-decoration: none; }
+.book .book-summary .st-brand:hover { color: var(--st-hot); text-decoration: none; }

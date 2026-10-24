@@ -261,7 +261,7 @@ try {
     const st = await status(sid), facts = await ev(sid, "document.getElementById('f-product').textContent + ' ' + document.getElementById('f-size').textContent");
     const before = await ev(sid, "document.getElementById('find').disabled");
     const hid = [];
-    for (const id of ["confirm", "uboot-confirm", "stock-confirm", "bar", "report-text", "bk-bar", "bk-cancel"]) if (await shown(sid, id)) hid.push(id);
+    for (const id of ["confirm", "uboot-confirm", "stock-confirm", "prog", "report-text", "bk-bar", "bk-cancel"]) if (await shown(sid, id)) hid.push(id);
     check(`as it opens, every confirmation, the bars, Stop and the report not drawn${hid.length ? " (drawn: " + hid.join(", ") + ")" : ""}`, !hid.length);
     await ev(sid, "document.getElementById('c-power').click()");
     const one = await ev(sid, "document.getElementById('find').disabled");

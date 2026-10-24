@@ -11,6 +11,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strata Flasher</title>
+<!--FAVICON-->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
 <style>
   /* V0.87 (U22): the STRATA theme's colours (firmware/src/sy_gfx.c): ground, ink, label, mid, line, vermilion */
@@ -30,9 +31,7 @@
          display: grid; gap: 16px; }
   header { display: grid; gap: 6px; padding-bottom: 4px; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .mark { width: 30px; height: 22px; display: grid; grid-template-rows: repeat(3, 1fr); gap: 3px; }
-  .mark i { display: block; border-radius: 0; background: var(--hot); }
-  .mark i:nth-child(2) { margin-right: 6px; opacity: .75; } .mark i:nth-child(3) { margin-right: 12px; opacity: .5; }
+  .brand .logo { width: 60px; height: 60px; flex: none; margin: -6px 0; }   /* (the logo: assets/logo; make_flasher.py puts it in) */
   h1 { margin: 0; font-size: 26px; letter-spacing: .18em; font-weight: 700; }
   .sub { margin: 0; color: var(--mute); }
   .facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 8px 0 0; font-size: 13px; }
@@ -76,6 +75,9 @@
   .status[data-kind="warn"] { border-left-color: var(--amber); background: var(--amber-bg); }
   #status { font-weight: 600; }
   progress { width: 100%; height: 6px; accent-color: var(--amber); }
+  .prog { display: flex; align-items: center; gap: 12px; }   /* (the install's bar, by the button that started it) */
+  .prog progress { flex: 1; height: 10px; accent-color: var(--hot); }
+  .prog span { font: 700 13px var(--mono); min-width: 4.5ch; text-align: right; }
   details summary { cursor: pointer; color: var(--mute); font-size: 13px; }
   details summary:hover { color: var(--hot); }
   details.flipper { border: 1px solid var(--line); padding: 8px 12px; }
@@ -104,7 +106,7 @@
 <main>
   <!--PUBLIC:<nav class="site" aria-label="Site"><a href="index.html" aria-current="page">Install</a><a href="book/index.html">Guide &amp; manual</a><a href="info.html">Info</a><a href="@REPO@">Source</a></nav>:PUBLIC-->
   <header>
-    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>Strata</h1></div>
+    <div class="brand"><!--LOGO--><h1>Strata</h1></div>
     <p class="sub">Hardware test flasher for the M-VAVE FM-1 &middot; Chrome or Edge, on this computer only</p>
     <dl class="facts">
       <dt>Build</dt><dd id="f-version">&hellip;</dd>
@@ -116,7 +118,6 @@
 
   <section class="card status" id="status-card" data-kind="">
     <div id="status">Loading the package&hellip;</div>
-    <progress id="bar" max="100" value="0" hidden></progress>
     <details><summary>Log</summary><pre id="log"></pre></details>
   </section>
 
@@ -181,6 +182,7 @@
       <p class="warn">Do not unplug the FM-1 or switch it off until this page says Done.</p>
       <div class="row"><button id="write" class="primary">Write Strata</button><button id="cancel">Cancel</button></div>
     </div>
+    <div class="prog" id="prog" hidden><progress id="bar" max="100" value="0"></progress><span id="bar-pct">0 %</span></div>
   </section>
 
   <!--INTERNAL-->
@@ -295,7 +297,7 @@ function describe(id) {
                                   : "Felucca or another firmware of its family";
 }
 function gate() {
-  document.body.toggleAttribute("data-busy", writing);   // (the site's background animation pauses while it writes)
+  document.body.toggleAttribute("data-busy", writing);   // (the site's background follows the install: fxState)
   const backingUp = !!bk && (bk.state === "waiting" || bk.state === "reading");
   const ready = !!image && !backingUp && [...document.querySelectorAll(".pre")].every((c) => c.checked);
   $("find").disabled = !ready || writing || !$("confirm").hidden;
@@ -393,19 +395,28 @@ async function getMidi() {
   gate();
 })();
 
-// the steps fm1ota.js reports, on the bar: step 1's reads (~74), then the loader's (~1167)
-function stepper() {
-  $("bar").hidden = false;
-  $("bar").value = 0;
+// the site's background (fx.js) follows the install: its progress 0..1 on <body data-progress>, then done or err
+function fxState(progress, end = "") {
+  document.body.dataset.progress = progress < 0 ? "" : String(Math.max(0, Math.min(1, progress)));
+  document.body.dataset.fx = end;
+}
+// the steps fm1ota.js reports, on the bar beside the button that started them: step 1's reads (~74), then the
+// loader's (~1167)
+function stepper(near) {
+  const prog = $("prog"), bar = $("bar"), pct = $("bar-pct");
+  $(near).closest(".row").after(prog);
+  prog.hidden = false;
+  const set = (f) => { bar.value = f * 100; pct.textContent = `${Math.floor(f * 100)} %`; fxState(f); };
+  set(0);
   const total = 74 + 1167;
   return (k, a) => {
     log(`${k} ${a ?? ""}`);
     if (k === "start") say(`Starting: the FM-1 reports ${a}`, "busy");
-    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); $("bar").value = (a / total) * 100; }
+    if (k === "verify") { say("Step 1 of 2: the firmware running now reads the package…", "busy"); set(a / total); }
     if (k === "loader") say("Restarting into the update loader…", "busy");
-    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); $("bar").value = ((74 + a) / total) * 100; }
+    if (k === "write") { say("Step 2 of 2: writing. Do not unplug.", "busy"); set((74 + a) / total); }
     if (k === "reboot") say("Restarting the FM-1…", "busy");
-    if (k === "done") $("bar").value = 100;
+    if (k === "done") set(1);
   };
 }
 
@@ -461,7 +472,7 @@ $("write").addEventListener("click", async () => {
   writing = true; gate();
   try {
     log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
-    const up = new Updater(await getMidi(), log), step = stepper();
+    const up = new Updater(await getMidi(), log), step = stepper("find");
     if (job.loader) {
       if (!await up.resume(image, step, meta.product)) throw codeErr("stopped");
     } else {
@@ -469,7 +480,8 @@ $("write").addEventListener("click", async () => {
     }
     await restartCheck(meta.product);
     say(`Done: Strata answers after a restart (${meta.product}). Now step 3.`, "ok");
-  } catch (e) { showErr(e); }
+    fxState(1, "done");
+  } catch (e) { showErr(e); fxState(-1, "err"); }
   writing = false; gate();
 });
 
@@ -534,14 +546,15 @@ $("stock-write").addEventListener("click", async () => {
   writing = true; gate();
   try {
     log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
-    const up = new Updater(await getMidi(), log), step = stepper();
+    const up = new Updater(await getMidi(), log), step = stepper("stock-go");
     if (job.loader) {
       if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");
     } else {
       await up.install(stock.image, stock.product, step);
     }
     say("Done: the FM-1 runs the official V15.", "ok");
-  } catch (e) { showErr(e); }
+    fxState(1, "done");
+  } catch (e) { showErr(e); fxState(-1, "err"); }
   writing = false; gate();
 });
 
