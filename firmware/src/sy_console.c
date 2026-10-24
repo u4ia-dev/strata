@@ -506,6 +506,8 @@ static void cdc_task(void)                              /* main loop */
             con.stalled = 0;
             con_exec(con.line);
             con.len = 0;
+            con.stalled = 0;                           /* (V0.875: the prompt even after a reply cut short: the page
+                                                        * sees the end and asks again) */
             con_puts("> ");
         } else if (c == 0x7F || c == 0x08) {
             if (con.len) {

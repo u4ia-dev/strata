@@ -168,7 +168,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #include "../../firmware/src/sy_loop.c"
 #include "../../firmware/src/sy_c2.c"                 /* (one core here: CORE 2's page says so) */
 #include "../../firmware/src/sy_sounds.h"
-#define STRATA_VERSION "V0.87.1"                        /* (the boot screen's: the page names the build) */
+#define STRATA_VERSION "V0.875"                        /* (the boot screen's: the page names the build) */
 #ifndef WEB_NO_LINT                               /* (web_lint: the screens' check; strata_bench.c: none) */
 #define LK_LINT 1
 #endif
