@@ -328,6 +328,8 @@ try {
     await until(sid, "!document.getElementById('confirm').hidden", 8000);
     const found = await ev(sid, "document.getElementById('found').textContent");
     check("after Find: its confirmation drawn, Find itself off", await shown(sid, "confirm") && await ev(sid, "document.getElementById('find').disabled"));
+    await ev(sid, `window.__pct = []; new MutationObserver(() => window.__pct.push(parseInt(document.getElementById('bar-pct').textContent, 10)))
+      .observe(document.getElementById('bar-pct'), { childList: true, characterData: true, subtree: true }); 0`);
     await click(sid, "write");
     const asked = await until(sid, "/switch the FM-1 off/.test(document.getElementById('status').textContent) || document.getElementById('status-card').dataset.kind === 'err'", 90000);
     await sleep(1500);
@@ -341,6 +343,9 @@ try {
           done && /^Done: Strata answers after a restart/.test(st) && /FM-1_015/.test(found) && /official/.test(found) &&
           fm.upgrades === 2 && fm.bad === 0 && fm.identity === "FM-1_900" && fm.restarts === 1);
     check("the bar at 100 % after the install", await ev(sid, "document.getElementById('bar').value") === 100);
+    const pct = await ev(sid, "window.__pct");
+    check(`the bar's percentage only climbs, never past 100 (${pct.length} steps, at most ${Math.max(...pct)} %, ends ${pct[pct.length - 1]} %)`,
+          pct.length > 10 && Math.max(...pct) === 100 && pct[pct.length - 1] === 100 && pct.every((v, i) => !i || v >= pct[i - 1]));
     await shot(sid, "flasher_done.png");
     await send("Target.closeTarget", { targetId });
   }
