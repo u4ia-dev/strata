@@ -713,6 +713,65 @@ static int ui_clips_leds(uint32_t k)
     return 1;
 }
 
+/* V0.875 (item 25): panel key k's note or hit, still held, taken back out of what it was recorded into: the clip recording
+ * (its event out of the clip and the pass lists, the open note forgotten) and TAKE's memory. DEBUG's opening, for F3 and
+ * G5 landing alone first. The main loop's, the audio interrupt held a moment (LP_LOCK) */
+static void ui_l_unkey(uint32_t k)
+{
+    uint32_t t, note, i, j, e = LP_END, fl;
+    int hit, acc = 0;
+    if (k >= 27u)
+        return;
+    t = lpx.keytrk[k] % LP_NTRK;
+    note = lpx.keynote[k];
+    hit = lpp.trk[t].type == LT_DRUM;
+    if (hit) {
+        uint32_t row = lp_drum_key(k, &acc);
+        if (row >= DK_ROWS)
+            return;
+        note = DK_NOTE[row];
+    }
+    if (note > 127u)
+        return;
+    fl = LP_LOCK();
+    if (t == lpr.trk && (lpr.st == LR_TAKE || lpr.st == LR_DUB)) {   /* (the clip recording: this note's event) */
+        lp_clip_t *c = &lpp.clip[lpr.trk][lpr.scn];
+        if (hit) {
+            for (j = lpr.npass; j-- > 0 && e == LP_END;)
+                if (lp_ev[lpr.pass[j]].a == note && (lp_ev[lpr.pass[j]].len & LP_HIT))
+                    e = lpr.pass[j];
+        } else {
+            for (j = 0; j < LP_NOPEN; j++)
+                if (lpr.open[j].used && lpr.open[j].note == note) {
+                    e = lpr.open[j].ev;
+                    lpr.open[j].used = 0;
+                }
+        }
+        if (e != LP_END && lp_unlink(c, e)) {
+            lp_forget(e);
+            lp_release(e);
+            lps[t].resync = 1;
+        }
+    }
+    if (lpk.trk == t) {                             /* (TAKE's: the newest entry of it, the ones after it one place back) */
+        for (j = 0; j < lpk.n; j++) {
+            i = (lpk.head + LP_NTAKE - 1u - j) % LP_NTAKE;
+            if (lpk.note[i] == note && (hit ? (lpk.len[i] & LP_HIT) != 0u : !lpk.len[i])) {
+                uint32_t m;
+                for (m = 0; m < j; m++) {
+                    uint32_t a = (i + m) % LP_NTAKE, b = (a + 1u) % LP_NTAKE;
+                    lpk.q[a] = lpk.q[b], lpk.note[a] = lpk.note[b], lpk.vel[a] = lpk.vel[b], lpk.len[a] = lpk.len[b];
+                }
+                lpk.head = (uint16_t)((lpk.head + LP_NTAKE - 1u) % LP_NTAKE);
+                lpk.n--;
+                break;
+            }
+        }
+    }
+    LP_UNLOCK(fl);
+    lpx.seq++;
+}
+
 /* a project read (sy_app.c; ok 2: none kept, the UI's SCALE kept for its tracks), or not (ok 0); blocked: the one
  * loaded is not saved where older presets are */
 static void sy_ui_project(int ok, int blocked)

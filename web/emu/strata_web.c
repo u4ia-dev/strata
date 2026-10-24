@@ -751,7 +751,7 @@ EXPORT int32_t web_test_bloom(uint32_t f) { return sy_floori((f ? ui_twist : ui_
  * or released) */
 EXPORT int32_t web_test_chord(uint32_t f)
 {
-    return f == 0u ? chs.n : f == 1u ? chs.root : f == 2u ? chs.bass : f == 3u ? chs.built
+    return f == 0u ? chs.n : f == 1u ? chs.root : f == 2u ? chs.bass : f == 3u ? chs.built : f == 4u ? chs.nheld
            : f >= 10u && f < 10u + CH_MAXN ? chs.note[f - 10u] : -1;
 }
 EXPORT const char *web_test_chord_name(void)
@@ -809,7 +809,7 @@ EXPORT int32_t web_test_voice_note(uint32_t i)
 /* V0.8, the looper (sy_loop.c): f 0 the track selected (set: lp_select), 1 the scene picked, 2 QUANTIZE, 3 COUNT-IN,
  * 4 CLICK, 5 its LEVEL, 6 LAUNCH, 7 the project, 8 SONG on (v >= 0 sets them); 10 recording (LR_*), 11 the track
  * recording, 12 events free, 13 the UI's change count, 14 the click sounding (samples left), 15 the transport running,
- * 16 the bar it is in, 17 UNDO's events kept, 18 this pass's, 19 the pass before's, 20 SONG's slot playing; read
+ * 16 the bar it is in, 17 UNDO's events kept, 18 this pass's, 19 the pass before's, 20 SONG's slot playing, 21 TAKE's notes; read
  * back */
 /* V0.86: the battery's reading and USB power (v < 0: as they are); the screen: 0 on .. 4 (SCR_*), 1 dark */
 EXPORT int32_t web_test_power(int32_t batt, int32_t usbp)
@@ -886,6 +886,7 @@ EXPORT int32_t web_test_lp(uint32_t f, int32_t v)
     case 18: return lpr.npass;
     case 19: return lpr.nlast;
     case 20: return lpx.sslot;
+    case 21: return lpk.n;                          /* (V0.875: TAKE's notes kept) */
     default: return -1;
     }
 }
