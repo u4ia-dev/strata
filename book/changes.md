@@ -33,7 +33,7 @@ ever saved, "TEST · NOT SAVED" shows while one is loaded, and the sound you had
 fewer dropouts. A new note first takes unison voices from the others before it steals one. The effects' low-cost mode and
 HALL's extra lines fade in and out instead of clicking. The MASTER knob ignores its own noise. PROJECT NEW keeps CLOCK IN. OTT no
 longer buzzes on held notes (about 10 dB less), which was most of OTT GROWL's crackle; the rest of the crackle on some
-sounds is in their wavetables and is fixed in V0.88.
+sounds is in their wavetables, which V0.88 redoes.
 
 **Backup mode.** Entering backup mode from Strata works again: <kbd>OCT−</kbd> + <kbd>OCT+</kbd> held 5 s, or the SysEx
 message. Tested on one FM-1.
