@@ -12,7 +12,7 @@ How Strata uses the FM-1's controls and screen, and the rules every menu follows
 | KNOB 1–4 | Set the four values on the screen, left to right. |
 | SELECT | Go to the next or previous module of the menu (<kbd>EDIT</kbd>: OSC A, OSC B, SUB, NOISE, FILTER, MATRIX). |
 | ALGORITHM | Go to the next or previous page of the module. |
-| PRESETS | Open the presets list (on looper pages: choose the track; on a drum track: choose the drum). |
+| PRESETS | Open the presets list (on looper pages: choose the track, except on CLIPS; on a drum track: choose the drum). |
 | MASTER | Output level. |
 
 The FM-1's keys have no velocity; they play at SCL's VELOCITY (100).
@@ -41,14 +41,15 @@ A module that is switched off says so on its pages ("OSC B IS OFF · EDIT + OCT+
 ## Buttons
 
 1. **Once**: opens the menu on the page you left. Pressed inside its own menu: goes to its first page.
-2. **Twice** (within 300 ms): its second job, such as <kbd>EDIT</kbd> twice for the wavetable list.
+2. **Twice** (within 300 ms): its second job, such as <kbd>EDIT</kbd> twice for the wavetable list. Pressed twice again, it loads the one you chose.
 3. **Held**: opens its layer until you let go.
 4. **With <kbd>OCT+</kbd> / <kbd>OCT−</kbd>**: hold the button, then press OCT+ to switch on or add, OCT− to switch off
    or remove.
 5. **With <kbd>OCT−</kbd> held 5 s**: resets what the menu shows. A countdown appears after 2 s; let go of OCT− to
    cancel. Sound changes can be undone afterwards with <kbd>SAVE</kbd> + <kbd>OCT−</kbd>.
 
-**Help**: hold <kbd>HOME</kbd> to see what every control does on the current screen.
+**Help**: hold <kbd>HOME</kbd> to see what every control does on the current screen. The map stays for as long as you hold
+the button. On the HOME page, keep holding for 5 seconds to open DEBUG (a bar fills along the bottom).
 
 ## Layers
 
@@ -75,14 +76,26 @@ Windows open over the page; the keys still play. Any other button, SELECT or PRE
 | --- | --- | --- |
 | Assign window | <kbd>ENV</kbd> or <kbd>LFO</kbd> twice | Put a source onto a knob ([how](modulation.md#put-a-modulator-on-a-knob)) |
 | SAVE window | <kbd>SAVE</kbd> | SAVE, SAVE AS NEW or CANCEL: <kbd>OCT−</kbd>/<kbd>OCT+</kbd> choose, <kbd>SAVE</kbd> confirms |
-| Questions (DELETE?, T1: DRUMS?, WIPE?) | an action that removes something | Confirm as the window says; anything else cancels |
+| Questions (DELETE?, TYPE, WIPE?, test projects) | an action that removes or replaces something | Confirm as the window says; anything else cancels |
 
-Lists (presets, wavetables, drum presets, kits, projects) all work the same way: turn PRESETS to move, press
-<kbd>SAVE</kbd> twice to load, <kbd>SAVE</kbd> + <kbd>OCT+</kbd> to save a new entry, <kbd>SAVE</kbd> +
-<kbd>OCT−</kbd> to delete (it asks first). A list closes after 5 seconds untouched.
+Lists (presets, wavetables, drum presets, kits, projects) all work the same way: turn PRESETS to move, then press
+twice **the button that opened the list** to load. In the presets list that is <kbd>SAVE</kbd>; in the wavetable, drum
+preset and kit lists it is <kbd>EDIT</kbd>; in the projects list it is <kbd>SEQ</kbd>. <kbd>SAVE</kbd> + <kbd>OCT+</kbd>
+saves a new entry and <kbd>SAVE</kbd> + <kbd>OCT−</kbd> deletes (it asks first). A list closes after 5 seconds
+untouched, or when you press its opener once or any other button.
+
+**Answering a question**: press twice the button that opened it, or the menu button of the page whose knob asked.
+
+| Question | Answer yes with |
+| --- | --- |
+| A track's TYPE (CLIPS, KNOB 1) | <kbd>SEQ</kbd> twice |
+| WIPE? and a test project (DEBUG) | <kbd>HOME</kbd> twice |
+| A clip's DELETE? | <kbd>SEQ</kbd> + <kbd>OCT−</kbd> again |
+
+One press of that button, or any other button, says no.
 
 ## Power-on
 
-Strata shows its splash for two seconds, then HOME, with the sound, settings and project you had. Hold
+Strata shows its logo for two seconds, then HOME, with the sound, settings and project you had. Hold
 <kbd>HOME</kbd> while switching on to start without the last sound. After a crash Strata does this by itself and shows
 SAFE START.

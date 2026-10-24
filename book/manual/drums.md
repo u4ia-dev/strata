@@ -22,10 +22,10 @@ Hold a step's key and turn the knobs to set that hit's VELOCITY, ACCENT, CHANCE 
 **Fill a row with a rhythm (EUCLID)**: on CLIP, ALGORITHM to EUCLID. Turn KNOB 4 to choose the row, then KNOB 1 HITS,
 KNOB 2 STEPS and KNOB 3 ROTATE. Each turn refills that row across the clip.
 
-**Load a kit**: press <kbd>EDIT</kbd> twice on HOME or KIT, turn PRESETS, press <kbd>SAVE</kbd> twice. Your clips stay.
+**Load a kit**: press <kbd>EDIT</kbd> twice on HOME or KIT, turn PRESETS, press <kbd>EDIT</kbd> twice again. Your clips stay.
 
 **Load a drum preset into a row**: press <kbd>EDIT</kbd> (DRUM shows the drum PRESETS chooses), then <kbd>EDIT</kbd>
-twice. SELECT changes the category, PRESETS the preset; <kbd>SAVE</kbd> twice loads it. The row keeps its LEVEL and PAN.
+twice. SELECT changes the category, PRESETS the preset; <kbd>EDIT</kbd> twice again loads it. The row keeps its LEVEL and PAN.
 
 **Save**: on a drum track, <kbd>SAVE</kbd> saves the drum (on DRUM) or the kit (elsewhere) as a sound is saved: SAVE
 over your own, or SAVE AS NEW with a name. You can keep 64 drum presets and 16 kits; any project can use them.
@@ -84,6 +84,8 @@ The duck lowers every synth track after its effects; the drums are never ducked.
 ## GRID, HIT, EUCLID
 
 ![The GRID](../images/DrumGrid-2x.png)
+
+The rows are named KICK, SNARE, CLAP, HAT C, HAT O, CYM, WT 1, WT 2 and DUCK at the left of the grid.
 
 | Page | Knobs | What they set |
 | --- | --- | --- |

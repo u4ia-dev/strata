@@ -2,6 +2,36 @@
 
 What each version changed, newest first.
 
+## V0.87.1
+
+The book matches Strata V0.87.1 at commit ae531d4.
+
+**Panel.**
+- <kbd>HOME</kbd> held for 5 s opens DEBUG only on the HOME page. On any other page the same hold shows the help map for
+  as long as you hold it.
+- WIPE moved from SETTINGS into DEBUG. Press <kbd>HOME</kbd> twice to confirm.
+- A list or question is confirmed by pressing twice the button that opened it: <kbd>EDIT</kbd> for the wavetable, kit and
+  drum-preset lists, <kbd>SEQ</kbd> for the projects list and a track's TYPE, <kbd>HOME</kbd> for WIPE. One press, or
+  any other button, says no.
+- CLIPS: <kbd>OCT−</kbd> and <kbd>OCT+</kbd> step through the scenes, KNOB 2 sets PLAYS, MUTE or SOLO, KNOB 4 chooses the
+  track, and PRESETS opens the track's sound list again.
+- Tap tempo is <kbd>GLO</kbd> held + F3, the lowest key (it does not sound). <kbd>GLO</kbd> + <kbd>PLAY</kbd> is PLAY's own
+  again.
+
+**Screens.** Strata starts with its logo. The POLARITY dial points up at rest. ARP STEPS shows each step's CHANCE as a
+fader. TAPE moves with the sound. The drum grid's row names are shorter. KEY SCAN names KNOB 1's lines instead of flagging
+them.
+
+**Test projects.** DEBUG > TESTS has four built-in projects (VOICES, FX, DRUMS, LOOPER) that stress the voices, every
+effect, the drums and the looper for 60 to 90 seconds. Loading one saves your open project first; nothing from a test is
+saved, "TEST · NOT SAVED" shows while one is loaded, and the sound you had comes back when it ends.
+
+**Sound engine.** Chords can use more voices before Strata limits them, and a new note first takes unison voices from the
+others before it steals one. The effects' low-cost mode and HALL's extra lines fade in and out instead of clicking. The
+MASTER knob ignores its own noise. PROJECT NEW keeps CLOCK IN.
+
+**Backup mode.** Strata can enter backup mode in three ways. Unconfirmed on hardware.
+
 ## Book rewritten: condensed, one-page guide
 
 The book now matches Strata V0.87 at commit 3f869d7. The Guide is one page of feature cards, the cheat sheet is laid out

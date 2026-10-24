@@ -1,4 +1,4 @@
-# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17, V0.87's in §18 and §19)
+# Strata's flash and RAM (the V0.65 audit; V0.67's figures in §8, V0.8's in §11, V0.81's in §14, V0.85's in §15, V0.86's in §16 and §17, V0.87's in §18 and §19, V0.87.1's in §20)
 
 Where Strata's flash and RAM go, what V0.65 freed and how, what the audit found on the way, and what is left. The
 figures are from `tools/build.py --strata` and the listing (`build/strata.dis`, symbols from `objdump -t`) unless a
@@ -134,6 +134,35 @@ The STRATA UI ([UI.md](UI.md)) against V0.66, from the build (`tools/build.py --
 The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at or under V0.66's in each of five
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
+
+## 20. V0.87.1 (a local build)
+
+From the build (`tools/build.py --strata`, the log's "ok" lines), against V0.87 step 2 (§19):
+
+| | V0.87 step 2 | V0.87.1 | |
+|---|---:|---:|---|
+| App image | 503,348 B | 519,048 B | +15,700; 62,516 B of the app slot's 581,564 B free |
+| RAM .data + .bss | 66,980 B | 67,156 B | +176, of 73,728 |
+| Pool | 362,036 B | 363,776 B | of 380,928 B; 17,152 B free with the 4 KiB margin |
+| Spare SRAM | | 22,188 B used | 22,784 B left, watched on BENCH |
+| Interrupt stack | ~3,068 B | ~3,064 B | of 4,096 allowed (audio 2,824 B, TIMER5 nested 184 B, wrappers 56 B) |
+| Main stack | ~5,304 B | ~4,364 B | of 8,192 allowed (12,032 reserved): the path fm1_cstart > fm1_main > sy_app_ms > ui_buttons |
+
+What it added: the four test projects' data and code (`sy_testproj.c`: compact tables built into the looper when one
+loads, so no buffers of their own; their state is in the +176 of `.data` + `.bss`); the logo's drawing in place of the two blooms; DEBUG > TESTS and
+the test mark; the HALL reverb's lines 5 to 8 ramping in (a 5-field struct on the stack in one out-of-line function);
+the guard's and the admission's new arithmetic; the MASTER pot's dead band; backup mode's three ways; the console's
+`tproj`, `uboot yes a|b|c` and three more `status` lines. `sy_app_ms` and the settings' save are out of line, as the
+test projects' call had made the compiler take them into `fm1_main`, their flash buffers under every frame the loop
+draws (the main stack +508 B). All figures **verified on host** (the build's counts); the unit's own use is on BENCH
+(**needs hardware test**).
+
+The guard and the admission (V0.87.1): they go by the half's whole time, the interrupts nested in it too, to higher
+marks (steps at 85 %, effects at low cost at 88 %, a voice shed at 92 % twice in a row, back under 75 %; V0.87's were
+70, 78, 85 and 55 % of the render alone), and a new note that does not fit first takes unison voices from the others
+before it steals. Measured on the host (`web/emu/strata_clip.c`, `strata_guard.c`): **verified in emulator**; the CPU
+on the FM-1 **needs hardware test** (BENCH's AUDIO row, `status`'s `load_total_pct` and `voices_traded`, test projects
+1 and 3).
 
 ## 19. V0.87 step 2 (the drums' models, presets, kits)
 

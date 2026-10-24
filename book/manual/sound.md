@@ -24,7 +24,7 @@ parameter are in the [parameter reference](parameters.md).
 
 1. Show OSC A or OSC B and press <kbd>EDIT</kbd> twice.
 2. Turn SELECT to jump between categories and PRESETS to choose a table.
-3. Press <kbd>SAVE</kbd> twice to load it.
+3. Press <kbd>EDIT</kbd> twice again to load it.
 
 ## OSC A and OSC B
 

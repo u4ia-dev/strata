@@ -4,7 +4,7 @@ Eight tracks (T1–T8) and eight scenes (A–H). Each track can hold one clip pe
 1 to 16 bars long. A scene is a row of clips that play together; SONG chains scenes. Four projects keep it all.
 
 <kbd>SEQ</kbd> opens three modules (SELECT): **LOOP** (CLIPS, MIXER, SONG), **CLIP** (NOTES, NOTE+, CLIP, TOOLS) and
-**TRACK** (RECORD, CLICK). On every looper page, PRESETS chooses the track. The top line shows the track, the scene, the
+**TRACK** (RECORD, CLICK). On every looper page but CLIPS, PRESETS chooses the track. The top line shows the track, the scene, the
 bar and beat, and REC or DUB while recording.
 
 ## How to
@@ -13,7 +13,8 @@ bar and beat, and REC or DUB while recording.
 
 **Record a loop**
 
-1. Press <kbd>SEQ</kbd>. Turn PRESETS to choose a track and KNOB 2 to choose a scene with an empty place.
+1. Press <kbd>SEQ</kbd>. On CLIPS, turn KNOB 4 to choose a track and press <kbd>OCT−</kbd> or <kbd>OCT+</kbd> to choose a
+   scene with an empty place.
 2. Tap <kbd>REC</kbd>. If the transport is stopped, one bar of count-in clicks plays first; if it is running,
    recording starts at the next bar.
 3. Play. Notes are recorded as played (or quantized, see RECORD), and so are turns of any knob that can be modulated.
@@ -56,7 +57,7 @@ Hold <kbd>SEQ</kbd>:
 | MIDI | only sends its notes out over USB MIDI |
 | DRUMS | the project's drum kit ([The drums](drums.md)) |
 
-Set TYPE with KNOB 1 on CLIPS. A track with clips asks first; <kbd>SAVE</kbd> confirms. Clips are kept whatever the
+Set TYPE with KNOB 1 on CLIPS. A track with clips asks first; press <kbd>SEQ</kbd> twice to confirm. Clips are kept whatever the
 type.
 
 ## Pages
@@ -65,7 +66,7 @@ type.
 
 | Page | Knobs | What they do |
 | --- | --- | --- |
-| CLIPS | TYPE, SCENE | Tracks as rows, scenes as columns. Filled: playing; framed: there; dot: empty; blinking: launched; vermilion: recording. |
+| CLIPS | TYPE, PLAYS/MUTE/SOLO, (none), TRACK | <kbd>OCT−</kbd> and <kbd>OCT+</kbd> choose the scene; KNOB 2 sets the selected track to PLAYS, MUTE or SOLO; KNOB 4 chooses the track; PRESETS opens the track's sound list (a drum track: its drums). Tracks as rows, scenes as columns. Filled: playing; framed: there; dot: empty; blinking: launched; vermilion: recording. |
 | MIXER | VOLUME, PAN, MUTE/SOLO | The selected track's level (0–127, 100 as recorded), pan, and PLAYS, MUTE or SOLO. |
 | SONG | SLOT, SCENE, REPEATS, SONG | Up to 16 slots, each a scene played 1–16 times. With SONG ON, <kbd>PLAY</kbd> plays the slots in order and starts again after the last. |
 | NOTES | NOTE, PITCH, START, LENGTH | A piano roll of the clip, one bar at a time. |
@@ -82,8 +83,8 @@ The sound itself is not changed.
 
 ![Projects](../images/LoopProjects-2x.png)
 
-Press <kbd>SEQ</kbd> twice for the projects list. Turn PRESETS to choose one and press <kbd>SAVE</kbd> twice to load it;
-the current project is saved first. <kbd>SAVE</kbd> + <kbd>OCT−</kbd> clears the loaded project (it asks first).
+Press <kbd>SEQ</kbd> twice for the projects list. Turn PRESETS to choose one and press <kbd>SEQ</kbd> twice to load it
+(once, or another button, closes the list); the current project is saved first. <kbd>SAVE</kbd> + <kbd>OCT−</kbd> clears the loaded project (it asks first).
 
 A project keeps the tracks (type, channels, mix, scale, chords and ARP), the clips, SONG and the drum kit, up to 2,048
 notes and moves in all. It is saved by itself when the transport is stopped and nothing has sounded for 3 seconds.

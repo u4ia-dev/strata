@@ -30,7 +30,7 @@ last change.
 | Press | Does |
 | --- | --- |
 | A menu button once | Opens its menu where you left it (pressed again: its first page) |
-| Twice, quickly | Its second job (EDIT twice: the wavetable list) |
+| Twice, quickly | Its second job (EDIT twice: the wavetable list; press it twice again to load the one chosen) |
 | Held | Its layer, for as long as you hold it (FX held: the macros) |
 
 | Press | Does |
@@ -56,7 +56,7 @@ last change.
 <a class="more" href="../manual/fx.md">Manual: Effects</a></div>
 <div class="card"><h3>Performing</h3>
 <p>Bend, mod wheel, macros and temporary tweaks from the knobs.</p>
-<ul><li><kbd>GLO</kbd> held: PERFORM (bend, wheel, glide)</li><li><kbd>FX</kbd> held: MACROS and effect bypass</li><li><kbd>LFO</kbd> held: MOMENTARY changes</li><li><kbd>GLO</kbd> held + <kbd>PLAY</kbd> taps: tap tempo</li></ul>
+<ul><li><kbd>GLO</kbd> held: PERFORM (bend, wheel, glide)</li><li><kbd>FX</kbd> held: MACROS and effect bypass</li><li><kbd>LFO</kbd> held: MOMENTARY changes</li><li><kbd>GLO</kbd> held + F3 (lowest key) taps: tap tempo</li></ul>
 <a class="more" href="../manual/playing.md">Manual: Playing</a></div>
 <div class="card"><h3>Scales, chords, ARP</h3>
 <p>Fit the keys to a scale, play a chord on every key, arpeggiate it in time.</p>
@@ -64,7 +64,7 @@ last change.
 <a class="more" href="../manual/playing.md">Manual: Playing</a></div>
 <div class="card"><h3>Looper</h3>
 <p>Eight tracks of clips in eight scenes. Record takes and overdubs, then launch them.</p>
-<ul><li><kbd>SEQ</kbd>: clips, mixer, song</li><li><kbd>REC</kbd>: record; <kbd>REC</kbd> twice: keep what you just played</li><li><kbd>SEQ</kbd> held: launch pad</li><li><kbd>SEQ</kbd> twice: projects</li></ul>
+<ul><li><kbd>SEQ</kbd>: clips, mixer, song</li><li><kbd>REC</kbd>: record; <kbd>REC</kbd> twice: keep what you just played</li><li><kbd>SEQ</kbd> held: launch pad</li><li><kbd>SEQ</kbd> twice: projects</li><li>CLIPS: <kbd>OCT−</kbd>/<kbd>OCT+</kbd> scene, KNOB 4 track</li></ul>
 <a class="more" href="../manual/looper.md">Manual: The looper</a></div>
 <div class="card"><h3>Drums</h3>
 <p>Set a track's TYPE to DRUMS: eight drum rows, seven models, presets, kits and a step grid.</p>
@@ -80,7 +80,7 @@ last change.
 <a class="more" href="../manual/midi.md">Manual: MIDI and USB</a></div>
 <div class="card"><h3>Settings</h3>
 <p>Themes, LED brightness, knob feel, MIDI, power saving.</p>
-<ul><li><kbd>HOME</kbd> twice: SETTINGS</li><li><kbd>HOME</kbd> held: help map</li><li>SETTINGS &gt; WIPE: settings back to default</li></ul>
+<ul><li><kbd>HOME</kbd> twice: SETTINGS</li><li><kbd>HOME</kbd> held: help map; on HOME, 5 s: DEBUG</li><li>DEBUG &gt; WIPE: settings back to default</li><li>DEBUG &gt; TESTS: test projects</li></ul>
 <a class="more" href="../manual/settings.md">Manual: Settings, LEDs and DEBUG</a></div>
 <div class="card"><h3>Installing</h3>
 <p>Install from the web page, back up first, and go back at any time.</p>
@@ -88,6 +88,6 @@ last change.
 <a class="more" href="../manual/install.md">Manual: Installing and recovery</a></div>
 <div class="card"><h3>When things go wrong</h3>
 <p>Messages explained, sounds that won't play, crashes and limits.</p>
-<ul><li><kbd>HOME</kbd> held at power-on: start without the last sound</li><li>SETTINGS &gt; WIPE: reset the settings</li></ul>
+<ul><li><kbd>HOME</kbd> held at power-on: start without the last sound</li><li>DEBUG &gt; WIPE: reset the settings</li></ul>
 <a class="more" href="../manual/troubleshooting.md">Manual: Troubleshooting</a></div>
 </div>

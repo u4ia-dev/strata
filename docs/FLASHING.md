@@ -1,5 +1,10 @@
 # Flashing Strata for a hardware test
 
+> **V0.87.1 is a local build, not a public one.** It is installed only through the local test flasher (`build/flasher`,
+> `serve.py`) on the owner's computer, never published. The public releases stay at V0.87 until a public version is
+> decided. Section 1 says what V0.87.1 is; section 4's items 59 to 66 are its test; the test page's new sections are
+> described in section 4 ("The V0.87.1 test page").
+
 This is the procedure for putting Strata's **hardware test build** (`V0.87 UI`: V0.87's controls and windows on V0.86's interface and drum editor, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes,
 its drum synth and sidechain, and CORE 2, the second core measured: [CONTROLS.md](CONTROLS.md) "Buttons", "The
 looper", "The drums", "SETTINGS") on an FM-1, testing it, and going back. Strata is installed the way Felucca is: by
@@ -11,8 +16,8 @@ back. Section 9 says what happened and what changed. `V0.5` (2026-10-17) had the
 check and its report came back over USB, so bulk IN works after a power-on (**verified on hardware**, the V0.5
 report). `V0.6` is the build after that test: the FX chain, seven new effects and the UI changes the test asked for
 (section 1); it installed (2026-10-17), and its test waited for `V0.65`, the memory audit ([BUDGET.md](BUDGET.md)),
-which ran on the FM-1 on 2026-10-18 (the test page's report); `V0.66` is the build after that report; V0.86 and V0.87 are
-not yet run on an FM-1. Section 8 lists what was checked where.
+which ran on the FM-1 on 2026-10-18 (the test page's report); `V0.66` is the build after that report; V0.86 and V0.87 ran on an FM-1 (the V0.87 test, 2026-10-24: its report
+is what V0.87.1 answers); V0.87.1 is not yet run. Section 8 lists what was checked where.
 
 | | |
 | --- | --- |
@@ -28,6 +33,28 @@ and the preset browser, the settings, on the FM-1's own flash; MIDI in over USB 
 audio input (what it plays, to the computer); MASTER; a USB serial console; and **SETTINGS > BENCH**, which measures
 what this test is for. The platform is Felucca's, unchanged: the boot guard, the watchdog, the crash screen, the
 update entry, the UBOOT entries.
+
+**New in V0.87.1** (a local build from the V0.87 test; [CONTROLS.md](CONTROLS.md) "V0.87.1, in short"; package
+`build/strata.fwsc`, 610,073 bytes, identity `FM-1_900`; [BUDGET.md](BUDGET.md) §20):
+- The panel: DEBUG opens from HOME only (elsewhere HOME held is the help map for as long as it is held), WIPE moved into
+  DEBUG (HOME twice), a list or question answered by the button that opened it twice (EDIT: the wavetables, kits and
+  drum presets; SEQ: the projects and the track TYPE; HOME: WIPE and the test projects), the CLIPS page (OCT−, OCT+ the
+  scene, KNOB 2 PLAYS / MUTE / SOLO, KNOB 4 the track, PRESETS the list), tap tempo on GLO held + F3, the POLARITY dial
+  pointing up, ARP STEPS' CHANCE as faders, TAPE moving with the sound, the drum GRID's short row names, KEY SCAN naming
+  KNOB 1's lines, the logo splash, "TEST · NOT SAVED" while a test project is loaded.
+- **DEBUG > TESTS: four built-in test projects** (1 VOICES, 2 FX, 3 DRUMS, 4 LOOPER; 60 to 90 s each, then they stop;
+  the console's `tproj`). Loading one first saves the owner's open project, settings and sound into their own slots,
+  as PROJECT's LOAD does; nothing from the test is saved; a project's load, PROJECT NEW or a restart ends it, and the
+  sound from before comes back.
+- The engine: the guard and the admission go by the half's whole time (the interrupts nested in it too), to higher
+  marks, and a note that does not fit takes unison voices from the others before it steals (more voices before the
+  CPU limit: item 14 of the V0.87 findings); the guard's steps no longer click (the effects' low-cost mode and HALL's
+  lines 5 to 8 ramp over 16 blocks); the MASTER pot has a dead band (its ADC noise no longer moves the gain every
+  frame); PROJECT NEW keeps CLOCK IN.
+- Backup mode has **three ways, a, b and c**, all writing nothing (below, "Backup mode from Strata"); the keys and the
+  SysEx soft key take b until the test decides.
+- The console: `tproj`, `uboot yes a|b|c`, and `status` lines `load_total_pct`, `voices_traded`, `master_adc`, `tproj`,
+  `tproj_ms` (section 5).
 
 **New in V0.6** (from the V0.5 test; [CONTROLS.md](CONTROLS.md)): the effects as a **chain** of up to eight modules
 (add, take out, move, two of a type; the chain view on FX), seven new effects (FLANGER, PHASER, an FX FILTER of 21
@@ -186,12 +213,29 @@ its server in an administrator PowerShell (section 3, step 3), then its step 1 (
    files still match its receipt.
 3. **Leave backup mode:** switch the FM-1 off and on. Copy the backup folder somewhere else as well.
 
-Other ways into backup mode work for the page's backup too (it waits for the disk, however it got there): the
+Other ways into backup mode may work for the page's backup too (it waits for the disk, however it got there): the
 page's **Put the FM-1 in backup mode** (the firmware's soft key `F0 22 24 35 7D F7`) and OCT− + OCT+ held 5 s on
 Felucca or Strata. *Not enough on their own:* from Strata on 2026-10-16 the chip reached backup mode but Windows never
-read it (*Unknown USB Device (Device Descriptor Request Failed)*, on a direct port and behind a hub), and it went back
-to Strata about 14 s later; from the official firmware or Felucca on this computer: unverified. (Backup mode that no
-computer has read ends by itself after about 13 s; once read, it stays until the FM-1 is switched off.)
+read it (*Unknown USB Device (Device Descriptor Request Failed)*, on a direct port and behind a hub); from the official
+firmware or Felucca on this computer: unverified. **From V0.87 (the 2026-10-24 test; verified on hardware):** OCT− +
+OCT+ held 5 s and the SysEx soft key both left a **black screen** and Windows showed an **unknown USB device**, even
+after a replug; a **power cycle** brought Strata back; **the Flipper Zero route works**. (The stock V15 does the same
+thing and reaches backup mode on a Linux host, so something Strata sets survives the reset; the reset leaves the
+watchdog armed and does no USB detach.) The older line, "backup mode that no computer has read ends by itself after
+about 13 s", is now **in doubt**: strata-review suspects it was the watchdog (left armed across the reset), not a
+timeout of the chip's own. **Unverified**, pending the V0.87.1 test (items 59 to 66 below, the test page's section 7).
+
+**Backup mode from Strata, V0.87.1** (**needs hardware test**; writes nothing). Three ways, picked by the console's
+`uboot yes a|b|c` (the keys and the SysEx soft key take `b`; the footer says "WAY B"):
+
+| Way | What it does |
+| --- | --- |
+| A | as V0.87: the USB detached for 30 ms, the P33 reset, the watchdog left armed |
+| B | the watchdog stopped, the USB detached (controller off, D+ pull-up off) for about 100 ms, then the P33 reset |
+| C | as B, then a watchdog reset instead of the P33 one |
+
+B and C try their reset for about 3 s, then the other, so a way never leaves a black screen for ever. The test decides
+the winner; then all three entries take it. If none works, the Flipper route (above) does.
 
 **Backups made another way** are the same thing, a raw 1 MiB image of the flash from address 0, and any of these
 tools can use any of them; the page counts only the ones it made. MvaveFM1Unbricker's `fm1_unbrick.py backup DIR`,
@@ -305,7 +349,9 @@ save as a file) is what to paste into the conversation. The list below is the wh
    PROGRAM on; MIDI LEARN. The TRS jack if you have a device for it.
 9. **USB audio.** Record the FM-1 in the DAW (an audio input named after the USB name): clean, no gaps.
 10. **Optional:** OCT− + OCT+ for 5 s: the countdown from 2 s, then UBOOT. Note whether Windows shows the
-    `WL82 UBOOT1.00` disk or an unknown device; unread, the FM-1 returns to Strata by itself after ~13 s.
+    `WL82 UBOOT1.00` disk or an unknown device (V0.87.1: way B, item 62; on V0.87 it was an unknown device and a black
+    screen until a power cycle). The old "returns to Strata by itself after ~13 s" is **unverified** (it may have been the
+    watchdog).
 
 New in V0.6:
 
@@ -482,11 +528,12 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     alone until it times out and restarts (about a minute): Strata starts normally, **no STRATA CRASH screen, no SAFE
     START** (V0.86 showed one). Photo either way.
 55. **V0.87: the splash and the theme.** Pick a theme other than STRATA, power-cycle: the splash in that theme. Then
-    SETTINGS > WIPE, SAVE: STRATA again, LIGHTS HIGH, your presets and projects still there.
-56. **V0.87: the new controls.** EDIT twice (the wavetables' list: SELECT the category, SAVE twice loads); LFO twice on
+    WIPE (V0.87.1: DEBUG, HOME held 5 s on HOME, ALGORITHM to WIPE, KNOB 1, HOME twice): STRATA again, LIGHTS HIGH, your
+    presets and projects still there.
+56. **V0.87: the new controls.** EDIT twice (the wavetables' list: SELECT the category; V0.87.1: EDIT twice loads); LFO twice on
     a WAVE page (the assign window: a source onto WT POS, ALGORITHM, AMOUNT and POLARITY, by ear); SAVE once (the SAVE
     window); a reset by EDIT + OCT− held 5 s, stopped once by letting go of OCT−; REC twice after playing a phrase
-    (TAKE: it loops); GLO held + PLAY tapped in time (tap tempo); SEQ + OCT+ (a new clip, PRESETS its length), SEQ +
+    (TAKE: it loops); GLO held + F3 tapped in time (V0.87.1: tap tempo); SEQ + OCT+ (a new clip, PRESETS its length), SEQ +
     OCT− twice (DELETE?, deleted). Any one that does not do what CONTROLS.md says: note it.
 57. **V0.87 step 2: the drums by ear.** On a drum track: EDIT twice on KIT, load each of the six kits over the same
     beat (808, 909, LO-FI, VIDEO GAME, TRAP, DRUM & BASS): do they sound like their names, and unlike each other?
@@ -500,13 +547,72 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     input still records. Send the soft key (the flasher's "Put the FM-1 in backup mode"), then switch the FM-1 off and
     on: Strata again. Optional: Felucca's installer still finds the FM-1 (the way back to Felucca).
 
+New in V0.87.1 (a local build; the test page's sections 3 and 7 and its guided steps have these; **needs this hardware
+test** throughout):
+
+59. **The test projects** (the page's section 3, or by hand). The page's four buttons (or "Run all four") load each with
+    `tproj N`, record the FM-1's USB audio while it plays (60 to 90 s; hands off the FM-1 and the volume), poll `tproj` for its
+    running time and stop it if it overruns. By hand: HOME held 5 s on HOME, ALGORITHM to TESTS, KNOB 1 a test, HOME
+    twice. Note: the question's wording; "TEST · NOT SAVED" on every page's top line, the name on HOME; the test
+    stopping by itself; KNOB 2 stopping it early. Then load a project: the test ends, **the sound from before the test is
+    back** (a sound chosen during the test is replaced: choose one and see), your project, tempo and CLOCK IN as they
+    were, and nothing the test did saved (power-cycle: your own work as it was).
+60. **Voices and crackle** (tests 1 and 3; the recordings). More than 3 or 4 voices on SUPERSAW and VOWEL PAD at 8
+    notes, no late halves, no crackle (V0.87 heard it on OTT GROWL and VOWEL PAD, and in USB recordings at loud
+    volumes). The console's `status`: `load_total_pct` (the half's whole time, the guard's figure) and `voices_traded`
+    (notes that took unison voices from the others).
+61. **The MASTER pot's dead band.** Leave it alone: `status`'s `master_adc` (the pot's reading, before the band) may move a
+    step or two, the level must not. Turn it: smooth, both ends reachable (silence at the left end, full at the right).
+62. **Backup mode, the three ways** (the page's section 7: three buttons, each asks first, its own before and after
+    notes). Before: what Windows shows for the FM-1. Press way A, B or C: the console drops. After: a disk `WL82
+    UBOOT1.00` is good; "Unknown USB device" or a black screen is the V0.87 failure. **Power-cycle the FM-1 after every
+    try.** The keys (OCT− + OCT+ 5 s) and the soft key take way B: try them after B's result. Also: left alone in
+    backup mode, does it return to Strata by itself (and after how long)? That answers whether the old ~13 s was the
+    watchdog.
+63. **The panel changes** (V0.87.1): HOME held 5 s on HOME opens DEBUG, on any other page only the help map for as long as
+    held; WIPE in DEBUG (HOME twice; once keeps); EDIT twice then EDIT twice again loads (tables, kits, drum presets);
+    SEQ twice then SEQ twice loads a project; CLIPS' KNOB 1 then SEQ twice for a track's TYPE; CLIPS' OCT−, OCT+,
+    KNOB 2 and KNOB 4, PRESETS; GLO held + F3 taps the tempo (F3 silent); the POLARITY dial up at rest, both
+    polarities; ARP STEPS' CHANCE faders; TAPE moving with sound; the drum GRID's labels clear of the grid.
+64. **KEY SCAN.** DEBUG > KEY SCAN: turn KNOB 1: its two cells ("PA5:9, PA5:10") are rings, named "KNOB 1", not
+    flagged vermilion. Does any other cell turn vermilion? Does any key close a second cell (velocity)?
+65. **The logo splash** at power-on, in the theme's colours from the first frame (try two themes).
+66. **The effects' changes under load** (test 2: no click when the guard steps the effects; HALL's lines joining and going
+    smoothly). The recordings' clicks per minute against the emulator's render: `tools/hw_audio_check.py` (below).
+
+**The V0.87.1 test page** (`web/strata_flash/test.html`; section numbers as on the page):
+- **3, The test projects**: a button for each test and "Run all four" and "Stop". Each press: `tproj N` on the console,
+  the FM-1's USB audio recorded the whole while (the browser asks to use the microphone once; the device "Strata for
+  FM-1"), `tproj` polled for the running time, `tproj stop` if it overruns, then the recording and the run's figures
+  saved. A table gives each test's result and detail; without `serve.py` each recording is offered as a download.
+- **Where runs are saved**: `serve.py` makes `build/hwtest/<YYYYMMDD-HHMMSS>/` (found from `build/flasher/serve.py`;
+  `--hwtest DIR` puts it elsewhere) and writes `tpN.wav` and `tpN.json` (N 1 to 4) into it, under the same token and
+  Origin check as the backup's calls (a WAV to 64 MB, a JSON to 1 MB; nothing else accepted). The run folder is for
+  `tools/hw_audio_check.py`.
+- **7, Backup mode, three ways**: buttons for ways A, B and C (`uboot yes a|b|c`), each asking first, with a box for
+  what Windows shows before and after; power-cycle after each.
+- The chord-MIDI row is gone (the setting went in V0.87); the guided "draw" row was fixed. The menus are V0.87's (SETTINGS
+  by HOME twice; BENCH, KEY SCAN and CORE 2 in DEBUG, HOME held 5 s on HOME).
+
+**`tools/hw_audio_check.py RUN_DIR [--ref build/tproj]`** (stdlib plus numpy; `--selftest`): for each `tpN.wav` in a run
+folder, peak and RMS, clipped runs, clicks a minute (second-difference discontinuities against a robust local threshold),
+gaps (zero runs of 24 or more frames with sound on both sides: a dropout), repeats (4 or more identical frames: a UAC
+underrun), the file's length against the run's and its drift against the page's clock. With `--ref`, it compares each
+recording with the emulator's render of the same project (`web/emu/strata_tproj.c`, 44,118 Hz): level and peak
+difference, click and gap rates, the spectrum in octave bands, the sound's length. Statistics only: the two never
+line up sample for sample. **Verified on host** (`--selftest`); the recordings' numbers need the test.
+
 ## 5. The report
 
 On the flasher page, step 3: **Read the device report** opens Strata's USB serial console (Chrome asks for the port:
 the FM-1's) and reads `status` and `bench`; **Run BENCH's loops, then read** asks for RUN first. **Copy**, and paste
 the text into the conversation with what you heard and saw, and photos of any crash screen. The same console works
 in any serial terminal (115200 baud; type `help`). Its commands only read (`bench run` starts BENCH's loops);
-`uboot yes` enters backup mode. The test page (section 4) makes a fuller report: everything it measured and what you
+`uboot yes` enters backup mode (V0.87.1: `uboot yes a|b|c` picks the way; the keys and the soft key use b); `tproj N` (1 to 4) loads and starts a test project
+and replies `tproj N NAME ok` or `tproj N busy`, `tproj stop` replies `tproj stop ok`, and `tproj` alone `tproj K NAME ms` while
+one runs, `tproj none` otherwise; a number over 32 bits is refused. `status` gained `load_total_pct` (the guard's figure,
+the half's whole time, interrupts in), `voices_traded`, `master_adc` (the MASTER pot's last reading, before the dead
+band), `tproj` (the test playing, 0 none) and `tproj_ms`. The test page (section 4) makes a fuller report: everything it measured and what you
 marked.
 
 ## 6. Going back
