@@ -44,12 +44,12 @@ def public_flasher(raw, repo):
          "Installer for the M-VAVE FM-1 &middot; Chrome or Edge on a computer"),
         ('$("find").disabled ? "s3" : "s2"', '"s2"'),
         (" Now step 3.", ""),
-        ("the Flipper Zero route (FLASHING.md, section 6).",
-         f'the Flipper Zero route (<a href="{BOOK_INSTALL}#recovery">the manual</a>).'),
-        ("(FLASHING.md, section 6) or the FM-1 Transporter.",
-         f'(<a href="{BOOK_INSTALL}#recovery">the manual</a>) or the FM-1 Transporter.'),
-        ('Flipper Zero route (FLASHING.md, " +\n    "section 6), and send the log.',
-         'Flipper Zero route (the manual\'s " +\n    "Recovery), and keep the log.'),
+        ("made the backup (FLASHING.md, section 6).",
+         f'made the backup (<a href="{BOOK_INSTALL}#going-back">the manual</a>).'),
+        ("Zero (FLASHING.md, section 6). Both",
+         f'Zero (<a href="{BOOK_INSTALL}#recovery">the manual</a>). Both'),
+        ('backup mode (FLASHING.md, " +\n    "section 6), and send the log.',
+         'backup mode (the manual\'s " +\n    "Recovery), and keep the log.'),
         ("Use Chrome or Edge, and open the page from localhost (serve.py).", "Use Chrome or Edge on a computer."),
         ("run serve.py from Strata's source (FLASHING.md, section 2)", "use a backup tool (the manual: Back up first)"),
         ("open it from build\\\\flasher\\\\serve.py (FLASHING.md, section 3)", "use a backup tool (the manual: Back up first)"),
@@ -133,12 +133,13 @@ def info_page(repo, version, sha):
   </section>
   <section>
     <h2>Good to know</h2>
-    <p>The SysEx message <code>F0 22 24 35 7D F7</code> on the FM-1's USB MIDI port (as on the official firmware)
-      restarts it into backup mode; any program that can send SysEx can send it. Switching the FM-1 off and on returns
-      to Strata. OCT− and OCT+ held 5 s do the same.</p>
+    <p>Backup mode: OCT− and OCT+ held 5 s, or the SysEx message <code>F0 22 24 35 7D F7</code> on the FM-1's USB
+      MIDI port (as on the official firmware). With V0.87 the computer may show an unknown USB device instead; the
+      FM-1 Transporter and a Flipper Zero enter backup mode at power-on, whatever the firmware does. Switching the FM-1
+      off and on returns to Strata.</p>
     <p>The USB serial console, the DEBUG menu (HOME held 5 s) and CORE 2 (off by default) are in every build.</p>
     <p>Going back: M-VAVE's updater or the installer's "Return to official V15" with M-VAVE's own file; Felucca's
-      installer; or your backup, written back in backup mode.</p>
+      installer; or your backup, written back in backup mode (<a href="{BOOK_INSTALL}#going-back">how</a>).</p>
   </section>
   <section>
     <h2>Licences</h2>

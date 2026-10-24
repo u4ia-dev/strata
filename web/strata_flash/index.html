@@ -125,9 +125,8 @@
     <ul class="checks">
       <li class="backup">
         <!--PUBLIC:<p><b>Back up first (recommended).</b> A full copy of the FM-1's flash is the only way back to
-        exactly what you have now, Felucca's projects and samples included. Put the FM-1 in backup mode with the
-        button below, or hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s, then read the flash with a
-        backup tool on your computer: <a href="book/manual/install.html#back-up-first">how to back up</a>.</p>:PUBLIC-->
+        exactly what you have now, Felucca's projects and samples included. Make it with a backup tool before you
+        install: <a href="book/manual/install.html#back-up-first">how to back up</a>.</p>:PUBLIC-->
         <!--LOCAL-->
         <p><b>A full flash backup (recommended).</b> All 1 MiB, read twice, the two copies identical, checked as an
         FM-1's flash: the way back to exactly what you have now. The install no longer needs one; make one before your
@@ -145,7 +144,6 @@
           <button id="bk-cancel" hidden>Stop</button></div>
         <progress id="bk-bar" max="32" value="0" hidden></progress>
         <p id="bk-status" class="small">Asking this page's server about backups&hellip;</p>
-        <!--/LOCAL-->
         <div class="aside">
           <p>Backup mode from here: this asks the firmware running now to restart into it (nothing is written). If the
           computer doesn't see the FM-1 then, a Flipper Zero enters backup mode at power-on, whatever the firmware
@@ -157,6 +155,7 @@
               <button id="uboot-cancel">Cancel</button></div>
           </div>
         </div>
+        <!--/LOCAL-->
       </li>
       <li><label><input type="checkbox" class="pre" id="c-power">
         <span>The battery is <b>charged</b>, and the FM-1 is plugged <b>straight into the computer</b> with a USB
@@ -209,8 +208,8 @@
         name has "FM-1" in it, which the installer looks for.</li>
       <li><b>To the official V15:</b> pick M-VAVE's unmodified <code>FM-1.fwsc</code> (checked here by its SHA-256,
         never uploaded), then write it with the same update path. M-VAVE's own updater works too.</li>
-      <li><b>To exactly what you had,</b> or when Strata does not answer: write your backup or the official V15 back by
-        the Flipper Zero route (FLASHING.md, section 6).</li>
+      <li><b>To exactly what you had,</b> or when Strata does not answer: write your backup or the official V15 back in
+        backup mode, with the tool that made the backup (FLASHING.md, section 6).</li>
     </ol>
     <label class="small">Official FM-1.fwsc (V15): <input id="stock-file" type="file" accept=".fwsc"></label>
     <div class="row"><button id="stock-go" class="danger" disabled>Return to official V15&hellip;</button></div>
@@ -228,11 +227,10 @@
       <li>Strata shows <b>STRATA CRASH</b>: take a photo. It restarts; a second crash within 30&nbsp;s puts it in backup
         mode by itself, where your backup can be written back.</li>
       <li>Backup mode by hand, while Strata runs: hold <kbd>OCT&minus;</kbd> and <kbd>OCT+</kbd> for 5&nbsp;s (a
-        countdown shows from 2&nbsp;s). If the computer then reports a USB device it can't recognise, use a Flipper
-        Zero instead: it enters backup mode at power-on.</li>
-      <li>Strata does not answer any updater (it plays, but Find gets no answer): the Flipper Zero route
-        (FLASHING.md, section 6) or the FM-1 Transporter. Both enter backup mode at power-on, whatever the firmware
-        does.</li>
+        countdown shows from 2&nbsp;s). If the computer then reports a USB device it can't recognise, switch the FM-1
+        off and on and use the FM-1 Transporter or a Flipper Zero: both enter backup mode at power-on.</li>
+      <li>Strata does not answer any updater (it plays, but Find gets no answer): the FM-1 Transporter or a Flipper
+        Zero (FLASHING.md, section 6). Both enter backup mode at power-on, whatever the firmware does.</li>
     </ul>
   </section>
 
@@ -266,7 +264,7 @@ const WHY = {
   noloader: "The FM-1 in update mode did not appear. Replug the cable and press Find the FM-1: it stays in update mode until finished.",
   noreturn: "The FM-1 did not come back after the write. Switch it off and on.",
   norestart: "Strata did not answer after the restart: the FM-1 takes in USB but sends nothing back, so no updater can " +
-    "reach it now. Do not keep it: put the official V15 or your backup back by the Flipper Zero route (FLASHING.md, " +
+    "reach it now. Do not keep it: put the official V15 or your backup back in backup mode (FLASHING.md, " +
     "section 6), and send the log.",
   mismatch: "Written, but the FM-1 reports another firmware",
   badreq: "The FM-1 asked for something outside the package: stopped, nothing more sent. Press Find the FM-1 again.",

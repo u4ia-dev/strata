@@ -355,7 +355,7 @@ try {
     const end = await until(sid, "document.getElementById('status-card').dataset.kind === 'err' || /^Done/.test(document.getElementById('status').textContent)", 40000);
     const st = await status(sid);
     check(`mute after the restart: "${st.slice(0, 64)}..."`,
-          end && !/^Done/.test(st) && /did not answer after the restart/.test(st) && /Flipper Zero route/.test(st));
+          end && !/^Done/.test(st) && /did not answer after the restart/.test(st) && /back in backup mode/.test(st));
     await send("Target.closeTarget", { targetId });
   }
   {   // the FM-1 already in update mode: the page finishes the write

@@ -1,9 +1,7 @@
 # Strata for FM-1
 
 **Strata** turns the **M-VAVE FM-1** into a complete pocket instrument: a deep wavetable synth, an 8-track looper
-and a drum machine. The knobs control what's on the screen, every button works the same way, and the screens are easy
-to read. It's free software, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
-Instruments).
+and a drum machine.
 
 ![HOME](images/Home-2x.png)
 
@@ -18,8 +16,6 @@ Instruments).
 - **[Guide](guide/guide.md)**: get started and see every feature on one page.
 - **[Cheat sheet](guide/cheatsheet.md)**: every button and knob.
 - **Manual**: each feature in depth, starting with [The panel](manual/panel.md).
-
-It matches Strata V0.87. Buttons look like <kbd>EDIT</kbd>; the knobs under the screen are KNOB 1 to 4.
 
 ## Install
 
