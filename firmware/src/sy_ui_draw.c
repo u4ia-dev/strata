@@ -563,6 +563,8 @@ static void ui_home_name(const char *nm, int dot)
  * bar, lit as it sounds (its level's envelope, live), the one PRESETS picked framed; the bloom of the output at the
  * right, smaller; the kit's TUNE, DECAY, TONE (every drum's moved together) and the duck's AMOUNT on the knobs */
 static const char *const UI_DK4[DK_N] = {"KICK", "SNAR", "CLAP", "HATC", "HATO", "CYM", "WT 1", "WT 2"};
+static void ui_tp_home(void);                       /* (V0.87.1, below with the top line's) */
+static void ui_tp_top(const char *label, int on, uint32_t n, const char *right, int fx);
 static void ui_p_hdrum(void)
 {
     static const char *const NM[4] = {"TUNE", "DECAY", "TONE", "DUCK"};
@@ -590,6 +592,7 @@ static void ui_p_hdrum(void)
                 0, 0);
         lk_box(x + 4.0f, y + 29.0f, x + 4.0f + 20.0f * lv, y + 31.5f, a > 0.35f ? sk.ground : sk.lab);
     }
+    ui_tp_home();
     ui_bloom_ticks();
     ui_bloom();
     for (i = 0; i < 4u; i++) {
@@ -662,6 +665,7 @@ static void ui_p_home(void)
         lk_text(9.0f, y, T9, ROW[i], sk.lab, sk.ground, 40, 0);
         lk_text(9.0f, y + 11.0f, T10B, lk_fit(t, sizeof t, v, T10B, 0, 96.0f), sk.ink, sk.ground, 0, 0);
     }
+    ui_tp_home();
     ui_bloom_ticks();
     ui_bloom();
     for (i = 0; i < 4u; i++) {                      /* the macros (V0.86: up, the page row under them) */
@@ -2270,7 +2274,8 @@ static void ui_p_tests(void)
     lk_text(8.0f, 150.0f, T9, "KNOB 1 PICKS \xB7 HOME TWICE LOADS IT", sk.lab, sk.ground, 20, 0);
     lk_text(8.0f, 162.0f, T9, "KNOB 2: STOPS THE ONE LOADED", sk.lab, sk.ground, 20, 0);
     lk_text(8.0f, 174.0f, T9, "NOTHING IS SAVED WHILE ONE IS LOADED", sk.lab, sk.ground, 20, 0);
-    lk_text(8.0f, 186.0f, T9, "ANOTHER PROJECT OR A RESTART ENDS IT", sk.lab, sk.ground, 20, 0);
+    lk_text(8.0f, 186.0f, T9, "A PROJECT LOADED, NEW, OR A RESTART", sk.lab, sk.ground, 20, 0);   /* (V0.87.1: what ends it) */
+    lk_text(8.0f, 198.0f, T9, "ENDS IT. STOPPING IT DOES NOT", sk.lab, sk.ground, 20, 0);
     pg.figs |= 3u;
     ui_H(0, 8.0f, 27.0f);
     ui_H(1, 226.0f, 27.0f);
@@ -2585,6 +2590,8 @@ static void ui_p_plist(void)
         sp_put(sp_put(up, DC_NAME[ui.pl_dcat % DC_N]), " DRUMS");
     lk_top(ui.pl_kind == PL_TABLES ? (ui.pl_osc ? "OSC B TABLES" : "OSC A TABLES") : ui.pl_kind == PL_DRUMS ? up
            : TOP[ui.pl_kind % 5u], -1, 0, 0, r, 0, 0);
+    ui_tp_top(ui.pl_kind == PL_TABLES ? (ui.pl_osc ? "OSC B TABLES" : "OSC A TABLES") : ui.pl_kind == PL_DRUMS ? up
+              : TOP[ui.pl_kind % 5u], -1, 0, r, 0);
     first = pos > 2u ? pos - 2u : 0u;
     if (n > 5u && first > n - 5u)
         first = n - 5u;
@@ -2704,6 +2711,46 @@ static void ui_batt_glyph(float x, float y, int32_t lvl)
     for (i = 0; i <= (uint32_t)lvl && i < 4u; i++)
         lk_box(x + 2.0f + 3.0f * (float)i, y + 2.0f, x + 4.0f + 3.0f * (float)i, y + 6.0f, lvl == 0 ? sk.hot : sk.ink);
 }
+/* (V0.87.1) a test project loaded, nothing saved: "TEST \xB7 NOT SAVED" in HOT on the top line, its right edge against what is
+ * at the right (n module dots, the right word, the chain's squares, HOME's pulse), the longest of three wordings that
+ * fits after the label; ui_tp_x is its left edge, for the battery to keep clear (1e9: none drawn). A page without a
+ * test loaded pays the one test */
+#define UI_TP_HY 152.0f                           /* (HOME's line for it: its y) */
+static float ui_tp_x = 1e9f;
+static void ui_tp_top(const char *label, int on, uint32_t n, const char *right, int fx)
+{
+    static const char *const W[3] = {"TEST \xB7 NOT SAVED", "NOT SAVED", "TEST"};
+    float lx, rx, w = 0.0f;
+    uint32_t i;
+    ui_tp_x = 1e9f;
+    if (!sy_tp_active() || !lk_vis(0.0f, 0.0f, 240.0f, 16.0f))
+        return;
+    lx = (on >= 0 ? 18.0f : 8.0f) + lk_tw(T10B, label, 30) + 8.0f;
+    rx = fx ? 166.0f : n ? 232.0f - (float)(n * 8u) - 4.0f : 232.0f;
+    if (right)
+        rx -= lk_tw(T10B, right, 30) + 10.0f;
+    if (ui_sec() == SEC_MACRO)
+        rx = sy_minf(rx, ui_pulse_x() - 8.0f);
+    for (i = 0; i < 3u; i++) {
+        w = lk_tw(T9B, W[i], 0);
+        if (rx - w >= lx)
+            break;
+    }
+    if (i == 3u)
+        return;
+    ui_tp_x = rx - w;
+    lk_text(ui_tp_x, 2.0f, T9B, W[i], sk.hot, sk.ground, 0, 13);
+}
+/* (V0.87.1) HOME's line for it: the test, "TEST 2 \xB7 FX", under the sound's rows (HOT, 9 px bold) */
+static void ui_tp_home(void)
+{
+    char t[32];
+    uint32_t k = (uint32_t)sy_tp_active();
+    if (!k)
+        return;
+    sp_put(sp_put(sp_fix(sp_put(t, "TEST "), (int32_t)k, 0u, 0), " \xB7 "), sy_tp_name(k - 1u));
+    lk_text(9.0f, UI_TP_HY, T9B, t, sk.hot, sk.ground, 20, 0);
+}
 /* .. on the top line (SHOW BATTERY: HOME's, or every screen's), after the label where it fits before what is at the
  * right (fx: the chain's squares there, the words left of them) */
 static void ui_batt_top(const char *label, int on, uint32_t n, uint32_t gap, const char *right, int fx)
@@ -2718,6 +2765,7 @@ static void ui_batt_top(const char *label, int on, uint32_t n, uint32_t gap, con
         rx -= lk_tw(T10B, right, 30) + 6.0f;
     if (ui_sec() == SEC_MACRO)
         rx = sy_minf(rx, ui_pulse_x() - 8.0f);
+    rx = sy_minf(rx, ui_tp_x - 4.0f);              /* (V0.87.1: clear of the test's mark) */
     if (rx - lx >= 18.0f)
         ui_batt_glyph(lx, 5.0f, lvl);
 }
@@ -2794,6 +2842,7 @@ static void ui_top(void)
             n = 1;
     }
     lk_top(t, pw >= 0 ? sy_patch.p[pw] != 0 : -1, n, cur, sec == SEC_CHAIN ? 0 : right, 0u, 0u);
+    ui_tp_top(t, pw >= 0 ? 1 : -1, n, sec == SEC_CHAIN ? r : right, ui_is_fx(sec) || sec == SEC_CHAIN);
     ui_batt_top(t, pw >= 0 ? 1 : -1, n, 0u, sec == SEC_CHAIN ? r : right, ui_is_fx(sec) || sec == SEC_CHAIN);
     if (sec == SEC_CHAIN && lk_vis(0.0f, 0.0f, 240.0f, 16.0f))   /* (left of the squares) */
         lk_text_r(166.0f, 2.0f, T10B, r, sk.lab, sk.ground, 30, 13);

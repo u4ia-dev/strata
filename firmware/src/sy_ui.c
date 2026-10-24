@@ -3635,6 +3635,13 @@ static void sy_ui_ms(void)
         memset(ui.ks_seen, 0, sizeof ui.ks_seen);
     }
     ui_pl_ms();
+    {                                               /* (V0.87.1: a test loaded or ended, another: HOME and the top line say so) */
+        static uint8_t tpa;
+        if (tpa != (uint8_t)sy_tp_active()) {
+            tpa = (uint8_t)sy_tp_active();
+            ui.dirty |= D_ALL;
+        }
+    }
     if (sy_tp_active()) {                           /* (V0.87.1: a test loaded: its time moving, it runs) */
         uint32_t m = sy_tp_ms((uint32_t)sy_tp_active() - 1u);
         if (m != ui.tp_ms) {

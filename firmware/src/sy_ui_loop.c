@@ -464,7 +464,7 @@ static void ui_l_reset(void)
 static void ui_p_q(void)
 {
     char t[32], n[32];
-    const char *l1 = "SAVE+OCT- AGAIN: DELETE IT", *l2 = "ANYTHING ELSE: KEEP IT", *l3 = 0;
+    const char *l1 = "SAVE+OCT- AGAIN: DELETE IT", *l2 = "ANYTHING ELSE: KEEP IT", *l3 = 0, *l4 = 0;
     uint32_t tr = lpp.sel % LP_NTRK;
     if (ui.qk == Q_TYPE) {
         uint32_t want = ui.lt_want ? (uint32_t)(ui.lt_want - 1) & 3u : ui_l_type3(tr);
@@ -476,7 +476,8 @@ static void ui_p_q(void)
         l1 = "HOME TWICE: EVERY SETTING BACK", l2 = "ONCE, OR ANOTHER BUTTON: KEEP THEM", l3 = "PRESETS AND PROJECTS STAY";
     } else if (ui.qk == Q_TEST) {
         sp_put(sp_put(sp_put(sp_fix(sp_put(t, "TEST "), (int32_t)ui.tp_k + 1, 0u, 0), ": "), sy_tp_name(ui.tp_k)), "?");
-        l1 = "HOME TWICE: LOAD IT AND START IT", l2 = "ONCE, OR ANOTHER BUTTON: NO", l3 = "NOTHING OF YOURS IS CHANGED";
+        l1 = "HOME TWICE: LOAD IT AND START IT", l2 = "ONCE, OR ANOTHER BUTTON: NO", l3 = "NOTHING FROM IT IS EVER SAVED",
+        l4 = "LOADING A PROJECT ENDS IT";   /* (V0.87.1) */
     } else {
         uint32_t c = (uint32_t)(ui.qv ? ui.qv - 1u : 0u), b = lp_clip_bars(c / LP_NSCN, c % LP_NSCN);
         sp_put(t, "DELETE?");
@@ -492,6 +493,8 @@ static void ui_p_q(void)
     lk_text(26.0f, 124.0f, T9, l2, sk.lab, sk.ground, 20, 0);
     if (l3 && ui.qk != Q_CLIPDEL)
         lk_text(26.0f, 148.0f, T9, l3, sk.lab, sk.ground, 20, 0);
+    if (l4)
+        lk_text(26.0f, 160.0f, T9, l4, sk.lab, sk.ground, 20, 0);
 }
 
 static int sy_app_project(uint32_t p);              /* sy_app.c: the project saved, project p loaded */

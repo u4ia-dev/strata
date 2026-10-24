@@ -946,6 +946,16 @@ run(5.4);                                       // (the list gone: its 5 s)
   go(SEC.DEBUG, "TESTS");
   run(3.2);
   shot("TestsRunning");
+  ex.web_test_tp(1, 3);                         // (V0.87.1: a test loaded, nothing saved: the mark on the top line, HOME's line)
+  go(SEC.MACRO, "SOUND"); run(0.3);
+  shot("TestMarkHome");
+  go(SEC.LFO1, "POINTS"); run(0.3);
+  shot("TestMarkLfo");
+  go(SEC.CHAIN, "CHAIN"); run(0.3);
+  shot("TestMarkChain");
+  go(SEC.SEQ, "CLIPS"); run(0.3);
+  shot("TestMarkClips");
+  go(SEC.DEBUG, "TESTS"); run(0.3);
   ex.web_test_tp(1, -1);
   tap(B.HOME);
   go(SEC.SEQ, "CLIPS");
