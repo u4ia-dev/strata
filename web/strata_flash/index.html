@@ -554,7 +554,7 @@ $("stock-write").addEventListener("click", async () => {
   writing = true; gate();
   try {
     log(backupOk ? `backup: ${bk.latest.dir} sha256 ${bk.latest.sha256}` : "backup: none recent (recommended, not required)");
-    const up = new Updater(await getMidi(), log), step = stepper("stock-go", Math.round(WRITE_REQS * stock.image.length / image.length));
+    const up = new Updater(await getMidi(), log), step = stepper("stock-go", image ? Math.round(WRITE_REQS * stock.image.length / image.length) : WRITE_REQS);   // (Strata's package may not have loaded: V15 still goes)
     if (job.loader) {
       if (!await up.resume(stock.image, step, stock.product)) throw codeErr("stopped");
     } else {
