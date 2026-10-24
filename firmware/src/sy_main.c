@@ -344,7 +344,7 @@ static void sy_lcd_idle(void)
         return;
     last = fm1_ms;
     sy_midi_take();
-    if (!SY_KEYS_ISR && sy_ui_keys_plain()) {    /* (without TIMER5's keys: read them here) */
+    if (!sy_keys_isr && sy_ui_keys_idle()) {     /* (without TIMER5's keys: read them here; V0.875: OCT- held too, its keys that way) */
         sy_keys_read();
         sy_keys();
     }

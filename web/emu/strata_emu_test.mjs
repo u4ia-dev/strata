@@ -3090,8 +3090,8 @@ const secOf = (x) => x.web_test_page_section();
   t.web_buttons(CORNERS); t.web_keys(ENDS); play(t, 0.6);
   const whole = secOf(t);
   t.web_keys(0); t.web_buttons(0); play(t, 1.0);
-  check(`OCT- + F3 + G5 (no GLO) 3 s: nothing opens (section ${three[0] === SEC.LFO1 ? "LFO 1" : three[0]}), ${three[1]} voice (F3, landing first, plays; G5 is held off), octave ${three[2]}; all four for 0.2 s only: not DEBUG (${short[0] === SEC.DEBUG ? "DEBUG" : "no"}); then the four together: DEBUG (${whole === SEC.DEBUG})`,
-        three[0] === SEC.LFO1 && three[1] === 1 && short[0] !== SEC.DEBUG && whole === SEC.DEBUG);
+  check(`OCT- + F3 + G5 (no GLO) 3 s: nothing opens (section ${three[0] === SEC.LFO1 ? "LFO 1" : three[0]}), ${three[1]} voices (F3 and G5 are held off under OCT-), octave ${three[2]}; all four for 0.2 s only: not DEBUG (${short[0] === SEC.DEBUG ? "DEBUG" : "no"}); then the four together: DEBUG (${whole === SEC.DEBUG})`,
+        three[0] === SEC.LFO1 && three[1] === 0 && short[0] !== SEC.DEBUG && whole === SEC.DEBUG);
 }
 {                                               // .. a partial chord's tap tempo is taken back: GLO + F3 taps, the third one held with OCT- and G5
   const t = await fresh();
@@ -3129,18 +3129,112 @@ const secOf = (x) => x.web_test_page_section();
   check(`CLIPS: scene ${sc0}, OCT- stepped it to ${sc1}; the four corners: DEBUG (${sec1 === SEC.DEBUG}), the scene back at ${sc2}; NAME IT (${onName}) "${n0}": F3 and G5 typed "${n1}"; with OCT- and GLO: DEBUG (${sec2 === SEC.DEBUG}), the name back "${n2}"`,
         sc0 === 3 && sc1 === 2 && sec1 === SEC.DEBUG && sc2 === 3 && onName && n1 !== n0 && sec2 === SEC.DEBUG && n2 === n0);
 }
-{                                               // .. every other way keeps its own: OCT- alone the octave, F3 under OCT- plays, G5 under GLO plays
+{                                               // item 25: the partial chords' effects, in each order the corners can land (OCT- first; F3 first; GLO first)
+  const land = (t, order, mid) => {             // (the four, the last two together; `mid` read just before the chord is whole)
+    const w = (x) => play(t, x);
+    if (order === "OCT-") { t.web_buttons(1 << B.OCTDN); w(0.05); t.web_keys(1 << 0); w(0.05); t.web_keys(ENDS); w(0.05); }
+    else if (order === "F3") { t.web_keys(1 << 0); w(0.05); t.web_keys(ENDS); w(0.05); t.web_buttons(1 << B.OCTDN); w(0.05); }
+    else { t.web_buttons(1 << B.GLO); w(0.03); t.web_keys(1 << 0); w(0.03); t.web_keys(ENDS); w(0.03); }
+    const m = mid();
+    t.web_buttons(CORNERS); w(0.6);
+    const sec = secOf(t);
+    t.web_keys(0); t.web_buttons(0); w(0.5);
+    return { m, sec };
+  };
+  const ORD = ["OCT-", "F3", "GLO"];
+  const grid = (t) => [t.web_test_grid(5, 0, 0, 0), t.web_test_grid(5, 0, 15, 0)];
+  const out = [];
+  for (const o of ORD) {                        // the drum GRID: a step F3 put in goes out again
+    const t = await fresh();
+    t.web_test_lp_trk(7, 0, 2); t.web_test_lp(0, 7);
+    goPage(t, 51, "GRID"); play(t, 0.05);
+    const g0 = grid(t), r = land(t, o, () => grid(t)), g1 = grid(t);
+    out.push([o, g0.join(), r.m.join(), g1.join(), r.sec === SEC.DEBUG]);
+  }
+  check(`the drum GRID, each order (steps 1,16 before / just before the fourth / after): ${out.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out.every((x) => x[4])}`,
+        out.every((x) => x[1] === "0,0" && x[3] === "0,0" && x[4]) && out[0][2] === "0,0" && out[1][2] === "1,0" && out[2][2] === "1,0");
+  const out2 = [];
+  for (const o of ORD) {                        // CLIPS: F3 launches T1's clip at its release only: the four never do
+    const t = await fresh();
+    goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
+    t.web_test_lp_put(0, 0, 0, 96, 60, 100); t.web_test_lp_put(0, 1, 0, 96, 60, 100);
+    const l = () => [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1), t.web_test_lp(15, -1), t.web_test_run()];
+    const l0 = l(), r = land(t, o, l), l1 = l();
+    out2.push([o, l0.join(), r.m.join(), l1.join(), r.sec === SEC.DEBUG, cstr(t, t.web_test_toast())]);
+  }
+  check(`CLIPS, each order (T1's playing, launched, running, PLAY before / just before the fourth / after): ${out2.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out2.every((x) => x[4])}`,
+        out2.every((x) => x[1] === "255,255,0,0" && x[2] === "255,255,0,0" && x[3] === "255,255,0,0" && x[4] && x[5] === ""));
+  {                                             // .. F3 alone on CLIPS still launches: at its release
+    const t = await fresh();
+    goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
+    t.web_test_lp_put(0, 0, 0, 96, 60, 100);
+    t.web_keys(1 << 0); play(t, 0.3);
+    const held = [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1)];
+    t.web_keys(0); play(t, 0.3);
+    const rel = [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1), t.web_test_run()];
+    check(`CLIPS: F3 held 0.3 s launches nothing yet (${held}); let go it launches T1's clip (playing ${rel[0]}, launched ${rel[1]}, PLAY ${rel[2]})`,
+          held.join() === "255,255" && (rel[0] === 0 || rel[1] === 0) && rel[2] === 1);
+  }
+  const out3 = [];
+  for (const o of ORD) {                        // LATCH: the chord latched before; F3 under OCT- is held off, else it replaced the chord: ended, LATCH stays on
+    const t = await fresh();
+    t.web_test_chd(19, 1); play(t, 0.05);
+    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.3);
+    const v0 = t.web_test_voices(), r = land(t, o, () => t.web_test_voices());
+    play(t, 2.0);
+    const v1 = t.web_test_voices(), on = t.web_test_chd(19, -1), held = t.web_test_chord(4);
+    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.4);
+    const v2 = t.web_test_voices();
+    t.web_test_chd(19, 0); play(t, 0.3);
+    out3.push([o, v0, r.m, v1, on, held, v2, r.sec === SEC.DEBUG, t.web_test_voices()]);
+  }
+  check(`LATCH, each order (voices latched / just before the fourth / 2 s after, LATCH, roots held, a key after): ${out3.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}, ${x[4]}, ${x[5]}, ${x[6]}`).join("; ")}; DEBUG ${out3.every((x) => x[7])}; LATCH off: ${out3.map((x) => x[8])} voices`,
+        out3.every((x) => x[1] === 1 && x[4] === 1 && x[6] === 1 && x[7] && x[8] === 0) && out3[0][3] === 1 && out3[0][2] === 1 &&
+        out3[1][3] === 0 && out3[1][5] === 0 && out3[2][3] === 0 && out3[2][5] === 0 && out3[1][2] >= 2 && out3[2][2] >= 2);
+  const out4 = [];
+  for (const o of ORD) {                        // recording: a note F3 or G5 played before the chord was whole is taken out of the take and TAKE's memory
+    const t = await fresh();
+    t.web_test_lp(3, 0);
+    tap(t, B.REC); play(t, 0.3);
+    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.2);
+    const st = () => [t.web_test_lp(10, -1), t.web_test_lp(12, -1), t.web_test_lp(18, -1), t.web_test_lp(21, -1)];
+    const b0 = st(), r = land(t, o, st), b1 = st();
+    out4.push([o, b0.join(), r.m.join(), b1.join(), r.sec === SEC.DEBUG, t.web_test_voices()]);
+  }
+  check(`recording, each order (state, events free, this pass's, TAKE's notes: before / just before the fourth / after): ${out4.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out4.every((x) => x[4])}`,
+        out4.every((x) => x[1].startsWith("3,") && x[3] === x[1] && x[4] && x[5] === 0) && out4[0][2] === out4[0][1] && out4[1][2] !== out4[1][1] && out4[2][2] !== out4[2][1]);
+}
+{                                               // .. MIDI LEARN: OCT- takes the picked parameter's CC away; the four corners put it back
+  const t = await fresh();
+  goPage(t, SEC.MENU, "MIDI"); play(t, 0.1);
+  t.web_enc(E.K2, 1); play(t, 0.13);            // (LEARN on)
+  tap(t, B.EDIT);
+  const K1 = t.web_test_page_virt(0);
+  t.web_enc(E.K1, 1); play(t, 0.13);
+  t.web_midi(0xB1, 20, 64); play(t, 0.05);
+  const l0 = t.web_test_learned(20), n0 = t.web_test_set_get(6, -1);
+  t.web_buttons(1 << B.OCTDN); play(t, 0.05);
+  const l1 = t.web_test_learned(20);
+  t.web_keys(1 << 0); play(t, 0.05); t.web_keys(ENDS); play(t, 0.05); t.web_buttons(CORNERS); play(t, 0.6);
+  const l2 = t.web_test_learned(20), n2 = t.web_test_set_get(6, -1), sec = secOf(t);
+  t.web_keys(0); t.web_buttons(0); play(t, 0.5);
+  check(`MIDI LEARN: CC 20 learned (${l0 === K1}, ${n0} CC); OCT- takes it away (${l1}); the four corners: DEBUG (${sec === SEC.DEBUG}), it is back (${l2 === K1}, ${n2} CC)`,
+        K1 >= 0 && K1 < 1000 && l0 === K1 && n0 === 1 && l1 === -1 && sec === SEC.DEBUG && l2 === K1 && n2 === 1);
+}
+{                                               // .. every other way keeps its own: OCT- alone the octave, F3 under OCT- is held off (a middle key plays), G5 under GLO plays
   const t = await fresh();
   tap(t, B.OCTDN);
   const o1 = t.web_test_oct();
   t.web_buttons(1 << B.OCTDN); play(t, 0.05); t.web_keys(1 << 0); play(t, 0.4);
   const under = [t.web_test_voices(), secOf(t)];
+  t.web_keys(1 << 7); play(t, 0.4);
+  const mid = t.web_test_voices();
   t.web_keys(0); t.web_buttons(0); play(t, 1.0);
   t.web_buttons(1 << B.GLO); play(t, 0.6); t.web_keys(1 << 26); play(t, 0.4);
   const g5 = t.web_test_voices();                // (PERFORM: G5 plays)
   t.web_keys(0); t.web_buttons(0); play(t, 1.0);
-  check(`outside the chord: OCT- alone steps the octave (${o1}); F3 with OCT- held plays (${under[0]} voice, not DEBUG: ${under[1] !== SEC.DEBUG}); G5 with GLO held plays (${g5} voice)`,
-        o1 === -1 && under[0] === 1 && under[1] !== SEC.DEBUG && g5 === 1);
+  check(`outside the chord: OCT- alone steps the octave (${o1}); F3 with OCT- held is held off (${under[0]} voices, not DEBUG: ${under[1] !== SEC.DEBUG}), a middle key plays then (${mid}); G5 with GLO held plays (${g5} voice)`,
+        o1 === -1 && under[0] === 0 && under[1] !== SEC.DEBUG && mid === 1 && g5 === 1);
 }
 {                                               // item 28. PERFORM: the taps seen, the tempo as it settles
   const t = await fresh();

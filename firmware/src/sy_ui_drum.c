@@ -170,6 +170,12 @@ static int ui_grid_key(uint32_t k)
     if (r) {                                        /* (put in: held, the knobs its own) */
         ui.ghold = 1, ui.ghold_k = (uint8_t)k;
         ui.ghold_new = 1, ui.ghold_turn = 0;
+        if (k == 0u || k == 26u) {                  /* (V0.875: F3 or G5 is a DEBUG corner: the step kept for the opening, to take out) */
+            uint32_t i = k ? 1u : 0u;
+            ui.dbg_ok |= (uint8_t)(DBG_GR0 << i);
+            ui.dbg_gr[i] = (uint8_t)ui_d_row();
+            ui.dbg_gs[i] = (uint16_t)st;
+        }
     }
     if (r && !cht.run && lpr.st == LR_OFF)
         sy_app_drum(DK_NOTE[ui_d_row()], sy_ui_key_vel());
