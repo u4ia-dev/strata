@@ -1,6 +1,6 @@
 # Credits
 
-Strata is u4ia's, a fork of Felucca: everything below is Felucca's and stays credited as it is (NOTICE.md).
+Strata is a fork of Felucca, created with Claude: everything below is Felucca's and stays credited as it is (NOTICE.md).
 
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).

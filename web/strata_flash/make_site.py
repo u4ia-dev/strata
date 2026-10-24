@@ -139,7 +139,7 @@ def info_page(repo, version, sha):
   <section>
     <h2>Good to know</h2>
     <p>Backup mode: OCT− and OCT+ held 5 s, or the SysEx message <code>F0 22 24 35 7D F7</code> on the FM-1's USB
-      MIDI port (as on the official firmware). V0.87 sometimes left an unknown USB device; V0.875 works (tested on one FM-1). The
+      MIDI port (as on the official firmware). On the FM-1 tested, V0.87 left an unknown USB device; V0.875 works (tested on one FM-1). The
       FM-1 Transporter and a Flipper Zero enter backup mode at power-on, whatever the firmware does. Switching the FM-1
       off and on returns to Strata.</p>
     <p>The USB serial console, the DEBUG menu (OCT&minus;, F3, G5 and GLO held together) and CORE 2 (off by default) are in every build.</p>
