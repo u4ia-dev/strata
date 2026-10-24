@@ -15,7 +15,7 @@
   const INK = "244,241,234", HOT = "255,77,46";
   let w = 0, h = 0, cx = 0, cy = 0, rr = 0, dim = 1, dots = [], raf = 0, last = 0, t = 0;
   let px = -1e9, py = -1e9, breath = 0, breathV = 0;
-  let prog = NaN, shown = 0, glow = 0, fxEnd = "";            // the install: its progress, as drawn (eased), Done's glow
+  let prog = NaN, shown = 0, glow = 0, fxEnd = "", stillT = 0;            // the install: its progress, as drawn (eased), Done's glow
 
   function build() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -115,14 +115,17 @@
     if (still.matches) shown = isNaN(prog) ? 0 : prog;
     if (end !== fxEnd) {
       fxEnd = end;
-      if (end === "done") { glow = 3; breathV += 2.4; prog = NaN; }
+      if (end === "done") { glow = still.matches ? 0 : 3; breathV += 2.4; prog = NaN; shown = still.matches ? 0 : shown; }   // (still: no glow left lit)
       if (end === "err") { prog = NaN; shown = 0; }
     }
     kick();
   }
 
   function kick() {
-    if (still.matches) { draw(false); return; }   // (reduced motion: the progress still drawn, without moving)
+    if (still.matches) {                         // (reduced motion: the progress still drawn, without moving, at most
+      if (!stillT) stillT = setTimeout(() => { stillT = 0; draw(false); }, 100);   // ten times a second)
+      return;
+    }
     if (!raf && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); }
   }
 
