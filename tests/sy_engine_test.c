@@ -543,21 +543,26 @@ static void t_voices(void)
         sy_note_on(60 + i, 100);
         run(1, 0);
     }
-    k = (uint32_t)sy_cpu(250) + (uint32_t)sy_cpu(250);
+    for (i = 0; i < 20u; i++)                             /* (V0.87.1: the render at 80 %, the whole time too: */
+        sy_cpu(205, 205);                                 /* V0.87's guard stepped at 70 % of the render) */
+    check("CPU guard (V0.87.1): 80 % of the half, the render and its whole time alike: nothing", sy_uni_budget == 48u &&
+          !fx_lo && nvoices() == 4u);
+    k = (uint32_t)sy_cpu(200, 250) + (uint32_t)sy_cpu(200, 250);
     run(1, 0);
     ok = 0;
     for (i = 0; i < SY_NVOICE; i++)
         ok |= sy_v[i].steal != 0;
-    check("CPU guard: two halves over 85 % shed a voice (faded)", k == 1u && (ok || nvoices() < 4u));
+    check("CPU guard: two halves over 92 % of their whole time (the render under it) shed a voice (faded)",
+          k == 1u && (ok || nvoices() < 4u));
     for (i = 0; i < 20u; i++)
-        sy_cpu(190);
-    check("CPU guard: over 70 % the unison budget steps down to 16", sy_uni_budget == 16u);
+        sy_cpu(190, 222);
+    check("CPU guard: over 85 % of the whole time the unison budget steps down to 16", sy_uni_budget == 16u);
     for (i = 0; i < 20u; i++)
-        sy_cpu(210);
-    check("CPU guard: over 78 % the effects get cheaper", fx_lo == 1);
+        sy_cpu(190, 230);
+    check("CPU guard: over 88 % the effects get cheaper", fx_lo == 1);
     for (i = 0; i < 345u * 6u; i++)
-        sy_cpu(100);
-    check("CPU guard: under 55 % for a second, one step back at a time, all the way", sy_uni_budget == 48u && !fx_lo);
+        sy_cpu(100, 185);
+    check("CPU guard: under 75 % for a second, one step back at a time, all the way", sy_uni_budget == 48u && !fx_lo);
     {                                                     /* near the deadline: at once */
         uint32_t b0, b1, sh;
         int f1;
@@ -566,6 +571,15 @@ static void t_voices(void)
             sy_note_on(60 + i, 100);
             run(1, 0);
         }
+        sh = (uint32_t)sy_cpu_now(250);                   /* (V0.87.1: 98 % in the half its voices started: */
+        f1 = sy_g.shed == 0u && !sh;                      /* a start's peak, nothing shed at once) */
+        eng_reset();
+        for (i = 0; i < 4u; i++) {
+            sy_note_on(60 + i, 100);
+            run(1, 0);
+        }
+        sy_adm_half(0);                                   /* (a half later: none started since) */
+        check("CPU guard (V0.87.1): 98 % in the half that started its voices sheds none at once (a start's peak)", f1);
         b0 = sy_uni_budget;
         k = (uint32_t)sy_cpu_now(225);                    /* (88 %: nothing) */
         b1 = sy_uni_budget;
@@ -595,8 +609,41 @@ static void t_voices(void)
         on2 = nvoices();
         printf("engine: admission: 8 notes, a voice 1/8 of a block: %u voices, %u refused a free one (stealing); "
                "the cost not measured yet: %u voices\n", (unsigned)on1, (unsigned)ref, (unsigned)on2);
-        check("admission: a chord's voices only as many as the block's time holds under 80 % (1/4 + 4 x 1/8), the "
+        check("admission: a chord's voices only as many as the block's time holds under 84 % (1/4 + 4 x 1/8), the "
               "others steal; with the cost not measured yet (a new sound), every one", on1 == 4u && ref == 4u && on2 == 8u);
+    }
+    {                                                     /* V0.87.1: the unison gives way before a note steals */
+        uint32_t on1, ref, tr, b1;
+        eng_reset();
+        set(SP_V_POLY, 8);
+        set(SP_A_UNI, 7);
+        snap();
+        sy_adm.vt = SY_TICKS_BLK / 100u * 12u;            /* (a voice of 7 unison voices 12 % of a block: its own 5 %, */
+        sy_adm.bt = SY_TICKS_BLK / 4u;                    /* each unison voice 1 %; the rest 25 %) */
+        ref = sy_adm.refused;
+        tr = sy_adm.traded;
+        for (i = 0; i < 8u; i++)
+            sy_note_on(48 + 3 * i, 100);
+        on1 = nvoices();
+        b1 = sy_uni_budget;
+        run(1, 0);
+        printf("engine: admission: 8 notes of 7 unison voices (a voice 12 %% of a block, 7 of it its unison): %u voices, "
+               "%u refused, %u took unison from the others, the budget %u (%u instances after a block)\n", (unsigned)on1,
+               (unsigned)(sy_adm.refused - ref), (unsigned)(sy_adm.traded - tr), (unsigned)b1, (unsigned)sy_instances());
+        check("admission (V0.87.1): a chord of 7-unison voices that the time does not hold whole: every note a voice, the "
+              "unison budget stepped down for them (to 16: 2 each), none refused",
+              on1 == 8u && sy_adm.refused == ref && sy_adm.traded > tr && b1 == 16u && sy_instances() <= 16u);
+        eng_reset();
+        set(SP_V_POLY, 8);
+        set(SP_A_UNI, 7);
+        snap();
+        sy_adm.vt = SY_TICKS_BLK / 100u * 12u;
+        sy_adm.bt = SY_TICKS_BLK / 2u;                    /* (the rest half a block: even the floor does not hold 8) */
+        ref = sy_adm.refused;
+        for (i = 0; i < 8u; i++)
+            sy_note_on(48 + 3 * i, 100);
+        check("admission (V0.87.1): with the budget at its floor and still no time, a note steals as before",
+              nvoices() < 8u && sy_adm.refused > ref && sy_uni_budget == 16u);
     }
 }
 

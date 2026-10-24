@@ -26,6 +26,7 @@
 _Static_assert(SY_HALF % SY_BLK == 0u, "a half is whole blocks");
 _Static_assert(SY_HALF == 128u, "MASTER's ramp steps a half in 128ths (sy_master_blk)");
 _Static_assert(SY_HALF == C2_HALF, "CORE 2's test renders a half (sy_c2.c)");
+_Static_assert(SY_HALF / SY_BLK == 4u, "four blocks a half (sy_engine.c sy_adm_half)");
 
 static int32_t sy_abuf[2u * SY_HALF_WORDS] __attribute__((aligned(4)));
 
@@ -68,6 +69,10 @@ static sy_ring_t sy_ev_key;                      /* the keys' notes (V0.66): fro
 #define SY_STARTS_BLK 2u                         /* note-ons a block at most (V0.66): a chord's voices start over a few
                                                   * blocks (8 notes: 2.2 ms), no block pays for all their starts, and the
                                                   * first two measure a new sound's cost (sy_engine.c admission) */
+#define SY_STARTS_HI 179u                        /* V0.87.1: .. one a block with the half over 70 % of its time (the
+                                                  * guard's smoothed whole): a start's first block costs 1.4 to 2.4
+                                                  * times a steady one (sy_engine.c sy_cpu_now), so a chord near the
+                                                  * mark spreads its peak over two halves (8 notes: 5.1 ms) */
 static uint32_t sy_ev_starts;                    /* .. this block's so far */
 
 /* the interrupts held off (V0.66: sy_hw.c's flash work, BENCH's RUN): the halves that come late after it are
@@ -121,8 +126,12 @@ static void sy_ev_drain(sy_ring_t *g)
 }
 
 /* ------------------------------------------------------------------------------------------- audio --- */
-static uint32_t sy_load_q8;                      /* the last halves' load, 256 = all of a half (the guard's) */
+static uint32_t sy_load_q8;                      /* the last half's render, 256 = all of a half */
 static int32_t sy_app_load(void) { return SY_LOAD_KNOWN ? (int32_t)(sy_g.load_q8 * 100u / 256u) : -1; }   /* (HOME) */
+static int32_t sy_app_load_total(void)           /* V0.87.1: .. the half's whole time, the nested interrupts in: the */
+{                                                /* guard's (the console's, BENCH's: the platform's to show) */
+    return SY_LOAD_KNOWN ? (int32_t)(sy_g.tot_q8 * 100u / 256u) : -1;
+}
 
 /* MASTER on a block of the half: from the level the last half ended at to the one asked for, b its first frame */
 static void sy_master_blk(int32_t *o, int32_t g0, int32_t g1, uint32_t b)
@@ -156,7 +165,8 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
             sy_ev_drain(&sy_ev_key);
             sy_ev_drain(&sy_ev_midi);
             sy_loop_block();                     /* (V0.8, the looper: its clips, as keys into the tracks' chords) */
-            sy_chord_block(&sy_ev_starts, SY_STARTS_BLK);   /* (the chords: their steps, their notes' starts) */
+            sy_chord_block(&sy_ev_starts, sy_g.tot_q8 > SY_STARTS_HI ? 1u : SY_STARTS_BLK);   /* (the chords: their */
+                                                 /* steps, their notes' starts; V0.87.1: one a block near the mark) */
             sy_block(o + 2u * b);
             lp_click_block(o + 2u * b);          /* (the looper's click, before MASTER) */
             sy_master_blk(o + 2u * b, g0, g1, b);
@@ -171,8 +181,12 @@ void fm1_alnk0_irq(void)                         /* via isr_alnk0 (hal/fm1_isr.S
         us = fm1_ticks() - t0 - SY_NESTED_TICKS();
         us = (us > c2t ? us - c2t : 0u) / FM1_TICKS_PER_US;
         sy_load_q8 = us * 256u / (SY_HALF * 1000000u / 44118u);
-        sy_cpu(sy_load_q8);
-        sy_cpu_now((fm1_ticks() - t0) / FM1_TICKS_PER_US * 256u / (SY_HALF * 1000000u / 44118u));
+        {                                        /* (V0.87.1: the guard and the admission on the half's whole time) */
+            uint32_t tt = fm1_ticks() - t0, tq = tt / FM1_TICKS_PER_US * 256u / (SY_HALF * 1000000u / 44118u);
+            sy_cpu(sy_load_q8, tq);
+            sy_cpu_now(tq);
+            sy_adm_half(tt);
+        }
         sy_bench.half_us = us;
         if (us > sy_bench.half_max_us)
             sy_bench.half_max_us = us;
@@ -543,6 +557,9 @@ static struct {
     uint8_t prj_told;                            /* .. its sectors hold older presets: said once */
 } sy_fl;
 static void sy_ui_project(int ok, int blocked);  /* sy_ui.c: a project loaded (or not); its place in the way */
+static int sy_tp_active(void);                   /* sy_testproj.c (V0.87.1): a test project loaded (nothing saved), */
+static void sy_tp_end(void);                     /* .. ended by a project's load, */
+static void sy_tp_tick(void);                    /* .. its load and its changes, a millisecond */
 static void sy_ui_dk_saved(int rc, uint32_t kind, uint32_t i, int del);   /* sy_ui_save.c (V0.87) */
 _Static_assert(sizeof(dk_kit_t) <= SP_PACK_MAX, "a kit's record fits the write's buffer");
 /* a drum preset (kind 0) or a kit (1) into the user's record i (src 0: deleted); 0 queued */
@@ -704,10 +721,12 @@ static void sy_flash_ms(void)
 {
     if (sy_fl.prj_want >= 0 && !sy_fl.busy && !cht.run && lpr.st == LR_OFF) {   /* (PROJECT's LOAD: hushed, the one */
         sy_hush_req = 1;                                                         /* loaded saved, then the next read) */
-        if (sy_hushed) {
-            int ok = !sy_prj_save(0) || ui_prj_state[lpg.prj % LP_NPRJ] == 2u;
-            if (ok)
+        if (sy_hushed) {                         /* (V0.87.1: a test project loaded is never saved; the load ends it) */
+            int ok = sy_tp_active() || !sy_prj_save(0) || ui_prj_state[lpg.prj % LP_NPRJ] == 2u;
+            if (ok) {
                 sy_prj_load((uint32_t)sy_fl.prj_want);
+                sy_tp_end();
+            }
             sy_fl.prj_want = -1;
             sy_hush_req = 0;
             sy_ui_project(ok, 0);
@@ -750,7 +769,8 @@ static void sy_flash_ms(void)
     }
     if (ui_sounding())
         sy_fl.quiet_t = fm1_ms;
-    if (fm1_ms - sy_fl.check_t < 500u || fm1_ms - sy_fl.quiet_t < SY_QUIET_MS || sy_fl.busy || sy_next_st)
+    if (fm1_ms - sy_fl.check_t < 500u || fm1_ms - sy_fl.quiet_t < SY_QUIET_MS || sy_fl.busy || sy_next_st ||
+        sy_tp_active())                          /* (V0.87.1: a test project loaded: none of them saved) */
         return;
     sy_fl.check_t = fm1_ms;
     {                                            /* (quiet: the settings, the sound, when changed) */
@@ -920,8 +940,9 @@ static SY_NOINLINE void sy_app_boot(void)
 }
 
 /* every millisecond: the keys, the UI's buttons and knobs, a step of a wavetable build, a sound asked for while
- * one was loading, the flash's work */
-static void sy_app_ms(void)
+ * one was loading, the flash's work (V0.87.1: out of line, as before the test projects' call made the compiler take
+ * it into fm1_main, its flash buffers under every frame the loop draws: the main stack +508 B) */
+static SY_NOINLINE void sy_app_ms(void)
 {
     sy_keys_isr = (uint8_t)(SY_KEYS_ISR && sy_ui_keys_plain());
     sy_keys();
@@ -936,6 +957,7 @@ static void sy_app_ms(void)
             sy_app_entry_load(id);
     }
     sy_flash_ms();
+    sy_tp_tick();                                /* (V0.87.1: a test project's load, its changes) */
 }
 
 /* a frame (~60 a second): the screen where it changed, the LEDs */

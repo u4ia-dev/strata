@@ -73,6 +73,8 @@ static int16_t fx_flg[2][2][FX_LN] SY_SPARE, fx_tap[2][2][FX_LN] SY_SPARE, fx_co
 _Static_assert(FX_RV_TOTAL * 2u + FX_RV_PRE * 2u + (FX_RV_AP0 + FX_RV_AP1) * 2u <= 24u * 1024u, "reverb in 24 KiB");
 
 static uint8_t fx_lo;                     /* the CPU guard: OTT's upward compression off, the reverb on 4 lines */
+#define FX_LO_STEP (1.0f / 16.0f)         /* V0.87.1: .. and back, over 16 blocks (11.6 ms) each (sy_engine.c's guard;
+                                           * HALL and PLATE the same way): its steps had clicked (strata_guard.c) */
 
 typedef struct {                          /* CHORUS */
     uint32_t w, ph;                       /* the write index (0..FX_CHO_N - 1), its LFO's phase */
@@ -81,6 +83,7 @@ typedef struct {                          /* CHORUS */
 typedef struct {                          /* OTT */
     float s[2][2][2];                     /* the crossovers' SVF states [crossover][channel][ic1 ic2] */
     float env[3], g[3];                   /* each band's follower and its gain at the end of the last block */
+    float upg;                            /* V0.87.1: UPWARD's share the guard leaves (fx_lo: to 0, back to 1, slewed) */
 } fx_ott_t;
 typedef struct {                          /* EQ */
     float s[3][2][2];                     /* the SVF states [band][channel][ic1 ic2] */
@@ -131,6 +134,8 @@ static struct {
     float rv_lp[FX_RV_NL], rv_in, rv_o[2][2], rv_hp[2];
     uint32_t rv_ph;
     uint8_t rv_nl;                        /* reverb lines running */
+    float rv_g;                           /* V0.87.1: lines 5-8's weight (HALL 1, PLATE 0, between: on their way; -1 not
+                                           * yet set) */
     fx_ott_t ott[2];
     fx_eq_t eq[2];
     fx_flg_t flg[2];
@@ -174,6 +179,7 @@ static void fx_join(uint32_t i)           /* instance i from rest (it joins the 
         sy_zerof(fx.rv_o[0], 4u);
         sy_zerof(fx.rv_hp, 2u);
         fx.rv_nl = FX_RV_NL;
+        fx.rv_g = -1.0f;
         memset(fx_rv, 0, sizeof fx_rv);
         memset(fx_rvpre, 0, sizeof fx_rvpre);
         memset(fx_rvap, 0, sizeof fx_rvap);
@@ -181,6 +187,7 @@ static void fx_join(uint32_t i)           /* instance i from rest (it joins the 
     case FXT_OTT:
         memset(&fx.ott[k], 0, sizeof fx.ott[k]);
         fx.ott[k].g[0] = fx.ott[k].g[1] = fx.ott[k].g[2] = 1.0f;
+        fx.ott[k].upg = fx_lo ? 0.0f : 1.0f;
         break;
     case FXT_EQ: memset(&fx.eq[k], 0, sizeof fx.eq[k]); break;
     case FXT_FLANGER:
@@ -458,10 +465,99 @@ static void fx_delay(float *l, float *r, uint32_t fi)
 }
 
 /* ----------------------------------------------------------------------------------------- REVERB --- */
+/* V0.87.1: the reverb's block while HALL's lines 5-8 join or go: fx_reverb's loop on all eight lines, their weight gg
+ * ramped in it (apart, so that the steady loop stays as it was, instruction for instruction) */
+typedef struct {
+    float m, dm, khp, damp, width, l1, l4, d1, d4, dd1, dd4, gg, dg;
+    float len[FX_RV_NL], gain[FX_RV_NL];
+    uint32_t pre;
+} fx_rv_t;
+static SY_NOINLINE void fx_rv_xf(float *l, float *r, fx_rv_t *c)
+{
+    float *ch[2] = {l, r};
+    uint32_t i, j, k;
+    for (i = 0; i < SY_BLK; i += 2u) {
+        float m1 = 0.5f * (l[i + 1u] + r[i + 1u]), x = 0.25f * (fx.rv_in + m1) + 0.25f * (l[i] + r[i]), y[FX_RV_NL], o[2];
+        fx.rv_in = m1;                                  /* (the mono input, 1-2-1, every other sample) */
+        fx.rv_hp[0] += (x - fx.rv_hp[0]) * c->khp;     /* LOW CUT */
+        x -= fx.rv_hp[0];
+        fx_rvpre[fx.rv_pw] = fx_q(x);                   /* PRE-DELAY */
+        {
+            uint32_t q = fx.rv_pw + FX_RV_PRE - c->pre;
+            x = (float)fx_rvpre[q >= FX_RV_PRE ? q - FX_RV_PRE : q] * FX_DQ;
+        }
+        fx.rv_pw = (uint16_t)(fx.rv_pw + 1u < FX_RV_PRE ? fx.rv_pw + 1u : 0u);
+        {                                               /* two allpass diffusers */
+            float d = (float)fx_rvap[fx.rv_a0] * FX_DQ, v = x + 0.6f * d;
+            fx_rvap[fx.rv_a0] = fx_q(v);
+            x = d - 0.6f * v;
+            fx.rv_a0 = (uint16_t)(fx.rv_a0 + 1u < FX_RV_AP0 ? fx.rv_a0 + 1u : 0u);
+            d = (float)fx_rvap[FX_RV_AP0 + fx.rv_a1] * FX_DQ;
+            v = x + 0.6f * d;
+            fx_rvap[FX_RV_AP0 + fx.rv_a1] = fx_q(v);
+            x = d - 0.6f * v;
+            fx.rv_a1 = (uint16_t)(fx.rv_a1 + 1u < FX_RV_AP1 ? fx.rv_a1 + 1u : 0u);
+        }
+        c->len[1] = c->l1 + c->d1;
+        c->len[4] = c->l4 + c->d4;
+        c->d1 += c->dd1;
+        c->d4 += c->dd4;
+        for (k = 0; k < FX_RV_NL; k++) {                /* read each line: at its write index + n less the delay */
+            uint32_t n = FX_RV_LEN[k] + 8u, i0, i1;    /* (positive: truncation is the floor; under 2n) */
+            const int16_t *ln = fx_rv + FX_RV_BASE[k];
+            float rp = (float)(fx.rv_w[k] + n) - c->len[k], f, a, b, sv;   /* (the sum exact either way) */
+            i0 = (uint32_t)(int32_t)rp;
+            f = rp - (float)i0;
+            i1 = i0 + 1u;
+            a = ln[i0 >= n ? i0 - n : i0];
+            b = ln[i1 >= n ? i1 - n : i1];
+            sv = (a + (b - a) * f) * FX_DQ;
+            fx.rv_lp[k] += (sv - fx.rv_lp[k]) * c->damp;   /* DAMP */
+            y[k] = fx.rv_lp[k] * c->gain[k];
+        }
+        y[4] *= c->gg, y[5] *= c->gg, y[6] *= c->gg, y[7] *= c->gg;   /* (lines 5-8: their weight) */
+        o[0] = y[0] - y[2] + y[4] - y[6];               /* the outputs before the mixing */
+        o[1] = y[1] - y[3] + (y[5] - y[7]);
+        {                                               /* Hadamard 8, scaled from 1 / sqrt 8 (gg 1) to 1 / 2 (0) */
+            float a0 = y[0] + y[1], a1 = y[0] - y[1], a2 = y[2] + y[3], a3 = y[2] - y[3];
+            float a4 = y[4] + y[5], a5 = y[4] - y[5], a6 = y[6] + y[7], a7 = y[6] - y[7];
+            float b0 = a0 + a2, b1 = a1 + a3, b2 = a0 - a2, b3 = a1 - a3, b4 = a4 + a6, b5 = a5 + a7, b6 = a4 - a6, b7 = a5 - a7;
+            float sc = 0.35355339f + 0.14644661f * (1.0f - c->gg);
+            y[0] = (b0 + b4) * sc; y[1] = (b1 + b5) * sc; y[2] = (b2 + b6) * sc;
+            y[3] = (b3 + b7) * sc; y[4] = (b0 - b4) * sc; y[5] = (b1 - b5) * sc;
+            y[6] = (b2 - b6) * sc; y[7] = (b3 - b7) * sc;
+        }
+        {                                               /* write back with the input, +- by line (lines 5-8 */
+            float xh = x * 0.5f;                        /* their writes ramped too, so that a line joining from */
+            for (k = 0; k < FX_RV_NL; k++) {            /* silence fills without a step, heard a line later) */
+                uint32_t n = FX_RV_LEN[k] + 8u;
+                float w = k & 1u ? y[k] - xh : y[k] + xh;
+                if (k >= 4u)
+                    w *= c->gg;
+                fx_rv[FX_RV_BASE[k] + fx.rv_w[k]] = fx_q(w);
+                fx.rv_w[k] = (uint16_t)(fx.rv_w[k] + 1u < n ? fx.rv_w[k] + 1u : 0u);
+            }
+            c->gg += c->dg;
+        }
+        {                                               /* WIDTH: the sides towards their middle; blended */
+            float m2 = c->m + c->dm;
+            for (j = 0; j < 2u; j++) {
+                float s = 0.5f * (o[0] + o[1]), v = s + (o[j] - s) * c->width, w0;
+                v *= 0.6f;
+                w0 = 0.5f * (fx.rv_o[j][1] + v);
+                fx.rv_o[j][1] = v;
+                ch[j][i] += (w0 - ch[j][i]) * c->m;
+                ch[j][i + 1u] += (v - ch[j][i + 1u]) * m2;
+            }
+            c->m = m2 + c->dm;
+        }
+    }
+}
+
 static void fx_reverb(float *l, float *r, uint32_t fi)
 {
-    float m0, m, dm, *ch[2] = {l, r};
-    uint32_t i, c, k, nl = sy_patch.p[SP_RV_TYPE] && !fx_lo ? 8u : 4u;
+    float m0, m, dm, *ch[2] = {l, r}, want = sy_patch.p[SP_RV_TYPE] && !fx_lo ? 1.0f : 0.0f, g0, g1;
+    uint32_t i, c, k, nl;
     float size = 0.45f + 0.55f * mod_get(sy_goff, SP_RV_SIZE);
     float rt = 0.3f * sy_exp2f(6.0589f * mod_get(sy_goff, SP_RV_DECAY));          /* 0.3 .. 20 s */
     float damp = 1.0f - 0.85f * mod_get(sy_goff, SP_RV_DAMP), width = mod_get(sy_goff, SP_RV_WIDTH);
@@ -471,6 +567,15 @@ static void fx_reverb(float *l, float *r, uint32_t fi)
     uint32_t base = 0;
     if (!fx_mixes(fi, SP_RV_ON, mod_get(sy_goff, SP_RV_MIX), &m0))
         return;
+    /* V0.87.1: HALL's lines 5-8 join and go over 16 blocks (FX_LO_STEP), their weight ramped across each block in
+     * their reads (the output, the mixing), in their writes and in the mixing's scale (1 / sqrt 8 at 1, HALL's; 1 / 2 at
+     * 0, PLATE's: the 8-line mixing with lines 5-8 at 0 is the 4-line one exactly): fx_rv_xf. At once, as before
+     * (fx_lo, TYPE), their going had stepped the tail and their joining the lines' writes, heard a line later
+     * (web/emu/strata_guard.c) */
+    g0 = fx.rv_g < 0.0f ? want : fx.rv_g;
+    g1 = want > g0 ? sy_minf(want, g0 + FX_LO_STEP) : sy_maxf(want, g0 - FX_LO_STEP);
+    fx.rv_g = g1;
+    nl = g0 > 0.0f || g1 > 0.0f ? 8u : 4u;
     if (nl != fx.rv_nl) {                              /* lines joining: from silence */
         if (nl > fx.rv_nl)
             for (k = 0, base = 0; k < FX_RV_NL; k++) {
@@ -500,7 +605,19 @@ static void fx_reverb(float *l, float *r, uint32_t fi)
     l4 = len[4];
     m = m0;
     dm = (fx.mix[fi] - m0) * (1.0f / (float)SY_BLK);
-    for (i = 0; i < SY_BLK; i += 2u) {
+    if (nl == 8u && (g0 < 1.0f || g1 < 1.0f)) {         /* (lines 5-8 on their way) */
+        fx_rv_t x;
+        x.m = m, x.dm = dm, x.khp = khp, x.damp = damp, x.width = width, x.l1 = l1, x.l4 = l4;
+        x.d1 = d1, x.d4 = d4, x.dd1 = dd1, x.dd4 = dd4, x.gg = g0, x.dg = (g1 - g0) * (1.0f / (float)FX_HB);
+        x.pre = pre;
+        sy_copyf(x.len, len, FX_RV_NL);
+        sy_copyf(x.gain, gain, FX_RV_NL);
+        fx_rv_xf(l, r, &x);
+        i = SY_BLK;                                     /* (the loop below: none of it) */
+    } else {
+        i = 0;
+    }
+    for (; i < SY_BLK; i += 2u) {
         float m1 = 0.5f * (l[i + 1u] + r[i + 1u]), x = 0.25f * (fx.rv_in + m1) + 0.25f * (l[i] + r[i]), y[FX_RV_NL], o[2];
         fx.rv_in = m1;                                  /* (the mono input, 1-2-1, every other sample) */
         fx.rv_hp[0] += (x - fx.rv_hp[0]) * khp;        /* LOW CUT */
@@ -590,11 +707,14 @@ static void fx_ott(float *l, float *r, uint32_t fi)
     fx_ott_t *st = &fx.ott[fx_nth(fi)];
     float m0, *ch[2] = {l, r}, bands[3][2][SY_BLK], c1[4], c2[4], g1[3], pk[3] = {0.0f, 0.0f, 0.0f};
     uint32_t i, c, b;
-    float up = fx_lo ? 0.0f : mod_get(sy_goff, SP_OT_UP + o), down = mod_get(sy_goff, SP_OT_DOWN + o);
+    float up, down = mod_get(sy_goff, SP_OT_DOWN + o);
     float tm = sy_exp2f(4.0f * mod_get(sy_goff, SP_OT_TIME + o) - 2.0f);          /* x0.25 .. x4 */
     float lv[3];
     if (!fx_mixes(fi, SP_OT_ON + o, mod_get(sy_goff, SP_OT_DEPTH + o), &m0))
         return;
+    st->upg = fx_lo ? sy_maxf(0.0f, st->upg - FX_LO_STEP) : sy_minf(1.0f, st->upg + FX_LO_STEP);   /* (V0.87.1: the */
+    up = mod_get(sy_goff, SP_OT_UP + o) * st->upg;   /* guard's UPWARD off over 16 blocks, not at once: a quiet passage
+                                                      * lifted by up to 24 dB fell in a block, a thump) */
     lv[0] = sy_exp2f(sp_lin(SP_OT_LOW, mod_get(sy_goff, SP_OT_LOW + o)) * 0.0166096f);
     lv[1] = sy_exp2f(sp_lin(SP_OT_MID, mod_get(sy_goff, SP_OT_MID + o)) * 0.0166096f);
     lv[2] = sy_exp2f(sp_lin(SP_OT_HIGH, mod_get(sy_goff, SP_OT_HIGH + o)) * 0.0166096f);

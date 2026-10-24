@@ -2,7 +2,8 @@
 /* The firmware (web/emu/strata_web.c, natively) driven at random under the sanitizers, its invariants checked after
  * each step: the panel's buttons (taps, holds, chords with OCT), the keys, the knobs, MIDI in (notes on every channel,
  * controllers, clock, start and stop), the looper's own (launches, scenes, REC, UNDO PASS, notes and moves put in,
- * the tracks' settings, the pages, projects loaded), the audio rendered between. Checked: the event pool (every event
+ * the tracks' settings, the pages, projects loaded; V0.87.1 the test projects loaded, stopped and ended by a project's
+ * load), the audio rendered between. Checked: the event pool (every event
  * in one clip's list, the free list or UNDO's, none twice; the counts), each clip (its list sorted, as long as its
  * count, inside its length), each track's place (its scenes, its next event in its clip), the recording's lists, the
  * chords' side the UI's (the selected track's), the voices' tracks, the parameters held. A failure prints the step
@@ -205,7 +206,7 @@ static void act(void)
             }
         }
     } else if (r < 70) {                          /* the looper's own (V0.85: the drums' too) */
-        uint32_t q = rn(16), t = rn(8), s = rn(8);
+        uint32_t q = rn(17), t = rn(8), s = rn(8);
         TRACE("%u looper %u t%u s%u\n", step_no, q, t, s);
         if (q == 0)
             web_test_lp_launch(t, rn(5) == 0 ? LP_STOP : s);
@@ -242,6 +243,16 @@ static void act(void)
                 web_test_kit(rn(8), rn(16), (int32_t)rn(140));
         } else if (q == 10) {                     /* (a hit straight in: any row, the duck's too) */
             web_test_drum_hit(rn(10), rn(9), rn(128), rn(2));
+        } else if (q == 16) {                     /* (V0.87.1: a test project loaded and played a while, stopped, a */
+            uint32_t w = rn(4);                   /* project loaded: the end of it) */
+            TRACE("%u tproj %u\n", step_no, w);
+            if (w == 0)
+                sy_tp_load(rn(SY_TP_N));
+            else if (w == 1)
+                sy_tp_stop();
+            else if (w == 2)
+                sy_app_project(rn(LP_NPRJ));
+            run_ms(rn(3000));
         } else if (lpr.st != LR_OFF && lpr.trk == t && lpr.scn == s) {
             ;                                     /* (V0.86's tools: never on the clip recording, as the UI keeps it) */
         } else if (q == 11) {                     /* (V0.86: TOOLS' PASTE, a clip or a bar of it, from another) */

@@ -48,6 +48,16 @@ static const prof_t PROF[] = {
     {"SUPERSAW, 8 notes, the drums, the duck", 8, {{-1, 0}}, 0, 2},
     {"drums: the eight lanes, every effect, COMP", 0, {{-1, 0}}, -1, 3},   /* (V0.86: sy_drum.c's effects) */
     {"drums: the eight lanes on V0.87's models", 0, {{-1, 0}}, -1, 4},    /* (V0.87 step 2: ANALOG, FM, CHIP, NOISE) */
+    {"PLUCK, 1 note", 1, {{-1, 0}}, 1},        /* (V0.87.1: every starter sound at 1 note and 8, the voices' cost */
+    {"PAD, 1 note", 1, {{-1, 0}}, 2},          /* against the guard's: DECISIONS item 14) */
+    {"FM KEYS, 1 note", 1, {{-1, 0}}, 3},
+    {"FM KEYS, 8 notes", 8, {{-1, 0}}, 3},
+    {"SYNC LEAD, 1 note", 1, {{-1, 0}}, 4},
+    {"LADDER BASS, 1 note", 1, {{-1, 0}}, 5},
+    {"VOWEL PAD, 1 note", 1, {{-1, 0}}, 6},
+    {"VOWEL PAD, 8 notes", 8, {{-1, 0}}, 6},
+    {"OTT GROWL, 1 note", 1, {{-1, 0}}, 7},
+    {"OTT GROWL, 8 notes", 8, {{-1, 0}}, 7},
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 

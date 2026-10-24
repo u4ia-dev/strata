@@ -193,6 +193,7 @@ static void voice_init(sy_voice_t *v, uint32_t k)
 static float sy_last_pitch = 60.0f;        /* the last note played (glide starts from it) */
 static uint32_t sy_age, sy_rseed = 0x2545F491u;
 static uint8_t sy_alt;
+static uint8_t sy_v_new;                   /* V0.87.1: voices started from silence since the half began (the guard's) */
 
 /* starts a note on a voice: a silent voice from scratch; a sounding one (a retrigger, MONO) keeps its phases
  * and its envelopes rise from where they are */
@@ -213,6 +214,7 @@ static void voice_start(sy_voice_t *v, uint32_t note, uint32_t vel, float from_p
     v->pitch = glide ? from_pitch : (float)note;
     v->rnd = (float)(sy_rand(&sy_rseed) >> 8) * (1.0f / 16777216.0f);
     v->alt = sy_alt ^= 1u;
+    sy_v_new = (uint8_t)(sy_v_new + (fresh && sy_v_new < 255u));
     if (fresh) {
         v->amp = 0.0f;
         v->fade = 1.0f;
