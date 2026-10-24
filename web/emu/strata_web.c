@@ -405,7 +405,9 @@ EXPORT int32_t web_test_tp(uint32_t f, int32_t v)
         web_tp_fake_t0 = fm1_ms;
         ui.dirty = D_ALL;
     }
-    return f == 0u ? ui.tp_k : f == 2u ? sy_tp_active() : f == 3u ? (int32_t)sy_tp_ms(0) : -1;
+    return f == 0u ? ui.tp_k : f == 2u ? sy_tp_active() : f == 3u ? (int32_t)sy_tp_ms(0)
+         : f == 4u ? (sy_tp_active_real() ? (int32_t)sy_tp_ms_real((uint32_t)sy_tp_active_real() - 1u) : -1)   /* (V0.87.1: the real one's time) */
+         : -1;
 }
 EXPORT int32_t web_test_ks_enc(uint32_t r, uint32_t c) { return ui_ks_enc(r, c); }   /* (V0.87.1: KEY SCAN: the encoder at a cell) */
 EXPORT const char *web_test_cd(void)

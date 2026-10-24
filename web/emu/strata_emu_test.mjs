@@ -2812,14 +2812,39 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   t.web_enc(E.K1, 1); play(t, 0.8);
   twiceB(t, B.HOME);                               // (HOME twice: load; the stub has none: NOT AVAILABLE)
   const na = [t.web_test_win(3), tt(), sec(), t.web_test_tp(2, 0)];
+  play(t, 3.0);                                    // (the real load is asynchronous: it saves the owner's work, hushes, builds, plays)
+  const up = [t.web_test_tp(2, 0), t.web_test_tp(4, 0) > 1500];
+  t.web_enc(E.K2, 1); play(t, 0.3);                // (KNOB 2: stops it; it stays loaded, its time still)
+  const stop = tt(), ms1 = t.web_test_tp(4, 0);
+  play(t, 1.0);
+  const down = [t.web_test_tp(2, 0), t.web_test_tp(4, 0) === ms1, ms1 > 1500];
   t.web_test_tp(1, 1); play(t, 2.2);              // (a test shown loaded, its time moving: the page shows it)
   const run = [t.web_test_tp(2, 0), t.web_test_tp(3, 0) > 1500];
-  t.web_enc(E.K2, 1); play(t, 0.2);                // (KNOB 2: stop; the stub stops nothing, the toast says it was asked)
-  const stop = tt();
-  check(`DEBUG > TESTS: KNOB 1 picks TEST ${names.join(", ")} (stops at both ends); asked a moment after the last detent (${asked}), turning again keeps it (${again}); EDIT: no (${no}); HOME twice with no project to load: "${na[1]}" (question ${na[0]}, still DEBUG ${na[2] === SEC.DEBUG}, loaded ${na[3]}); one shown loaded (${run}); KNOB 2: "${stop}"`,
+  t.web_test_tp(1, -1);
+  check(`DEBUG > TESTS: KNOB 1 picks TEST ${names.join(", ")} (stops at both ends); asked a moment after the last detent (${asked}), turning again keeps it (${again}); EDIT: no (${no}); HOME twice loads the real TEST 4: "${na[1]}" (question ${na[0]}, still DEBUG ${na[2] === SEC.DEBUG}, loaded ${na[3]}); 3 s on it plays (${up[0]}, its time over 1.5 s ${up[1]}); KNOB 2: "${stop}", still loaded ${down[0]}, its time stopped ${down[1]} at ${down[2]}; one shown loaded (${run})`,
         names.join() === "1,2,4,1" && asked.join() === "0,4,0" &&
-        again.join() === "4,2" && no.join() === "0,KEPT" && na[0] === 0 && na[1] === "NOT AVAILABLE" && na[2] === SEC.DEBUG &&
-        na[3] === 0 && run.join() === "2,true" && stop === "TEST STOPPED");
+        again.join() === "4,2" && no.join() === "0,KEPT" && na[0] === 0 && na[1] === "TEST 4: LOOPER" && na[2] === SEC.DEBUG &&
+        na[3] === 4 && up[0] === 4 && up[1] && stop === "TEST STOPPED" && down[0] === 4 && down[1] && down[2] && run.join() === "2,true");
+}
+{                                               // V0.87.1: a test loaded, nothing saved: the top line's mark and HOME's line show only while sy_tp_active() is set
+  const m = await boot();
+  splash(m);
+  const fb = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
+  const band = (f, y0, y1) => f.slice(y0 * 240, y1 * 240);
+  const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i]), 0);
+  const rows = [];
+  for (const [name, set] of [["HOME", () => goPage(m, SEC.MACRO, "SOUND")], ["ENV 1", () => { for (let q = 0; q < 200; q++) { m.web_test_go(q); if (m.web_test_page_section() === SEC.ENV1) break; } }]]) {
+    set(); play(m, 0.4);
+    const a = fb();
+    m.web_test_tp(1, 2); play(m, 0.4);
+    const b = fb();
+    m.web_test_tp(1, -1); play(m, 0.4);
+    const c = fb();
+    rows.push([name, diff(band(a, 0, 16), band(b, 0, 16)), diff(band(a, 0, 16), band(c, 0, 16)),
+               name === "HOME" ? diff(band(a, 148, 166), band(b, 148, 166)) : 0, diff(a, c)]);
+  }
+  check(`a test loaded: the top line differs (${rows.map(r => r[0] + " " + r[1]).join(", ")} pixels), HOME's line under the rows differs (${rows[0][3]}); the test ended from sy_tp_active(): back as it was (${rows.map(r => r[2] + "/" + r[4]).join(", ")} pixels)`,
+        rows.every(r => r[1] > 100 && r[2] === 0 && r[4] === 0) && rows[0][3] > 100);
 }
 {                                               // V0.87.1: CLIPS: the scenes on OCT-, OCT+, MUTE / SOLO on KNOB 2, the track on KNOB 4, PRESETS the sound's list
   const c = await boot();
