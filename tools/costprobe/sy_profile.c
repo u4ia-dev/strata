@@ -22,6 +22,8 @@ typedef struct {
     int8_t sound;                          /* V0.81: a starter sound under them (sy_sounds.h; -1 none) */
     uint8_t drums;                         /* V0.85: 1 every lane hit each 64 blocks (~46 ms), 2 and the duck each 32;
                                             * V0.86: 3 as 1, every drum's effects on and the kit's COMP */
+    uint8_t xf;                            /* V0.87.1: the guard's fx_lo turned each 17 blocks (its 16-block ramp each
+                                            * way): the reverb's lines 5-8 on their way (sy_fx.c fx_rv_xf) */
 } prof_t;
 
 #define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}, {SP_EQ_ON, 1},   \
@@ -48,6 +50,17 @@ static const prof_t PROF[] = {
     {"SUPERSAW, 8 notes, the drums, the duck", 8, {{-1, 0}}, 0, 2},
     {"drums: the eight lanes, every effect, COMP", 0, {{-1, 0}}, -1, 3},   /* (V0.86: sy_drum.c's effects) */
     {"drums: the eight lanes on V0.87's models", 0, {{-1, 0}}, -1, 4},    /* (V0.87 step 2: ANALOG, FM, CHIP, NOISE) */
+    {"PLUCK, 1 note", 1, {{-1, 0}}, 1},        /* (V0.87.1: every starter sound at 1 note and 8, the voices' cost */
+    {"PAD, 1 note", 1, {{-1, 0}}, 2},          /* against the guard's: DECISIONS item 14) */
+    {"FM KEYS, 1 note", 1, {{-1, 0}}, 3},
+    {"FM KEYS, 8 notes", 8, {{-1, 0}}, 3},
+    {"SYNC LEAD, 1 note", 1, {{-1, 0}}, 4},
+    {"LADDER BASS, 1 note", 1, {{-1, 0}}, 5},
+    {"VOWEL PAD, 1 note", 1, {{-1, 0}}, 6},
+    {"VOWEL PAD, 8 notes", 8, {{-1, 0}}, 6},
+    {"OTT GROWL, 1 note", 1, {{-1, 0}}, 7},
+    {"OTT GROWL, 8 notes", 8, {{-1, 0}}, 7},
+    {"SUPERSAW, 1 note, the reverb's lines 5-8 always on their way (16 blocks)", 1, {{-1, 0}}, 0, 0, 1},
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 
@@ -101,6 +114,8 @@ int main(int argc, char **argv)
                 sy_drum_hit(l, 0, 100, (int)(l & 1u));
         if (p->drums == 2u && i % 32u == 0u)
             sy_drum_hit(DK_DUCK, 0, 100, 0);
+        if (p->xf && i % 17u == 0u)             /* (V0.87.1: fx_lo turned, as the guard turns it) */
+            sy_g_fx(!sy_g.fx_lo, 0);
         sy_block(out);
         if (i < PROF_WARM)
             sy_service();

@@ -12,7 +12,10 @@
  * Glide: GLIDE's time, always or (GL MODE LEGATO) only between held notes. The unison budget: the sounding
  * oscillator instances (voices x oscillators x unison) stay under sy_uni_budget; over it, the oldest voices lose a
  * unison voice a block (faded) before any voice is stolen. The CPU guard (sy_cpu) shrinks the budget, then the
- * effects' cost, then sheds voices, and undoes it in reverse when the load falls. */
+ * effects' cost, then sheds voices, and undoes it in reverse when the load falls. V0.87.1: the guard and the
+ * admission go by the half's whole time, the interrupts nested in it too (what the deadline is), to a higher mark
+ * (85 %: the V0.87 test's voices stopped at 60-69 % of the render alone, the guard stepping at 70 % of it), and a new
+ * note the time does not hold takes unison voices from the others before it steals. */
 #define SY_STACK 16u
 #define SY_UNI_BUDGET 48u
 static void sy_note_off(uint32_t note);
@@ -29,38 +32,103 @@ static uint8_t sy_wheel, sy_at, sy_expr = 127;
 static lfo_t sy_glfo[2];
 static volatile uint8_t sy_lfo_sync;         /* the transport started (PLAY): the FREE LFOs from their start, next block */
 static struct {                              /* the CPU guard */
-    uint32_t load_q8;                        /* the last half's load, smoothed (256 = 100 %) */
+    uint32_t load_q8;                        /* the last half's render, smoothed (256 = 100 %: HOME, BENCH) */
+    uint32_t tot_q8;                         /* V0.87.1: .. its whole time, the interrupts nested in it too (the guard's) */
     uint8_t level;                           /* budget steps taken, 0..SY_GUARD_FX */
     uint8_t fx_lo;                           /* effects at low cost (OTT upward off, reverb half its lines) */
-    uint8_t over;                            /* halves in a row over 85 % */
-    uint16_t calm;                           /* halves in a row under 55 % */
+    uint8_t over;                            /* halves in a row over SY_G_SHED */
+    uint16_t calm;                           /* halves in a row under SY_G_CALM */
     uint32_t shed;                           /* voices shed */
 } sy_g;
+/* the guard's marks (V0.87.1), 256 the half's whole time: over SY_G_STEP (smoothed) the unison budget a step down a
+ * half, over SY_G_FXLO the effects at low cost too, a half over SY_G_SHED twice in a row a voice shed; under SY_G_CALM
+ * for a second a step back. V0.87's were 70, 78 and 85 % of the render alone and 55 % back: the nested interrupts
+ * (TIMER5's keys and LEDs, the USB audio's packets) not counted, so a mark on the render was lower on the deadline by
+ * however long they took */
+#define SY_G_STEP 218u                       /* 85 % */
+#define SY_G_FXLO 225u                       /* 88 % */
+#define SY_G_SHED 236u                       /* 92 % */
+#define SY_G_CALM 192u                       /* 75 % (a budget step is ~8 % of a core, tools/costprobe: no see-saw) */
+#define SY_GUARD_FX 4u                       /* budget steps */
+static const uint8_t SY_GUARD_BUDGET[SY_GUARD_FX + 1u] = {48, 40, 32, 24, 16};
 
 /* admission (V0.66): a chord of eight VOWEL PADs took one half 3.85 ms of its 2.90 (BENCH on V0.65: 3 halves late)
  * before the guard, which only reads a half once it is over, shed five voices. So the engine times its blocks (the
  * platform's clock, SY_TICKS: none on the host and in the emulator, where nothing is refused) and a new voice takes a
- * free one only while the block's time it is measured to need fits: the voices' own (a voice's, measured, times one
- * more than sound now) and the rest of the block's (the effects, the matrix) under 80 % of a block. Else it steals, as
- * POLY does with every voice taken. A sound's load forgets the voice's cost: its first two voices measure it (the
- * app starts at most two notes a block) */
+ * free one only while the time it is measured to need fits: the voices' own (a voice's, measured, times one more than
+ * sound now) and the rest of a block's (V0.87.1: the half's whole time less its voices', a block's share: the effects,
+ * the drums, the events, the interrupts nested) under SY_ADM_PCT of a block. V0.87.1: a voice's time is its own
+ * (envelopes, filter, amp, the matrix) and its unison voices': vt = c1 (K + u), u the voices' unison voices on average
+ * (sy_instances), K SY_ADM_K. When the budget binds, a new voice adds its own and takes its unison voices from the
+ * others (sy_budget, the oldest first); so a note that does not fit asks first whether it would with the budget a step
+ * (or more) down, and if so the budget steps and the voice plays: the unison gives way before a note steals. Else it
+ * steals, as POLY does with every voice taken. A sound's load forgets the voice's cost: its first two voices measure
+ * it (the app starts at most two notes a block; V0.87.1: the first measure taken whole, not halved into the 0) */
 #ifndef SY_TICKS
 #define SY_TICKS() 0u                        /* the platform's clock (strata.c: TIMER4) */
 #define SY_TICKS_BLK 0u                      /* .. its ticks in a block's time (0: no admission) */
 #endif
+#define SY_ADM_PCT 84u                       /* (V0.87.1; 80 % of the block's own time before) */
+#define SY_ADM_TRADE 80u                     /* .. a voice that takes unison from the others: under this (the trade's
+                                              * saving an estimate, below) */
+#define SY_ADM_K 5.0f                        /* a voice's own work in unison voices' (tools/costprobe, SUPERSAW: ~183 and
+                                              * ~34 instructions a sample; a sound without its filter ~3) */
+#define SY_ADM_C1 (SY_TICKS_BLK / 74u)       /* .. a unison voice's time a block at most (1.35 %: ~47 instructions a
+                                              * sample at 154 a us, the kernel's ~34 and room for a warp's). A sound
+                                              * whose own work is far more (VOWEL PAD: its formant filter, ~467 against
+                                              * 34, K ~14) made K's c1 too large, the saving overestimated: bounded by
+                                              * this, and the 4 points of SY_ADM_TRADE, within them */
 static uint32_t sy_loads;                    /* sounds taken (sy_patch_swap: the event log) */
 static struct {
-    uint32_t vt, bt;                         /* a voice's time a block (smoothed), the rest of the block's */
+    uint32_t vt, bt;                         /* a voice's time a block (smoothed), the rest of a block's */
     uint32_t refused;                        /* notes that stole for want of time (BENCH, the event log) */
+    uint32_t traded;                         /* V0.87.1: notes that took a voice for unison given up (the budget) */
+    uint32_t tvh;                            /* .. the voices' time this half so far */
 } sy_adm;
-static int sy_admit(void)
+static uint32_t sy_instances(void);
+static uint32_t sy_uni_new(uint32_t *nosc)   /* a new voice's unison voices (the budget's cap aside), its oscillators */
 {
-    uint32_t i, n = 0;
+    uint32_t o, n = 0;
+    *nosc = 0;
+    for (o = 0; o < SY_NOSC; o++)
+        if (sy_patch.p[o ? SP_B_ON : SP_A_ON]) {
+            int32_t u = sy_patch.p[o ? SP_B_UNI : SP_A_UNI];
+            n += (uint32_t)(u < 1 ? 1 : u > (int32_t)SY_NUNI ? (int32_t)SY_NUNI : u);
+            (*nosc)++;
+        }
+    return n;
+}
+static SY_NOINLINE int sy_admit(void)       /* (out of line: a note-on's, its float work kept in one place) */
+{
+    uint32_t i, n = 0, ni, un, fl, lv, cap = SY_TICKS_BLK / 100u * SY_ADM_PCT;
+    float c1, c0;
     if (!SY_TICKS_BLK || !sy_adm.vt)
         return 1;
     for (i = 0; i < SY_NVOICE; i++)
         n += sy_v[i].on != 0;
-    return !n || sy_adm.bt + (n + 1u) * sy_adm.vt <= SY_TICKS_BLK / 5u * 4u;
+    if (!n)
+        return 1;
+    ni = sy_instances();
+    un = sy_uni_new(&fl);
+    c1 = sy_minf((float)sy_adm.vt / ((float)ni / (float)n + SY_ADM_K), (float)SY_ADM_C1);
+    c0 = (float)sy_adm.vt - c1 * (float)ni / (float)n;   /* (a voice's own: the measure less its unison's) */
+    for (lv = sy_g.level;; lv++) {
+        uint32_t nj = ni + un, b = SY_GUARD_BUDGET[lv];
+        nj = nj > b ? b : nj;                    /* (what the budget leaves; each voice its oscillators at least) */
+        nj = nj < (n + 1u) * fl ? (n + 1u) * fl : nj;
+        if ((float)sy_adm.bt + c0 * (float)(n + 1u) + c1 * (float)nj <=
+            (float)(lv == sy_g.level ? cap : SY_TICKS_BLK / 100u * SY_ADM_TRADE)) {
+            if (lv != sy_g.level) {
+                sy_g.level = (uint8_t)lv;
+                sy_uni_budget = b;
+                sy_g.calm = 0;
+                sy_adm.traded++;
+            }
+            return 1;
+        }
+        if (lv >= SY_GUARD_FX || nj <= (n + 1u) * fl)
+            return 0;                            /* (the budget at its floor, or no unison left to give) */
+    }
 }
 
 /* ------------------------------------------------------------------------------------- the tables --- */
@@ -356,40 +424,61 @@ static void sy_budget(void)
 }
 
 /* ------------------------------------------------------------------------------------ the CPU guard --- */
-#define SY_GUARD_FX 4u                       /* budget steps */
-static const uint8_t SY_GUARD_BUDGET[SY_GUARD_FX + 1u] = {48, 40, 32, 24, 16};
 
-/* end of a half (audio.c): load_q8 the render's share of the half, 256 = 100 %. Over 70 % (smoothed) the budget
- * steps down, one step a half; over 78 % the effects get cheaper too; two halves over 85 % shed a voice (faded;
- * returns 1). Under 55 % for a second, one step back (the effects first). */
-static int sy_cpu(uint32_t load_q8)
+/* the guard's three steps (V0.87.1: one place each, web/emu/strata_guard.c forces them): a voice shed (faded over
+ * VOICE_STEAL_BLKS; 1 if one was), the unison budget a step down, the effects at low cost (or back) */
+static int sy_g_shed(void)
+{
+    sy_voice_t *v = sy_steal_pick(SY_NVOICE);
+    if (!v || v->steal)
+        return 0;
+    v->steal = VOICE_STEAL_BLKS;
+    v->next_vel = 0;
+    sy_g.shed++;
+    return 1;
+}
+static void sy_g_step(void)
+{
+    if (sy_g.level < SY_GUARD_FX)
+        sy_g.level++;
+    sy_uni_budget = SY_GUARD_BUDGET[sy_g.level];
+}
+static void sy_g_fx(int lo, int fast)        /* (fast: near the deadline, the effects' ramps over 4 blocks, not 16) */
+{
+    if (lo && (fast || !sy_g.fx_lo))
+        fx_lo_k = fast ? FX_LO_FAST : FX_LO_STEP;   /* (on: an emergency's quick ramp kept until it is back) */
+    else if (!lo)
+        fx_lo_k = FX_LO_STEP;
+    sy_g.fx_lo = (uint8_t)(lo != 0);
+    fx_lo = sy_g.fx_lo;
+}
+
+/* end of a half (sy_app.c): load_q8 the render's share of the half (HOME's), tot_q8 its whole time's, the interrupts
+ * nested in it too (256 = 100 %). V0.87.1: the guard on the whole, smoothed: over SY_G_STEP the budget steps down, one
+ * step a half; over SY_G_FXLO the effects get cheaper too; two halves over SY_G_SHED shed a voice (faded; returns 1).
+ * Under SY_G_CALM for a second, one step back (the effects first) */
+static int sy_cpu(uint32_t load_q8, uint32_t tot_q8)
 {
     int shed = 0;
     sy_g.load_q8 = (sy_g.load_q8 * 3u + load_q8) / 4u;
-    if (load_q8 > 218u) {
+    sy_g.tot_q8 = (sy_g.tot_q8 * 3u + tot_q8) / 4u;
+    if (tot_q8 > SY_G_SHED) {
         if (++sy_g.over >= 2u) {
-            sy_voice_t *v = sy_steal_pick(SY_NVOICE);
-            if (v && !v->steal) {
-                v->steal = VOICE_STEAL_BLKS;
-                v->next_vel = 0;
-                sy_g.shed++;
-            }
+            shed = sy_g_shed();
             sy_g.over = 0;
-            shed = 1;
         }
     } else {
         sy_g.over = 0;
     }
-    if (sy_g.load_q8 > 179u) {
-        if (sy_g.level < SY_GUARD_FX)
-            sy_g.level++;
-        if (sy_g.load_q8 > 200u)
-            sy_g.fx_lo = 1;
+    if (sy_g.tot_q8 > SY_G_STEP) {
+        sy_g_step();
+        if (sy_g.tot_q8 > SY_G_FXLO)
+            sy_g_fx(1, 0);
         sy_g.calm = 0;
-    } else if (sy_g.load_q8 < 141u && (sy_g.level || sy_g.fx_lo)) {
+    } else if (sy_g.tot_q8 < SY_G_CALM && (sy_g.level || sy_g.fx_lo)) {
         if (++sy_g.calm >= 345u) {
             if (sy_g.fx_lo)
-                sy_g.fx_lo = 0;
+                sy_g_fx(0, 0);
             else
                 sy_g.level--;
             sy_g.calm = 0;
@@ -402,31 +491,35 @@ static int sy_cpu(uint32_t load_q8)
     return shed;
 }
 
+/* V0.87.1: the admission's rest of a block from the half's whole time (TIMER4 ticks): less its voices', a block's
+ * share, smoothed (it was the rest of sy_block alone: the events, the chords, the looper's click, the USB tap and the
+ * nested interrupts left out) */
+static void sy_adm_half(uint32_t tot_ticks)
+{
+    uint32_t r = tot_ticks > sy_adm.tvh ? tot_ticks - sy_adm.tvh : 0u;
+    if (SY_TICKS_BLK)
+        sy_adm.bt = (sy_adm.bt * 3u + r / 4u) / 4u;  /* (a half four blocks: sy_app.c's SY_HALF) */
+    sy_adm.tvh = 0;
+    sy_v_new = 0;
+}
+
 /* end of a half, again: tot_q8 the render and the interrupts nested in it together (256 = the half). Near the deadline
  * the guard steps at once, not a few smoothed halves later: over 90 % a budget step (and over 94 % the effects at low
- * cost), over 96 % a voice shed now (BENCH on V0.5: 95 % at its peak, 5 halves late, 1 voice shed). The way back is
- * sy_cpu's, unchanged. Returns 1 when a voice was shed */
+ * cost), over 96 % a voice shed now (BENCH on V0.5: 95 % at its peak, 5 halves late, 1 voice shed). V0.87.1: not in a
+ * half that started voices from silence: a start's first block costs 1.4 to 2.4 times a steady one (two voices, the
+ * starter sounds, on the host), a peak that is gone a half later; a load that stays sheds by sy_cpu's two halves.
+ * The way back is sy_cpu's, unchanged. Returns 1 when a voice was shed */
 static int sy_cpu_now(uint32_t tot_q8)
 {
     int shed = 0;
     if (tot_q8 <= 230u)
         return 0;
-    if (sy_g.level < SY_GUARD_FX)
-        sy_g.level++;
+    sy_g_step();
     if (tot_q8 > 240u)
-        sy_g.fx_lo = 1;
+        sy_g_fx(1, 1);
     sy_g.calm = 0;
-    if (tot_q8 > 246u) {
-        sy_voice_t *v = sy_steal_pick(SY_NVOICE);
-        if (v && !v->steal) {
-            v->steal = VOICE_STEAL_BLKS;
-            v->next_vel = 0;
-            sy_g.shed++;
-            shed = 1;
-        }
-    }
-    sy_uni_budget = SY_GUARD_BUDGET[sy_g.level];
-    fx_lo = sy_g.fx_lo;
+    if (tot_q8 > 246u && !sy_v_new)
+        shed = sy_g_shed();
     return shed;
 }
 
@@ -504,7 +597,7 @@ static inline void sy_dc_store(float *st, float x1, float y1)
 static void sy_patch_swap(void);
 static void sy_block(int32_t *out)
 {
-    uint32_t i, k, t0 = SY_TICKS(), tv, nv = 0;
+    uint32_t i, k, tv, nv = 0;
     float vs[SRC_VOICE_LAST + 1u], vol0 = sy_vol, vol1, dv;
     sy_voice_t *newest = 0;
     if (sy_next_st)
@@ -612,11 +705,10 @@ static void sy_block(int32_t *out)
         }
         sy_out_pk = (uint16_t)pk;
     }
-    if (SY_TICKS_BLK) {                              /* (admission: a voice's time, quick to follow; the rest's) */
-        uint32_t rest = SY_TICKS() - t0 - tv;
-        if (nv)
-            sy_adm.vt = (sy_adm.vt + tv / nv) / 2u;
-        sy_adm.bt = (sy_adm.bt * 3u + rest) / 4u;
+    if (SY_TICKS_BLK) {                              /* (admission: a voice's time, quick to follow; the rest */
+        if (nv)                                      /* from the half's whole, sy_adm_half) */
+            sy_adm.vt = sy_adm.vt ? (sy_adm.vt + tv / nv) / 2u : tv / nv;
+        sy_adm.tvh += tv;
     }
 }
 
@@ -688,6 +780,7 @@ static void sy_init(void)
     sy_uni_budget = SY_UNI_BUDGET;
     memset(&sy_g, 0, sizeof sy_g);
     memset(&sy_adm, 0, sizeof sy_adm);
+    sy_v_new = 0;
     memset(sy_dc, 0, sizeof sy_dc);
     memset(sy_glfo, 0, sizeof sy_glfo);
     sy_lfo_sync = 0;
