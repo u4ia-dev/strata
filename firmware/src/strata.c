@@ -150,6 +150,7 @@ static volatile uint32_t t5_nested_ticks;        /* .. TIMER4 ticks TIMER5 spent
 #endif
 #define SY_NESTED_TICKS() t5_nested_ticks
 #include "sy_app.c"
+#include "sy_testproj.c"                        /* (V0.87.1: the test projects) */
 
 /* ------------------------------------------------- update, the FM-1 --- */
 #include "ota.c"

@@ -2294,7 +2294,8 @@ static void ui_p_countdown(void)
 }
 
 /* HOME held (V0.86, B17): the help map of the screen shown: what SELECT, ALGORITHM, PRESETS and the knobs do here,
- * every button once and twice; held on, the SETTINGS at 5 s (the bar at the bottom filling toward them) */
+ * every button once and twice; on HOME, held on, DEBUG at 5 s (the bar at the bottom filling toward it; V0.87.1: HOME
+ * only) */
 static void ui_p_help(void)
 {
     static const char *const TW[12] = {
@@ -2305,8 +2306,8 @@ static void ui_p_help(void)
     uint8_t secs[NFXC];
     uint32_t n, i, sec = ui_sec(), held = fm1_ms - ui.bt_t[B_HOME];
     char t[160], v[40], f[96], *e;                  /* (t: eight modules' names, 13 characters each at most) */
-    float w = 224.0f * sy_clampf((float)held / (float)UI_LONG_MS, 0.0f, 1.0f);
-    lk_banner("HELP", "HOLD ON: DEBUG AT 5 S");
+    float w = ui_cd_debug() ? 224.0f * sy_clampf((float)held / (float)UI_LONG_MS, 0.0f, 1.0f) : 0.0f;
+    lk_banner("HELP", ui_cd_debug() ? "HOLD ON: DEBUG AT 5 S" : "LET GO TO CLOSE");
     sp_put(sp_put(sp_put(t, sec == SEC_MACRO ? "HOME" : ui_sec_name(sec)), " > "), UI_PG[ui.page].name);
     lk_text(8.0f, 24.0f, T12B, lk_fit(f, sizeof f, t, T12B, 20, 224.0f), sk.ink, sk.ground, 20, 11);
     for (i = 0; i < 5u; i++) {
@@ -2348,7 +2349,8 @@ static void ui_p_help(void)
     lk_text(8.0f, 118.0f, T9, "ONCE: THE PAGE LEFT; IN ITS MENU: FIRST", sk.lab, sk.ground, 20, 0);
     for (i = 0; i < 12u; i++)
         lk_text(i & 1u ? 124.0f : 8.0f, 134.0f + 12.0f * (float)(i / 2u), T9, TW[i], sk.ink, sk.ground, 20, 0);
-    lk_frame(8.5f, 212.5f, 223.0f, 7.0f, 1.0f, sk.line);
+    if (ui_cd_debug())
+        lk_frame(8.5f, 212.5f, 223.0f, 7.0f, 1.0f, sk.line);
     if (w > 1.0f)
         lk_box(10.0f, 214.0f, 8.0f + sy_minf(w, 222.0f), 218.0f, sk.hot);
 }

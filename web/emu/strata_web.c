@@ -179,6 +179,7 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
+#include "../../firmware/src/sy_testproj.c"    /* (V0.87.1: the test projects) */
 
 #undef __attribute__
 #define EXPORT __attribute__((used, visibility("default")))

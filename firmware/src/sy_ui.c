@@ -2101,7 +2101,8 @@ static void ui_lfo_add(void)
     ui_pts_done(k);
 }
 
-/* a long hold, UI_LONG_MS: HOME opens the DEBUG menu (V0.87, U5; its help map from HOLD), OCT- in the browser
+/* a long hold, UI_LONG_MS: HOME on HOME opens the DEBUG menu (V0.87, U5; its help map from HOLD; V0.87.1: on HOME only,
+ * elsewhere the help map stays while HOME is held), OCT- in the browser
  * deletes the preset playing (UI_DEL_MS), a menu button + OCT- held resets what it shows (V0.87, U2: from OCT-'s press;
  * its countdown from UI_CD_SHOW_MS). Let go, a knob, another button, another page or the MOD layer stop it */
 #define UI_LONG_MS 5000u
@@ -2111,6 +2112,7 @@ static void ui_reset(uint32_t b);
 static void ui_mod_close(void);
 static void ui_lay_close(void);
 static int ui_cd_quiet(uint32_t b) { return b != B_HOME && b != B_SAVE && b != B_OCTDN && b != NB; }
+static int ui_cd_debug(void) { return ui_sec() == SEC_MACRO; }   /* (V0.87.1: HOME held opens DEBUG from HOME only) */
 static void ui_cd_arm(uint32_t b)                  /* (a button held: from its press) */
 {
     ui.cd_btn = (uint8_t)b;
@@ -2167,6 +2169,10 @@ static void ui_cd_tick(void)
                   : !(ui.bt_down & (1u << b)) || (ui.bt_chord & (1u << b)) || (ui.mod && (ui.mod_btn != b || ui.mod_last >= 0)) ||
                         ui.mom_n || (b == B_OCTDN && (ui_sec() != SEC_BROWSE || sy_app_slot() < 0))) {
         ui_cd_stop();
+        return;
+    }
+    if (b == B_HOME && !ui.cd_oct && !ui_cd_debug()) {   /* (V0.87.1: not on HOME: the help map only, as long as held) */
+        ui.cd_s = 0;
         return;
     }
     if (held >= dur) {
