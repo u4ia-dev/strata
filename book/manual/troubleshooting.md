@@ -23,7 +23,7 @@
 - **The screen or LEDs are dark**: SETTINGS > POWER > SCREEN OFF AFTER (any control wakes it), SCREEN > LIGHTS.
 - **Crackles**: too much unison and too many effects at once; Strata trims them by itself. Use fewer unison copies or
   effects.
-- **Everything feels wrong**: SETTINGS > WIPE resets the settings; presets and projects stay.
+- **Everything feels wrong**: DEBUG > WIPE (hold <kbd>HOME</kbd> 5 s on HOME) resets the settings; presets and projects stay.
 
 ## Messages
 

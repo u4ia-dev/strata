@@ -42,7 +42,9 @@ chain and an estimate of their processor cost; REVERB is the costliest.
 | BITCRUSH | BITS, RATE, MIX | | BITS 1–16; RATE lowers the sample rate. |
 | TREMOLO | MODE, SYNC, RATE, DEPTH | SHAPE: SHAPE, SPREAD | MODE: TREMOLO or AUTOPAN. SHAPE: SINE, TRIANGLE, SQUARE, SAW. |
 | RING MOD | FREQ, SHAPE, SPREAD, MIX | | SHAPE: sine to square carrier. |
-| TAPE | WOW, FLUTTER, SATURATE, MIX | TONE: TONE, HISS | TONE darkens like a worn head; HISS adds gated tape hiss. |
+| TAPE | WOW, FLUTTER, SATURATE, MIX | TONE: TONE, HISS | TONE darkens like a worn head; HISS adds gated tape hiss. The screen moves with the sound: the reels turn faster as it gets louder and a dot rides the SATURATE curve. |
+
+![TAPE](../images/Tape-2x.png)
 
 With SYNC FIXED, the rate of DELAY, FLANGER, PHASER and TREMOLO is a note value of the tempo. Every effect also has a
 VALUES page. Ranges and defaults are in the [parameter reference](parameters.md#drive).

@@ -15,7 +15,7 @@ Or hold <kbd>SCL</kbd> and press a key to make it the root.
 stops it. Turn LATCH on (GROOVE page) to keep it playing after you let go.
 
 **Bend and glide**: hold <kbd>GLO</kbd> for PERFORM (<kbd>GLO</kbd> twice keeps it open). **Tap the tempo**: hold
-<kbd>GLO</kbd> and tap <kbd>PLAY</kbd> three or more times.
+<kbd>GLO</kbd> and tap F3, the lowest key, three or more times (F3 makes no sound while you tap).
 
 ## SCALE
 
@@ -78,6 +78,10 @@ when chords are off.
 | | CHANCE | How often the step plays, 0–100 % |
 | | SLIDE | Hold into the next note (a glide in MONO or LEGATO with GLIDE) |
 
+![ARP STEPS](../images/ArpStepsChance-2x.png)
+
+On STEPS, each step's CHANCE shows as a fader in its column: the cap is up at 100 % and down at 0.
+
 With the transport running (<kbd>PLAY</kbd>), ARP and PATTERN follow its beat from the start of the bar; stopped, they
 start when you press a key. The ARP button is lit while the ARP is on.
 
@@ -90,7 +94,7 @@ start when you press a key. The ARP button is lit while the ARP is on.
 
 | Layer | Hold | What the knobs do |
 | --- | --- | --- |
-| PERFORM | <kbd>GLO</kbd> | KNOB 1 pitch bend (springs back when the layer closes), KNOB 2 mod wheel, KNOB 3 GLIDE, KNOB 4 VOLUME. <kbd>PLAY</kbd> taps the tempo. |
+| PERFORM | <kbd>GLO</kbd> | KNOB 1 pitch bend (springs back when the layer closes), KNOB 2 mod wheel, KNOB 3 GLIDE, KNOB 4 VOLUME. Tap the tempo with F3, the lowest key (it does not sound): hold <kbd>GLO</kbd>, tap three or more times. |
 | MACROS | <kbd>FX</kbd> | MACRO 1–4. White keys F3–F4 bypass effects 1–8 (lit: in; dim: bypassed). |
 | MOMENTARY | <kbd>LFO</kbd> | Change the page's values; they return when you let go. |
 

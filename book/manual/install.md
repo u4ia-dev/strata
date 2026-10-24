@@ -20,7 +20,7 @@ a backup tool on a computer.
 
 - **From Strata or Felucca**: hold <kbd>OCT−</kbd> and <kbd>OCT+</kbd> for 5 seconds (a countdown shows from 2 s).
   With Strata V0.87 the computer may show an *unknown USB device* instead; then switch the FM-1 off and on and use
-  one of the last two ways.
+  one of the last two ways. Strata V0.87.1 enters backup mode a different way (unconfirmed on hardware).
 - **From the official firmware (V15)**: send the USB-MIDI message `F0 22 24 35 7D F7` with any program that sends
   SysEx.
 - **The [FM-1 Transporter](https://github.com/kurogedelic/FM-1-transporter)**, a Seeed XIAO RP2040 wired to the FM-1's

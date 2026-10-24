@@ -12,7 +12,8 @@ through the **matrix**: eight slots, each a source, a destination and an amount.
 1. Go to the page with the parameter you want to move, such as FILTER's TONE page.
 2. Press <kbd>LFO</kbd> twice for an LFO, or <kbd>ENV</kbd> twice for an envelope or a macro. The assign window opens.
 3. Turn KNOB 1 to choose the source and KNOB 2 to choose the parameter. Parameters marked NO can't be modulated.
-4. Turn ALGORITHM to the second page. Turn KNOB 2 to set the AMOUNT (−100 to +100 %) and KNOB 1 to set the POLARITY.
+4. Turn ALGORITHM to the second page. Turn KNOB 2 to set the AMOUNT (−100 to +100 %) and KNOB 1 to set the POLARITY. The dial points up at rest; its arc shows how far the source swings the knob from
+   there, both ways for BIPOLAR, one way for UNIPOLAR.
 5. Press any button to close it. <kbd>OCT−</kbd> in the window removes the source from the parameter.
 
 ### Try sources quickly (the MOD layer)
@@ -81,6 +82,8 @@ sweep the whole range.
 | BEND | −1…+1 | pitch bend |
 | AFTERTOUCH | 0…1 | MIDI channel aftertouch |
 | FIXED | | a constant offset |
+
+![The assign window, page 2](../images/AssignLfo2-2x.png)
 
 **Polarity.** A unipolar source (0…1) pushes a parameter one way; a bipolar one (−1…+1) swings it both ways. Each
 slot's POLARITY, set in the assign window, swaps this: an LFO made UNIPOLAR only opens a filter from where you set it.
