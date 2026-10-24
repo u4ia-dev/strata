@@ -706,17 +706,20 @@ static int sy_app_project(uint32_t p)
 static void sy_app_project_new(void)             /* PROJECT's NEW: the one loaded cleared (its tracks, chords, clips) */
 {
     uint32_t t;
+    uint8_t clk;
     if (cht.run)
         sy_app_run(0);
     sy_tp_end(1);                                /* (V0.87.1: a test project loaded: over, the owner's back first) */
     lp_project_clear();
     sy_ev_push(&sy_ev_ui, SY_EV_PANIC, 0u, 0u);  /* (V0.87.1: what the clips had on ends; NEW while it played left the
                                                   * chords' notes held, their ends cleared with the clips) */
+    clk = ch_clock;                              /* (V0.87.1: CLOCK IN is a setting, not the project's: NEW keeps it) */
     for (t = 0; t < CH_NTRK; t++) {
         ch_use(t);
         ch_defaults();
     }
     ch_use(0);
+    ch_clock = clk;
     sy_ui_project(1, 0);
 }
 
