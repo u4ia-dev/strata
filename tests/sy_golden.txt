@@ -4,5 +4,5 @@ pad 9d0be6833a249aab
 fm keys 46f87a855530bbe9
 sync lead 167492882f2572d0
 ladder bass 5f88ad79594138c7
-vowel pad 855063cfb9b49067
-ott growl 7867f10690d47fc5
+vowel pad e7fe9ec32a78f727
+ott growl 19878bd4509e290b
