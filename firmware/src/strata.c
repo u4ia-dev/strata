@@ -34,7 +34,7 @@
 #define FM1_LED_Q 1              /* V0.87 (U9): the LED scan's tick in quarters, steady levels (hal/fm1_input.h) */
 #define FM1_T5_PRD_V 150u        /* .. TIMER5 at 40 kHz, the tick every fourth (sy_main.c fm1_timer5_irq) */
 #ifndef STRATA_VERSION
-#define STRATA_VERSION "V0.87 UI"                 /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums;
+#define STRATA_VERSION "V0.87.1"                 /* the splash and the console (V0.8: the looper, CORE 2; V0.85 its drums;
                                                    * V0.86 the interface, V0.87 its changes); build.py --strata --release X.Y */
 #endif
 #if !FELUCCA_OTA || !FELUCCA_FLASH
