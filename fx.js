@@ -72,15 +72,15 @@
       const b = d.core ? Math.min(3, 2 + Math.round((1 - d.f) + lift)) : Math.min(3, Math.round((1 - d.f) * 1.4 + lift * 2));
       ink[b].push(x, y, d.s);
     }
-    const alpha = [0.12, 0.2, 0.34, 0.6];
+    const alpha = [0.17, 0.28, 0.47, 0.82];
     ink.forEach((b, i) => {
       ctx.fillStyle = `rgba(${INK},${alpha[i] * dim})`;
       for (let j = 0; j < b.length; j += 3) ctx.fillRect(b[j] - b[j + 2] / 2, b[j + 1] - b[j + 2] / 2, b[j + 2], b[j + 2]);
     });
-    ctx.fillStyle = `rgba(${HOT},${0.85 * dim})`;
+    ctx.fillStyle = `rgba(${HOT},${dim})`;
     for (let j = 0; j < hot.length; j += 3) ctx.fillRect(hot[j] - hot[j + 2] / 2, hot[j + 1] - hot[j + 2] / 2, hot[j + 2], hot[j + 2]);
     const ring = rr * (1 + breath * 0.3), turn = move ? -t * 0.04 : 0;   // HOME's dial: 60 ticks, every fifth long
-    ctx.strokeStyle = `rgba(${INK},${0.3 * dim})`; ctx.lineWidth = 1.5; ctx.beginPath();
+    ctx.strokeStyle = `rgba(${INK},${0.42 * dim})`; ctx.lineWidth = 1.5; ctx.beginPath();
     for (let i = 0; i < 60; i++) {
       const a = turn + (i / 60) * Math.PI * 2, l = i % 5 === 0 ? 11 : 5;
       ctx.moveTo(cx + Math.cos(a) * ring, cy + Math.sin(a) * ring);

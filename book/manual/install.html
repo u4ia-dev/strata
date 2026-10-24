@@ -388,18 +388,31 @@ Going back does not bring them back. A full backup does.</p>
 </blockquote>
 <h2 id="back-up-first">Back up first</h2>
 <p>A full backup is a copy of the FM-1's whole flash (1 MiB). It's the only way back to exactly what you have now,
-Felucca's projects and samples included. It's recommended, not required, and it's made with a backup tool on your
-computer, not on this site.</p>
-<ol>
-<li>Put the FM-1 in <strong>backup mode</strong> (Recovery, below): the Install page's <strong>Put the FM-1 in backup mode</strong> button, or
-<kbd>OCT−</kbd> + <kbd>OCT+</kbd> held for 5 seconds. If the computer doesn't see it, a Flipper Zero with
-<a href="https://github.com/merthsoft/flipper-fm1-recovery" target="_blank">flipper-fm1-recovery</a> enters backup mode at power-on.</li>
-<li>In backup mode the FM-1 appears as a USB disk named <code>WL82 UBOOT1.00</code>. If the computer offers to format it,
-cancel. Never format it.</li>
-<li>Read the whole flash with a backup tool: flipper-fm1-recovery's, MvaveFM1Unbricker, the FM-1 Transporter, or
-jl-uboot-tool (<code>read 0 0x100000</code>). Read it twice and keep it only if both copies are identical.</li>
-<li>Switch the FM-1 off and on to leave backup mode. Keep the backup somewhere safe.</li>
-</ol>
+Felucca's projects and samples included. It's recommended, not required. It's made in the chip's <strong>backup mode</strong>, with
+a backup tool on a computer.</p>
+<p><strong>1. Put the FM-1 in backup mode</strong>, in any of these ways:</p>
+<ul>
+<li><strong>From Strata or Felucca</strong>: hold <kbd>OCT−</kbd> and <kbd>OCT+</kbd> for 5 seconds (a countdown shows from 2 s).
+With Strata V0.87 the computer may show an <em>unknown USB device</em> instead; then switch the FM-1 off and on and use
+one of the last two ways.</li>
+<li><strong>From the official firmware (V15)</strong>: send the USB-MIDI message <code>F0 22 24 35 7D F7</code> with any program that sends
+SysEx.</li>
+<li><strong>The <a href="https://github.com/kurogedelic/FM-1-transporter" target="_blank">FM-1 Transporter</a></strong>, a Seeed XIAO RP2040 wired to the FM-1's
+USB lines: at power-on, whatever the firmware does.</li>
+<li><strong>A Flipper Zero</strong> with <a href="https://github.com/merthsoft/flipper-fm1-recovery" target="_blank">flipper-fm1-recovery</a>: at power-on,
+whatever the firmware does.</li>
+</ul>
+<p>In backup mode the FM-1 appears as a USB disk named <code>WL82 UBOOT1.00</code>. If the computer offers to format it, cancel.
+Never format it.</p>
+<p><strong>2. Read the whole flash</strong> with a backup tool, twice, and keep it only if both copies are identical:</p>
+<ul>
+<li><a href="https://github.com/Quixotic7/MvaveFM1Unbricker" target="_blank">MvaveFM1Unbricker</a>: <code>fm1_unbrick.py backup</code> (Windows or Linux),
+which reads twice and compares by itself.</li>
+<li><a href="https://github.com/kagaimiq/jl-uboot-tool" target="_blank">jl-uboot-tool</a>: <code>read 0 0x100000</code> (Windows or Linux).</li>
+<li>The FM-1 Transporter: <code>fm1t.py dump</code> (macOS, Linux or Windows), through its own board.</li>
+<li>flipper-fm1-recovery's <code>pc_backup.py</code> (Windows).</li>
+</ul>
+<p><strong>3. Switch the FM-1 off and on</strong> to leave backup mode. Keep the backup somewhere safe.</p>
 <h2 id="install">Install</h2>
 <ol>
 <li>Open the site's <strong>Install</strong> page in <strong>Chrome or Edge</strong> on a computer. It checks the package and shows its SHA-256.</li>
@@ -419,21 +432,22 @@ firmware it found before anything is written.</li>
 its SHA-256, never uploaded) and press <strong>Return to official V15</strong>. M-VAVE's own updater also works.</li>
 <li><strong>Felucca</strong>: use Felucca's installer at <a href="https://hugelton.github.io/Felucca/" target="_blank">hugelton.github.io/Felucca</a>; it finds
 the FM-1 running Strata.</li>
-<li><strong>Exactly what you had</strong>: write your backup back in backup mode (Recovery, below), with the flipper-fm1-recovery
-restore tool or jl-uboot-tool. Write only from 0x4000 up, never the boot area.</li>
+<li><strong>Exactly what you had</strong>: write your backup back in backup mode (Recovery, below), with the tool that made it
+(MvaveFM1Unbricker, jl-uboot-tool, the FM-1 Transporter or flipper-fm1-recovery). Write only from 0x4000 up, never
+the boot area.</li>
 </ul>
 <h2 id="recovery">Recovery</h2>
 <p>If no updater can reach the FM-1, put it in <strong>backup mode</strong>, where the chip itself accepts a backup or firmware over
 USB:</p>
 <ul>
-<li><strong>The SysEx message</strong> <code>F0 22 24 35 7D F7</code> on the FM-1's USB MIDI port (as on the official firmware), or the Install
-page's <strong>Put the FM-1 in backup mode</strong>.</li>
-<li><strong><kbd>OCT−</kbd> and <kbd>OCT+</kbd> held for 5 seconds</strong> on Strata or Felucca (a countdown shows from 2 s).</li>
-<li><strong>A Flipper Zero</strong> with flipper-fm1-recovery, which works at power-on whatever the firmware does. Use it if the
-other two don't make the FM-1 appear as a disk on the computer.</li>
+<li><strong><kbd>OCT−</kbd> and <kbd>OCT+</kbd> held for 5 seconds</strong> on Strata or Felucca, or <strong>the SysEx message</strong>
+<code>F0 22 24 35 7D F7</code> on the FM-1's USB MIDI port (as on the official firmware). With Strata V0.87 the computer may
+show an unknown USB device instead of the disk.</li>
+<li><strong>The FM-1 Transporter</strong> or <strong>a Flipper Zero</strong> with flipper-fm1-recovery, which work at power-on whatever the
+firmware does. Use one of them if the FM-1 doesn't appear as a disk on the computer.</li>
 </ul>
-<p>Switching the FM-1 off and on leaves backup mode. In backup mode, the flipper-fm1-recovery restore tool rewrites only
-the firmware sectors that differ and checks them; it never writes the boot area.</p>
+<p>Switching the FM-1 off and on leaves backup mode. In backup mode, the restore tools (MvaveFM1Unbricker, the FM-1
+Transporter, flipper-fm1-recovery) write only the firmware area and check it; none of them writes the boot area.</p>
 <ul>
 <li><strong>A write stopped</strong> (cable out, browser closed): don't switch the FM-1 off. Reconnect and press <strong>Find the FM-1</strong>
 again; the page finishes the write.</li>
@@ -484,7 +498,7 @@ backup mode by itself.</li>
     <script>
         var gitbook = gitbook || [];
         gitbook.push(function() {
-            gitbook.page.hasChanged({"page":{"title":"Installing and recovery","level":"3.11","depth":1,"next":{"title":"Troubleshooting","level":"3.12","depth":1,"path":"manual/troubleshooting.md","ref":"manual/troubleshooting.md","articles":[]},"previous":{"title":"Settings, LEDs and DEBUG","level":"3.10","depth":1,"path":"manual/settings.md","ref":"manual/settings.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/install.md","mtime":"2026-10-24T00:06:32.127Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T00:14:55.511Z"},"basePath":"..","book":{"language":""}});
+            gitbook.page.hasChanged({"page":{"title":"Installing and recovery","level":"3.11","depth":1,"next":{"title":"Troubleshooting","level":"3.12","depth":1,"path":"manual/troubleshooting.md","ref":"manual/troubleshooting.md","articles":[]},"previous":{"title":"Settings, LEDs and DEBUG","level":"3.10","depth":1,"path":"manual/settings.md","ref":"manual/settings.md","articles":[]},"dir":"ltr"},"config":{"plugins":["-sharing","-fontsettings","-livereload"],"root":".","styles":{"website":"styles/website.css"},"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"theme":"default","author":"u4ia","pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56},"embedFonts":false},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"variables":{},"title":"Strata for FM-1","language":"en","gitbook":"*","description":"The guide and the manual for Strata, the wavetable synth, looper and drum machine firmware for the M-VAVE FM-1."},"file":{"path":"manual/install.md","mtime":"2026-10-24T03:15:17.236Z","type":"markdown"},"gitbook":{"version":"6.2.2","time":"2026-10-24T03:16:10.196Z"},"basePath":"..","book":{"language":""}});
         });
     </script>
 </div>

@@ -1,8 +1,7 @@
 <p align="center"><img src="docs/media/banner.png" alt="STRATA: wavetable synth, 8-track looper and drum machine firmware for the M-VAVE FM-1"></p>
 
 **Strata** turns the **M-VAVE FM-1** into a complete pocket instrument: a deep wavetable synth, an 8-track looper and a
-drum machine. The knobs control what's on the screen, every button works the same way, and the screens are easy to
-read. It's free software, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
+drum machine. It's free software, built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton
 Instruments).
 
 **Install it in the browser:** <https://u4ia-dev.github.io/strata/> (Chrome or Edge on a computer) ·
