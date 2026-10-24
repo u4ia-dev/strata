@@ -135,7 +135,7 @@ The drawing's time on the host, both builds alike (`web/emu/strata_bench.c`): at
 sessions of the panel (HOME in silence and with a chord, a knob turning on FILTER, ENV with a chord held, every page
 shown once; the table in [UI.md](UI.md) §5). On the FM-1: BENCH's SCREEN row, **needs a hardware test**.
 
-## 20. V0.87.1 (a local build)
+## 20. V0.87.1 (the hardware-test build; public in V0.875)
 
 From the build (`tools/build.py --strata`, the log's "ok" lines), against V0.87 step 2 (§19):
 

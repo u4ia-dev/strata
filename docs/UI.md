@@ -12,8 +12,8 @@ added the looper's (CLIPS, MIXER, TRACK, RECORD, CLICK, NOTES, EDIT, CLIP, SONG,
 in place of V0.8's sequencer pages (never installed). V0.86 (step 1 of its plan, the interface) laid every menu screen
 out one way (§1), regrouped the pages, gave HOME three pages and a drum kit's view, PRESETS a list, SEQ two groups
 with SPEED and TOOLS, the buttons a second press, HOME held a help map, SETTINGS POWER and KEY SCAN, and wrote the
-LEDs' rules down (§1); step 2, the drum editor, added DRUM's and KIT's screens and the kits' list (§4). V0.87.1 (a local build from the V0.87
-hardware test) changed the screens listed under the table in §4: "V0.87.1's screens".
+LEDs' rules down (§1); step 2, the drum editor, added DRUM's and KIT's screens and the kits' list (§4). V0.87.1 (the build from the V0.87
+hardware test, public in V0.875) changed the screens listed under the table in §4: "V0.87.1's screens".
 
 Status: verified in the emulator (166 checks, `web/emu/strata_emu_test.mjs`; every screen rendered and checked for
 overlaps, `web/emu/strata_ui_shots.mjs`; every knob on every page turned and checked, `web/emu/strata_knob_sweep.mjs`;
