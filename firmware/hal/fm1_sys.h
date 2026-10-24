@@ -9,7 +9,8 @@
  *   fm1_wdt_feed()       in the main loop
  *   fm1_reboot()         chip reset through P33 (P3_PR_PWR bit 4)
  *   fm1_enter_uboot()    "usb_update_mode" at 0x01C7FD80 + chip reset
- *   fm1_enter_uboot_wdt() the same mailbox, then the watchdog's reset instead of P33's (Strata V0.87.1)
+ *   fm1_enter_uboot_way(w) the same mailbox; the watchdog stopped and P33's reset (0), or the watchdog's (1), each
+ *                        tried ~3 s, then the other (Strata V0.87.1)
  *   fm1_enter_update(p)  112-byte UPDATA_PARM record at 0x01C7FD88 + core reset
  *                        (the SPL then runs the staged update loader)
  *   fm1_core_reset()     PWR_CON core reset
@@ -22,6 +23,7 @@
 #pragma once
 #include <stdint.h>
 #include "fm1_cc.h"
+#include "fm1_time.h"                            /* (fm1_ticks: fm1_enter_uboot_way's tries) */
 
 #define FM1_P33_CON (*(volatile uint32_t *)0x13E08u)
 #define FM1_P33_DAT (*(volatile uint32_t *)0x13E0Cu)
@@ -184,14 +186,18 @@ static void fm1_enter_uboot(void)
         ;
 }
 
-/* Strata V0.87.1 (item 12, way c; needs a hardware test): the same mailbox as fm1_enter_uboot, then the watchdog's
- * own reset, armed at its shortest documented timeout (0xA, ~1 s) and not fed, instead of the P33 reset. The FM-1
- * Transporter saw the ROM take its USB key after a watchdog reset; whether the ROM reads the mailbox after one is
+/* Strata V0.87.1 (item 12, ways b and c; needs a hardware test): the same mailbox as fm1_enter_uboot, then a reset
+ * that cannot hang for ever. After the cli: way b (wdt_first 0) stops the watchdog and resets through P33; way c
+ * (wdt_first 1) arms the watchdog at its shortest documented timeout (0xA, ~1 s) and does not feed it. Each try waits
+ * ~3 s on TIMER4; one that did not reset the chip (a P33 transfer timed out, the ROM ignored it) gives way to the
+ * other, and so on. Both go through P33: with P33 dead neither can, and only a power cycle helps. The FM-1
+ * Transporter saw the ROM take its USB key after a watchdog reset; whether it reads the mailbox after one is
  * unverified (if not: a plain restart). Writes nothing but RAM and the watchdog's register */
-FM1_INLINE void fm1_enter_uboot_wdt(void)
+#define FM1_UBOOT_TRY_TICKS (3000u * 24000u)        /* ~3 s of TIMER4 (24 MHz, fm1_time.h) */
+FM1_INLINE void fm1_enter_uboot_way(uint32_t wdt_first)
 {
     static const char k[16] = "usb_update_mode";
-    uint32_t i;
+    uint32_t i, t0;
     __asm__ volatile("cli");
     FM1_RESET_PREP();
     if (!(*(volatile uint32_t *)0x1EEE240u & 1u))       /* drop CPU0 write limits, as fm1_enter_uboot */
@@ -199,9 +205,18 @@ FM1_INLINE void fm1_enter_uboot_wdt(void)
     *(volatile uint32_t *)0x1EEE348u = 0;
     for (i = 0; i < 16u; i++)
         FM1_BOOT_STATE[i] = (uint8_t)k[i];
-    fm1_wdt_arm(0x0A);
-    for (;;)
-        ;
+    for (;;) {
+        if (wdt_first) {
+            fm1_wdt_arm(0x0A);
+        } else {
+            fm1_wdt_stop();
+            fm1_p33_or(FM1_P3_PR_PWR, 0x10);
+        }
+        t0 = fm1_ticks();
+        while ((uint32_t)(fm1_ticks() - t0) < FM1_UBOOT_TRY_TICKS)
+            ;
+        wdt_first = !wdt_first;
+    }
 }
 
 FM1_INLINE void fm1_core_reset(void)

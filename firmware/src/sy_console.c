@@ -79,10 +79,10 @@ static void con_ks(const char *k, const char *s)        /* "key text\r\n" */
     con_puts("\r\n");
 }
 
-static uint32_t con_num(const char **p, int *ok)        /* decimal or 0x hex */
+static uint32_t con_num(const char **p, int *ok)        /* decimal or 0x hex (V0.87.1: over 32 bits, not ok) */
 {
     const char *s = *p;
-    uint32_t v = 0, base = 10, d, n = 0;
+    uint32_t v = 0, base = 10, d, n = 0, over = 0;
     while (*s == ' ')
         s++;
     if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
@@ -97,9 +97,11 @@ static uint32_t con_num(const char **p, int *ok)        /* decimal or 0x hex */
             d = (uint32_t)(c - 'A' + 10);
         else
             break;
+        if (v > (0xFFFFFFFFu - d) / base)
+            over = 1;
         v = v * base + d;
     }
-    *ok = n > 0;
+    *ok = n > 0 && !over;
     *p = s;
     return v;
 }
@@ -235,7 +237,7 @@ static void con_status(void)
     {                                            /* (V0.87.1: the test project playing, 1 .. SY_TP_N, 0 none) */
         uint32_t k = (uint32_t)sy_tp_active();
         con_kv("tproj", (int32_t)k);
-        con_kv("tproj_ms", k ? (int32_t)sy_tp_ms(k - 1u) : 0);
+        con_kv("tproj_ms", k && k <= SY_TP_N ? (int32_t)sy_tp_ms(k - 1u) : 0);
     }
 }
 
@@ -389,10 +391,9 @@ static void con_tproj(const char *p)
         con_puts("tproj stop ok\r\n");
         return;
     }
-    n = con_num(&p, &ok);
     while (*p == ' ')
         p++;
-    if (!ok && !*p) {
+    if (!*p) {
         k = (uint32_t)sy_tp_active();
         if (!k || k > SY_TP_N) {
             con_puts("tproj none\r\n");
@@ -407,6 +408,9 @@ static void con_tproj(const char *p)
         con_puts("\r\n");
         return;
     }
+    n = con_num(&p, &ok);                          /* (not ok: no digits, or over 32 bits) */
+    while (*p == ' ')
+        p++;
     if (!ok || *p || n < 1u || n > SY_TP_N) {
         con_puts("usage: tproj [1..4|stop]\r\n");
         return;

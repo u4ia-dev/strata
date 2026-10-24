@@ -359,25 +359,22 @@ static uint32_t uboot_mark __attribute__((section(".noinit")));
 /* V0.87.1 (item 12; needs a hardware test): V0.87's way into it left a black screen and "unknown USB device" on
  * Windows, even after a replug, while stock V15's (the same mailbox and P33 reset, no USB detach) reaches it on a
  * Linux host. Three ways, none writing anything but the mailbox in RAM: 'a' as V0.87 (USB detached 30 ms, the
- * watchdog left armed across the reset); 'b' the watchdog stopped, USB detached (controller off, D+ pull-up off) for
- * 100 ms, then the P33 reset; 'c' as b, then the watchdog's reset (~1 s) instead of P33's. The keys, the SysEx soft key
- * and the boot guard take SY_UBOOT_WAY; the console's `uboot yes a|b|c` picks one. The test decides; then all take
- * the winner, here */
+ * watchdog left armed across the reset); 'b' USB detached (controller off, D+ pull-up off) for 100 ms, the watchdog
+ * still armed through the wait (~8 s left: a stall there still restarts), stopped only after the cli, then the P33
+ * reset; 'c' as b, then the watchdog's reset (~1 s) instead of P33's. Each of b's and c's resets tried ~3 s, then the
+ * other (hal/fm1_sys.h fm1_enter_uboot_way): never a black screen for ever. The keys and the SysEx soft key take
+ * SY_UBOOT_WAY; the console's `uboot yes a|b|c` picks one. The test decides; then all take the winner, here (the boot
+ * guard too, once it is proven) */
 #ifndef SY_UBOOT_WAY
 #define SY_UBOOT_WAY 'b'
 #endif
 static uint8_t sy_uboot_way = SY_UBOOT_WAY;      /* the next entry's (sy_console.c sets it with its request) */
-static void sy_uboot_reset(uint32_t way)         /* USB detached: the wait, then the reset */
+static void sy_uboot_reset(uint32_t way)         /* USB detached: the wait (the watchdog armed), then the reset */
 {
-    if (way == 'a') {
-        fm1_delay_ms(30);
+    fm1_delay_ms(way == 'a' ? 30u : 100u);
+    if (way == 'a')
         fm1_enter_uboot();
-    }
-    fm1_wdt_stop();
-    fm1_delay_ms(100);
-    if (way == 'c')
-        fm1_enter_uboot_wdt();
-    fm1_enter_uboot();
+    fm1_enter_uboot_way(way == 'c');
 }
 static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as it is (debug, a flash backup) */
 {
@@ -650,8 +647,8 @@ void fm1_cstart(void)
     if (bootguard.failed >= 2u) {                /* two boots in a row died in their first 30 s */
         bootguard.failed = 0;
         bootguard.pending = 0;
-        fm1_usb_off();                           /* (V0.87.1: the keys' way, SY_UBOOT_WAY; USB off, whatever it was) */
-        sy_uboot_reset(SY_UBOOT_WAY);
+        fm1_enter_uboot();                       /* (V0.87's, the watchdog armed: the last resort stays as it was
+                                                  * until the hardware test proves a way; then it takes SY_UBOOT_WAY) */
     }
     fm1_irq_init();
     for (d = _bss_start; d < _bss_end; d++)
