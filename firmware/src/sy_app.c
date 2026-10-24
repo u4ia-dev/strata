@@ -558,7 +558,7 @@ static struct {
 } sy_fl;
 static void sy_ui_project(int ok, int blocked);  /* sy_ui.c: a project loaded (or not); its place in the way */
 static int sy_tp_active(void);                   /* sy_testproj.c (V0.87.1): a test project loaded (nothing saved), */
-static void sy_tp_end(void);                     /* .. ended by a project's load, */
+static void sy_tp_end(int read);                 /* .. ended by a project's load (read: its stream taken) or NEW, */
 static void sy_tp_tick(void);                    /* .. its load and its changes, a millisecond */
 static void sy_ui_dk_saved(int rc, uint32_t kind, uint32_t i, int del);   /* sy_ui_save.c (V0.87) */
 _Static_assert(sizeof(dk_kit_t) <= SP_PACK_MAX, "a kit's record fits the write's buffer");
@@ -708,7 +708,10 @@ static void sy_app_project_new(void)             /* PROJECT's NEW: the one loade
     uint32_t t;
     if (cht.run)
         sy_app_run(0);
+    sy_tp_end(1);                                /* (V0.87.1: a test project loaded: over, the owner's back first) */
     lp_project_clear();
+    sy_ev_push(&sy_ev_ui, SY_EV_PANIC, 0u, 0u);  /* (V0.87.1: what the clips had on ends; NEW while it played left the
+                                                  * chords' notes held, their ends cleared with the clips) */
     for (t = 0; t < CH_NTRK; t++) {
         ch_use(t);
         ch_defaults();
@@ -717,16 +720,38 @@ static void sy_app_project_new(void)             /* PROJECT's NEW: the one loade
     sy_ui_project(1, 0);
 }
 
+/* the settings and the sound playing, each saved when it differs from what the flash has (out of line: its buffer
+ * not in the main loop's frame); 1 if a write failed */
+static SY_NOINLINE int sy_save_se(void)
+{
+    uint8_t b[SS_SETTINGS_LEN + SP_PACK_MAX + 3u];
+    uint32_t n = sy_ui_settings(b, 0), c = ss_crc32(b, n);
+    int left = 0;
+    if (c != sy_fl.set_crc) {
+        if (!ss_save(SS_SETTINGS, b, n))
+            sy_fl.set_crc = c;
+        else
+            left = 1;
+    }
+    n = sy_edit_pack(b);
+    c = ss_crc32(b, n);
+    if (c != sy_fl.edit_crc) {
+        if (!ss_save(SS_EDIT, b, n))
+            sy_fl.edit_crc = c;
+        else
+            left = 1;
+    }
+    return left;
+}
+
 static void sy_flash_ms(void)
 {
     if (sy_fl.prj_want >= 0 && !sy_fl.busy && !cht.run && lpr.st == LR_OFF) {   /* (PROJECT's LOAD: hushed, the one */
         sy_hush_req = 1;                                                         /* loaded saved, then the next read) */
         if (sy_hushed) {                         /* (V0.87.1: a test project loaded is never saved; the load ends it) */
             int ok = sy_tp_active() || !sy_prj_save(0) || ui_prj_state[lpg.prj % LP_NPRJ] == 2u;
-            if (ok) {
-                sy_prj_load((uint32_t)sy_fl.prj_want);
-                sy_tp_end();
-            }
+            if (ok)
+                sy_tp_end(sy_prj_load((uint32_t)sy_fl.prj_want));
             sy_fl.prj_want = -1;
             sy_hush_req = 0;
             sy_ui_project(ok, 0);
@@ -773,18 +798,19 @@ static void sy_flash_ms(void)
         sy_tp_active())                          /* (V0.87.1: a test project loaded: none of them saved) */
         return;
     sy_fl.check_t = fm1_ms;
-    {                                            /* (quiet: the settings, the sound, when changed) */
-        uint8_t b[SS_SETTINGS_LEN + SP_PACK_MAX + 3u];
-        uint32_t n = sy_ui_settings(b, 0), c = ss_crc32(b, n);
-        if (c != sy_fl.set_crc && !ss_save(SS_SETTINGS, b, n))
-            sy_fl.set_crc = c;
-        n = sy_edit_pack(b);
-        c = ss_crc32(b, n);
-        if (c != sy_fl.edit_crc && !ss_save(SS_EDIT, b, n))
-            sy_fl.edit_crc = c;
-    }
+    sy_save_se();                                /* (quiet: the settings, the sound, when changed) */
     if (!cht.run && lpr.st == LR_OFF)            /* (V0.8: the project's objects changed, one a check: stopped, so */
         sy_prj_save(1);                          /* nothing records meanwhile) */
+}
+/* V0.87.1: the owner's own work on the flash now, hushed and stopped, before a test project replaces it (as PROJECT's
+ * LOAD saves the one loaded first): the settings, the sound playing, the project's objects. 0: all of it there (a
+ * project whose sectors older presets hold: never saved, as before) */
+static int sy_save_own(void)
+{
+    int left = sy_save_se();
+    if (sy_prj_save(0) && ui_prj_state[lpg.prj % LP_NPRJ] != 2u)
+        left = 1;
+    return left;
 }
 
 /* power-on: the user slots' index; the settings; the sound that was playing (unless HOME is held, or the platform

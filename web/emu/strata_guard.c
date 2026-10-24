@@ -33,8 +33,9 @@ static const uint8_t CH8[8] = { 48, 55, 60, 64, 67, 71, 74, 79 };   /* C3 G3 C4 
 #define WAV_PRE (FS / 2u)
 #define WAV_POST (FS)
 
-enum { GE_SHED, GE_STEP, GE_STEP4, GE_FXLO, GE_FXHI, GE_N };
-static const char *const GE_NAME[GE_N] = {"voice shed", "budget -1 step", "budget -4 steps", "fx_lo on", "fx_lo off"};
+enum { GE_SHED, GE_STEP, GE_STEP4, GE_FXLO, GE_FXHI, GE_FXNOW, GE_N };
+static const char *const GE_NAME[GE_N] = {"voice shed", "budget -1 step", "budget -4 steps", "fx_lo on", "fx_lo off",
+                                          "fx_lo at once"};
 
 static void guard_step(uint32_t e)               /* the guard's step, as it takes it */
 {
@@ -43,7 +44,7 @@ static void guard_step(uint32_t e)               /* the guard's step, as it take
     else if (e == GE_STEP || e == GE_STEP4)
         sy_g_step();
     else
-        sy_g_fx(e == GE_FXLO);
+        sy_g_fx(e == GE_FXLO || e == GE_FXNOW, e == GE_FXNOW);
 }
 
 static void run_ms(uint32_t ms)
@@ -112,6 +113,8 @@ static const case_t CASES[] = {
     {0, 8, 1, 0, GE_FXLO, "supersawtail_fxlo"},  {6, 4, 0, 0, GE_FXLO, "vowelpad4_fxlo"},
     {7, 4, 0, 0, GE_FXLO, "ottgrowl4_fxlo"},     {2, 8, 1, 1, GE_FXHI, "padtail_fxhi"},
     {0, 8, 1, 1, GE_FXHI, "supersawtail_fxhi"},
+    {2, 8, 1, 0, GE_FXNOW, "padtail_fxnow"},     {0, 8, 1, 0, GE_FXNOW, "supersawtail_fxnow"},
+    {7, 1, 0, 0, GE_FXNOW, "ottgrowlquiet_fxnow", 250},
     {7, 1, 0, 0, GE_FXLO, "ottgrowlquiet_fxlo", 250}, {7, 1, 0, 1, GE_FXHI, "ottgrowlquiet_fxhi", 250},
     {6, 4, 0, 0, GE_FXLO, "vowelpadquiet_fxlo", 250}, {6, 4, 0, 1, GE_FXHI, "vowelpadquiet_fxhi", 250},
 };
@@ -155,7 +158,7 @@ int main(int argc, char **argv)
             }
             render(pre, PRE / 2u, -1);
             if (k->fxlo) {                           /* (on half a second before T: the emulator's guard, its load 0, */
-                sy_g_fx(1);                          /* steps back after a second of calm) */
+                sy_g_fx(1, 0);                       /* steps back after a second of calm) */
                 sy_g.calm = 0;
             }
             render(pre + PRE, PRE / 2u, -1);

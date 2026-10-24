@@ -75,6 +75,8 @@ _Static_assert(FX_RV_TOTAL * 2u + FX_RV_PRE * 2u + (FX_RV_AP0 + FX_RV_AP1) * 2u 
 static uint8_t fx_lo;                     /* the CPU guard: OTT's upward compression off, the reverb on 4 lines */
 #define FX_LO_STEP (1.0f / 16.0f)         /* V0.87.1: .. and back, over 16 blocks (11.6 ms) each (sy_engine.c's guard;
                                            * HALL and PLATE the same way): its steps had clicked (strata_guard.c) */
+#define FX_LO_FAST (1.0f / 4.0f)          /* .. over 4 (2.9 ms) when the guard takes it near the deadline (sy_cpu_now) */
+static float fx_lo_k = FX_LO_STEP;        /* .. the step a block now (sy_engine.c sy_g_fx sets it) */
 
 typedef struct {                          /* CHORUS */
     uint32_t w, ph;                       /* the write index (0..FX_CHO_N - 1), its LFO's phase */
@@ -567,13 +569,13 @@ static void fx_reverb(float *l, float *r, uint32_t fi)
     uint32_t base = 0;
     if (!fx_mixes(fi, SP_RV_ON, mod_get(sy_goff, SP_RV_MIX), &m0))
         return;
-    /* V0.87.1: HALL's lines 5-8 join and go over 16 blocks (FX_LO_STEP), their weight ramped across each block in
+    /* V0.87.1: HALL's lines 5-8 join and go over 16 blocks (fx_lo_k: 4 in an emergency), their weight ramped in
      * their reads (the output, the mixing), in their writes and in the mixing's scale (1 / sqrt 8 at 1, HALL's; 1 / 2 at
      * 0, PLATE's: the 8-line mixing with lines 5-8 at 0 is the 4-line one exactly): fx_rv_xf. At once, as before
      * (fx_lo, TYPE), their going had stepped the tail and their joining the lines' writes, heard a line later
      * (web/emu/strata_guard.c) */
     g0 = fx.rv_g < 0.0f ? want : fx.rv_g;
-    g1 = want > g0 ? sy_minf(want, g0 + FX_LO_STEP) : sy_maxf(want, g0 - FX_LO_STEP);
+    g1 = want > g0 ? sy_minf(want, g0 + fx_lo_k) : sy_maxf(want, g0 - fx_lo_k);
     fx.rv_g = g1;
     nl = g0 > 0.0f || g1 > 0.0f ? 8u : 4u;
     if (nl != fx.rv_nl) {                              /* lines joining: from silence */
@@ -712,7 +714,7 @@ static void fx_ott(float *l, float *r, uint32_t fi)
     float lv[3];
     if (!fx_mixes(fi, SP_OT_ON + o, mod_get(sy_goff, SP_OT_DEPTH + o), &m0))
         return;
-    st->upg = fx_lo ? sy_maxf(0.0f, st->upg - FX_LO_STEP) : sy_minf(1.0f, st->upg + FX_LO_STEP);   /* (V0.87.1: the */
+    st->upg = fx_lo ? sy_maxf(0.0f, st->upg - fx_lo_k) : sy_minf(1.0f, st->upg + fx_lo_k);   /* (V0.87.1: the */
     up = mod_get(sy_goff, SP_OT_UP + o) * st->upg;   /* guard's UPWARD off over 16 blocks, not at once: a quiet passage
                                                       * lifted by up to 24 dB fell in a block, a thump) */
     lv[0] = sy_exp2f(sp_lin(SP_OT_LOW, mod_get(sy_goff, SP_OT_LOW + o)) * 0.0166096f);

@@ -17,12 +17,14 @@
  * timed changes the main loop takes as the transport passes them (sy_tp_tick: the sound, the mixer, SPEED, the clip
  * tools, the kit's values; TEST 2's chain and sweeps worked out from the parameter table). The LFOs and envelopes do
  * the sweeps through matrix slots (M5 .. M8; TEST 2 all eight).
- * Nothing is saved while one is loaded: the projects' auto-save, the sound playing's and the settings' (sy_app.c
- * sy_flash_ms) wait. What ends it: loading a project (PROJECT's LOAD, any of the four: the one loaded is not saved
- * first, the test's never is), or a restart. Loading another test project replaces it (still a test). sy_tp_stop,
- * the end of its time and PLAY's stop stop it playing; it stays loaded, auto-save off, until one of those. When it
- * ends, the sound that was playing before the first test (its bytes kept as the auto-save would write them), the
- * tempo and time signature and the looper's settings (QUANTIZE, COUNT-IN, CLICK, LAUNCH) come back.
+ * Nothing of a test is ever saved. Its load first saves the owner's own work, as PROJECT's LOAD does (the project,
+ * the settings, the sound playing: sy_app.c sy_save_own), then keeps the projects' auto-save, the sound playing's and
+ * the settings' (sy_flash_ms) waiting while it is loaded. What ends it: loading a project (PROJECT's LOAD, any of
+ * the four), PROJECT's NEW, or a restart. Loading another test project replaces it (still a test). sy_tp_stop, the
+ * end of its time and PLAY's stop stop it playing; it stays loaded, auto-save off, until one of those. When it ends,
+ * the sound that was playing before the first test (its bytes kept as the auto-save would write them), the tempo and
+ * time signature, CLOCK IN, the looper's settings (QUANTIZE, COUNT-IN, CLICK, LAUNCH) and, if the project loaded then
+ * has no stream kept, the tracks' chords come back.
  * Needs everything above it in strata.c (and web/emu/strata_web.c): the engine, sy_loop.c, sy_drum.c, sy_app.c, the
  * UI (ui, sy_ui_touch, sy_ui_project, ui_hist_push). */
 #define SY_TP_N 4u
@@ -315,10 +317,16 @@ static struct {
                                                   * group's sixteenths */
     uint16_t cur[NSLOT];                         /* .. the parameters the slots sweep */
     uint32_t t0, t1;                             /* its start; its end (TPS_DONE) */
+    uint32_t tw, tr;                             /* TPS_LOAD: when it began; the last ask to stop or to start */
+    uint8_t hush;                                /* .. the hush asked */
     uint16_t bpm;                                /* the owner's: the tempo, TS-BEAT, TS-NOTE; the looper's settings */
-    uint8_t tsb, tsn, quant, cin, click, launch, edited;
+    uint8_t tsb, tsn, quant, cin, click, launch, edited, clock;
 } tp;
 static uint8_t tp_was[3u + SP_PACK_MAX] SY_POOL;   /* .. the sound playing as the auto-save writes it (sy_edit_pack) */
+static ch_d_t tp_chd[CH_NTRK] SY_POOL;             /* .. the tracks' chords (an empty project after it: these) */
+#define TP_WAIT_MS 1000u                           /* a load's wait for the stop and the hush at most; its start's */
+#define TP_RETRY_MS 20u                            /* .. a stop or a start asked again (a full ring drops it) */
+static int tp_run(uint32_t on) { return sy_ev_push(&sy_ev_ui, SY_EV_RUN, on ? 1u : 0u, 0u); }   /* (sy_app_run's) */
 static uint32_t tp_was_n;
 
 static const char *sy_tp_name(uint32_t k) { return k < SY_TP_N ? SY_TP_NAME[k] : ""; }
@@ -424,6 +432,8 @@ static SY_NOINLINE void tp_build(uint32_t k)
         tp.bpm = ui.bpm, tp.tsb = ui.tsb, tp.tsn = ui.tsn;
         tp.quant = lpg.quant, tp.cin = lpg.cin, tp.click = lpg.click, tp.launch = lpg.launch;
         tp.edited = ui.edited;
+        tp.clock = ch_clock;
+        memcpy(tp_chd, ch_d, sizeof tp_chd);
         ui_hist_push();                          /* (SAVE + OCT- takes the sound before back, as a preset's load) */
         tp.had = 1;
     }
@@ -445,6 +455,7 @@ static SY_NOINLINE void tp_build(uint32_t k)
         tp_chord(t, r->chord);
     }
     ch_use(0);
+    ch_clock = 0;                                /* (the panel's tempo: CLOCK IN back at its end) */
     for (i = 0; i < p->nclip; i++) {
         const tp_clip_t *c = &p->clip[i];
         lp_clip_t *d = &lpp.clip[c->trk % LP_NTRK][c->scn % LP_NSCN];
@@ -513,8 +524,9 @@ static void tp_exec(const tp_act_t *a)
         if ((uint32_t)a->id < DK_NPRE)
             dk_row_set(t, &DKP[a->id], (uint32_t)a->id + 1u);
         break;
-    default:                                     /* TP_END: it stops */
-        sy_app_run(0);
+    default:                                     /* TP_END: it stops (asked again until it has: sy_tp_tick) */
+        tp_run(0);
+        tp.tr = fm1_ms;
         break;
     }
     lpx.seq++;
@@ -594,36 +606,45 @@ static int sy_tp_load(uint32_t k)
     if (k >= SY_TP_N || tp.st == TPS_LOAD || tp.st == TPS_WAIT || sy_fl.busy || sy_fl.prj_want >= 0 || lpr.st != LR_OFF)
         return 0;
     if (cht.run)
-        sy_app_run(0);
+        tp_run(0);
     tp.k = (uint8_t)k;
     tp.st = TPS_LOAD;
+    tp.tw = tp.tr = fm1_ms;
+    tp.hush = 0;
     return 1;
+}
+static void tp_unhush(void)                      /* the hush let go (a save waiting keeps it: sy_main.c sy_hush_end) */
+{
+    if (tp.hush)
+        sy_hush_req = sy_fl.busy != 0;
+    tp.hush = 0;
 }
 static void sy_tp_stop(void)                     /* it stops playing (still loaded: auto-save off until a load) */
 {
     if (tp.st == TPS_LOAD) {
-        sy_hush_req = 0;
+        tp_unhush();
         tp.st = sy_tp_on ? TPS_DONE : TPS_NONE;
         return;
     }
     if (tp.st == TPS_WAIT || tp.st == TPS_RUN) {
         if (cht.run)
-            sy_app_run(0);
+            tp_run(0);
         tp.t1 = fm1_ms;
         if (tp.st == TPS_WAIT)
             tp.t0 = tp.t1;
         tp.st = TPS_DONE;
     }
 }
-/* a project loaded (sy_app.c sy_flash_ms, after it): the test is over; the sound, the tempo and the looper's
- * settings as they were before it */
-static SY_NOINLINE void sy_tp_end(void)
+/* a project loaded (sy_app.c sy_flash_ms, after it; read: its stream taken) or PROJECT's NEW: the test is over; the
+ * sound, the tempo, CLOCK IN and the looper's settings as they were before it, and (none read) the tracks' chords */
+static SY_NOINLINE void sy_tp_end(int read)
 {
     sy_patch_t p;
+    uint32_t t;
     if (!sy_tp_on && tp.st == TPS_NONE)
         return;
     if (tp.st == TPS_LOAD)
-        sy_hush_req = 0;
+        tp_unhush();
     if (tp.had) {
         if (tp_was_n > 3u && sp_unpack(&p, tp_was + 3, tp_was_n - 3u)) {
             int16_t sl = (int16_t)(tp_was[0] | tp_was[1] << 8);
@@ -635,6 +656,12 @@ static SY_NOINLINE void sy_tp_end(void)
         sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn % 5u]);
         lpg.quant = tp.quant, lpg.cin = tp.cin, lpg.click = tp.click, lpg.launch = tp.launch;
         ui.edited = tp.edited;
+        ch_clock = tp.clock;
+        if (!read) {                             /* (an empty slot: the owner's chords, not the test's) */
+            memcpy(ch_d, tp_chd, sizeof tp_chd);
+            for (t = 0; t < CH_NTRK; t++)
+                ch_d[t].gen++;
+        }
         sy_ui_touch();
     }
     tp.had = 0;
@@ -648,17 +675,28 @@ static SY_NOINLINE void sy_tp_tick(void)
     const tp_proj_t *p = &TP_PROJ[tp.k % SY_TP_N];
     switch (tp.st) {
     case TPS_LOAD:                               /* (as PROJECT's LOAD: stopped, nothing recording, hushed) */
-        if (sy_fl.prj_want >= 0) {
-            tp.st = sy_tp_on ? TPS_DONE : TPS_NONE;
+        if (sy_fl.prj_want >= 0 || (tp.hush && (cht.run || lpr.st != LR_OFF)) || fm1_ms - tp.tw > TP_WAIT_MS) {
+            tp_unhush();                         /* (a project's load asked; PLAY, REC or MIDI's start while it */
+            tp.st = sy_tp_on ? TPS_DONE : TPS_NONE;   /* hushed: theirs, heard; or never stopped: nothing loaded) */
             return;
+        }
+        if (cht.run && fm1_ms - tp.tr >= TP_RETRY_MS) {
+            tp_run(0);                           /* (the stop again: the ring may have been full) */
+            tp.tr = fm1_ms;
         }
         if (cht.run || lpr.st != LR_OFF || sy_fl.busy || sy_next_st)
             return;
         sy_hush_req = 1;
+        tp.hush = 1;
         if (!sy_hushed)
             return;
+        if (!tp.had && sy_save_own()) {          /* (the owner's work first, into the owner's slots; a write that */
+            tp_unhush();                         /* failed: no test, nothing lost) */
+            tp.st = TPS_NONE;
+            return;
+        }
         tp_build(tp.k);
-        sy_hush_req = 0;
+        tp_unhush();
         tp.st = TPS_WAIT;
         tp.ran = 0;
         tp.t0 = fm1_ms;
@@ -668,18 +706,26 @@ static SY_NOINLINE void sy_tp_tick(void)
             return;
         if (tp.k == 1u)                          /* (TEST 2's first chain into the sound playing: the swap took the */
             tp_fx(0);                            /* sound whole, what the main loop wrote meanwhile with it) */
-        sy_app_run(1);
-        tp.t0 = fm1_ms;
+        tp_run(1);
+        tp.t0 = tp.tr = fm1_ms;
         tp.st = TPS_RUN;
         return;
     case TPS_RUN: {
         uint32_t q;
-        if (cht.run)
+        if (cht.run) {
             tp.ran = 1;
-        else if (tp.ran || fm1_ms - tp.t0 > 500u) {   /* (stopped: its END, or PLAY) */
+        } else if (tp.ran) {                     /* (stopped: its END, or PLAY) */
             tp.t1 = fm1_ms;
             tp.st = TPS_DONE;
             return;
+        } else if (fm1_ms - tp.t0 > TP_WAIT_MS) {   /* (never started: the owner's project back, saved at the load; */
+            tp.t1 = fm1_ms;                       /* the test over once it is read: sy_tp_end) */
+            tp.st = TPS_DONE;
+            sy_app_project(lpg.prj);
+            return;
+        } else if (fm1_ms - tp.tr >= TP_RETRY_MS) {
+            tp_run(1);                           /* (PLAY again: the ring may have been full) */
+            tp.tr = fm1_ms;
         }
         if (!cht.run)
             return;
@@ -693,6 +739,10 @@ static SY_NOINLINE void sy_tp_tick(void)
         }
         if (tp.k == 1u && q < p->len)
             tp_fx(q);
+        if (tp.pc >= p->nact && fm1_ms - tp.tr >= TP_RETRY_MS) {
+            tp_run(0);                           /* (its END's stop again: the ring may have been full) */
+            tp.tr = fm1_ms;
+        }
         return;
     }
     default:

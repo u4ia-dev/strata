@@ -69,9 +69,15 @@ static const uint8_t SY_GUARD_BUDGET[SY_GUARD_FX + 1u] = {48, 40, 32, 24, 16};
 #define SY_TICKS_BLK 0u                      /* .. its ticks in a block's time (0: no admission) */
 #endif
 #define SY_ADM_PCT 84u                       /* (V0.87.1; 80 % of the block's own time before) */
+#define SY_ADM_TRADE 80u                     /* .. a voice that takes unison from the others: under this (the trade's
+                                              * saving an estimate, below) */
 #define SY_ADM_K 5.0f                        /* a voice's own work in unison voices' (tools/costprobe, SUPERSAW: ~183 and
-                                              * ~34 instructions a sample; a sound without its filter ~3, so 5 errs on
-                                              * the side of trading less) */
+                                              * ~34 instructions a sample; a sound without its filter ~3) */
+#define SY_ADM_C1 (SY_TICKS_BLK / 74u)       /* .. a unison voice's time a block at most (1.35 %: ~47 instructions a
+                                              * sample at 154 a us, the kernel's ~34 and room for a warp's). A sound
+                                              * whose own work is far more (VOWEL PAD: its formant filter, ~467 against
+                                              * 34, K ~14) made K's c1 too large, the saving overestimated: bounded by
+                                              * this, and the 4 points of SY_ADM_TRADE, within them */
 static uint32_t sy_loads;                    /* sounds taken (sy_patch_swap: the event log) */
 static struct {
     uint32_t vt, bt;                         /* a voice's time a block (smoothed), the rest of a block's */
@@ -95,7 +101,7 @@ static uint32_t sy_uni_new(uint32_t *nosc)   /* a new voice's unison voices (the
 static SY_NOINLINE int sy_admit(void)       /* (out of line: a note-on's, its float work kept in one place) */
 {
     uint32_t i, n = 0, ni, un, fl, lv, cap = SY_TICKS_BLK / 100u * SY_ADM_PCT;
-    float c1;
+    float c1, c0;
     if (!SY_TICKS_BLK || !sy_adm.vt)
         return 1;
     for (i = 0; i < SY_NVOICE; i++)
@@ -104,12 +110,14 @@ static SY_NOINLINE int sy_admit(void)       /* (out of line: a note-on's, its fl
         return 1;
     ni = sy_instances();
     un = sy_uni_new(&fl);
-    c1 = (float)sy_adm.vt / ((float)ni / (float)n + SY_ADM_K);
+    c1 = sy_minf((float)sy_adm.vt / ((float)ni / (float)n + SY_ADM_K), (float)SY_ADM_C1);
+    c0 = (float)sy_adm.vt - c1 * (float)ni / (float)n;   /* (a voice's own: the measure less its unison's) */
     for (lv = sy_g.level;; lv++) {
         uint32_t nj = ni + un, b = SY_GUARD_BUDGET[lv];
         nj = nj > b ? b : nj;                    /* (what the budget leaves; each voice its oscillators at least) */
         nj = nj < (n + 1u) * fl ? (n + 1u) * fl : nj;
-        if ((float)sy_adm.bt + c1 * ((float)(n + 1u) * SY_ADM_K + (float)nj) <= (float)cap) {
+        if ((float)sy_adm.bt + c0 * (float)(n + 1u) + c1 * (float)nj <=
+            (float)(lv == sy_g.level ? cap : SY_TICKS_BLK / 100u * SY_ADM_TRADE)) {
             if (lv != sy_g.level) {
                 sy_g.level = (uint8_t)lv;
                 sy_uni_budget = b;
@@ -435,8 +443,12 @@ static void sy_g_step(void)
         sy_g.level++;
     sy_uni_budget = SY_GUARD_BUDGET[sy_g.level];
 }
-static void sy_g_fx(int lo)
+static void sy_g_fx(int lo, int fast)        /* (fast: near the deadline, the effects' ramps over 4 blocks, not 16) */
 {
+    if (lo && (fast || !sy_g.fx_lo))
+        fx_lo_k = fast ? FX_LO_FAST : FX_LO_STEP;   /* (on: an emergency's quick ramp kept until it is back) */
+    else if (!lo)
+        fx_lo_k = FX_LO_STEP;
     sy_g.fx_lo = (uint8_t)(lo != 0);
     fx_lo = sy_g.fx_lo;
 }
@@ -461,12 +473,12 @@ static int sy_cpu(uint32_t load_q8, uint32_t tot_q8)
     if (sy_g.tot_q8 > SY_G_STEP) {
         sy_g_step();
         if (sy_g.tot_q8 > SY_G_FXLO)
-            sy_g_fx(1);
+            sy_g_fx(1, 0);
         sy_g.calm = 0;
     } else if (sy_g.tot_q8 < SY_G_CALM && (sy_g.level || sy_g.fx_lo)) {
         if (++sy_g.calm >= 345u) {
             if (sy_g.fx_lo)
-                sy_g_fx(0);
+                sy_g_fx(0, 0);
             else
                 sy_g.level--;
             sy_g.calm = 0;
@@ -504,7 +516,7 @@ static int sy_cpu_now(uint32_t tot_q8)
         return 0;
     sy_g_step();
     if (tot_q8 > 240u)
-        sy_g_fx(1);
+        sy_g_fx(1, 1);
     sy_g.calm = 0;
     if (tot_q8 > 246u && !sy_v_new)
         shed = sy_g_shed();

@@ -642,8 +642,8 @@ static void t_voices(void)
         ref = sy_adm.refused;
         for (i = 0; i < 8u; i++)
             sy_note_on(48 + 3 * i, 100);
-        check("admission (V0.87.1): with the budget at its floor and still no time, a note steals as before",
-              nvoices() < 8u && sy_adm.refused > ref && sy_uni_budget == 16u);
+        check("admission (V0.87.1): no time even with the budget at its floor (a trade held under 80 %), a note steals as "
+              "before", nvoices() < 8u && sy_adm.refused > ref);
     }
 }
 

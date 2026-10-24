@@ -7,10 +7,12 @@
  *   cc -O2 -ffp-contract=off -w -Ibuild/gen -Ifirmware/src -o build/emu/strata_tproj web/emu/strata_tproj.c -lm
  *   build/emu/strata_tproj K out.wav     K 1 .. 4: one line of figures (peak, RMS, clipped samples, the voices' most,
  *                                        the guard's levels), and for TEST 1 the voices of each chord
- *   build/emu/strata_tproj check         the flash: a project and a sound saved first, then each test loaded, played
- *                                        and left 10 s (the auto-save's time), the image compared with the one before;
- *                                        then a project's load ends it: the sound and the tempo as before, the image
- *                                        still the same */
+ *   build/emu/strata_tproj check         PLAY before a load's hush: the load gives way. The owner's work saved, edited
+ *                                        again, a test loaded 0.5 s later: the edit saved first, kept by a restart (a
+ *                                        process of its own, from the image). Each test played and left 10 s (the
+ *                                        auto-save's time): the flash as it was. PROJECT's LOAD, an empty project and
+ *                                        NEW end it: the sound, tempo, CLOCK IN, chords back. A start that never comes
+ *                                        ends the load (forced) */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -180,36 +182,108 @@ static uint32_t nor_diff(const uint8_t *a)
     return d;
 }
 
-static int check(void)
+/* the owner's state as the check left it: the sound (its name, CUTOFF), BPM, CLOCK IN, track 1's chords' mode, its
+ * clip's notes; 0 all as expected */
+static uint32_t owner_ok(const char *name, int32_t cut, uint32_t bpm, int32_t notes)
+{
+    return !(!strcmp(sy_patch.name, name) && sy_patch.p[SP_F_CUT] == cut && ui.bpm == bpm && ch_clock == 1u &&
+             ch_d[0].mode == CH_KEY && (notes < 0 || web_test_lp_clip(0, 0, 2, -1) == notes));
+}
+static uint32_t until(uint32_t st, uint32_t ms)  /* the test's state st reached (in ms at most): 1 */
+{
+    while (ms-- && tp.st != st)
+        web_ms();
+    return tp.st == st;
+}
+
+/* a restart from the flash image in path: the owner's edits there (the one made just before a test's load too) */
+static int restart(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    uint32_t d;
+    if (!f || fread(nor, 1, sizeof nor, f) != sizeof nor)
+        return 1;
+    fclose(f);
+    web_boot();
+    run_ms(500);
+    d = sy_tp_active() || owner_ok("LADDER BASS", 444, 98u, 9);
+    printf("check: a restart: test %s; the sound %s (CUTOFF %d), BPM %u, CLOCK IN %u, track 1 chords %u, the clip %d "
+           "notes (9: the one added 0.5 s before the test's load)  %s\n", sy_tp_active() ? "loaded" : "none",
+           sy_patch.name, sy_patch.p[SP_F_CUT], ui.bpm, ch_clock, ch_d[0].mode, web_test_lp_clip(0, 0, 2, -1),
+           d ? "FAIL" : "ok");
+    return d != 0;
+}
+
+static int check(const char *self)
 {
     static uint8_t img[sizeof nor];
-    uint32_t k, d, bad = 0, w0, n = 0;
-    int16_t cut;
-    char name[17];
+    uint32_t k, d, bad = 0, w0, w1;
     web_nor_erase();
     web_boot();
     run_ms(500);
-    web_test_sound_set(5);                       /* (the owner's: LADDER BASS, a knob turned; a clip of notes) */
+    /* 1. a test's load while PLAY's start comes before the hush: the load gives way, nothing silent */
+    sy_tp_load(3);
+    run_ms(2);
+    k = tp.hush && !sy_hushed;
+    sy_app_run(1);
+    run_ms(100);
+    d = !k || sy_tp_active() || tp.st != TPS_NONE || sy_hush_req || sy_hushed || !cht.run;
+    printf("check: PLAY while a test's load waits for its hush: the load %s, the hush %s, the transport %s  %s\n",
+           tp.st == TPS_NONE ? "dropped" : "on", sy_hush_req || sy_hushed ? "kept" : "let go",
+           cht.run ? "running" : "stopped", d ? "FAIL" : "ok");
+    bad += d;
+    sy_app_run(0);
     run_ms(200);
+    /* 2. the owner's work, saved; then edited again within a second of a test's load */
+    web_test_sound_set(5);                       /* (the owner's: LADDER BASS, a knob turned; a clip of notes; */
+    run_ms(200);                                 /* CLOCK IN MIDI, track 1's chords KEY) */
     web_test_set(SP_F_CUT, 333);
-    cut = sy_patch.p[SP_F_CUT];
-    memcpy(name, sy_patch.name, sizeof name);
     for (k = 0; k < 8u; k++)
         web_test_lp_put(0, 0, 48u * k, 40u, 48u + k, 100u);
     ui.bpm = 97;
     sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+    ch_clock = 1;
+    ch_d[0].mode = CH_KEY, ch_d[0].gen++;
     run_ms(8000);                                /* (quiet, stopped: the auto-save writes them) */
     memcpy(img, nor, sizeof nor);
     w0 = web_flash_writes;
-    printf("check: the owner's project and sound saved (%u flash writes so far)\n", web_flash_writes);
+    web_midi(0x90, 60, 100);                     /* (the edits while a note sounds: the auto-save waits for 3 s of */
+    run_ms(100);                                 /* quiet, so none of them is on the flash at the load) */
+    web_test_set(SP_F_CUT, 444);
+    web_test_lp_put(0, 0, 360u, 20u, 72u, 100u);
+    ui.bpm = 98;
+    sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+    run_ms(400);
+    web_midi(0x80, 60, 0);
+    d = web_flash_writes != w0;
+    if (!sy_tp_load(0) || !until(TPS_WAIT, 2000u)) {
+        printf("check: test 1 not loaded\n");
+        return 1;
+    }
+    d = d || !nor_diff(img);
+    printf("check: a test loaded 0.5 s after an edit: the owner's work saved first (%u bytes, %u writes)  %s\n",
+           nor_diff(img), web_flash_writes - w0, d ? "FAIL" : "ok");
+    bad += d;
+    memcpy(img, nor, sizeof nor);
+    w0 = web_flash_writes;
+    {                                            /* (a restart now, from this image: its own process) */
+        char cmd[512];
+        FILE *f = fopen("build/tproj/check_nor.bin", "wb");
+        if (!f)
+            return 1;
+        fwrite(nor, 1, sizeof nor, f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s restart build/tproj/check_nor.bin", self);
+        fflush(stdout);
+        bad += system(cmd) != 0;
+    }
+    /* 3. each test played, the flash left as it was */
     for (k = 0; k < SY_TP_N; k++) {
-        uint32_t t;
-        if (!sy_tp_load(k)) {
+        if (k && !sy_tp_load(k)) {
             printf("check: test %u not loaded\n", k + 1u);
             return 1;
         }
-        for (t = 0; t < 100000u && tp.st != TPS_DONE; t++)
-            step(&n), n = 0;
+        until(TPS_DONE, 100000u);
         run_ms(10000);                           /* (stopped and quiet: when the auto-save would write) */
         d = nor_diff(img);
         printf("check: test %u %s loaded, played %.1f s, 10 s after: the flash %s (%u bytes differ, %u writes)  %s\n",
@@ -217,19 +291,56 @@ static int check(void)
                web_flash_writes - w0, d || web_flash_writes != w0 ? "FAIL" : "ok");
         bad += d || web_flash_writes != w0;
     }
-    sy_app_project(lpg.prj);                     /* (a project's load ends it) */
+    /* 4. PROJECT's LOAD ends it */
+    sy_app_project(lpg.prj);
     run_ms(500);
-    d = sy_tp_active() || sy_patch.p[SP_F_CUT] != cut || strcmp(sy_patch.name, name) || ui.bpm != 97u ||
-        web_test_lp_clip(0, 0, 2, -1) != 8;
-    printf("check: PROJECT's LOAD ended it: test %s, the sound %s (%s, CUTOFF %d), BPM %u, the project's clip %d notes  "
-           "%s\n", sy_tp_active() ? "still loaded" : "none", d ? "not back" : "back", sy_patch.name,
-           sy_patch.p[SP_F_CUT], ui.bpm, web_test_lp_clip(0, 0, 2, -1), d ? "FAIL" : "ok");
+    d = sy_tp_active() || owner_ok("LADDER BASS", 444, 98u, 9);
+    printf("check: PROJECT's LOAD ended it: test %s, the sound %s (CUTOFF %d), BPM %u, CLOCK IN %u, the clip %d notes  "
+           "%s\n", sy_tp_active() ? "still loaded" : "none", sy_patch.name, sy_patch.p[SP_F_CUT], ui.bpm, ch_clock,
+           web_test_lp_clip(0, 0, 2, -1), d ? "FAIL" : "ok");
     bad += d;
     run_ms(10000);
     d = nor_diff(img);
-    printf("check: 10 s after: the flash %s (%u bytes differ, %u writes)  %s\n", d ? "CHANGED" : "unchanged", d,
-           web_flash_writes - w0, d ? "FAIL" : "ok");
+    printf("check: 10 s after: the flash %s (%u bytes differ)  %s\n", d ? "CHANGED" : "unchanged", d, d ? "FAIL" : "ok");
     bad += d != 0;
+    /* 5. an empty slot loaded after a test: the owner's chords, not the test's */
+    sy_tp_load(3);
+    until(TPS_RUN, 3000u);
+    run_ms(300);
+    sy_app_project((lpg.prj + 1u) % LP_NPRJ);
+    run_ms(500);
+    d = sy_tp_active() || owner_ok("LADDER BASS", 444, 98u, -1);
+    printf("check: an empty project loaded after TEST 4: test %s, CLOCK IN %u, track 1 chords %u (KEY %u), BPM %u  %s\n",
+           sy_tp_active() ? "still loaded" : "none", ch_clock, ch_d[0].mode, CH_KEY, ui.bpm, d ? "FAIL" : "ok");
+    bad += d;
+    /* 6. PROJECT's NEW ends it too */
+    sy_tp_load(1);
+    until(TPS_RUN, 3000u);
+    run_ms(300);
+    w1 = web_flash_writes;
+    sy_app_project_new();
+    run_ms(500);
+    d = sy_tp_active() || strcmp(sy_patch.name, "LADDER BASS") || sy_patch.p[SP_F_CUT] != 444 || ui.bpm != 98u;
+    run_ms(8000);
+    printf("check: PROJECT's NEW ended it: test %s, the sound %s (CUTOFF %d), BPM %u; auto-save back on (%u writes "
+           "after: the new project, as NEW always writes it)  %s\n", sy_tp_active() ? "still loaded" : "none",
+           sy_patch.name, sy_patch.p[SP_F_CUT], ui.bpm, web_flash_writes - w1, d || web_flash_writes == w1 ? "FAIL" : "ok");
+    bad += d || web_flash_writes == w1;
+    /* 7. a start that never comes (its PLAY taken out of the ring each time, as a full ring drops it): the load ends,
+     * the owner's project back */
+    sy_tp_load(0);
+    until(TPS_WAIT, 3000u);
+    for (k = 0; k < 2000u && tp.st != TPS_NONE; k++) {
+        web_ms();
+        while (sy_ev_ui.w != sy_ev_ui.r && sy_ev_ui.q[(sy_ev_ui.w - 1u) % SY_EVQ].type == SY_EV_RUN &&
+               sy_ev_ui.q[(sy_ev_ui.w - 1u) % SY_EVQ].a == 1u)
+            sy_ev_ui.w--;
+    }
+    run_ms(500);
+    d = sy_tp_active() || tp.st != TPS_NONE || sy_patch.p[SP_F_CUT] != 444;
+    printf("check: a test whose start never came: `tproj` would say %s, the sound %s  %s\n",
+           sy_tp_active() ? "it is loaded" : "none", sy_patch.p[SP_F_CUT] == 444 ? "back" : "not back", d ? "FAIL" : "ok");
+    bad += d;
     printf("check: %u failed\n", bad);
     return bad != 0;
 }
@@ -237,7 +348,9 @@ static int check(void)
 int main(int argc, char **argv)
 {
     if (argc == 2 && !strcmp(argv[1], "check"))
-        return check();
+        return check(argv[0]);
+    if (argc == 3 && !strcmp(argv[1], "restart"))
+        return restart(argv[2]);
     if (argc != 3 || atoi(argv[1]) < 1 || atoi(argv[1]) > (int)SY_TP_N) {
         printf("strata_tproj K out.wav (K 1 .. %u), or strata_tproj check\n", SY_TP_N);
         return 2;
