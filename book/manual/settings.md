@@ -40,8 +40,9 @@ the transport runs. <kbd>ARP</kbd> is lit while the arpeggiator is on.
 ## DEBUG
 
 On any page, hold <kbd>OCT−</kbd>, F3 (the lowest key), G5 (the highest key) and <kbd>GLO</kbd> together for a
-quarter of a second. The four buttons are far apart on purpose, so DEBUG never opens by accident, and the notes and
-changes those presses started are taken back. (<kbd>HOME</kbd> held shows the help map only.) <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
+quarter of a second. The four buttons are far apart on purpose, so DEBUG never opens by accident. While <kbd>OCT−</kbd> is
+down, F3 and G5 make no sound and do nothing; a key pressed before it is cut off, and the step, note or tap it made is
+taken back. (<kbd>HOME</kbd> held shows the help map only.) <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
 test Strata:
 
 - **BENCH**: what the FM-1 measures (audio, CPU, screen, keys, tables, flash, stacks). RUN times the processor.

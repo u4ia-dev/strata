@@ -9,7 +9,8 @@ build was never public).
 
 **Panel.**
 - **DEBUG opens with four buttons**: hold <kbd>OCT−</kbd>, F3 (the lowest key), G5 (the highest key) and <kbd>GLO</kbd>
-  together, on any page. The notes and changes those presses started are taken back. <kbd>HOME</kbd> held shows the help
+  together, on any page. While <kbd>OCT−</kbd> is down, F3 and G5 make no
+  sound and do nothing; a key pressed before it is cut off, and the step, note or tap it made is taken back. <kbd>HOME</kbd> held shows the help
   map on every page, with no countdown, and no longer opens DEBUG.
 - WIPE moved from SETTINGS into DEBUG. Press <kbd>HOME</kbd> twice to confirm.
 - A list or question is confirmed by pressing twice the button that opened it: <kbd>EDIT</kbd> for the wavetable, kit and
