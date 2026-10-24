@@ -11,7 +11,11 @@
 // Scenarios, each in a fresh page: as it opens; the automatic tests on a good FM-1 (every row, the load table, no
 // SysEx, only the page's read-only commands, every note ended, the sound put back); PROGRAM off; another build; the
 // fixed effects' knobs with and without V0.6's bug; the chain's seven steps; the encoders; the keys' wait; three
-// restarts and one that crashed; the report; no sideways scroll at a phone's width; the dark scheme.
+// restarts and one that crashed; the report; no sideways scroll at a phone's width; the dark scheme. V0.87.1 adds
+// the test projects (the console answers `tproj N`, `tproj`, `tproj stop`; getUserMedia is stubbed with a generated
+// tone from a device named "Strata for FM-1"; the page is served by the real serve.py with a temporary --hwtest folder,
+// so the saved WAV and JSON, the token check and the refusals are the real ones), the three backup-mode buttons
+// (`uboot yes a|b|c`: the console drops), the "draw" row's two buttons and the chord-MIDI row gone.
 //   node web/strata_flash/test_test.mjs [build/flasher] [OUT]   (after make_flasher.py; on Windows: Windows' node;
 //                                                                OUT: build/flasher_shots)
 import { spawn } from "node:child_process";
@@ -19,6 +23,7 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const root = process.argv[2] || "build/flasher", out = process.argv[3] || "build/flasher_shots";
 const CHROME = process.env.CHROME || ["C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -39,7 +44,36 @@ const server = http.createServer((req, res) => {
   } catch { res.writeHead(404); res.end(); }
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const base = `http://127.0.0.1:${server.address().port}`;
+let base = `http://127.0.0.1:${server.address().port}`;
+const staticBase = base;
+// serve.py itself, for the recordings (a temporary --hwtest folder)
+const PY = ["python", "py", "python3"].find((c) => { try { return spawnSync(c, ["--version"]).status === 0; } catch { return false; } });
+const hwdir = fs.mkdtempSync(path.join(os.tmpdir(), "strata-hwtest-"));
+let serveProc = null, servePort = 0;
+async function startServe() {
+  if (!PY) throw new Error("no python for serve.py");
+  const probe = http.createServer();
+  await new Promise((r) => probe.listen(0, "127.0.0.1", r));
+  servePort = probe.address().port;
+  await new Promise((r) => probe.close(r));
+  serveProc = spawn(PY, [path.join(root, "serve.py"), String(servePort), "--hwtest", hwdir, "--backups", path.join(hwdir, "bk")], { stdio: ["ignore", "ignore", "ignore"] });
+  for (let t = 0; t < 100; t++) {
+    const ok = await new Promise((r) => http.get({ host: "127.0.0.1", port: servePort, path: "/api/backup" }, (res) => { res.resume(); r(res.statusCode === 200); }).on("error", () => r(false)));
+    if (ok) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("serve.py did not start");
+}
+// a raw POST (node's http allows the Origin and token headers a test sets)
+function rawPost(pth, body, headers = {}) {
+  return new Promise((res, rej) => {
+    const r = http.request({ host: "127.0.0.1", port: servePort, path: pth, method: "POST", headers: { Origin: `http://127.0.0.1:${servePort}`, ...headers } }, (resp) => {
+      let d = ""; resp.on("data", (c) => (d += c)); resp.on("end", () => res({ code: resp.statusCode, body: d }));
+    });
+    r.on("error", rej);
+    r.end(body);
+  });
+}
 
 // ------------------------------------------------------------------ the simulated FM-1, in the page
 const FAKE = (cfg) => `(() => {
@@ -49,7 +83,20 @@ const FAKE = (cfg) => `(() => {
   const norm = (p, v) => Math.fround(Math.fround(v - p.lo) / Math.fround(p.hi - p.lo));
   const fm = window.__fm = { midi: [], cmds: [], sysex: null, on: true, sound: cfg.sound || "PAD", slot: cfg.slot ?? -1,
     p: new Int16Array(N), n: new Float32Array(N), changed: new Float64Array(N), loaded: 0, notes: new Map(), bank: 0,
-    late: 0, shed: 0, run: 0, enc: [], keys: 0, crash: "", boots: 0, uac: 0 };
+    late: 0, shed: 0, run: 0, enc: [], keys: 0, crash: "", boots: 0, uac: 0, tp: { k: 0, t0: 0 }, uboot: [] };
+  window.confirm = () => true;                                           // (the backup-mode buttons ask first)
+  const TPN = ["VOICES", "FX", "DRUMS", "LOOPER"];
+  const tone = { rate: 0 };
+  Object.defineProperty(navigator.mediaDevices, "enumerateDevices", { value: async () => [
+    { kind: "audioinput", label: "Microphone (Realtek)", deviceId: "d0" }, { kind: "audioinput", label: "Strata for FM-1 (1209:5354)", deviceId: "d1" },
+    { kind: "audiooutput", label: "Speakers", deviceId: "o0" }], configurable: true });
+  Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async (c) => {   // (a generated tone, not the FM-1)
+    fm.gum = fm.gum || []; fm.gum.push(JSON.stringify(c));
+    const ctx = new AudioContext(), dst = ctx.createMediaStreamDestination(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.frequency.value = 440; g.gain.value = 0.5; osc.connect(g).connect(dst); osc.start(); await ctx.resume();
+    tone.rate = ctx.sampleRate;
+    return dst.stream;
+  }, configurable: true });
   const cut = P.find((p) => p.name === "CUTOFF" && M.secs[p.sec] === "FILTER");
   function load() {                                                     // a sound: every value at once (sp_snap)
     for (const p of P) { fm.p[p.id] = p.lo + Math.trunc((p.hi - p.lo) * 0.3); fm.n[p.id] = norm(p, fm.p[p.id]); fm.changed[p.id] = 0; }
@@ -119,6 +166,16 @@ const FAKE = (cfg) => `(() => {
       wait_max_us: cfg.wait || 8200, stack_irq_used: 2300, stack_irq_size: 7936, stack_main_used: cfg.stack || 6900,
       stack_main_size: 12032, spare_bytes: 45056, spare_changed_bytes: cfg.spare || 0, run: fm.run, run_int_loops: 100000,
       run_int_us: fm.run === 2 ? 3895 : 0, run_flt_loops: 50000, run_flt_us: fm.run === 2 ? 3051 : 0 });
+    let mm;
+    if ((mm = line.match(/^tproj ([1-4])$/))) {
+      if (cfg.tpbusy || fm.tp.k) return "tproj " + mm[1] + " busy\\r\\n";
+      fm.tp.k = Number(mm[1]); fm.tp.t0 = performance.now(); fm.tp.log = (fm.tp.log || []).concat(fm.tp.k);
+      setTimeout(() => { fm.tp.k = 0; }, cfg.tpms || 1500);
+      return "tproj " + mm[1] + " " + TPN[mm[1] - 1] + " ok\\r\\n";
+    }
+    if (line === "tproj stop") { fm.tp.k = 0; return "tproj stop ok\\r\\n"; }
+    if (line === "tproj") return fm.tp.k ? "tproj " + fm.tp.k + " " + TPN[fm.tp.k - 1] + " " + Math.round((performance.now() - fm.tp.t0) * 50) + "\\r\\n" : "tproj none\\r\\n";
+    if ((mm = line.match(/^uboot yes ([abc])$/))) { fm.uboot.push(mm[1]); setTimeout(() => fm.power(false), 150); return "uboot way " + mm[1] + ": leaving\\r\\n"; }
     if (line === "bench run") { fm.run = 1; setTimeout(() => { fm.run = 2; }, 120); return "RUN asked: 'bench' again in a second\\r\\n"; }
     if (line === "crash") return fm.crash || "no crash record\\r\\n";
     if (line === "inp") {
@@ -172,7 +229,7 @@ const FAKE = (cfg) => `(() => {
 // ------------------------------------------------------------------ Chrome over a pipe (JSON, each ended by a 0 byte)
 const prof = fs.mkdtempSync(path.join(os.tmpdir(), "strata-testpage-"));
 const chrome = spawn(CHROME, ["--headless=new", "--remote-debugging-pipe", `--user-data-dir=${prof}`, "--no-first-run",
-  "--no-default-browser-check", "--window-size=1000,1000", "--disable-background-timer-throttling",
+  "--no-default-browser-check", "--window-size=1000,1000", "--autoplay-policy=no-user-gesture-required", "--disable-background-timer-throttling",
   "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank"],
   { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"] });   // (the pages' timers at full speed: each is a new tab)
 const toChrome = chrome.stdio[3], fromChrome = chrome.stdio[4];
@@ -398,6 +455,121 @@ try {
     check(`no exceptions in the guided steps${exceptions(sid).length ? ": " + exceptions(sid)[0] : ""}`, !exceptions(sid).length);
     await send("Target.closeTarget", { targetId });
   }
+  {   // V0.87.1: the rows, the test projects through the real serve.py, backup mode
+    await startServe();
+    base = `http://127.0.0.1:${servePort}`;
+    const wavInfo = (f) => {
+      const b = fs.readFileSync(f), pcm = new Int16Array(b.buffer.slice(b.byteOffset + 44, b.byteOffset + b.length - ((b.length - 44) % 2)));
+      let pk = 0;
+      for (const v of pcm) pk = Math.max(pk, Math.abs(v));
+      return { riff: b.toString("ascii", 0, 4) + b.toString("ascii", 8, 12), ch: b.readUInt16LE(22), rate: b.readUInt32LE(24), bits: b.readUInt16LE(34),
+               frames: b.readUInt32LE(40) / 4, peak: pk / 32768, size: b.length };
+    };
+    const runs = () => fs.readdirSync(hwdir).filter((f) => /^\d{8}-\d{6}$/.test(f)).sort();
+    {
+      const { sid, targetId } = await open();
+      const rows = await ev(sid, "[!document.querySelector('[data-look=\"chordmidi\"]'), !!document.querySelector('[data-look=\"wipe\"]'), !!document.querySelector('[data-look=\"confirm\"]'), document.querySelectorAll('[data-fail=\"draw\"]').length, /DEBUG/.test(document.getElementById('g-draw').textContent), !/SETTINGS \\(HOME held/.test(document.body.textContent)]");
+      check(`the rows: the chord-MIDI row gone, WIPE and the confirmations in, the "draw" row with two fail buttons, DEBUG named, no old SETTINGS path`,
+            rows[0] && rows[1] && rows[2] && rows[3] === 2 && rows[4] && rows[5]);
+      await connect(sid);
+      await guided(sid, "draw", async () => { await click(sid, '[data-fail="draw"][data-key="draw-steps"]'); }, 12000);
+      const rep0 = await text(sid, "#report");
+      check(`the "draw" row's own words: "I could not do the steps" is its own line, not "it did not work"`,
+            /FAIL +draw-steps \(said\): the tester pressed 'I could not do the steps'/.test(rep0) && !/the tester: it did not work/.test(rep0));
+      await send("Target.closeTarget", { targetId });
+    }
+    {   // TEST 2 on its own
+      const { sid, targetId } = await open();
+      await connect(sid);
+      const before = (await fm(sid, "fm.cmds")).length;
+      await click(sid, '[data-tp="2"]');
+      const done = await until(sid, "document.querySelectorAll('#t-tp tbody tr').length === 1", 30000);
+      const row = await ev(sid, "[...document.querySelectorAll('#t-tp tbody tr')].map((tr) => [tr.cells[0].textContent, tr.cells[1].textContent, tr.cells[2].textContent])[0] || []");
+      const cmds = (await fm(sid, "fm.cmds")).slice(before), gum = await fm(sid, "fm.gum"), rn = runs();
+      check(`TEST 2: sent status, bench, tproj 2, polled tproj to none, then status and bench; ${cmds.length} commands (${row[1]})`,
+            done && cmds[0] === "status" && cmds[1] === "bench" && cmds[2] === "tproj 2" && cmds.filter((c) => c === "tproj").length >= 2 &&
+            cmds.slice(-2).join() === "status,bench" && cmds.every((c) => /^(status|bench|tproj|tproj 2)$/.test(c)) && /^(OK|WARN)/.test(row[1]));
+      const g = JSON.parse(gum[gum.length - 1]).audio;
+      check(`it recorded the input named "Strata for FM-1" (exact id d1), echo cancellation, noise suppression, auto gain all off`,
+            g.deviceId.exact === "d1" && g.echoCancellation === false && g.noiseSuppression === false && g.autoGainControl === false);
+      const dir = rn.length ? path.join(hwdir, rn[rn.length - 1]) : "", files = dir ? fs.readdirSync(dir).sort() : [];
+      check(`serve.py wrote build/hwtest/<date-time>/tp2.wav and tp2.json (${rn[rn.length - 1]}: ${files.join(", ")}), nothing else`,
+            rn.length === 1 && files.join() === "tp2.json,tp2.wav");
+      const w = wavInfo(path.join(dir, "tp2.wav")), j = JSON.parse(fs.readFileSync(path.join(dir, "tp2.json"), "utf8"));
+      check(`the WAV: ${w.riff}, ${w.bits}-bit, ${w.ch} ch, ${w.rate} Hz = the JSON's rate, ${(w.frames / w.rate).toFixed(2)} s, peak ${w.peak.toFixed(3)} (the 0.5 tone)`,
+            w.riff === "RIFFWAVE" && w.bits === 16 && w.ch === 2 && w.rate === j.rate && w.rate >= 22050 && w.frames / w.rate > 1.5 && Math.abs(w.peak - 0.5) < 0.02);
+      check(`the JSON: test 2 FX, status and bench before and after, the console's lines, the deltas, timing (${Object.keys(j).length} fields)`,
+            j.test === 2 && j.replied_name === "FX" && j.status_before.sound && j.status_after.uac_rate_hz && j.bench_before.half_us && j.bench_after.half_us &&
+            j.console.length >= 6 && j.console[2].cmd === "tproj 2" && j.deltas.uac_overruns === 0 && j.tproj_ms_last > 0 && j.sent_at_frame >= 0 &&
+            j.none_at_frame > j.sent_at_frame && j.device.includes("Strata for FM-1") && j.duration_s > 1.5 && j.version === META.version);
+      check(`no exceptions in the recording${exceptions(sid).length ? ": " + exceptions(sid)[0] : ""}`, !exceptions(sid).length);
+      await shot(sid, "testpage_tproj.png");
+      await send("Target.closeTarget", { targetId });
+    }
+    {   // busy is an error shown; nothing is saved
+      const n0 = runs().length, { sid, targetId } = await open({ tpbusy: true });
+      await connect(sid);
+      await click(sid, '[data-tp="1"]');
+      await until(sid, "document.querySelectorAll('#t-tp tbody tr').length === 1", 15000);
+      const row = await ev(sid, "document.querySelector('#t-tp tbody tr').textContent");
+      check(`"tproj 1 busy" is an error shown on the page, and nothing was saved (${row.slice(0, 70)}...)`, /FAIL/.test(row) && /busy/.test(row) && runs().length === n0 && !(await fm(sid, "fm.tp.log")));
+      await send("Target.closeTarget", { targetId });
+    }
+    {   // the four in one run folder
+      const n0 = runs().length, { sid, targetId } = await open();
+      await connect(sid);
+      await click(sid, "#tp-all");
+      const done = await until(sid, "document.getElementById('s-tp').textContent === 'done'", 90000);
+      const rn = runs(), dir = path.join(hwdir, rn[rn.length - 1]), files = fs.readdirSync(dir).sort();
+      const order = await fm(sid, "fm.tp.log");
+      check(`Run all four: TEST 1, 2, 3, 4 in that order, one new folder with ${files.length} files (${files.join(" ")})`,
+            done && rn.length === n0 + 1 && order.join() === "1,2,3,4" && files.join() === "tp1.json,tp1.wav,tp2.json,tp2.wav,tp3.json,tp3.wav,tp4.json,tp4.wav");
+      const names = await ev(sid, "R.tp.map((t) => t.name).join()");
+      check(`the report lists the four runs (${names})`, names === "VOICES,FX,DRUMS,LOOPER" && /== test projects/.test(await text(sid, "#report")));
+      await send("Target.closeTarget", { targetId });
+    }
+    {   // serve.py's refusals, with the token the page was given
+      const html = await new Promise((r) => http.get({ host: "127.0.0.1", port: servePort, path: "/test.html" }, (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => r(d)); }));
+      const tok = (html.match(/const TOKEN = "([0-9a-f]+)"/) || [])[1] || "";
+      const H = { "X-Strata-Token": tok };
+      const run = JSON.parse((await rawPost("/api/hwtest/new", "", H)).body).run;
+      const wav = Buffer.concat([Buffer.from("RIFF\0\0\0\0WAVE", "binary"), Buffer.alloc(100)]);
+      const r1 = await rawPost("/api/hwtest/new", "", {}), r2 = await rawPost("/api/hwtest/new", "", { "X-Strata-Token": "nope" });
+      const r3 = await rawPost("/api/hwtest/new", "", { ...H, Origin: "http://evil.example" });
+      const names = ["tp5.wav", "tp0.json", "tp1.exe", "..%2ftp1.wav", "tp1.wav%00", "tp1.wav%0a", "x.wav", ".."].map((n) => rawPost(`/api/hwtest/${run}/${n}`, wav, H));
+      const bad = (await Promise.all(names)).map((r) => r.code);
+      const trav = [(await rawPost(`/api/hwtest/..%2f..%2fx/tp1.wav`, wav, H)).code, (await rawPost(`/api/hwtest/../tp1.wav`, wav, H)).code,
+                    (await rawPost(`/api/hwtest/20990101-000000/tp1.wav`, wav, H)).code];
+      const notwav = (await rawPost(`/api/hwtest/${run}/tp3.wav`, "hello", H)).code, notjson = (await rawPost(`/api/hwtest/${run}/tp3.json`, "[1]", H)).code;
+      const big = await new Promise((res) => {
+        const rq = http.request({ host: "127.0.0.1", port: servePort, path: `/api/hwtest/${run}/tp4.wav`, method: "POST",
+          headers: { ...H, Origin: `http://127.0.0.1:${servePort}`, "Content-Length": String(70 * 1024 * 1024) } }, (resp) => { resp.resume(); res(resp.statusCode); });
+        rq.on("error", () => res(0)); rq.write("x");
+        setTimeout(() => { rq.destroy(); res(-1); }, 5000);
+      });
+      const good = (await rawPost(`/api/hwtest/${run}/tp1.wav`, wav, H)).code, goodj = (await rawPost(`/api/hwtest/${run}/tp1.json`, "{\"a\":1}", H)).code;
+      const left = fs.readdirSync(path.join(hwdir, run)).sort().join();
+      check(`serve.py: no token, a wrong token and another origin refused (${r1.code} ${r2.code} ${r3.code})`, r1.code === 403 && r2.code === 403 && r3.code === 403);
+      check(`serve.py: other names refused (${bad.join(" ")}), traversal and an unknown folder refused (${trav.join(" ")})`,
+            bad.every((c) => c === 404) && trav.every((c) => c === 404));
+      check(`serve.py: a body that is no WAV or JSON refused (${notwav} ${notjson}), 70 MB refused before it is read (${big}), a good pair taken (${good} ${goodj}); the folder holds ${left}`,
+            notwav === 400 && notjson === 400 && big === 413 && good === 200 && goodj === 200 && left === "tp1.json,tp1.wav");
+    }
+    {   // backup mode, way B: asked first, sent once, the console drops, the report says which way
+      const { sid, targetId } = await open();
+      await connect(sid);
+      await ev(sid, "(document.getElementById('bk-before').value = 'Strata for FM-1 under Ports', 0)");
+      const before = (await fm(sid, "fm.cmds")).filter((c) => /uboot/.test(c)).length;
+      await click(sid, '[data-bk="b"]');
+      await until(sid, "/console dropped/.test(document.getElementById('s-bk').textContent)", 8000);
+      await ev(sid, "(document.getElementById('bk-after').value = 'Unknown USB device', document.getElementById('bk-after').dispatchEvent(new Event('input')), 0)");
+      const cmds = (await fm(sid, "fm.cmds")).filter((c) => /uboot/.test(c)), rep = await text(sid, "#report");
+      check(`backup mode way B: "uboot yes b" sent once (none before), the console dropped, the report says the way and what Windows showed`,
+            before === 0 && cmds.join() === "uboot yes b" && /way B pressed at .*Windows before: Strata for FM-1 under Ports; the console dropped after .*Windows after: Unknown USB device/.test(rep));
+      await send("Target.closeTarget", { targetId });
+    }
+    base = staticBase;
+  }
   {   // a phone's width, the dark scheme
     const { sid, targetId } = await open({}, "dark");
     await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sid);
@@ -413,6 +585,8 @@ try {
   console.log(`testpage: ${checks} checks, ${failed} failed (screenshots in ${out})`);
   chrome.kill();
   server.close();
+  if (serveProc) serveProc.kill();
+  try { fs.rmSync(hwdir, { recursive: true, force: true }); } catch (_) {}
   try { fs.rmSync(prof, { recursive: true, force: true }); } catch (_) {}
   process.exit(failed ? 1 : 0);
 }

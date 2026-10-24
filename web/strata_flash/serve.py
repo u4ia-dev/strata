@@ -12,9 +12,15 @@ beside the two files. The page writes nothing until a backup from the last MAX_A
 /api/backup); starting and stopping one takes this run's token and an Origin of this server (POST). Reading the disk
 needs Windows and an administrator PowerShell; without them the page shows why and the install stays off.
 
-  python serve.py [PORT] [--recovery DIR] [--backups DIR]       (Windows: py serve.py, as administrator)
+The hardware test's recordings (V0.87.1, test.html): POST /api/hwtest/new makes build/hwtest/<YYYYMMDD-HHMMSS>/ and
+POST /api/hwtest/<that>/tpN.wav|tpN.json (N 1 to 4) writes one file into it, under the same token and Origin check as the
+backup's calls; nothing else is accepted (a WAV to 64 MB, a JSON to 1 MB), and a name or folder of any other shape is
+refused. tools/hw_audio_check.py reads the folder.
+
+  python serve.py [PORT] [--recovery DIR] [--backups DIR] [--hwtest DIR]   (Windows: py serve.py, as administrator)
   --recovery: flipper-fm1-recovery with its .local (default: fm1-flipper-recovery beside the strata checkout)
   --backups: where each backup-YYYYMMDD-HHMMSS folder goes (default: %USERPROFILE%\\fm1-recovery)
+  --hwtest: where the test page's recordings go (default: build/hwtest, found from this file: build/flasher/serve.py)
 """
 import argparse
 import functools
@@ -37,6 +43,9 @@ LOADER_SHA256 = "d41da6126760c9d66660bcc0cac8d27d221806c5e369a8036921efe68dca537
 KEY_LINE = re.compile(r"KEY ([0-9A-F]{4}) FLASH \{'type': (\d+), 'id': (\d+)\}")
 WAIT_S, READ_S = 600, 300
 TOKEN_MARK = "__STRATA_TOKEN__"
+HW_RUN = re.compile(r"^\d{8}-\d{6}$")
+HW_FILE = re.compile(r"^tp[1-4]\.(wav|json)$")
+HW_MAX = {"wav": 64 * 1024 * 1024, "json": 1024 * 1024}                  # (90 s of 48 kHz stereo is 17 MB)
 # the backup-mode disk, and every USB device Windows could not read (Device Descriptor Request Failed) meanwhile
 FINDER = r"""
 $end = (Get-Date).AddSeconds(WAIT_S)
@@ -246,13 +255,62 @@ class Backup:
         (folder / "backup.json").write_text(json.dumps(receipt, indent=1), encoding="utf-8")
 
 
+def hwtest_default(here):
+    """build/hwtest from build/flasher/serve.py; from the source tree (web/strata_flash) the repo's build/hwtest"""
+    here = Path(here).resolve()
+    return here.parent / "hwtest" if here.name == "flasher" else here.parents[1] / "build" / "hwtest"
+
+
+class HwTest:
+    """the recordings of the hardware test page: a run folder, then its tpN.wav and tpN.json"""
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.lock = threading.Lock()
+
+    def new_run(self):
+        with self.lock:
+            t = time.time()
+            while True:
+                name = time.strftime("%Y%m%d-%H%M%S", time.localtime(t))
+                try:
+                    (self.root / name).mkdir(parents=True, exist_ok=False)
+                    return name
+                except FileExistsError:
+                    t += 1
+
+    def check(self, run, name):
+        """the file's path, or '' for a run or name that is not allowed"""
+        if not HW_RUN.fullmatch(run) or not HW_FILE.fullmatch(name):
+            return ""
+        folder = self.root / run
+        if not folder.is_dir():
+            return ""
+        return str(folder / name)
+
+    @staticmethod
+    def valid(kind, data):
+        if kind == "wav":
+            return len(data) > 44 and data[:4] == b"RIFF" and data[8:12] == b"WAVE"
+        try:
+            return isinstance(json.loads(data.decode("utf-8")), dict)
+        except (ValueError, UnicodeDecodeError):
+            return False
+
+    def write(self, path, data):
+        tmp = path + ".part"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".fwsc": "application/octet-stream", ".md": "text/plain; charset=utf-8",
                       ".txt": "text/plain; charset=utf-8", "": "text/plain; charset=utf-8"}
 
-    def __init__(self, *a, backup=None, token="", port=0, **kw):
-        self.backup, self.token, self.port = backup, token, port
+    def __init__(self, *a, backup=None, token="", port=0, hwtest=None, **kw):
+        self.backup, self.token, self.port, self.hwtest = backup, token, port, hwtest
         super().__init__(*a, **kw)
 
     def end_headers(self):
@@ -282,8 +340,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/api/backup":
             self._json(200, self.backup.report())
-        elif path in ("/", "/index.html"):
-            body = (Path(self.directory) / "index.html").read_text(encoding="utf-8").replace(TOKEN_MARK, self.token)
+        elif path in ("/", "/index.html", "/test.html"):
+            page = "test.html" if path == "/test.html" else "index.html"        # (the test page's token: its recordings)
+            body = (Path(self.directory) / page).read_text(encoding="utf-8").replace(TOKEN_MARK, self.token)
             body = body.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -305,12 +364,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/backup/cancel":
             self.backup.cancel()
             self._json(200, {"cancelled": True})
+        elif path.startswith("/api/hwtest/") and self.hwtest is not None:
+            self._hwtest(path[len("/api/hwtest/"):])
         else:
             self._json(404, {"error": "no such call"})
 
+    def _hwtest(self, rest):
+        if rest == "new":
+            try:
+                self._json(200, {"run": self.hwtest.new_run()})
+            except OSError as e:
+                self._json(500, {"error": f"{type(e).__name__}: {e}"})
+            return
+        parts = rest.split("/")
+        path = self.hwtest.check(*parts) if len(parts) == 2 else ""
+        if not path:
+            self._json(404, {"error": "no such run or file"})
+            return
+        kind = parts[1].rsplit(".", 1)[1]
+        try:
+            n = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._json(411, {"error": "a length is needed"})
+            return
+        if n < 0 or n > HW_MAX[kind]:
+            self._json(413, {"error": f"at most {HW_MAX[kind]} bytes"})
+            return
+        data = self.rfile.read(n)
+        if len(data) != n or not self.hwtest.valid(kind, data):
+            self._json(400, {"error": f"not a {kind} file"})
+            return
+        try:
+            self.hwtest.write(path, data)
+        except OSError as e:
+            self._json(500, {"error": f"{type(e).__name__}: {e}"})
+            return
+        self._json(200, {"saved": parts[1], "bytes": n, "path": path})
 
-def make_server(port, directory, backup, token):
-    handler = functools.partial(Handler, directory=directory, backup=backup, token=token, port=port)
+
+def make_server(port, directory, backup, token, hwtest=None):
+    handler = functools.partial(Handler, directory=directory, backup=backup, token=token, port=port, hwtest=hwtest)
     return http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
 
 
@@ -320,10 +413,12 @@ def main():
     ap.add_argument("port", nargs="?", type=int, default=8000)
     ap.add_argument("--recovery", type=Path, default=here.parents[2] / "fm1-flipper-recovery")
     ap.add_argument("--backups", type=Path, default=Path.home() / "fm1-recovery")
+    ap.add_argument("--hwtest", type=Path, default=hwtest_default(here))
     a = ap.parse_args()
     backup = Backup(a.recovery, a.backups)
-    with make_server(a.port, str(here), backup, secrets.token_hex(16)) as srv:
+    with make_server(a.port, str(here), backup, secrets.token_hex(16), HwTest(a.hwtest)) as srv:
         print(f"Strata flasher: open http://127.0.0.1:{a.port}/ in Chrome or Edge (this computer only). Ctrl+C stops.")
+        print(f"Hardware test recordings: into {a.hwtest} (test.html)")
         why = backup.why_not()
         print("Backups: " + (f"into {a.backups}, with {a.recovery}" if not why else f"OFF: {why}"))
         try:
