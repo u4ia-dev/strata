@@ -123,6 +123,17 @@ int main(void)
     web_keys(0);
     web_test_chd(4, 0);
     run(300);
+    web_test_set(SP_FXC1, 23);                      /* V0.87.1: TAPE (instance 22) first in the chain, a chord held: the */
+    web_test_fx_on(22, 1);                          /* reels, the tape, the head and the curve as the sound moves them */
+    page(SEC_TAPE, "TAPE");
+    web_keys(chord);
+    run(300);
+    start();
+    run(2000);
+    report("TAPE, a chord held, 2 s");
+    web_keys(0);
+    web_test_set(SP_FXC1, 1);
+    run(300);
     for (i = 0; i < 16u; i++) {                     /* V0.8, the looper: three clips playing, CLIPS (redrawn 25 a */
         web_test_lp_put(0, 0, 24u * i, 20u, 60u + (i % 8u) * 2u, 100u);   /* second), then NOTES */
         web_test_lp_put(1, 0, 24u * i, 20u, 48u + (i % 4u) * 3u, 90u);

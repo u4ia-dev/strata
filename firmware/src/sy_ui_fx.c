@@ -1059,8 +1059,12 @@ static void ui_p_ring(void)
 }
 
 /* TAPE: the reels (turning while sound plays), the tape between them wobbling (WOW slow, FLUTTER quick), the heads,
- * SATURATE's curve, TONE's tilt, MIX */
+ * SATURATE's curve, TONE's tilt, MIX. V0.87.1: it follows the sound: the reels turn faster the louder it is, the tape's
+ * ripples travel (WOW's slowly, FLUTTER's quickly), the heads glow with the level and a dot rides SATURATE's curve at
+ * it (the output's peak, smoothed) */
 static float ui_reel_a;                             /* the reels' turn */
+static float ui_tape_lv, ui_tape_w, ui_tape_f;      /* the level (0 .. 1), WOW's and FLUTTER's ripple phases */
+static int ui_tape_live(void) { return ui_tape_lv > 0.0f; }   /* (it has not settled: frames go on after the sound) */
 static void ui_reel(float cx, float cy, float a)
 {
     uint32_t i;
@@ -1073,10 +1077,11 @@ static void ui_reel(float cx, float cy, float a)
 }
 static void ui_tape_seg(float xa, float ya, float xb, float yb, float ph, float wow, float flt, uint16_t c)
 {
+    ph += ui_tape_w;
     float pts[82], dx = xb - xa, dy = yb - ya, l = sy_sqrtf(dx * dx + dy * dy), nx = -dy / l, ny = dx / l;
     uint32_t i;
     for (i = 0; i <= 40u; i++) {
-        float u = (float)i / 40.0f, o = sy_sin2pi(2.0f * u + ph) * 3.2f * wow + sy_sin2pi(14.0f * u) * 1.2f * flt;
+        float u = (float)i / 40.0f, o = sy_sin2pi(2.0f * u + ph) * 3.2f * wow + sy_sin2pi(14.0f * u - ui_tape_f) * 1.2f * flt;
         pts[2u * i] = xa + dx * u + nx * o;
         pts[2u * i + 1u] = ya + dy * u + ny * o;
     }
@@ -1091,16 +1096,23 @@ static void ui_p_tape(void)
     float hs = (float)sy_patch.p[hid] * 0.001f;
     ui_reel(56.0f, 74.0f, ui_reel_a);
     ui_reel(184.0f, 74.0f, ui_reel_a);
-    ui_tape_seg(56.0f, 102.0f, 96.0f, 138.0f, 0.0f, wow, flt, ui_ink(wf));
-    lk_seg(96.0f, 142.0f, 144.0f, 142.0f, 1.5f, sk.ink);
-    ui_tape_seg(144.0f, 138.0f, 184.0f, 102.0f, 0.3f, wow, flt, ui_ink(wf));
+    ui_tape_seg(56.0f, 102.0f, 96.0f, 138.0f, 0.0f, wow + 0.3f * ui_tape_lv, flt + 0.25f * ui_tape_lv, ui_ink(wf));   /* (the sound */
+    lk_seg(96.0f, 142.0f, 144.0f, 142.0f, 1.5f, sk.ink);                                                            /* shakes it) */
+    ui_tape_seg(144.0f, 138.0f, 184.0f, 102.0f, 0.3f, wow + 0.3f * ui_tape_lv, flt + 0.25f * ui_tape_lv, ui_ink(wf));
     for (i = 0; i < (uint32_t)(hs * 40.0f + 0.5f); i++) {   /* (V0.86 HISS: grain under the heads, as much as it is) */
         float x = 98.0f + (float)(sy_rand(&seed) >> 8) * (44.0f / 16777216.0f);
         float y = 156.0f + (float)(sy_rand(&seed) >> 8) * (14.0f / 16777216.0f);
         lk_disc(x, y, 0.8f, ui_hotp((int32_t)hid) ? sk.hot : sk.mid);
     }
-    lk_ring(96.0f, 138.0f, 4.0f, 1.0f, sk.mid);
-    lk_ring(144.0f, 138.0f, 4.0f, 1.0f, sk.mid);
+    {                                               /* (the heads: a glow with the level) */
+        uint16_t hc = sy_mix565(sk.mid, sk.hot, (uint32_t)(ui_tape_lv * 256.0f));
+        if (ui_tape_lv > 0.05f) {
+            lk_disc(96.0f, 138.0f, 3.0f, hc);
+            lk_disc(144.0f, 138.0f, 3.0f, hc);
+        }
+        lk_ring(96.0f, 138.0f, 4.0f, 1.0f, hc);
+        lk_ring(144.0f, 138.0f, 4.0f, 1.0f, hc);
+    }
     lk_frame(112.0f, 144.0f, 16.0f, 8.0f, 1.0f, sk.ink);
     lk_frame(196.0f, 140.0f, 30.0f, 30.0f, 1.0f, sk.line);  /* SATURATE */
     for (i = 0; i < 27u; i++) {
@@ -1108,6 +1120,11 @@ static void ui_p_tape(void)
         ys[i] = 155.0f - 13.0f * lk_tanh(g * x) / lk_tanh(g);
     }
     lk_curve(198, ys, 27u, 1.5f, ui_ink(ui_hotp((int32_t)(SP_TP_SAT + o))), 0);
+    if (ui_tape_lv > 0.02f) {                       /* (the level on the curve: the swing's two ends) */
+        float g = 0.6f + 4.0f * sat, yl = 155.0f - 13.0f * lk_tanh(g * ui_tape_lv) / lk_tanh(g);
+        lk_disc(211.0f + 13.0f * ui_tape_lv, yl, 2.2f, sk.hot);
+        lk_disc(211.0f - 13.0f * ui_tape_lv, 310.0f - yl, 2.2f, sk.hot);
+    }
     lk_seg(20.0f, 160.0f + 6.0f * (1.0f - 2.0f * tn), 70.0f, 160.0f - 6.0f * (1.0f - 2.0f * tn), 1.5f,
            ui_ink(ui_hotp((int32_t)(SP_TP_TONE + o))));
     lk_hollow(45.0f, 160.0f, 2.5f);
@@ -1119,15 +1136,29 @@ static void ui_p_tape(void)
     ui_Hp((int32_t)(SP_TP_TONE + o), 74.0f, 150.0f);
     ui_Hp((int32_t)hid, 140.0f, 168.0f);
 }
-/* the reels turning: each one's box redrawn, a turn in 5 s */
+/* the sound moving it: each frame (20 a second) the reels' boxes redrawn, a turn in 5 s at rest, in 1.2 s at full level;
+ * every other frame the tape between them and the curve's box (10 a second) */
 static void ui_tape_wins(void)
 {
-    static uint32_t t;
+    static uint32_t t, n;
     uint32_t dt = fm1_ms - t;
+    float pk = (float)sy_out_pk * (1.0f / 32768.0f), tgt = ui_sounding() ? sy_sqrtf(sy_minf(pk, 1.0f)) : 0.0f;
     t = fm1_ms;
-    if (dt < 200u)
-        ui_reel_a += (float)dt * (1.0f / 5000.0f);
+    if (dt >= 200u)
+        dt = 50u;
+    ui_tape_lv += (tgt - ui_tape_lv) * (tgt > ui_tape_lv ? 0.7f : 0.25f);   /* (quick up, slower down) */
+    if (ui_tape_lv < 0.02f && tgt <= 0.0f)
+        ui_tape_lv = 0.0f;
+    ui_reel_a += (float)dt * (1.0f / 5000.0f) * (1.0f + 3.0f * ui_tape_lv);
     ui_reel_a -= (float)sy_floori(ui_reel_a);
+    ui_tape_w += (float)dt * 0.0006f * (1.0f + ui_tape_lv);   /* (0.6 Hz, quicker louder) */
+    ui_tape_w -= (float)sy_floori(ui_tape_w);
+    ui_tape_f += (float)dt * 0.008f;                          /* (8 Hz) */
+    ui_tape_f -= (float)sy_floori(ui_tape_f);
     ui_win(26, 44, 61, 61, 0);
     ui_win(154, 44, 61, 61, 0);
+    if (n++ & 1u) {
+        ui_win(52, 100, 136, 48, 0);
+        ui_win(194, 138, 34, 34, 0);
+    }
 }

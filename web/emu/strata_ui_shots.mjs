@@ -102,6 +102,14 @@ run(0.6);
 shot("Boot");                                   // (V0.86, P4: the splash held 2 s, then HOME)
 run(1.6);
 shot("Home");
+for (const [p, id] of [[4, "BootPaper"], [2, "BootIce"]]) {   // (V0.87.1: the logo splash in two other themes; STRATA's is "Boot")
+  ex.web_test_palette(p);
+  run(0.2);
+  ex.web_test_screen(3);
+  shot(id);
+}
+ex.web_test_palette(0);
+run(0.2);
 
 // ---- EDIT: OSC A, OSC B, SUB, NOISE, FILTER
 go(SEC.OSCA, "WAVE");
@@ -242,6 +250,15 @@ turn(0, 7);
 turn(1, 3);
 rest();
 for (const [sec, ...pages] of MODS2) for (const [nm, id] of pages) { go(sec, nm); shot(id); }
+chain([22]);                                    // (V0.87.1: TAPE with a chord playing, two frames 0.13 s apart: the reels, the
+go(34, "TAPE");                                 // ripples, the heads and the dot on the curve move with it)
+ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4));
+run(0.5);
+shot("TapeSoundA");
+run(0.13);
+shot("TapeSoundB");
+ex.web_keys(0);
+run(1.0);
 chain([0, 1, 2, 3]);
 
 // ---- GLO, KEYS
@@ -368,6 +385,14 @@ shot("ArpSteps");
 turn(2, -2);                                    // its LEVEL turning
 shot("ArpStepsTurn");
 rest();
+{                                               // (V0.87.1: each step's CHANCE a fader's cap in it, up at 100 %)
+  const chance = [100, 90, 80, 60, 45, 100, 25, 70, 100, 10, 55, 35, 100, 85, 65, 50], was = chance.map((_, i) => ex.web_test_step(i, 4, -1));
+  chance.forEach((v, i) => ex.web_test_step(i, 4, v));
+  turn(0, 3);
+  rest();
+  shot("ArpStepsChance");
+  was.forEach((v, i) => ex.web_test_step(i, 4, v));
+}
 go(SEC.STEPS, "RATCHET");
 turn(0, 8);                                     // step 12: 4 hits, CHANCE 75 %
 run(0.3);
@@ -424,7 +449,7 @@ run(0.1);
 ex.web_test_power(575, 0);                      // (V0.86: the battery 3 of 4 on POWER)
 for (const [sec, nm, id] of [[SEC.MENU, "SCREEN", "SetScreen"], [SEC.MENU, "PANEL", "SetPanel"], [SEC.MENU, "MIDI", "SetMidi"],
                              [SEC.DEBUG, "BENCH", "SetBench"], [SEC.DEBUG, "CORE 2", "SetCore2"], [SEC.DEBUG, "KEY SCAN", "SetKeyScan"],
-                             [SEC.MENU, "POWER", "SetPower"], [SEC.MENU, "WIPE", "SetWipe"]]) {   // (V0.87: DEBUG, WIPE)
+                             [SEC.MENU, "POWER", "SetPower"], [SEC.DEBUG, "WIPE", "SetWipe"], [SEC.DEBUG, "TESTS", "SetTests"]]) {   // (V0.87: DEBUG, WIPE; V0.87.1: WIPE in DEBUG, TESTS)
   go(sec, nm);
   shot(id);
 }
@@ -619,7 +644,7 @@ run(0.1);
 ex.web_buttons(1 << B.SAVE); run(0.05); ex.web_buttons((1 << B.SAVE) | (1 << B.OCTDN)); run(0.03);
 ex.web_buttons(1 << B.SAVE); run(0.03); ex.web_buttons(0); run(0.1);
 shot("PresetsDelete");
-run(3.2);
+run(5.4);                                       // (the list gone: its 5 s)
 
 // ---- V0.8: the looper (a project: T1 chords, T2 a MIDI bass line, T3 an arpeggio with the cutoff moving, clips in
 // other scenes; SONG A A B C)
@@ -864,8 +889,14 @@ run(3.2);
   twice(B.LFO);
   shot("AssignLfo");
   ex.web_enc(E.ALGO, 1); run(0.1);
-  turn(1, 6); rest();
-  shot("AssignLfo2");
+  for (let i = 0; i < 12; i++) { ex.web_enc(E.K2, 1); run(0.02); }
+  rest();
+  shot("AssignLfo2");                           // (V0.87.1: the dial points up; BIPOLAR: the swing both ways of the top)
+  turn(0, 1); rest();
+  shot("AssignLfo2Uni");                        // (UNIPOLAR: one way, by the AMOUNT's sign)
+  for (let i = 0; i < 30; i++) { ex.web_enc(E.K2, -1); run(0.02); }
+  rest();
+  shot("AssignLfo2UniNeg");
   tap(B.LFO);
   go(SEC.FILTER, "TONE");
   run(0.1);
@@ -900,9 +931,22 @@ run(3.2);
   turn(0, 3); run(0.6);
   shot("AskType");
   tap(B.EDIT);
-  go(SEC.MENU, "WIPE");
+  go(SEC.DEBUG, "WIPE");
   turn(0, 1); run(0.1);
   shot("AskWipe");
+  tap(B.HOME);
+  go(SEC.DEBUG, "TESTS");                       // (V0.87.1: DEBUG > TESTS: KNOB 1 picks, then HOME twice)
+  run(1.8);
+  turn(0, 2); run(0.1);
+  shot("TestsPicked");
+  run(0.8);
+  shot("AskTest");
+  tap(B.EDIT);
+  ex.web_test_tp(1, 1);                         // (a test shown loaded, its time moving: the emulator's stub loads none)
+  go(SEC.DEBUG, "TESTS");
+  run(3.2);
+  shot("TestsRunning");
+  ex.web_test_tp(1, -1);
   tap(B.HOME);
   go(SEC.SEQ, "CLIPS");
   ex.web_test_lp(1, 1);                         // (scene B: empty)

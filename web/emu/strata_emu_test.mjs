@@ -239,7 +239,22 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
         armed === 1 && armTxt === "T1 A: COUNT-IN" && disarmed === 0 && one === 0 && latched === 2 && ex.web_test_mod() === 0 &&
         ex.web_test_lp(10, -1) === 0 && ex.web_test_lp(15, -1) === 0);
 }
-{                                               // the SETTINGS (HOME held 5 s), its palettes
+{                                               // HOME held off HOME: the help map as long as held, never DEBUG (V0.87.1, item 1)
+  const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page(), sec0 = ex.web_test_page_section();
+  ex.web_buttons(1 << B.HOME);
+  play(ex, 0.5);
+  const h1 = cstr(ex, ex.web_test_cd());
+  play(ex, 5.5);
+  const h2 = [cstr(ex, ex.web_test_cd()), ex.web_test_page_section()];
+  ex.web_buttons(0);
+  play(ex, 0.1);
+  check(`HOME held off HOME (section ${sec0}): the help map, no countdown ("${h1}"), still at 6 s ("${h2[0]}", section ${h2[1]}); let go: closed ("${cstr(ex, ex.web_test_cd())}"), the page kept (${ex.web_test_page() === page0}), DEBUG never opened`,
+        sec0 !== SEC.MACRO && h1 === "HELP: LET GO" && h2[0] === "HELP: LET GO" && h2[1] === sec0 && cstr(ex, ex.web_test_cd()) === "" &&
+        ex.web_test_page() === page0 && toast() === "");
+  tap(ex, B.HOME);                              // (HOME: the page HOME)
+  check(`.. HOME tapped: HOME (section ${ex.web_test_page_section()})`, ex.web_test_page_section() === SEC.MACRO);
+}
+{                                               // the SETTINGS (HOME twice), DEBUG (HOME held 5 s on HOME), its palettes
   const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page();
   ex.web_buttons(1 << B.HOME);
   play(ex, 1.5);
@@ -802,8 +817,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   twiceB(h, B.EDIT);
   const tl = [h.web_test_pl(0), h.web_test_pl(3), h.web_test_pl(4), h.web_test_lay()];
   h.web_enc(E.PRESET, 1); play(h, 0.1);
-  saveTwice(h);
-  check(`EDIT twice on OSC A: its tables' list (open ${tl[0]}, kind ${tl[1]}, OSC ${tl[2]}, no layer ${tl[3]}); PRESETS, SAVE twice: OSC A's TABLE ${t0} -> ${h.web_test_value(ID.A_TABLE)}, the list gone (${h.web_test_pl(0)})`,
+  twiceB(h, B.EDIT);                            // (V0.87.1: the opener twice loads)
+  check(`EDIT twice on OSC A: its tables' list (open ${tl[0]}, kind ${tl[1]}, OSC ${tl[2]}, no layer ${tl[3]}); PRESETS, EDIT twice: OSC A's TABLE ${t0} -> ${h.web_test_value(ID.A_TABLE)}, the list gone (${h.web_test_pl(0)})`,
         tl.join() === "1,2,0,0" && h.web_test_value(ID.A_TABLE) !== t0 && h.web_test_pl(0) === 0);
 }
 {                                               // PLAY: the transport (the FREE LFOs from the beat), its LEDs; ARP
@@ -2067,14 +2082,14 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const n2 = (t, s) => { const r = []; for (let i = 0; i < 64; i++) { const n = q2.web_test_lp_note(t, s, i, 0); if (n < 0) break; r.push(`${n}@${q2.web_test_lp_note(t, s, i, 2)}`); } return r.join(" "); };
   const back = [n2(0, 0), n2(2, 1), q2.web_test_lp_trk(1, 0, -1), q2.web_test_lp_trk(1, 1, -1), q2.web_test_lp_trk(3, 2, -1), q2.web_test_chd(0, -1),
                 q2.web_test_lp_song(1, 0, -1), q2.web_test_lp(2, -1), q2.web_test_lp_clip(0, 2, 0, -1)];
-  twiceB(q2, B.SEQ);                            // (V0.87, S2: SEQ twice, the projects' list; SAVE twice loads)
+  twiceB(q2, B.SEQ);                            // (V0.87, S2: SEQ twice, the projects' list; V0.87.1: SEQ twice loads)
   const pj = [q2.web_test_pl(0), q2.web_test_pl(3)];
   q2.web_enc(E.PRESET, 1); play(q2, 0.1);
-  saveTwice(q2); play(q2, 0.5);
+  twiceB(q2, B.SEQ); play(q2, 0.5);
   const p2 = [q2.web_test_lp(7, -1), n2(0, 0), q2.web_test_lp_clip(0, 0, 0, -1)];
   twiceB(q2, B.SEQ);
   q2.web_enc(E.PRESET, -1); play(q2, 0.1);
-  saveTwice(q2); play(q2, 0.5);
+  twiceB(q2, B.SEQ); play(q2, 0.5);
   const p1 = [q2.web_test_lp(7, -1), n2(0, 0)];
   check(`.. after a power cycle: T1 A ${back[0]}; T3 B ${back[1]}; T2 MIDI ${back[2]} channel ${back[3] + 1}; T4 IN ${back[4]}; T1's chords ${back[5]}; SONG's slot 2 ${back[6]}; QUANTIZE ${back[7]}; T1 C ${back[8]} ticks; PROJECTS' list (${pj}) 2: ${p2.join(", ")}; back to 1: ${p1.join(", ")}`,
         back[0] === "60@0 64@96 67@192 72@288" && back[1] === n2s && back[2] === 1 && back[3] === 4 && back[4] === 6 &&
@@ -2245,11 +2260,11 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
     etap(B.HOME);                               // (V0.87, U6: EDIT twice on a drum track: the kits)
     etwice(B.EDIT);
     const kl = [e.web_test_pl(0), e.web_test_pl(3), e.web_test_pl(1)];
-    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (808 -> LO-FI from where it opens; SAVE twice: loaded)
+    e.web_enc(E.PRESET, 2); play(e, 0.1);       // (808 -> LO-FI from where it opens; EDIT twice: loaded)
     const want = e.web_test_pl(1);
-    saveTwice(e);
+    twiceB(e, B.EDIT);
     const ld = [ek(0, 47), cstr(e, e.web_test_kit_name()), ek(0, 48), e.web_test_pl(0), ek(0, 30), ek(0, 31)];
-    check(`EDIT twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, SAVE twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
+    check(`EDIT twice on a drum track: the kits (open ${kl[0]}, kits ${kl[1]}, at ${kl[2]}); PRESETS on, EDIT twice: kit ${ld[0]} "${ld[1]}" (picked ${want}), the dot gone (${ld[2]}), the list gone (${ld[3]}); its KICK's DRIVE ${ld[4]} ${ld[5]}`,
           kl.join() === "1,1,0" && ld[0] === want && ld[1] === "LO-FI" && ld[2] === 0 && ld[3] === 0 && ld[4] === 3 && ld[5] === 50);
     etap(B.EDIT);                               // (EDIT held 5 s on DRUM: the drum picked as a kit starts)
     goPage(e, 52, "SOUND"); play(e, 0.05);
@@ -2380,7 +2395,8 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   b.web_test_set_get(0, 0);
   check(`HOME twice: the SETTINGS (${h1}); a tap: back (${sec()}); HELP on: ENV opened from EDIT ("${hint}")`,
         h1 === SEC.MENU && sec() !== SEC.MENU && /^AGAIN: /.test(hint));
-  b.web_buttons(1 << B.HOME);                   // (HOME held: the help map; held on: SETTINGS at 5 s)
+  btap(B.HOME);                                 // (V0.87.1: DEBUG from HOME only)
+  b.web_buttons(1 << B.HOME);                   // (HOME held: the help map; held on: DEBUG at 5 s)
   play(b, 1.0);
   const hm = cstr(b, b.web_test_cd());
   play(b, 4.3);
@@ -2465,7 +2481,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   turn(E.K1, -1);                               // (asked: turning again asks another; no time out)
   play(q, 3.0);
   const ask2 = [q.web_test_win(3), q.web_test_lp_trk(0, 0, -1)];
-  q.web_buttons(1 << B.SAVE); play(q, 0.03); q.web_buttons(0); play(q, 0.35);
+  twiceB(q, B.SEQ);                             // (V0.87.1: SEQ twice, the button that asked)
   const ty2 = [q.web_test_win(3), q.web_test_lp_trk(0, 0, -1), qt(), q.web_test_lp_trk(0, 3, -1)];
   turn(E.K1, 1);                                // (asked again; another button: kept)
   play(q, 0.6);
@@ -2473,9 +2489,23 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const tkept = [qt(), q.web_test_lp_trk(0, 0, -1), q.web_test_win(3)];
   goPage(q, SEC.SEQ, "CLIPS");
   q.web_test_lp_trk(0, 3, 0);
-  check(`TYPE on an empty T2: OUT ${ty0} while turning, ${ty1} after; T1 (clips) asked (window ${ask[0]}, type ${ask[1]}); turned again, still asked at 3 s (${ask2}); SAVE: yes (${ty2}); asked again, EDIT: "${tkept[0]}" (${tkept[1]}, ${tkept[2]})`,
+  turn(E.K1, 1);                                // (asked again: SEQ once is a no: it waits out a second tap, then closes)
+  play(q, 0.6);
+  const w0 = q.web_test_win(3);
+  q.web_buttons(1 << B.SEQ); play(q, 0.03); q.web_buttons(0); play(q, 0.1);
+  const w1 = q.web_test_win(3);
+  play(q, 0.4);
+  const once = [w0, w1, q.web_test_win(3), qt(), q.web_test_lp_trk(0, 3, -1)];
+  turn(E.K1, 1);                                // (asked again: SAVE is another button: a no)
+  play(q, 0.6);
+  tap(q, B.SAVE);
+  const sv = [qt(), q.web_test_win(3), q.web_test_lp_trk(0, 3, -1)];
+  goPage(q, SEC.SEQ, "CLIPS");
+  q.web_test_lp_trk(0, 3, 0);
+  check(`TYPE on an empty T2: OUT ${ty0} while turning, ${ty1} after; T1 (clips) asked (window ${ask[0]}, type ${ask[1]}); turned again, still asked at 3 s (${ask2}); SEQ twice: yes (${ty2}); asked again, EDIT: "${tkept[0]}" (${tkept[1]}, ${tkept[2]}); SEQ once: waits, then no (${once}); SAVE: no (${sv})`,
         ty0 === 0 && ty1 === 1 && ask.join() === "1,0" && ask2.join() === "1,0" && ty2[0] === 0 && ty2[3] === 1 && ty2[2] === "T1 SYNTH+MIDI" &&
-        tkept[0] === "TYPE KEPT" && tkept[1] === ty2[1] && tkept[2] === 0);
+        tkept[0] === "TYPE KEPT" && tkept[1] === ty2[1] && tkept[2] === 0 &&
+        once.join() === "1,1,0,TYPE KEPT,0" && sv.join() === "TYPE KEPT,0,0");
   q.web_test_lp_trk(0, 0, 0);
   const W = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26], BK = [1, 3, 5, 8, 10, 13, 15, 17, 20];
   const kn0 = q.web_test_key_note();
@@ -2581,12 +2611,18 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   twiceB(v, B.REC);
   check(`REC twice: TAKE ("${tk[0]}": length ${tk[1]}, ${tk[2]} notes, not recording ${tk[3]}); again, nothing new played: "${vt()}"`,
         tk[0] === "T1 A: TAKE OF 3 NOTES" && tk[1] > 0 && tk[2] === 3 && tk[3] === 0 && vt() === "NOTHING PLAYED TO TAKE");
-  v.web_buttons(1 << B.GLO); play(v, 0.7);      // (GLO held, PERFORM: PLAY taps the tempo, 0.4 s apart)
-  for (let i = 0; i < 4; i++) { v.web_buttons((1 << B.GLO) | (1 << B.PLAY)); play(v, 0.03); v.web_buttons(1 << B.GLO); play(v, 0.37); }
-  const tt = [vt(), v.web_test_tempo(0), v.web_test_run()];
+  v.web_buttons(1 << B.GLO); play(v, 0.7);      // (GLO held, PERFORM: the lowest key, F3, taps the tempo, 0.4 s apart; V0.87.1)
+  const kn = v.web_test_key_note(), nv0 = v.web_test_voices();
+  let heardKey = 0;
+  for (let i = 0; i < 4; i++) { v.web_keys(1); play(v, 0.03); heardKey |= v.web_test_voices() > nv0; v.web_keys(0); play(v, 0.37); }
+  const tt = [vt(), v.web_test_tempo(0), v.web_test_run(), heardKey, v.web_test_key_note() === kn];
+  v.web_buttons((1 << B.GLO) | (1 << B.PLAY)); play(v, 0.03); v.web_buttons(1 << B.GLO); play(v, 0.3);   // (GLO + PLAY: PLAY's own)
+  const pl = [v.web_test_run(), vt()];
+  v.web_buttons((1 << B.GLO) | (1 << B.PLAY)); play(v, 0.03); v.web_buttons(1 << B.GLO); play(v, 0.3);
+  const pl2 = v.web_test_run();
   v.web_buttons(0); play(v, 0.3);
-  check(`GLO held + PLAY tapped 4 times, 0.4 s apart: "${tt[0]}" (${tt[1]} BPM), the transport still stopped (${tt[2]})`,
-        tt[0] === "TAP: 150 BPM" && tt[1] === 150 && tt[2] === 0);
+  check(`GLO held + F3 tapped 4 times, 0.4 s apart: "${tt[0]}" (${tt[1]} BPM), the transport stopped (${tt[2]}), F3 silent (${tt[3] ? "sounded" : "silent"}, key note kept ${tt[4]}); GLO + PLAY: PLAY's own (running ${pl[0]}, "${pl[1]}"), again stops (${pl2})`,
+        tt[0] === "TAP: 150 BPM" && tt[1] === 150 && tt[2] === 0 && !tt[3] && tt[4] && pl[0] === 1 && pl[1] === "PLAY" && pl2 === 0);
   goPage(v, SEC.OSCA, "WAVE"); play(v, 0.05);
   twiceB(v, B.LFO);                             // (the assign window: ALGORITHM its page 2, a slot taken; KNOB 2 AMOUNT,
   v.web_enc(E.ALGO, 1); play(v, 0.05);          // KNOB 1 POLARITY: UNIPOLAR)
@@ -2599,12 +2635,25 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`LFO twice on WAVE, page 2 (${pg2}): LFO 1 > WT POS in slot ${sl + 1} (AMOUNT ${sl >= 0 ? slots(v)[sl][2] : "-"}), UNIPOLAR (POLARITY bits ${pol}); shut, kept (${v.web_test_win(0)})`,
         pg2 === 2 && sl >= 0 && slots(v)[sl][2] > 0 && ((pol >> sl) & 1) === 1 && v.web_test_win(0) === 0);
   v.web_test_palette(3);
-  goPage(v, SEC.MENU, "WIPE"); play(v, 0.05);
+  const inSettings = goPage(v, SEC.MENU, "WIPE");   // (V0.87.1: WIPE is DEBUG's, HOME twice answers)
+  v.web_test_palette(3);
+  goPage(v, SEC.DEBUG, "WIPE"); play(v, 0.05);
   v.web_enc(E.K1, 1); play(v, 0.13);
   const wq = v.web_test_win(3);
-  tap(v, B.SAVE);
-  check(`WIPE: asked (${wq}); SAVE: "${vt()}", the palette STRATA (${v.web_test_palette(-1)}), LIGHTS HIGH (${v.web_dim_level()}); the presets kept`,
-        wq === 3 && /^WIPED/.test(vt()) && v.web_test_palette(-1) === 0 && v.web_dim_level() === 3);
+  tap(v, B.SAVE);                               // (SAVE: another button: no)
+  const w1 = [v.web_test_win(3), v.web_test_palette(-1), vt()];
+  v.web_enc(E.K1, 1); play(v, 0.13);
+  v.web_buttons(1 << B.HOME); play(v, 0.03); v.web_buttons(0); play(v, 0.1);   // (HOME once: waits for a second, then no)
+  const w2a = v.web_test_win(3);
+  play(v, 0.5);
+  const w2 = [w2a, v.web_test_win(3), v.web_test_palette(-1), vt(), v.web_test_page_section()];
+  v.web_enc(E.K1, 1); play(v, 0.13);
+  v.web_buttons(1 << B.HOME); play(v, 0.03); v.web_buttons(0); play(v, 0.08);
+  v.web_buttons(1 << B.HOME); play(v, 0.03); v.web_buttons(0); play(v, 0.3);
+  check(`WIPE in DEBUG (not in SETTINGS: ${inSettings}): asked (${wq}); SAVE: no (${w1}); HOME once: waits (${w2[0]}), then no (${w2.slice(1)}); HOME twice: "${vt()}", the palette STRATA (${v.web_test_palette(-1)}), LIGHTS HIGH (${v.web_dim_level()}), still DEBUG (${v.web_test_page_section()})`,
+        inSettings === -1 && wq === 3 && w1.join() === "0,3,KEPT" && w2[0] === 3 && w2[1] === 0 && w2[2] === 3 && w2[3] === "KEPT" &&
+        w2[4] === SEC.DEBUG && /^WIPED/.test(vt()) && v.web_test_palette(-1) === 0 && v.web_dim_level() === 3 &&
+        v.web_test_page_section() === SEC.DEBUG);
 }
 {                                               // V0.87 step 2: the drum models, presets and kits, the user's, EUCLID
   const d = await boot(), dt = () => cstr(d, d.web_test_toast()), dn = (r) => cstr(d, d.web_test_dk_name(r));
@@ -2626,13 +2675,13 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   twiceB(d, B.EDIT);                            // (EDIT twice on DRUM: the row's category's presets; PRESETS, SAVE twice)
   const dl = [d.web_test_pl(0), d.web_test_pl(3), d.web_test_pl(5)];
   d.web_enc(E.PRESET, 1); play(d, 0.1);
-  saveTwice(d);
+  twiceB(d, B.EDIT);
   const ld = [dn(0), d.web_test_dkm(0, 0), d.web_test_dkm(0, 1), d.web_test_dkm(0, 2), d.web_test_pl(0), dt()];
   twiceB(d, B.EDIT);
   d.web_enc(E.SELECT, 1); play(d, 0.1);
   const cat = [d.web_test_pl(5), d.web_test_pl(1)];
   play(d, 5.3);
-  check(`EDIT twice on DRUM: the drum presets (${dl}: open, DRUMS, KICK); PRESETS, SAVE twice: "${ld[0]}" in the row (${ld.slice(1, 4)}, the list gone ${ld[4]}, "${ld[5]}"); SELECT: SNARE's (${cat})`,
+  check(`EDIT twice on DRUM: the drum presets (${dl}: open, DRUMS, KICK); PRESETS, EDIT twice: "${ld[0]}" in the row (${ld.slice(1, 4)}, the list gone ${ld[4]}, "${ld[5]}"); SELECT: SNARE's (${cat})`,
         dl.join() === "1,4,0" && ld[0] === "909 KICK" && ld.slice(1, 5).join() === "1,0,2,0" && ld[5] === "KICK: 909 KICK" &&
         cat.join() === "1,0");
   dbtn(B.SAVE); play(d, 0.5);                   // (SAVE on DRUM: the drum; a factory's: SAVE AS NEW, NAME IT, written)
@@ -2656,11 +2705,11 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   twiceB(d, B.EDIT);                            // (EDIT twice on KIT: the kits, the factory's six then the user's)
   const kl = [d.web_test_pl(0), d.web_test_pl(3), d.web_test_pl(1)];
   d.web_enc(E.PRESET, -10); play(d, 0.1);
-  saveTwice(d);
+  twiceB(d, B.EDIT);
   const k808 = [cstr(d, d.web_test_kit_name()), dn(0), d.web_test_dkm(0, 0), dn(3), d.web_test_dkm(3, 0)];
   twiceB(d, B.EDIT);
   d.web_enc(E.PRESET, 6); play(d, 0.1);
-  saveTwice(d);
+  twiceB(d, B.EDIT);
   check(`SAVE on KIT: "${kn}", "${ks[0]}" (the kit "${ks[1]}", ${ks[2]} kit of the user's); EDIT twice: the kits (${kl}); 808: "${k808[0]}", rows "${k808[1]}" (${k808[2]}), "${k808[3]}" (${k808[4]}); the user's back: "${cstr(d, d.web_test_kit_name())}"`,
         kn === "DRUM KIT v2" && ks[0] === "SAVED: DRUM KIT v2 · KIT 1" && ks[1] === "DRUM KIT v2" && ks[2] === 1 &&
         kl.join() === "1,1,6" && k808.join() === "808,808 KICK,0,808 HAT,5" && cstr(d, d.web_test_kit_name()) === "DRUM KIT v2");
@@ -2690,6 +2739,139 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   lch(B.OCTDN); play(d, 0.8);
   check(`the drum presets' list: SAVE + OCT- on the user's asks (${asked}), again: "${dt()}" (${d.web_test_dkm(0, 3)} left)`,
         asked[0] === 9 && asked[1] === 1 && dt() === "DELETED DRUM 1" && d.web_test_dkm(0, 3) === 0);
+}
+{                                               // V0.87.1: a list is loaded from by its opener twice; once, or another button, leaves it
+  const n = await boot();
+  splash(n);
+  goPage(n, SEC.OSCA, "WAVE"); play(n, 0.05);
+  const t0 = n.web_test_value(ID.A_TABLE);
+  twiceB(n, B.EDIT);
+  n.web_enc(E.PRESET, 2); play(n, 0.1);
+  const open0 = n.web_test_pl(0);
+  saveTwice(n);                                 // (SAVE twice: no longer loads a table)
+  const sv = [n.web_test_pl(0), n.web_test_value(ID.A_TABLE) === t0];
+  twiceB(n, B.EDIT);
+  n.web_enc(E.PRESET, 2); play(n, 0.1);
+  n.web_buttons(1 << B.EDIT); play(n, 0.03); n.web_buttons(0); play(n, 0.1);
+  const once0 = n.web_test_pl(0);
+  play(n, 0.5);
+  const once = [once0, n.web_test_pl(0), n.web_test_value(ID.A_TABLE) === t0];
+  twiceB(n, B.EDIT);
+  n.web_enc(E.PRESET, 2); play(n, 0.1);
+  tap(n, B.ENV);
+  const oth = [n.web_test_pl(0), n.web_test_value(ID.A_TABLE) === t0];
+  check(`the tables' list: open (${open0}); SAVE twice leaves it, nothing loaded (${sv}); EDIT once: waits (${once[0]}), then gone (${once[1]}), nothing loaded (${once[2]}); another button: gone, nothing loaded (${oth})`,
+        open0 === 1 && sv.join() === "0,true" && once.join() === "1,0,true" && oth.join() === "0,true");
+  goPage(n, SEC.OSCA, "WAVE"); play(n, 0.05);
+  twiceB(n, B.SEQ);                             // the projects' list: SEQ twice loads, SAVE twice does not
+  n.web_enc(E.PRESET, 1); play(n, 0.1);
+  const pj0 = [n.web_test_pl(0), n.web_test_pl(3), n.web_test_lp(7, -1)];
+  saveTwice(n); play(n, 0.4);
+  const pj1 = [n.web_test_pl(0), n.web_test_lp(7, -1)];
+  twiceB(n, B.SEQ);
+  n.web_enc(E.PRESET, 1); play(n, 0.1);
+  twiceB(n, B.SEQ); play(n, 0.5);
+  check(`the projects' list (${pj0}): SAVE twice leaves it, no project loaded (${pj1}); SEQ twice: project ${n.web_test_lp(7, -1) + 1} loaded`,
+        pj0.join() === "1,3,0" && pj1.join() === "0,0" && n.web_test_lp(7, -1) === 1);
+  n.web_test_lp_trk(0, 0, 2); n.web_test_lp(0, 0); play(n, 0.2);   // the drum presets' and the kits' lists on a drum track
+  goPage(n, 52, "MODEL"); play(n, 0.05);
+  const pre = n.web_test_dkm(0, 2);
+  twiceB(n, B.EDIT);
+  n.web_enc(E.PRESET, 1); play(n, 0.1);
+  const drk = n.web_test_pl(3);
+  saveTwice(n);
+  const dr = [drk, n.web_test_pl(0), n.web_test_dkm(0, 2) === pre];
+  goPage(n, 50, "ACCENT"); play(n, 0.05);
+  twiceB(n, B.EDIT);
+  n.web_enc(E.PRESET, 2); play(n, 0.1);
+  const kit0 = [n.web_test_pl(0), n.web_test_pl(3)], kn0 = cstr(n, n.web_test_kit_name());
+  saveTwice(n);
+  const kt = [n.web_test_pl(0), cstr(n, n.web_test_kit_name()) === kn0];
+  check(`the drum presets' list (kind ${dr[0]}): SAVE twice leaves it, the row's preset kept (${dr.slice(1)}); the kits' (${kit0}): SAVE twice leaves it, the kit kept (${kt})`,
+        dr.join() === "4,0,true" && kit0.join() === "1,1" && kt.join() === "0,true");
+}
+{                                               // V0.87.1: DEBUG > TESTS, the four test projects (sy_testproj.c: stubs here)
+  const t = await boot(), tt = () => cstr(t, t.web_test_toast()), sec = () => t.web_test_page_section();
+  splash(t);
+  tap(t, B.HOME);
+  t.web_buttons(1 << B.HOME); play(t, 5.2); t.web_buttons(0); play(t, 0.1);   // (DEBUG: HOME held 5 s)
+  goPage(t, SEC.DEBUG, "TESTS"); play(t, 0.05);
+  const nm = () => t.web_test_tp(0, 0) + 1;
+  const names = [nm()];
+  t.web_enc(E.K1, 1); play(t, 0.1); names.push(nm());
+  t.web_enc(E.K1, 5); play(t, 0.1); names.push(nm());
+  t.web_enc(E.K1, -9); play(t, 0.1); names.push(nm());
+  const q0 = t.web_test_win(3);
+  play(t, 0.8);
+  const asked = [q0, t.web_test_win(3), t.web_test_tp(0, 0)];
+  t.web_enc(E.K1, 2); play(t, 0.1);                // (asked: turning picks another, still asked)
+  const again = [t.web_test_win(3), t.web_test_tp(0, 0)];
+  tap(t, B.EDIT);                                  // (another button: no)
+  const no = [t.web_test_win(3), tt()];
+  goPage(t, SEC.DEBUG, "TESTS"); play(t, 0.05);
+  t.web_enc(E.K1, 1); play(t, 0.8);
+  twiceB(t, B.HOME);                               // (HOME twice: load; the stub has none: NOT AVAILABLE)
+  const na = [t.web_test_win(3), tt(), sec(), t.web_test_tp(2, 0)];
+  t.web_test_tp(1, 1); play(t, 2.2);              // (a test shown loaded, its time moving: the page shows it)
+  const run = [t.web_test_tp(2, 0), t.web_test_tp(3, 0) > 1500];
+  t.web_enc(E.K2, 1); play(t, 0.2);                // (KNOB 2: stop; the stub stops nothing, the toast says it was asked)
+  const stop = tt();
+  check(`DEBUG > TESTS: KNOB 1 picks TEST ${names.join(", ")} (stops at both ends); asked a moment after the last detent (${asked}), turning again keeps it (${again}); EDIT: no (${no}); HOME twice with no project to load: "${na[1]}" (question ${na[0]}, still DEBUG ${na[2] === SEC.DEBUG}, loaded ${na[3]}); one shown loaded (${run}); KNOB 2: "${stop}"`,
+        names.join() === "1,2,4,1" && asked.join() === "0,4,0" &&
+        again.join() === "4,2" && no.join() === "0,KEPT" && na[0] === 0 && na[1] === "NOT AVAILABLE" && na[2] === SEC.DEBUG &&
+        na[3] === 0 && run.join() === "2,true" && stop === "TEST STOPPED");
+}
+{                                               // V0.87.1: CLIPS: the scenes on OCT-, OCT+, MUTE / SOLO on KNOB 2, the track on KNOB 4, PRESETS the sound's list
+  const c = await boot();
+  splash(c);
+  goPage(c, SEC.SEQ, "CLIPS"); play(c, 0.05);
+  const oct0 = c.web_test_oct(), sc0 = c.web_test_lp(1, -1);
+  tap(c, B.OCTUP); tap(c, B.OCTUP);
+  const up = [c.web_test_lp(1, -1), c.web_test_oct() === oct0];
+  tap(c, B.OCTDN); tap(c, B.OCTDN); tap(c, B.OCTDN);
+  const dn = c.web_test_lp(1, -1);
+  const names = [0, 1, 2, 3].map((k) => cstr(c, c.web_test_knob_name(k)));
+  c.web_enc(E.K2, 1); play(c, 0.15);
+  const ms1 = [c.web_test_lp_trk(0, 6, -1), c.web_test_lp_trk(0, 7, -1)];
+  c.web_enc(E.K2, 1); play(c, 0.15);
+  const ms2 = [c.web_test_lp_trk(0, 6, -1), c.web_test_lp_trk(0, 7, -1)];
+  c.web_enc(E.K2, -2); play(c, 0.15);
+  const sel0 = c.web_test_lp(0, -1);
+  c.web_enc(E.K4, 2); play(c, 0.15);
+  const sel1 = c.web_test_lp(0, -1);
+  c.web_enc(E.K4, -5); play(c, 0.15);
+  const sel2 = c.web_test_lp(0, -1);
+  c.web_enc(E.PRESET, 1); play(c, 0.15);
+  const pl = [c.web_test_pl(0), c.web_test_pl(3), c.web_test_lp(0, -1)];
+  check(`CLIPS: OCT+ twice: scene ${sc0} -> ${up[0]} (the octave kept ${up[1]}), OCT- three times: ${dn} (stops at A); knobs ${names.join(" | ")}; KNOB 2: MUTE (${ms1}), SOLO (${ms2}), back to plays; KNOB 4: track ${sel0 + 1} -> ${sel1 + 1} -> ${sel2 + 1}; PRESETS: the sounds' list (open ${pl[0]}, kind ${pl[1]}), the track kept (${pl[2] + 1})`,
+        sc0 === 0 && up.join() === "2,true" && dn === 0 && names[2] === "" && names[3].length > 0 &&
+        ms1.join() === "1,0" && ms2.join() === "0,1" && c.web_test_lp_trk(0, 6, -1) === 0 && c.web_test_lp_trk(0, 7, -1) === 0 &&
+        sel0 === 0 && sel1 === 2 && sel2 === 0 && pl.join() === "1,0,0");
+}
+{                                               // V0.87.1: TAPE moves with the sound (frames apart differ), still in silence
+  const m = await boot();
+  splash(m);
+  m.web_test_set(180, 23);                      // (SP_FXC1: TAPE, instance 22, first in the chain)
+  m.web_test_fx_on(22, 1);
+  goPage(m, 34, "TAPE"); play(m, 0.1);
+  const fb = () => new Uint16Array(m.memory.buffer, m.web_screen(), 240 * 240).slice();
+  const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i]), 0);
+  const quiet0 = fb(); play(m, 0.2); const quiet1 = fb();
+  m.web_keys((1 << 7) | (1 << 11) | (1 << 14)); play(m, 0.4);
+  const f0 = fb(); play(m, 0.12); const f1 = fb(); play(m, 0.3); const f2 = fb();
+  const moved = [diff(f0, f1), diff(f1, f2)];
+  m.web_keys(0); play(m, 4.0);
+  const q1 = fb(); play(m, 0.2); const q2 = fb();
+  check(`TAPE: silent, nothing moves (${diff(quiet0, quiet1)} pixels); with a chord, two frames 0.12 s and 0.3 s apart differ (${moved} pixels); after it dies away it is still again (${diff(q1, q2)})`,
+        diff(quiet0, quiet1) === 0 && moved[0] > 200 && moved[1] > 200 && diff(q1, q2) === 0);
+}
+{                                               // V0.87.1: KEY SCAN names the encoders' lines: KNOB 1's are PA5 at columns 9 and 10 (counted from 1)
+  const k = await boot();
+  splash(k);
+  const e = [k.web_test_ks_enc(1, 8), k.web_test_ks_enc(1, 9), k.web_test_ks_enc(0, 0), k.web_test_ks_enc(5, 1), k.web_test_ks_enc(1, 7), k.web_test_ks_enc(2, 8)];
+  goPage(k, SEC.DEBUG, "KEY SCAN"); play(k, 0.1);
+  check(`KEY SCAN: PA5:9 and PA5:10 are encoder ${e[0]} and ${e[1]} (KNOB 1's, matrix encoder 2); PA0:1 ${e[2]}, PB7:2 ${e[3]}; PA5:8 (a key) ${e[4]}, PA6:9 (a key) ${e[5]}`,
+        e.join() === "2,2,0,6,-1,-1");
 }
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

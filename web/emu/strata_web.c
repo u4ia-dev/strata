@@ -51,6 +51,10 @@ static const int8_t FM1_KEYMAP[6][FM1_NCOL] = {      /* as hal/fm1_input.h: key 
     { 0,  1, 15, 14, 17, 16, 19, 18, 20, 21, 22},
     {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 };
+#define FM1_NENC 7u                                  /* (V0.87.1: KEY SCAN names the encoders' lines: as hal/fm1_input.h) */
+static const uint8_t FM1_ENC[FM1_NENC][4] = {
+    {0, 0, 1, 0}, {2, 0, 3, 0}, {8, 1, 9, 1}, {8, 0, 9, 0}, {6, 0, 7, 0}, {4, 0, 5, 0}, {0, 5, 1, 5},
+};
 static uint8_t fm1_led[FM1_NCOL], fm1_led_dim[FM1_NCOL], fm1_led_breath[FM1_NCOL], fm1_led_mid[FM1_NCOL];
 static struct { volatile uint32_t notes, buttons; uint8_t raw[FM1_NCOL]; } fm1_in;   /* (raw: the matrix, BENCH > KEY SCAN) */
 static uint32_t web_pressed, web_released;
@@ -179,7 +183,15 @@ static uint32_t web_mout[256], web_mout_t[256], web_mout_n;   /* (V0.7: the chor
 #define SY_LOAD_KNOWN 0                          /* (web_ticks moves a millisecond at a time, never within a half) */
 #define SY_KEYS_ISR 1                             /* (the keys from "TIMER5", as the FM-1: web_ms) */
 #include "../../firmware/src/sy_app.c"
+#define sy_tp_ms sy_tp_ms_real                   /* (V0.87.1: the renders and checks of DEBUG > TESTS: a test shown loaded, */
+#define sy_tp_active sy_tp_active_real           /* with a time that moves, whatever sy_testproj.c does) */
 #include "../../firmware/src/sy_testproj.c"    /* (V0.87.1: the test projects) */
+#undef sy_tp_ms
+#undef sy_tp_active
+static int32_t web_tp_fake = -1;                /* (>= 0: the test shown loaded; -1: the project's own) */
+static uint32_t web_tp_fake_t0;
+static uint32_t sy_tp_ms(uint32_t k) { return web_tp_fake >= 0 ? fm1_ms - web_tp_fake_t0 : sy_tp_ms_real(k); }
+static int sy_tp_active(void) { return web_tp_fake >= 0 ? web_tp_fake + 1 : sy_tp_active_real(); }
 
 #undef __attribute__
 #define EXPORT __attribute__((used, visibility("default")))
@@ -384,6 +396,18 @@ EXPORT void web_test_screen(uint32_t k)
     }
 }
 /* the countdown shown (a long hold, sy_ui_draw.c): its title and its seconds, "SETTINGS 4"; "" none */
+/* DEBUG > TESTS (V0.87.1): the stub's test k loaded (-1 none), its time (the stub's own is 0) moving from ms on; the
+ * test picked, the question asked */
+EXPORT int32_t web_test_tp(uint32_t f, int32_t v)
+{
+    if (f == 1u) {
+        web_tp_fake = v;
+        web_tp_fake_t0 = fm1_ms;
+        ui.dirty = D_ALL;
+    }
+    return f == 0u ? ui.tp_k : f == 2u ? sy_tp_active() : f == 3u ? (int32_t)sy_tp_ms(0) : -1;
+}
+EXPORT int32_t web_test_ks_enc(uint32_t r, uint32_t c) { return ui_ks_enc(r, c); }   /* (V0.87.1: KEY SCAN: the encoder at a cell) */
 EXPORT const char *web_test_cd(void)
 {
     static char t[48];
@@ -391,7 +415,9 @@ EXPORT const char *web_test_cd(void)
     float frac;
     const char *sub, *sub2, *label;
     t[0] = 0;
-    if (ui_view() == V_HELP && ui_cd_view(&n, &frac, t + 6, &sub, &sub2, &label)) {   /* (V0.86: HOME's help map */
+    if (ui_view() == V_HELP && !ui_cd_debug()) {    /* (V0.87.1: off HOME: the help map as long as held) */
+        memcpy(t, "HELP: LET GO", 13);
+    } else if (ui_view() == V_HELP && ui_cd_view(&n, &frac, t + 6, &sub, &sub2, &label)) {   /* (V0.86: HOME's help map */
         memcpy(t, "HELP: ", 6);                                                         /* over its countdown) */
         sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
     } else if (ui_view() == V_CD && ui_cd_view(&n, &frac, t, &sub, &sub2, &label))

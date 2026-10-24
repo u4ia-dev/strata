@@ -135,7 +135,8 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
        UI_KSATT, UI_KSSUS, UI_KATONE, UI_DSRC, UI_DHOLD,                    /* TONE, the duck's SOURCE, HOLD, COMP) */
        UI_KCAMT, UI_KCATT, UI_KCREL, UI_KCMIX,
        UI_WIPE,                                       /* (V0.87: SETTINGS > WIPE; step 2: DRUM's MODEL, TYPE; the drum */
-       UI_KMODEL, UI_KVAR, UI_EHITS, UI_ESTEPS, UI_EROT };   /* CLIP's EUCLID: HITS, STEPS, ROTATE) */
+       UI_KMODEL, UI_KVAR, UI_EHITS, UI_ESTEPS, UI_EROT,   /* CLIP's EUCLID: HITS, STEPS, ROTATE) */
+       UI_TEST, UI_TSTOP };                            /* (V0.87.1, DEBUG > TESTS: the test picked, STOP) */
 #define SEC_MENU SEC_COUNT                          /* (sections of the UI's own: the SETTINGS, GLOBAL) */
 #define SEC_GLOBAL (SEC_COUNT + 1)
 #define SEC_SAVE (SEC_COUNT + 2)
@@ -159,7 +160,7 @@ enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G
        G_MIDI, G_BENCH, G_CHAIN, G_FLANGER, G_PHASER, G_FFILT, G_CRUSH, G_TREM, G_RING, G_TAPE, G_VOICE, G_PLAY,
        G_VALUES, G_CHORD, G_PERF, G_BASS, G_STEPS, G_RATCH, G_GROOVE, G_STRUM,
        G_LCLIPS, G_LMIX, G_LREC, G_LCLICK, G_LNOTES, G_LEDIT, G_LCLIP, G_LSONG, G_LPRJ, G_CORE2,
-       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_DDRIVE, G_DEQ, G_DSHAPE, G_KCURVE, G_KCOMP, G_WIPE, G_N };
+       G_KDRUM, G_KMORE, G_KACC, G_KDUCK, G_LGRID, G_LHIT, G_HMIX, G_LTOOLS, G_POWER, G_KSCAN, G_DDRIVE, G_DEQ, G_DSHAPE, G_KCURVE, G_KCOMP, G_WIPE, G_TESTS, G_N };
 static const uint8_t UI_TSN_VAL[5] = {1, 2, 4, 8, 16};   /* TS-NOTE: a whole note .. a sixteenth */
 typedef struct {
     uint8_t sec, graph;                             /* SEC_*, G_*: what the display draws */
@@ -310,10 +311,11 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_POWER, "POWER", {UI_PBATT, UI_PSCR, -1, -1}},   /* (V0.86: F31, F34) */
-    {SEC_MENU, G_WIPE, "WIPE", {UI_WIPE, -1, -1, -1}},             /* (V0.87, T1: every setting the firmware's) */
     {SEC_DEBUG, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},    /* (V0.87, U5: their own menu, HOME held 5 s) */
     {SEC_DEBUG, G_KSCAN, "KEY SCAN", {-1, -1, -1, -1}},   /* (V0.86, P3: BENCH's, read-only) */
     {SEC_DEBUG, G_CORE2, "CORE 2", {UI_C2ON, UI_C2RUN, UI_C2LOAD, -1}},   /* (V0.8 BENCH) */
+    {SEC_DEBUG, G_TESTS, "TESTS", {UI_TEST, UI_TSTOP, -1, -1}},   /* (V0.87.1: the four test projects, sy_testproj.c) */
+    {SEC_DEBUG, G_WIPE, "WIPE", {UI_WIPE, -1, -1, -1}},            /* (V0.87, T1: every setting the firmware's; V0.87.1: DEBUG's) */
     {SEC_KEYS, G_KEYS, "SCALE", {UI_SCALE, UI_ROOT, UI_FIT, UI_KVEL}},
     {SEC_CHORD, G_CHORD, "CHORD", {UI_HMODE, UI_HTYPE, UI_HVOI, UI_HSPR}},   /* (V0.7: sy_ui_chord.c) */
     {SEC_CHORD, G_STRUM, "STRUM", {UI_STRUM, UI_SDIR, UI_SHUM, UI_STAP}},
@@ -325,7 +327,7 @@ static const ui_page_t UI_PG[] = {
     /* (V0.8, the looper: sy_ui_loop.c. V0.86, S1 and C1-C6: PRESETS the track on every page; CLIPS' keys launch,
      * TYPE there; the TRACK page gone: MIDI's on RECORD, COUNT-IN and LAUNCH on CLICK; NOTES and NOTE+; CLIP's
      * SPEED; TOOLS. V0.87, U21: LOOP, CLIP, TRACK; SONG on LOOP, the projects a list: SEQ twice) */
-    {SEC_SEQ, G_LCLIPS, "CLIPS", {UI_LTYPE, UI_LSCN, -1, -1}},
+    {SEC_SEQ, G_LCLIPS, "CLIPS", {UI_LTYPE, UI_LMS, -1, UI_LTRK}},   /* (V0.87.1: the scenes: OCT-, OCT+; KNOB 4 the track) */
     {SEC_SEQ, G_LMIX, "MIXER", {UI_LVOL, UI_LPAN, UI_LMS, -1}},
     {SEC_SEQ, G_LSONG, "SONG", {UI_LSLOT, UI_LSSCN, UI_LSREP, UI_LSON}},   /* (V0.87, U21: SONG on LOOP; the projects */
     {SEC_LTRK, G_LREC, "RECORD", {UI_LQNT, UI_LCH, UI_LCIN, -1}},
@@ -563,6 +565,10 @@ static struct {
                                                      * the kit); NAME IT's; the drum presets' list's category (DC_*) */
     uint8_t e_hits, e_steps, e_rot;                 /* .. EUCLID's HITS, STEPS, ROTATE */
     uint8_t qk, qv;                                 /* .. a question asked (Q_*), what about (a clip: its index + 1) */
+    uint32_t q_t;                                   /* .. (V0.87.1) its owner button tapped once: the time | 1 (0 none) */
+    uint32_t sv_eat;                                /* .. SAVE tapped in a list of another's, shutting it: a second tap now is not SAVE's (time | 1) */
+    uint8_t tp_k, tp_ask;                           /* .. DEBUG > TESTS: the test picked (0 .. 3); KNOB 1 turned, its question due */
+    uint32_t tp_t, tp_ms, tp_mt;                    /* .. its last detent; the test loaded's time, when it last moved */
     uint8_t new_clip;                               /* .. (S3) SEQ + OCT+ made a clip: SEQ still held, PRESETS its length */
     uint32_t rec_t;                                 /* .. (F09) REC tapped once, not recording: its time | 1 (a second: TAKE) */
     uint32_t tt[4];                                 /* .. tap tempo's taps */
@@ -1491,10 +1497,21 @@ static void ui_pl_cat(int32_t s)                    /* SELECT in the wavetables'
     ui.pl_t = fm1_ms;
     ui.dirty = D_ALL;
 }
+/* (V0.87.1) a list is loaded from by the button that opened it, twice (the kits', the drums' and the tables': EDIT; the
+ * projects': SEQ; the sounds': SAVE); once, or any other button, leaves it */
+static uint32_t ui_pl_opener(void)
+{
+    return !ui.pl_open || ui.pl_kind == PL_SOUNDS ? B_SAVE : ui.pl_kind == PL_PROJECTS ? B_SEQ : B_EDIT;
+}
 static void ui_pl_ms(void)                          /* every millisecond: untouched, the list goes */
 {
+    uint32_t o = ui_pl_opener();
     if (ui.pl_open && fm1_ms - ui.pl_t >= UI_PL_CLOSE_MS && !(ui.bt_down & (1u << B_SAVE)))
         ui_pl_close();
+    if (ui.pl_open && o != B_SAVE && ui.tap_t[o] && fm1_ms - ui.tap_t[o] >= UI_DTAP_MS) {   /* (its opener tapped once: */
+        ui.tap_t[o] = 0;                                                                     /* no second, it leaves) */
+        ui_pl_close();
+    }
 }
 static void ui_pl_load(void)                        /* SAVE twice: the one picked loaded (undo takes a sound back) */
 {
@@ -1654,7 +1671,8 @@ static void ui_presets(int32_t s)
         ui_pl_turn(s);
         return;
     }
-    if (ui.fam == FAM_SEQ || ui.lay == LAY_PAD) {   /* (C1: the track, on every SEQ page; at the first or last, there) */
+    if ((ui.fam == FAM_SEQ && UI_PG[ui.page].graph != G_LCLIPS) || ui.lay == LAY_PAD) {   /* (C1: the track, on every SEQ */
+                                                    /* page but CLIPS (V0.87.1: its KNOB 4's); at the first or last, there) */
         int32_t to = sy_clampi((int32_t)(lpp.sel % LP_NTRK) + s, 0, LP_NTRK - 1);
         if (to != (int32_t)(lpp.sel % LP_NTRK)) {
             lp_select((uint32_t)to);
@@ -1688,9 +1706,10 @@ static void ui_home_track(int32_t s)
 /* ---------------------------------------------------------------------------------- V0.87 windows --- */
 /* windows over the page (V0.87): the assign window (LFO or ENV twice: a source onto one of the page's knobs, U15,
  * U16, B4, B5), the SAVE window (SAVE once: SAVE, SAVE AS NEW, CANCEL, U17) and a question (TYPE's on a track with
- * clips, S1; a clip's delete, S4; WIPE, T1). While one is open the keys play; a button not its own closes it and does
- * nothing more (PLAY and REC as ever); a knob not its own, SELECT and PRESETS close it too */
-enum { Q_NONE, Q_TYPE, Q_CLIPDEL, Q_WIPE };
+ * clips, S1; a clip's delete, S4; WIPE, T1; V0.87.1: DEBUG's TESTS). V0.87.1: a window or question is answered yes
+ * by the button that opened it, twice (ui_q_owner, ui_pl_opener). While one is open the keys play; a button not its
+ * own closes it and does nothing more (PLAY and REC as ever); a knob not its own, SELECT and PRESETS close it too */
+enum { Q_NONE, Q_TYPE, Q_CLIPDEL, Q_WIPE, Q_TEST };
 static const uint8_t ASG_LFO[2] = {SRC_LFO1, SRC_LFO2};
 static const uint8_t ASG_ENV[6] = {SRC_ENV1, SRC_ENV2, SRC_MAC1, SRC_MAC2, SRC_MAC3, SRC_MAC4};
 static int32_t ui_eff(int32_t id);
@@ -1762,8 +1781,11 @@ static void ui_win_close(void)                      /* every window closed (a qu
         ui.sw = 0, ui.dirty = D_ALL;
     if (ui.qk == Q_TYPE)
         ui_l_type_keep();
-    else if (ui.qk)
+    else if (ui.qk) {
+        if (ui.qk == Q_WIPE || ui.qk == Q_TEST)     /* (V0.87.1: said no) */
+            ui_toast("KEPT");
         ui.qk = Q_NONE, ui.dirty = D_ALL;
+    }
 }
 static void ui_asg_open(uint32_t b)
 {
@@ -1895,6 +1917,15 @@ static void ui_sw_do(void)                          /* SAVE in it: the row picke
     }
 }
 static void ui_wipe(void);
+static void ui_tp_go(void);
+/* (V0.87.1) a question is answered yes by its owner, the button that asked it, twice (TYPE's: SEQ; WIPE's, in DEBUG,
+ * which is HOME's menu: HOME); once, or any other button, answers no. A clip's DELETE? is SEQ + OCT- again, as ever */
+static uint32_t ui_q_owner(void) { return ui.qk == Q_TYPE ? B_SEQ : ui.qk == Q_WIPE || ui.qk == Q_TEST ? B_HOME : NB; }
+static void ui_q_no(void)
+{
+    ui.q_t = 0;
+    ui_win_close();
+}
 /* a button pressed with a window open (1: taken: nothing more, its release and hold nothing) */
 static int ui_win_press(uint32_t b)
 {
@@ -1906,7 +1937,7 @@ static int ui_win_press(uint32_t b)
     } else if (ui.sw && (b == B_OCTDN || b == B_OCTUP)) {   /* (OCT- up the rows, OCT+ down; SAVE kept for */
         ui.sw_pos = (uint8_t)sy_clampi((int32_t)ui.sw_pos + (b == B_OCTUP ? 1 : -1), ui_sw_own() >= 0 ? 0 : 1, 2);
         ui.dirty = D_ALL;                                    /* a sound of a user slot) */
-    } else if ((ui.sw || ui.qk) && b == B_SAVE) {
+    } else if ((ui.sw && b == B_SAVE) || (ui.qk && b == ui_q_owner())) {
         return 1;                                   /* (its release does it) */
     } else if (ui.qk == Q_CLIPDEL && (b == B_SEQ || b == B_OCTDN)) {
         return 0;                                   /* (SEQ + OCT- again deletes: ui_l_clip_del) */
@@ -1920,16 +1951,22 @@ static int ui_win_release(uint32_t b)               /* a tap with a window open 
 {
     if (b == B_SAVE && ui.sw) {
         ui_sw_do();
-    } else if (b == B_SAVE && ui.qk) {              /* (SAVE answers yes: TYPE's, WIPE's) */
+    } else if (ui.qk && b == ui_q_owner()) {        /* (V0.87.1: its owner twice answers yes: TYPE's, WIPE's) */
         uint32_t q = ui.qk;
+        if (!ui.q_t || fm1_ms - (ui.q_t & ~1u) >= UI_DTAP_MS) {
+            ui.q_t = fm1_ms | 1u;                   /* (the first tap: the second may come; sy_ui_ms) */
+            ui.tap_t[b] = 0;
+            return 1;
+        }
+        ui.q_t = 0;
         ui.qk = Q_NONE;
         ui.dirty = D_ALL;
         if (q == Q_TYPE)
             ui_l_type_go();
-        else if (q == Q_WIPE)
-            ui_wipe();
+        else if (q == Q_TEST)
+            ui_tp_go();
         else
-            ui_toast("KEPT");
+            ui_wipe();
     } else if (b == B_SEQ && ui.qk == Q_CLIPDEL) {
         ui_win_close();
         ui_toast("KEPT");
@@ -1947,6 +1984,8 @@ static int ui_win_knob(uint32_t k, int32_t s)       /* a knob with a window open
     }
     if (ui.qk == Q_TYPE && UI_PG[ui.page].id[k & 3u] == UI_LTYPE)
         return 0;                                   /* (TYPE turned on: another type asked, sy_ui_loop.c) */
+    if (ui.qk == Q_TEST && UI_PG[ui.page].id[k & 3u] == UI_TEST)
+        return 0;                                   /* (V0.87.1: the test picked again: the question follows) */
     if (!ui.sw && !ui.qk)
         return 0;
     ui_win_close();
@@ -1982,6 +2021,41 @@ static void ui_wipe(void)
     fm1_led_level(ui.glow);
     ui_toast("WIPED: PRESETS, PROJECTS KEPT");
     ui.dirty = D_ALL;
+}
+
+/* DEBUG > TESTS (V0.87.1, sy_testproj.c): KNOB 1 picks a test project (its question, HOME twice, comes a moment after
+ * the last detent); KNOB 2 stops the one loaded. They are defined after the UI in the unity build */
+static const char *sy_tp_name(uint32_t k);
+static int sy_tp_load(uint32_t k);
+static void sy_tp_stop(void);
+static int sy_tp_active(void);
+static uint32_t sy_tp_ms(uint32_t k);
+#define UI_NTEST 4u
+#define UI_TP_MS 600u                               /* the question comes this long after KNOB 1's last detent */
+static void ui_tp_go(void)
+{
+    char t[32];
+    if (!sy_tp_load(ui.tp_k)) {
+        ui_toast("NOT AVAILABLE");
+        return;
+    }
+    sp_put(sp_put(sp_fix(sp_put(t, "TEST "), (int32_t)ui.tp_k + 1, 0u, 0), ": "), sy_tp_name(ui.tp_k));
+    ui_toast(t);
+    ui.dirty = D_ALL;
+}
+static void ui_tp_turn(int32_t item, int32_t s)
+{
+    if (item == UI_TEST) {
+        ui.tp_k = (uint8_t)sy_clampi((int32_t)ui.tp_k + s, 0, (int32_t)UI_NTEST - 1);
+        ui.tp_ask = 1;
+        ui.tp_t = fm1_ms;
+    } else if (sy_tp_active()) {
+        sy_tp_stop();
+        ui_toast("TEST STOPPED");
+    } else {
+        ui_toast("NO TEST IS LOADED");
+    }
+    ui.dirty |= D_ALL;
 }
 
 /* ------------------------------------------------------------------------------------ LFO points --- */
@@ -2448,6 +2522,8 @@ static void ui_item_turn(int32_t item, int32_t s, uint32_t e)
         else
             ui.scr_off = (uint8_t)sy_clampi(ui.scr_off + s, 0, 3);
         ui.dirty = D_ALL;
+    } else if (item == UI_TEST || item == UI_TSTOP) {   /* (V0.87.1: DEBUG > TESTS) */
+        ui_tp_turn(item, s);
     } else if (item == UI_BRUN || item == UI_BCLR) {   /* BENCH's */
         ui_bench_turn(item);
     } else if (item >= UI_C2ON && item <= UI_C2LOAD) {   /* CORE 2's */
@@ -3041,18 +3117,23 @@ static void ui_reset(uint32_t b)
 
 static void ui_tap_tempo(void);
 static void ui_take(void);
+/* KEY SCAN (V0.87.1): the encoder whose A or B line is at row r (0 PA0, 1 .. 4 PA5 .. PA8, 5 PB7), column c (from 0), -1
+ * none. KNOB 1 is matrix encoder 2: its lines are PA5 at columns 8 and 9, "PA5:9", "PA5:10" as KEY SCAN counts */
+static int32_t ui_ks_enc(uint32_t r, uint32_t c)
+{
+    uint32_t e;
+    for (e = 0; e < FM1_NENC; e++)
+        if ((FM1_ENC[e][0] == c && FM1_ENC[e][1] == r) || (FM1_ENC[e][2] == c && FM1_ENC[e][3] == r))
+            return (int32_t)e;
+    return -1;
+}
 static void ui_press(uint32_t b)
 {
     ui_safe_end();
-    if (b == B_PLAY && ui.lay == LAY_PERF) {        /* (V0.87: GLO held + PLAY, tap tempo; PLAY's own nothing) */
-        ui_tap_tempo();
-        ui.bt_chord |= (uint16_t)(1u << B_PLAY);
-        return;
-    }
     if (ui_win_press(b))                            /* (V0.87: a window open) */
         return;
-    if (ui.pl_open && (b == B_SAVE || ((b == B_OCTDN || b == B_OCTUP) && (ui.bt_down & (1u << B_SAVE)))))
-        ui.pl_t = fm1_ms;                           /* (PRESETS' list: SAVE and SAVE + OCT its own; any other button */
+    if (ui.pl_open && (b == B_SAVE || b == ui_pl_opener() || ((b == B_OCTDN || b == B_OCTUP) && (ui.bt_down & (1u << B_SAVE)))))
+        ui.pl_t = fm1_ms;                           /* (PRESETS' list: SAVE and SAVE + OCT its own, V0.87.1: and its opener; any other button */
     else                                            /* closes it) */
         ui_pl_close();
     if (b != ui.cd_btn)
@@ -3105,6 +3186,10 @@ static void ui_press(uint32_t b)
         }
         if (b == B_OCTDN && ui_sec() == SEC_BROWSE)
             return;                                 /* (the browser: OCT- held deletes; its tap, at its release) */
+        if (ui_sec() == SEC_SEQ && UI_PG[ui.page].graph == G_LCLIPS && !ui.lay && !ui.mod) {   /* (V0.87.1: CLIPS: OCT-, */
+            ui_loop_turn(UI_LSCN, b == B_OCTUP ? 1 : -1, 0u);                                  /* OCT+ step the scenes; the */
+            return;                                                                            /* keys launch, no octave) */
+        }
         sy_app_octave(b == B_OCTUP ? 1 : -1);
         sp_fix(t + 9, sy_app_oct(), 0u, 1);
         ui_toast(t);
@@ -3114,21 +3199,29 @@ static void ui_press(uint32_t b)
 
 static void ui_hold(uint32_t b)
 {
+    if (ui.qk && ui.qk != Q_CLIPDEL && b == ui_q_owner()) {   /* (V0.87.1: its owner held is no answer: it shuts) */
+        ui.bt_chord |= (uint16_t)(1u << b);
+        ui_q_no();
+        return;
+    }
+    if (ui.pl_open && b == ui_pl_opener() && b != B_SAVE) {   /* (a list's opener held: not twice; it shuts) */
+        ui.bt_chord |= (uint16_t)(1u << b);
+        ui_pl_close();
+        return;
+    }
     if (b == B_SAVE && ui.pl_open) {                /* (V0.86: PRESETS' list: SAVE held is for its OCT, nothing */
         ui.bt_chord |= (uint16_t)(1u << B_SAVE);    /* more) */
         return;
     }
     if (ui_sec() == SEC_SAVE || ui_sec() == SEC_BROWSE) {
-        if (b == B_HOME)
-            ui_cd_arm(B_HOME);
-        else if (b == B_OCTDN && ui_sec() == SEC_BROWSE && !(ui.bt_chord & (1u << B_OCTDN)))
+        if (b == B_OCTDN && ui_sec() == SEC_BROWSE && !(ui.bt_chord & (1u << B_OCTDN)))
             sy_app_slot() >= 0 ? ui_cd_arm(B_OCTDN) : ui_toast("A STARTER SOUND STAYS");   /* (3 s: deleted) */
         return;
     }
     if (b == B_REC && !ui.mod)
         ui_mod_open(B_REC, ui.mod_pick, 0);
     else if (b == B_HOME && !ui.mod)
-        ui_cd_arm(B_HOME);                          /* (the help map; 5 s: the DEBUG menu) */
+        ui_cd_arm(B_HOME);                          /* (the help map; on HOME 5 s: the DEBUG menu) */
     else if (ui_btn_fam(b) < FAM_N && !ui.mod && !ui.lay) {   /* a menu button: its layer (V0.87: EDIT's and ENV's none */
         if (b == B_GLO)                                       /* for now, OK1; a reset is the button + OCT-, U2) */
             ui_lay_open(LAY_PERF, b);
@@ -3157,14 +3250,27 @@ static void ui_release(uint32_t b, int held)
             ui_lay_close();
         return;
     }
-    if (b == B_SAVE && ui.pl_open) {                /* (PRESETS' list open: SAVE twice loads the one picked) */
-        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS) {
-            ui.tap_t[b] = 0;
+    if (ui.pl_open && b == ui_pl_opener()) {        /* (a list open: its opener twice loads the one picked. V0.87.1: */
+        if (fm1_ms - ui.tap_t[b] < UI_DTAP_MS) {    /* PRESETS': SAVE; the kits', drums', tables': EDIT; the projects': */
+            ui.tap_t[b] = 0;                        /* SEQ; once, no second tap, it shuts: sy_ui_ms) */
             ui_pl_load();
         } else {
             ui.tap_t[b] = fm1_ms;
         }
         return;
+    }
+    if (b == B_SAVE && ui.pl_open) {                /* (a list of another's: SAVE tapped, it shuts; a second tap with it, */
+        ui_pl_close();                              /* as SAVE twice loaded before, is not SAVE's: no preset saved by it) */
+        ui.sv_eat = fm1_ms | 1u;
+        return;
+    }
+    if (b == B_SAVE && ui.sv_eat) {
+        uint32_t t = ui.sv_eat & ~1u;
+        ui.sv_eat = 0;
+        if (fm1_ms - t < UI_DTAP_MS) {
+            ui.tap_t[b] = 0;
+            return;
+        }
     }
     if (b == B_SAVE) {                              /* SAVE: on NAME IT, written; else once (no second tap within */
         ui.sv_tap_t = 0;                            /* UI_DTAP_MS) a new version, in the browser NAME IT; twice */
@@ -3266,7 +3372,7 @@ static void ui_take(void)
     ui_toast(t);
     ui.dirty = D_ALL;
 }
-/* V0.87: tap tempo (GLO held, PERFORM's layer: PLAY tapped); three taps or more, the tempo their mean gap's */
+/* V0.87: tap tempo (V0.87.1: GLO held, PERFORM's layer: the lowest key, F3, tapped; PLAY is PLAY's again); three taps or more, the tempo their mean gap's */
 static void ui_tap_tempo(void)
 {
     char t[24];
@@ -3377,6 +3483,10 @@ static int sy_ui_key(uint32_t k)
         return 1;
     if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
         return ui_save_key(k);
+    if (ui.lay == LAY_PERF && k == 0u) {            /* (V0.87.1: PERFORM's layer: F3 taps the tempo, no note) */
+        ui_tap_tempo();
+        return 1;
+    }
     if (ui.lay == LAY_MAC && k < 27u && UI_KEY_FX[k] >= 0) {   /* MACROS: a module bypassed or back in */
         char t[32];
         int32_t i = sp_chain_at(sy_patch.p, (uint32_t)UI_KEY_FX[k]);
@@ -3513,7 +3623,7 @@ static void sy_ui_ms(void)
         for (c = 0; c < FM1_NCOL; c++) {
             x = x * 31u + fm1_in.raw[c];
             for (r = 1; r < 5u; r++)
-                if (FM1_KEYMAP[r][c] < 0 && ((fm1_in.raw[c] >> r) & 1u))
+                if (FM1_KEYMAP[r][c] < 0 && ui_ks_enc(r, c) < 0 && ((fm1_in.raw[c] >> r) & 1u))   /* (V0.87.1: not an encoder's) */
                     ui.ks_seen[r] |= (uint16_t)(1u << c);
         }
         if (x != h && fm1_ms - kt >= 30u) {
@@ -3525,6 +3635,25 @@ static void sy_ui_ms(void)
         memset(ui.ks_seen, 0, sizeof ui.ks_seen);
     }
     ui_pl_ms();
+    if (sy_tp_active()) {                           /* (V0.87.1: a test loaded: its time moving, it runs) */
+        uint32_t m = sy_tp_ms((uint32_t)sy_tp_active() - 1u);
+        if (m != ui.tp_ms) {
+            ui.tp_ms = m;
+            ui.tp_mt = fm1_ms;
+        }
+    }
+    if (ui.tp_ask && fm1_ms - ui.tp_t >= UI_TP_MS) {   /* (V0.87.1: KNOB 1 stopped on a test: its question) */
+        ui.tp_ask = 0;
+        if (!ui.qk && UI_PG[ui.page].graph == G_TESTS) {
+            ui.qk = Q_TEST;
+            ui.dirty = D_ALL;
+        }
+    }
+    if (ui.q_t && (!ui.qk || fm1_ms - (ui.q_t & ~1u) >= UI_DTAP_MS)) {   /* (V0.87.1: its owner tapped once, no second: no) */
+        if (ui.qk)
+            ui_q_no();
+        ui.q_t = 0;
+    }
     ui_save_ms();
     ui_learn_ms();
     if (ui.toast[0] && (int32_t)(fm1_ms - ui.toast_t) >= 0) {

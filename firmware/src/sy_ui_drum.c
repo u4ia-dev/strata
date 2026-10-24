@@ -772,6 +772,9 @@ static void ui_p_kcomp(void)
 #define UI_GDX 11.0f
 #define UI_GY0 60.0f
 #define UI_GDY 11.0f
+/* (V0.87.1) the rows' names at the left of the grid: their place's, short (a row's preset name, long, is KNOB 2's) so they
+ * stop short of the first step at x 48 */
+static const char *const UI_GLAB[DK_ROWS] = {"KICK", "SNARE", "CLAP", "HAT C", "HAT O", "CYM", "WT 1", "WT 2", "DUCK"};
 static void ui_d_grid(int hit)
 {
     const lp_clip_t *c = lp_cur_clip();
@@ -794,7 +797,7 @@ static void ui_d_grid(int hit)
     lk_text(UI_TITLE_X, 40.0f, T10, tx, lp_cur_rec() ? sk.hot : sk.lab, sk.ground, 20, 12);
     for (r = 0; r < DK_ROWS; r++) {                 /* (the rows' names, the one picked bold) */
         float y = UI_GY0 + UI_GDY * (float)r;
-        lk_text(8.0f, y + 1.0f, r == ui_d_row() ? T9B : T9, dk_rname(r), r == ui_d_row() ? ui_ink(ui_hot(1)) : sk.lab,
+        lk_text(8.0f, y + 1.0f, r == ui_d_row() ? T9B : T9, UI_GLAB[r], r == ui_d_row() ? ui_ink(ui_hot(1)) : sk.lab,
                 sk.ground, 0, 0);
         for (s = 0; s < 16u && p0 + s < n; s++)    /* (an empty step: a dot, a beat's first a little brighter) */
             lk_box(UI_GX0 + UI_GDX * (float)s + 4.5f, y + 5.0f, UI_GX0 + UI_GDX * (float)s + 6.5f, y + 7.0f,
