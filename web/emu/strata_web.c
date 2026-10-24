@@ -417,11 +417,8 @@ EXPORT const char *web_test_cd(void)
     float frac;
     const char *sub, *sub2, *label;
     t[0] = 0;
-    if (ui_view() == V_HELP && !ui_cd_debug()) {    /* (V0.87.1: off HOME: the help map as long as held) */
+    if (ui_view() == V_HELP) {                      /* (V0.875: the help map as long as HOME is held, on every page) */
         memcpy(t, "HELP: LET GO", 13);
-    } else if (ui_view() == V_HELP && ui_cd_view(&n, &frac, t + 6, &sub, &sub2, &label)) {   /* (V0.86: HOME's help map */
-        memcpy(t, "HELP: ", 6);                                                         /* over its countdown) */
-        sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
     } else if (ui_view() == V_CD && ui_cd_view(&n, &frac, t, &sub, &sub2, &label))
         sp_fix(sp_put(t + strlen(t), " "), (int32_t)n, 0u, 0);
     else

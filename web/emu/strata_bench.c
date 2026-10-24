@@ -154,5 +154,19 @@ int main(void)
     start();
     run(2000);
     report("CLIP NOTES, its clip playing, 2 s");
+    web_buttons(0);                                   /* V0.875 (item 28): PERFORM, F3 tapped five times 0.4 s apart: the tap dots */
+    run(200);
+    web_buttons(1u << B_GLO);
+    run(700);
+    start();
+    for (i = 0; i < 5u; i++) {
+        web_keys(1u << 0);
+        run(50);
+        web_keys(0);
+        run(350);
+    }
+    run(200);
+    report("PERFORM, tap tempo: five taps, 2.2 s");
+    web_buttons(0);
     return 0;
 }

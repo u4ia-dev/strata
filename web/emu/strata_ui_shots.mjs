@@ -164,6 +164,11 @@ ex.web_test_set(ex.web_test_page_param(1), 560);
 ex.web_test_set(ex.web_test_page_param(2), 450);
 run(0.1);
 shot("Filter");
+ex.web_test_palette(5);                         // (V0.875, item 27: AMBER on the same screen)
+run(0.2);
+shot("Filter-amber");
+ex.web_test_palette(0);
+run(0.2);
 turn(1, 6);
 shot("FilterTurn");
 rest();
@@ -433,11 +438,11 @@ go(SEC.KEYS, "SCALE");
 turn(0, -1);
 rest();
 
-// ---- the SETTINGS (HOME held 5 s: its countdown first)
+// ---- the SETTINGS (HOME twice), the help map (HOME held)
 go(SEC.MACRO, "SOUND");
 ex.web_buttons(1 << B.HOME);
 run(2.4);
-shot("SettingsHold");                           // (V0.86, B17: the help map, the bar toward the SETTINGS)
+shot("SettingsHold");                           // (V0.86, B17: the help map; V0.875: on HOME too, no bar, DEBUG's four corners named)
 ex.web_buttons(0);
 run(0.1);
 go(SEC.FILTER, "TONE");
@@ -446,6 +451,17 @@ run(1.2);
 shot("HelpMap");
 ex.web_buttons(0);
 run(0.1);
+go(SEC.FILTER, "TONE");                         // (V0.875, item 25: DEBUG opened by OCT- + F3 + G5 + GLO, from a dense page)
+ex.web_buttons((1 << B.OCTDN) | (1 << B.GLO));
+run(0.05);
+ex.web_keys((1 << KEY.F3) | (1 << 26));
+run(0.15);
+shot("DebugChord");                             // (all four down, not yet 0.25 s: nothing opened, no note)
+run(0.4);
+shot("DebugOpened");
+ex.web_keys(0);
+ex.web_buttons(0);
+run(0.3);
 ex.web_test_power(575, 0);                      // (V0.86: the battery 3 of 4 on POWER)
 for (const [sec, nm, id] of [[SEC.MENU, "SCREEN", "SetScreen"], [SEC.MENU, "PANEL", "SetPanel"], [SEC.MENU, "MIDI", "SetMidi"],
                              [SEC.DEBUG, "BENCH", "SetBench"], [SEC.DEBUG, "CORE 2", "SetCore2"], [SEC.DEBUG, "KEY SCAN", "SetKeyScan"],
@@ -492,6 +508,31 @@ run(0.7);
 turn(0, 3);
 turn(1, 20);
 shot("Perform");
+turn(0, -3);                                    // (V0.875, item 28: tap tempo: F3 under GLO, each tap seen, the tempo as it settles)
+ex.web_keys(1 << KEY.F3);
+run(0.05);
+shot("PerformTap1");                            // (the first tap: its dot flashing)
+ex.web_keys(0);
+run(0.35);
+ex.web_keys(1 << KEY.F3);
+run(0.05);
+ex.web_keys(0);
+run(0.35);
+shot("PerformTap2");                            // (two taps: "2 OF 3")
+ex.web_keys(1 << KEY.F3);
+run(0.05);
+ex.web_keys(0);
+run(0.3);
+shot("PerformTap3");                            // (the third: the tempo set, vermilion)
+ex.web_keys(1 << KEY.F3);
+run(0.05);
+ex.web_keys(0);
+run(0.4);
+ex.web_keys(1 << KEY.F3);
+run(0.05);
+shot("PerformTap5");                            // (the fifth, its dot flashing: the figure settling)
+ex.web_keys(0);
+run(1.8);
 ex.web_buttons(0);
 run(0.3);
 ex.web_buttons(1 << B.FX);
@@ -618,6 +659,23 @@ for (const [i, nm] of [[8, "moss"], [9, "dusk"], [10, "sand"], [11, "neon"]]) { 
   go(SEC.FILTER, "TONE");
   shot(`Filter-${nm}`);
 }
+ex.web_test_palette(5);                         // V0.875, item 27: AMBER (NIGHT's place), the same two screens as STRATA's
+go(SEC.MACRO, "SOUND");
+ex.web_keys((1 << KEY.C4) | (1 << KEY.E4) | (1 << KEY.G4));
+run(0.6);
+shot("Main-amber");
+ex.web_keys(0);
+run(0.3);
+go(SEC.OSCA, "WAVE");
+shot("Osc-amber");
+turn(0, 3);
+shot("OscTurn-amber");                          // (a knob turning: its handle, the value, the shape before the turn: the HOT colour)
+rest();
+ex.web_buttons(1 << B.HOME);
+run(1.2);
+shot("HelpMap-amber");
+ex.web_buttons(0);
+run(0.1);
 ex.web_test_palette(0);
 
 // ---- V0.86: HOME's MIX pages, PRESETS' list (and its guard on an edited sound)

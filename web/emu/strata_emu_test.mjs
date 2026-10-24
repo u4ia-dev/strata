@@ -95,6 +95,8 @@ const octHold = (x, b, secs) => {               // V0.87 (U2): a menu button + O
   x.web_buttons(1 << b); play(x, 0.05); x.web_buttons(0); play(x, 0.4);
   return r;
 };
+const CORNERS = (1 << B.OCTDN) | (1 << B.GLO), ENDS = (1 << 0) | (1 << 26);   // (V0.875, item 25: DEBUG's four corners: OCT-, GLO, F3, G5)
+const openDebug = (x) => { x.web_buttons(CORNERS); x.web_keys(ENDS); play(x, 0.6); x.web_keys(0); x.web_buttons(0); play(x, 0.2); };
 const slots = (ex) => Array.from({ length: 8 }, (_, s) => [0, 1, 2].map((f) => ex.web_test_slot(s, f)));
 const fxTwice = (x) => {                        // FX tapped twice: the chain view <-> the module picked
   for (let i = 0; i < 2; i++) { x.web_buttons(1 << B.FX); play(x, 0.03); x.web_buttons(0); play(x, 0.08); }
@@ -239,7 +241,7 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
         armed === 1 && armTxt === "T1 A: COUNT-IN" && disarmed === 0 && one === 0 && latched === 2 && ex.web_test_mod() === 0 &&
         ex.web_test_lp(10, -1) === 0 && ex.web_test_lp(15, -1) === 0);
 }
-{                                               // HOME held off HOME: the help map as long as held, never DEBUG (V0.87.1, item 1)
+{                                               // HOME held off HOME: the help map as long as held, never DEBUG (V0.87.1, item 1; V0.875: on HOME too)
   const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page(), sec0 = ex.web_test_page_section();
   ex.web_buttons(1 << B.HOME);
   play(ex, 0.5);
@@ -254,7 +256,7 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   tap(ex, B.HOME);                              // (HOME: the page HOME)
   check(`.. HOME tapped: HOME (section ${ex.web_test_page_section()})`, ex.web_test_page_section() === SEC.MACRO);
 }
-{                                               // the SETTINGS (HOME twice), DEBUG (HOME held 5 s on HOME), its palettes
+{                                               // the SETTINGS (HOME twice), DEBUG (the four corners), its palettes
   const toast = () => cstr(ex, ex.web_test_toast()), page0 = ex.web_test_page();
   ex.web_buttons(1 << B.HOME);
   play(ex, 1.5);
@@ -262,12 +264,15 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   ex.web_buttons(0);
   play(ex, 0.1);
   const after = [ex.web_test_page(), toast()];
-  check(`HOME held: the help map, its countdown ("${count}"); let go at 1.5 s, nothing opens (section ${early}, the page kept, the footer "${after[1]}")`,
-        count === "HELP: DEBUG 4" && early !== SEC.MENU && after[0] === page0 && after[1] === "" && cstr(ex, ex.web_test_cd()) === "");
-  ex.web_buttons(1 << B.HOME);                  // (V0.87, U4, U5: held 5 s the DEBUG menu, twice the SETTINGS)
-  play(ex, 5.2);
+  check(`HOME held: the help map, no countdown ("${count}"); let go at 1.5 s, nothing opens (section ${early}, the page kept, the footer "${after[1]}")`,
+        count === "HELP: LET GO" && early !== SEC.MENU && after[0] === page0 && after[1] === "" && cstr(ex, ex.web_test_cd()) === "");
+  ex.web_buttons(1 << B.HOME);                  // (V0.875, item 25: HOME held 5 s on HOME is the help map still, never DEBUG)
+  play(ex, 5.5);
+  const homeHold = [cstr(ex, ex.web_test_cd()), ex.web_test_page_section()];
   ex.web_buttons(0);
   play(ex, 0.05);
+  const home5 = ex.web_test_page_section();
+  openDebug(ex);                                // (V0.875: the four corners open DEBUG; twice HOME, the SETTINGS)
   const dbg = [ex.web_test_page_section(), cstr(ex, ex.web_test_page_name())];
   twiceB(ex, B.HOME);
   const sec = ex.web_test_page_section(), p0 = ex.web_test_palette(-1);
@@ -288,7 +293,8 @@ check(`the WAVE page: KNOB 1 WT POS (${POS}), KNOB 2 TABLE (${TABLE}), KNOB 3 an
   }).length;
   ex.web_enc(E.K1, 5);
   play(ex, 0.05);
-  check(`HOME held 5 s: DEBUG (${dbg}); twice: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); round to the twelfth, ${neon} (${p11}); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
+  check(`HOME held 6 s on HOME: the help map still ("${homeHold[0]}"), section ${home5} after, never DEBUG; the four corners: DEBUG (${dbg}); HOME twice: the SETTINGS (section ${sec}); KNOB 1 changes the palette (${p0} -> ${p1}, ${moved} pixels with it); round to the twelfth, ${neon} (${p11}); the eighth, ${mono} (${p7}): ${grey} pixels not grey`,
+        homeHold[0] === "HELP: LET GO" && homeHold[1] === SEC.MACRO && home5 === SEC.MACRO &&
         dbg.join() === `${SEC.DEBUG},BENCH` && sec === SEC.MENU && p0 === 0 && p1 === 1 && moved > 2000 && p11 === 11 && neon === "NEON" && p7 === 7 &&
         mono === "MONO" && grey === 0 && ex.web_test_palette(-1) === 0);
   tap(ex, B.EDIT);
@@ -2396,13 +2402,16 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   check(`HOME twice: the SETTINGS (${h1}); a tap: back (${sec()}); HELP on: ENV opened from EDIT ("${hint}")`,
         h1 === SEC.MENU && sec() !== SEC.MENU && /^AGAIN: /.test(hint));
   btap(B.HOME);                                 // (V0.87.1: DEBUG from HOME only)
-  b.web_buttons(1 << B.HOME);                   // (HOME held: the help map; held on: DEBUG at 5 s)
+  b.web_buttons(1 << B.HOME);                   // (HOME held: the help map, as long as held; V0.875: DEBUG is the four corners)
   play(b, 1.0);
   const hm = cstr(b, b.web_test_cd());
   play(b, 4.3);
   b.web_buttons(0);
   play(b, 0.1);
-  check(`HOME held: the help map ("${hm}"); held 5 s: DEBUG (section ${sec()})`, hm.startsWith("HELP: DEBUG") && sec() === SEC.DEBUG);
+  const held5 = sec();
+  openDebug(b);
+  check(`HOME held: the help map ("${hm}"), 5.3 s on: not DEBUG (section ${held5}); the four corners: DEBUG (section ${sec()})`,
+        hm === "HELP: LET GO" && held5 !== SEC.DEBUG && sec() === SEC.DEBUG);
 }
 {                                               // V0.86: SEQ's TOOLS, SPEED, TYPE's guard, CLIPS' keys, the grid held
   const q = await boot(), qt = () => cstr(q, q.web_test_toast()), lp = (f, v = -1) => q.web_test_lp(f, v);
@@ -2794,7 +2803,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
   const t = await boot(), tt = () => cstr(t, t.web_test_toast()), sec = () => t.web_test_page_section();
   splash(t);
   tap(t, B.HOME);
-  t.web_buttons(1 << B.HOME); play(t, 5.2); t.web_buttons(0); play(t, 0.1);   // (DEBUG: HOME held 5 s)
+  openDebug(t);                                 // (DEBUG: the four corners)
   goPage(t, SEC.DEBUG, "TESTS"); play(t, 0.05);
   const nm = () => t.web_test_tp(0, 0) + 1;
   const names = [nm()];
@@ -2900,7 +2909,7 @@ const changed = (a, b, y0 = 0, y1 = 240) => a.filter((v, i) => v !== b[i] && i >
 }
 // V0.87.1, the pre-build review's UI findings (DECISIONS.md item 24): each of these failed before its fix
 const loadedReal = (x) => x.web_test_tp(4, 0) >= 0;   // (the real test project, sy_testproj.c: its time, -1 none)
-const toDebug = (x) => { x.web_buttons(1 << B.HOME); play(x, 5.2); x.web_buttons(0); play(x, 0.1); };
+const toDebug = openDebug;                      // (V0.875: DEBUG is the four corners)
 {                                               // 1. a question that opens by itself takes no press begun before it came
   const t = await boot(), tt = () => cstr(t, t.web_test_toast());
   splash(t); tap(t, B.HOME); toDebug(t);
@@ -3032,6 +3041,143 @@ const toDebug = (x) => { x.web_buttons(1 << B.HOME); play(x, 5.2); x.web_buttons
     left.push(diff(settled, fb()));
   }
   check(`TAPE: settled after sound, the screen equals a full redraw of it (differing pixels ${left})`, left.every((d) => d === 0));
+}
+// ---- V0.875 (the strata-ui stream): DEBUG by four corners, the tap tempo's indicator, the themes
+const fresh = async () => { const x = await boot(); splash(x); return x; };
+const secOf = (x) => x.web_test_page_section();
+{                                               // item 25. OCT- and GLO down first, then F3 and G5: no note, no octave, DEBUG after the dwell
+  const t = await fresh(), k0 = t.web_test_key_note();
+  tap(t, B.EDIT);
+  const oct0 = t.web_test_oct();
+  t.web_buttons(CORNERS); play(t, 0.05);
+  t.web_keys(1 << 0); play(t, 0.03); t.web_keys(ENDS); play(t, 0.1);
+  const early = [secOf(t), t.web_test_voices()];
+  play(t, 0.4);
+  const a = [secOf(t), cstr(t, t.web_test_page_name()), t.web_test_voices(), t.web_test_oct(), t.web_test_key_note() === k0,
+             cstr(t, t.web_test_toast()), t.web_test_lay(), cstr(t, t.web_test_cd())];
+  t.web_keys(0); t.web_buttons(0); play(t, 1.5);
+  const b = [secOf(t), t.web_test_voices(), t.web_test_oct(), t.web_test_lay()];
+  t.web_keys(1 << 7); play(t, 0.4);
+  const plays = t.web_test_voices();
+  t.web_keys(0); play(t, 1.0);
+  check(`DEBUG by four corners, OCT- and GLO first: not open at 0.2 s (${early}); at 0.6 s ${a[0] === SEC.DEBUG ? "DEBUG" : a[0]} ${a[1]}, ${a[2]} voices, octave ${a[3]} (was ${oct0}), no key note started (${a[4]}), no toast ("${a[5]}"), no layer (${a[6]}), no countdown ("${a[7]}"); let go: DEBUG stays (${b[0] === SEC.DEBUG}), ${b[1]} voices, octave ${b[2]}, no layer (${b[3]}); a key plays after (${plays} voice)`,
+        early[0] !== SEC.DEBUG && early[1] === 0 && a[0] === SEC.DEBUG && a[1] === "BENCH" && a[2] === 0 && a[3] === oct0 && a[4] &&
+        a[5] === "" && a[6] === 0 && a[7] === "" && b[0] === SEC.DEBUG && b[1] === 0 && b[2] === oct0 && b[3] === 0 && plays === 1);
+}
+{                                               // .. the two keys first (they sound), then OCT- and GLO: cut off at the opening, though still held
+  const t = await fresh();
+  tap(t, B.EDIT);
+  t.web_keys(ENDS); play(t, 0.3);
+  const sounding = t.web_test_voices();
+  t.web_buttons(1 << B.OCTDN); play(t, 0.05); t.web_buttons(CORNERS); play(t, 0.6);
+  const open = secOf(t);
+  play(t, 1.5);
+  const held = t.web_test_voices();              // (all four still down: nothing sounds)
+  t.web_keys(0); t.web_buttons(0); play(t, 0.5);
+  const after = [t.web_test_voices(), t.web_test_oct(), secOf(t)];
+  check(`.. the keys first: ${sounding} voices sounding; OCT- then GLO: DEBUG (${open === SEC.DEBUG}), 1.5 s on, all four still held, ${held} voices; let go: ${after[0]} voices, octave ${after[1]} (OCT-'s step taken back), DEBUG stays (${after[2] === SEC.DEBUG})`,
+        sounding === 2 && open === SEC.DEBUG && held === 0 && after[0] === 0 && after[1] === 0 && after[2] === SEC.DEBUG);
+}
+{                                               // .. a partial chord left alone: nothing opens, nothing is lost; all four for less than the dwell: nothing
+  const t = await fresh();
+  goPage(t, SEC.LFO1, "SHAPE"); play(t, 0.05);
+  t.web_buttons(1 << B.OCTDN); play(t, 0.05); t.web_keys(1 << 0); play(t, 0.03); t.web_keys(ENDS); play(t, 3.0);
+  const three = [secOf(t), t.web_test_voices(), t.web_test_oct()];
+  t.web_keys(0); t.web_buttons(0); play(t, 1.0);
+  t.web_buttons(CORNERS); t.web_keys(ENDS); play(t, 0.2);     // (all four for 0.2 s only: below the dwell)
+  t.web_keys(0); t.web_buttons(0); play(t, 1.0);
+  const short = [secOf(t), t.web_test_voices()];
+  t.web_buttons(CORNERS); t.web_keys(ENDS); play(t, 0.6);
+  const whole = secOf(t);
+  t.web_keys(0); t.web_buttons(0); play(t, 1.0);
+  check(`OCT- + F3 + G5 (no GLO) 3 s: nothing opens (section ${three[0] === SEC.LFO1 ? "LFO 1" : three[0]}), ${three[1]} voice (F3, landing first, plays; G5 is held off), octave ${three[2]}; all four for 0.2 s only: not DEBUG (${short[0] === SEC.DEBUG ? "DEBUG" : "no"}); then the four together: DEBUG (${whole === SEC.DEBUG})`,
+        three[0] === SEC.LFO1 && three[1] === 1 && short[0] !== SEC.DEBUG && whole === SEC.DEBUG);
+}
+{                                               // .. a partial chord's tap tempo is taken back: GLO + F3 taps, the third one held with OCT- and G5
+  const t = await fresh();
+  t.web_buttons(1 << B.GLO); play(t, 0.6);        // (PERFORM's layer open)
+  const lay = t.web_test_lay(), bpm0 = t.web_test_tempo(0);
+  const f3 = () => { t.web_keys(1 << 0); play(t, 0.05); t.web_keys(0); play(t, 0.35); };
+  f3(); f3();
+  t.web_keys(1 << 0); play(t, 0.05);              // (the third tap: the tempo is set, F3 stays down)
+  const bpm3 = t.web_test_tempo(0), toast3 = cstr(t, t.web_test_toast());
+  t.web_buttons(CORNERS); play(t, 0.05); t.web_keys(ENDS); play(t, 0.6);
+  const a = [secOf(t), t.web_test_tempo(0), cstr(t, t.web_test_toast()), t.web_test_lay(), t.web_test_voices()];
+  t.web_keys(0); t.web_buttons(0); play(t, 0.5);
+  check(`GLO + F3 tapped (layer ${lay}): the third tap set ${bpm3} BPM ("${toast3}", was ${bpm0}); OCT- and G5 with F3 and GLO held: DEBUG (${a[0] === SEC.DEBUG}), the tempo ${a[1]} back, toast "${a[2]}", layer ${a[3]}, ${a[4]} voices`,
+        lay === 1 && bpm3 !== bpm0 && a[0] === SEC.DEBUG && a[1] === bpm0 && a[2] === "" && a[3] === 0 && a[4] === 0);
+}
+{                                               // .. CLIPS' scene OCT- stepped is stepped back; NAME IT's characters are taken back
+  const t = await fresh();
+  goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
+  for (let i = 0; i < 3; i++) tap(t, B.OCTUP);
+  const sc0 = t.web_test_lp(1, -1);
+  t.web_buttons(1 << B.OCTDN); play(t, 0.05);
+  const sc1 = t.web_test_lp(1, -1);
+  t.web_buttons(CORNERS); t.web_keys(ENDS); play(t, 0.6);
+  const sc2 = t.web_test_lp(1, -1), sec1 = secOf(t);
+  t.web_keys(0); t.web_buttons(0); play(t, 0.5);
+  const u = await fresh();
+  saveTwice(u); play(u, 0.2);                    // (the browser)
+  tap(u, B.SAVE);                                // (NAME IT)
+  const onName = secOf(u) === SEC.SAVE, n0 = cstr(u, u.web_test_save_name());
+  u.web_keys(ENDS); play(u, 0.3);
+  const n1 = cstr(u, u.web_test_save_name());
+  u.web_buttons(CORNERS); play(u, 0.6);
+  const n2 = cstr(u, u.web_test_save_name()), sec2 = secOf(u);
+  u.web_keys(0); u.web_buttons(0); play(u, 0.5);
+  check(`CLIPS: scene ${sc0}, OCT- stepped it to ${sc1}; the four corners: DEBUG (${sec1 === SEC.DEBUG}), the scene back at ${sc2}; NAME IT (${onName}) "${n0}": F3 and G5 typed "${n1}"; with OCT- and GLO: DEBUG (${sec2 === SEC.DEBUG}), the name back "${n2}"`,
+        sc0 === 3 && sc1 === 2 && sec1 === SEC.DEBUG && sc2 === 3 && onName && n1 !== n0 && sec2 === SEC.DEBUG && n2 === n0);
+}
+{                                               // .. every other way keeps its own: OCT- alone the octave, F3 under OCT- plays, G5 under GLO plays
+  const t = await fresh();
+  tap(t, B.OCTDN);
+  const o1 = t.web_test_oct();
+  t.web_buttons(1 << B.OCTDN); play(t, 0.05); t.web_keys(1 << 0); play(t, 0.4);
+  const under = [t.web_test_voices(), secOf(t)];
+  t.web_keys(0); t.web_buttons(0); play(t, 1.0);
+  t.web_buttons(1 << B.GLO); play(t, 0.6); t.web_keys(1 << 26); play(t, 0.4);
+  const g5 = t.web_test_voices();                // (PERFORM: G5 plays)
+  t.web_keys(0); t.web_buttons(0); play(t, 1.0);
+  check(`outside the chord: OCT- alone steps the octave (${o1}); F3 with OCT- held plays (${under[0]} voice, not DEBUG: ${under[1] !== SEC.DEBUG}); G5 with GLO held plays (${g5} voice)`,
+        o1 === -1 && under[0] === 1 && under[1] !== SEC.DEBUG && g5 === 1);
+}
+{                                               // item 28. PERFORM: the taps seen, the tempo as it settles
+  const t = await fresh();
+  const fb = () => new Uint16Array(t.memory.buffer, t.web_screen(), 240 * 240).slice();
+  const HOT = ((31 << 11) | (19 << 5) | 5), hot = (f) => { let n = 0; for (let y = 192; y < 220; y++) for (let x = 0; x < 240; x++) { const v = f[y * 240 + x], s = ((v & 0xFF) << 8) | (v >> 8); if (s === HOT) n++; } return n; };
+  const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i]), 0);
+  t.web_buttons(1 << B.GLO); play(t, 0.6);
+  const s0 = fb();
+  const f3 = (gap) => { t.web_keys(1 << 0); play(t, 0.05); t.web_keys(0); play(t, gap); };
+  t.web_keys(1 << 0); play(t, 0.05); const flash1 = fb(); t.web_keys(0); play(t, 0.3); const dot1 = fb();
+  f3(0.4);
+  const dot2 = fb();
+  t.web_keys(1 << 0); play(t, 0.05); const flash3 = fb(), bpm3 = t.web_test_tempo(0); t.web_keys(0); play(t, 0.3);
+  const settled3 = fb();
+  f3(0.4); f3(0.4);
+  const bpm5 = t.web_test_tempo(0), dots5 = fb();
+  play(t, 2.3);                                  // (the run over: the dots go, the tempo stays)
+  const idle = fb();
+  t.web_buttons(0); play(t, 0.3);
+  check(`PERFORM, tapping: each tap changes the screen (${diff(s0, flash1)}, ${diff(flash1, dot1)}, ${diff(dot1, dot2)}, ${diff(dot2, flash3)} pixels); the tempo's figure vermilion from the third (${hot(s0)}, ${hot(dot2)} -> ${hot(settled3)} vermilion pixels, ${bpm3} then ${bpm5} BPM); the dots go 2.3 s after the last tap (${diff(dots5, idle)} pixels), the tempo stays (${t.web_test_tempo(0)})`,
+        diff(s0, flash1) > 100 && diff(flash1, dot1) > 20 && diff(dot1, dot2) > 20 && diff(dot2, flash3) > 100 && hot(s0) === 0 &&
+        hot(settled3) > 20 && diff(dots5, idle) > 100 && t.web_test_tempo(0) === bpm5);
+}
+{                                               // items 26, 27. the themes: STRATA darker, AMBER where NIGHT was; a saved NIGHT loads as AMBER
+  const t = await fresh();
+  const px = () => new Uint16Array(t.memory.buffer, t.web_screen(), 240 * 240);
+  const lum = (v) => { const s = ((v & 0xFF) << 8) | (v >> 8); return ((s >> 11) * 255 / 31) * 0.2126 + (((s >> 5) & 63) * 255 / 63) * 0.7152 + ((s & 31) * 255 / 31) * 0.0722; };
+  const name = () => cstr(t, t.web_test_palette_name());
+  t.web_test_palette(0); play(t, 0.2);
+  const n0 = name(), ground = lum(px()[239 * 240 + 120]);
+  t.web_test_palette(5); play(t, 0.2);
+  const n5 = name(), amber = lum(px()[239 * 240 + 120]);
+  const names = [];
+  for (let i = 0; i < 12; i++) { t.web_test_palette(i); names.push(name()); }
+  t.web_test_palette(5);
+  check(`the themes: ${names.join(" ")}; the first ${n0} on a black ground (luma ${ground.toFixed(1)}), the sixth ${n5} (was NIGHT: a saved index 5 loads it; ground ${amber.toFixed(1)}), no NIGHT (${!names.includes("NIGHT")})`,
+        names.length === 12 && n0 === "STRATA" && n5 === "AMBER" && !names.includes("NIGHT") && ground < 2 && amber < 2);
 }
 console.log(`emu: ${checks} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

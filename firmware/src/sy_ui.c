@@ -57,6 +57,7 @@ static void sy_app_run(uint32_t on);                /* .. the transport on, off 
 static int sy_app_clock(void);                      /* .. the tempo from MIDI's clock now (CLOCK IN MIDI) */
 static int sy_app_clock_lost(void);                 /* .. it stopped coming (1 once: the panel's tempo again) */
 static void sy_app_keys_hand(void);                 /* .. the keys held over to the chords (they just took the keys) */
+static void sy_app_key_off(uint32_t k);             /* .. (V0.875) key k's note ended now (DEBUG's four corners) */
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
 static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
@@ -153,7 +154,7 @@ enum { UI_COLOR = UI_ITEM, UI_ACCEL, UI_LPT, UI_LX, UI_LY, UI_LC, UI_BPM, UI_TSB
 #define SEC_KIT (SEC_COUNT + 13)                    /* (V0.85: EDIT's on a drum track, the kit: V0.86 ACCENT, DUCK, */
 #define SEC_LGRID (SEC_COUNT + 14)                  /* CURVE, COMP; SEQ's CLIP on a drum track: GRID, HIT, CLIP) */
 #define SEC_DRUM (SEC_COUNT + 15)                   /* (V0.86, step 2: EDIT's on a drum track: the drum PRESETS picks; */
-#define SEC_DEBUG (SEC_COUNT + 16)                  /* (V0.87, U5: HOME held 5 s: BENCH, KEY SCAN, CORE 2) */
+#define SEC_DEBUG (SEC_COUNT + 16)                  /* (V0.87, U5: BENCH, KEY SCAN, CORE 2; V0.875: OCT- + F3 + G5 + GLO) */
 #define SEC_N (SEC_COUNT + 17)                      /* SEC_KIT the kit's) every section, the UI's own too (ui.spage) */
 enum { G_LIST, G_WAVE, G_UNI, G_SPREAD, G_PITCH, G_OUT, G_SUB, G_NOISE, G_ENV, G_LFO, G_TEMPO, G_COLOR, G_HOME,
        G_FILTER, G_DRIVE, G_CHORUS, G_DELAY, G_REVERB, G_OTT, G_EQ, G_SAVE, G_BROWSE, G_MATRIX, G_KEYS, G_PANEL,
@@ -311,7 +312,7 @@ static const ui_page_t UI_PG[] = {
     {SEC_MENU, G_PANEL, "PANEL", {UI_ACCEL, UI_HOLD, -1, -1}},
     {SEC_MENU, G_MIDI, "MIDI", {UI_MCH, UI_LEARN, UI_MCLR, UI_MPC}},
     {SEC_MENU, G_POWER, "POWER", {UI_PBATT, UI_PSCR, -1, -1}},   /* (V0.86: F31, F34) */
-    {SEC_DEBUG, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},    /* (V0.87, U5: their own menu, HOME held 5 s) */
+    {SEC_DEBUG, G_BENCH, "BENCH", {UI_BRUN, UI_BCLR, -1, -1}},    /* (V0.87, U5: their own menu; V0.875: the four corners) */
     {SEC_DEBUG, G_KSCAN, "KEY SCAN", {-1, -1, -1, -1}},   /* (V0.86, P3: BENCH's, read-only) */
     {SEC_DEBUG, G_CORE2, "CORE 2", {UI_C2ON, UI_C2RUN, UI_C2LOAD, -1}},   /* (V0.8 BENCH) */
     {SEC_DEBUG, G_TESTS, "TESTS", {UI_TEST, UI_TSTOP, -1, -1}},   /* (V0.87.1: the four test projects, sy_testproj.c) */
@@ -574,6 +575,14 @@ static struct {
     uint32_t rec_t;                                 /* .. (F09) REC tapped once, not recording: its time | 1 (a second: TAKE) */
     uint32_t tt[4];                                 /* .. tap tempo's taps */
     uint8_t tt_n;
+    uint8_t dbg_st, dbg_ok, dbg_own;                /* .. (V0.875, item 25) DEBUG's four corners: 0 not all down, 1 all down, 2 opened; what a corner */
+                                                    /* landing did that the opening takes back (DBG_*), the corner that took the name */
+    uint32_t dbg_t;                                 /* .. when all four were down */
+    int8_t dbg_oct;                                 /* .. .. the keys' octave, the scene, the taps and tempo, the name as they were */
+    uint8_t dbg_scn, dbg_ttn, dbg_nlen, dbg_ncur, dbg_nsym;
+    uint16_t dbg_bpm;
+    uint32_t dbg_tt[4];
+    char dbg_name[17];
 } ui;
 #define UI_PL_CLOSE_MS 5000u                        /* PRESETS' list: gone this long after its last detent or press (V0.87, B3: 5 s) */
 #define UI_BOOT_MS 2000u                            /* (P4: the splash 2 s; fm1_ms counts from just after it is drawn) */
@@ -2193,10 +2202,10 @@ static void ui_lfo_add(void)
     ui_pts_done(k);
 }
 
-/* a long hold, UI_LONG_MS: HOME on HOME opens the DEBUG menu (V0.87, U5; its help map from HOLD; V0.87.1: on HOME only,
- * elsewhere the help map stays while HOME is held), OCT- in the browser
- * deletes the preset playing (UI_DEL_MS), a menu button + OCT- held resets what it shows (V0.87, U2: from OCT-'s press;
- * its countdown from UI_CD_SHOW_MS). Let go, a knob, another button, another page or the MOD layer stop it */
+/* a long hold, UI_LONG_MS: OCT- in the browser deletes the preset playing (UI_DEL_MS), a menu button + OCT- held resets
+ * what it shows (V0.87, U2: from OCT-'s press; its countdown from UI_CD_SHOW_MS). Let go, a knob, another button,
+ * another page or the MOD layer stop it. HOME held is the help map, on every page, as long as it is held (V0.875: no
+ * countdown, DEBUG is the four corners: ui_dbg_tick) */
 #define UI_LONG_MS 5000u
 #define UI_CD_SHOW_MS 2000u                         /* a menu button's countdown shows from here (HOME's, SAVE's from */
                                                     /* HOLD) */
@@ -2204,7 +2213,6 @@ static void ui_reset(uint32_t b);
 static void ui_mod_close(void);
 static void ui_lay_close(void);
 static int ui_cd_quiet(uint32_t b) { return b != B_HOME && b != B_SAVE && b != B_OCTDN && b != NB; }
-static int ui_cd_debug(void) { return ui_sec() == SEC_MACRO; }   /* (V0.87.1: HOME held opens DEBUG from HOME only) */
 static void ui_cd_arm(uint32_t b)                  /* (a button held: from its press) */
 {
     ui.cd_btn = (uint8_t)b;
@@ -2263,7 +2271,7 @@ static void ui_cd_tick(void)
         ui_cd_stop();
         return;
     }
-    if (b == B_HOME && !ui.cd_oct && !ui_cd_debug()) {   /* (V0.87.1: not on HOME: the help map only, as long as held) */
+    if (b == B_HOME && !ui.cd_oct) {                /* (V0.875: HOME held: the help map only, as long as held) */
         ui.cd_s = 0;
         return;
     }
@@ -2277,8 +2285,6 @@ static void ui_cd_tick(void)
             ui_reset(b);
         } else if (b == B_OCTDN) {
             ui_browse_del();
-        } else if (b == B_HOME) {                   /* (V0.87, U5: the DEBUG menu) */
-            ui_go(ui_first_page(SEC_DEBUG));
         }
         return;
     }
@@ -3135,6 +3141,8 @@ static void ui_reset(uint32_t b)
     ui.dirty = D_ALL;
 }
 
+#define UI_TAP_LIVE_MS 2000u                        /* (V0.875) taps this close are one run (ui_tap_tempo); the last dot flashes this long */
+#define UI_TAP_FLASH_MS 160u
 static void ui_tap_tempo(void);
 static void ui_take(void);
 /* KEY SCAN (V0.87.1): the encoder whose A or B line is at row r (0 PA0, 1 .. 4 PA5 .. PA8, 5 PB7), column c (from 0), -1
@@ -3147,6 +3155,91 @@ static int32_t ui_ks_enc(uint32_t r, uint32_t c)
             return (int32_t)e;
     return -1;
 }
+/* DEBUG by four corners (V0.875, item 25): OCT- + F3 (the lowest key) + G5 (the highest) + GLO, all down UI_DBG_MS
+ * together, from any page (HOME held is the help map only). Each corner has an action of its own alone, so the ones
+ * that landed are taken back when the fourth does: the octave and the scene OCT- stepped, the tap F3 made under GLO
+ * (its taps and the tempo), the characters NAME IT took (each record goes when its corner is let go: a completed tap
+ * stays). The keys: one landing while OCT- and another corner are down is held off (no note); one that landed before
+ * is cut off at the opening (sy_app_key_off); the layers GLO opened, the windows and OCT-'s and GLO's countdown close.
+ * A corner landing alone plays (a note; under GLO F3 the tap) until the chord is whole */
+#define UI_DBG_MS 250u
+enum { DBG_OCT = 1, DBG_SCN = 2, DBG_TAP = 4, DBG_NAME = 8 };   /* dbg_ok: what the corners did that is taken back */
+enum { DBG_O = 1, DBG_G = 2, DBG_K0 = 4, DBG_K1 = 8 };         /* the corners: OCT-, GLO, F3, G5 */
+static uint32_t ui_dbg_down(int live)               /* the corners down (live: the panel's own state, else as the UI has seen it) */
+{
+    uint32_t b = fm1_in.buttons, d = ui.bt_down;
+    uint32_t o = live ? (b >> panel.btn[B_OCTDN]) & 1u : (d >> B_OCTDN) & 1u;
+    uint32_t g = live ? (b >> panel.btn[B_GLO]) & 1u : (d >> B_GLO) & 1u;
+    return o | g << 1 | (fm1_in.notes & 1u) << 2 | ((fm1_in.notes >> 26) & 1u) << 3;
+}
+static void ui_dbg_name(uint32_t own)               /* NAME IT's text, kept before corner own changes it */
+{
+    if (ui.dbg_ok & DBG_NAME)
+        return;
+    memcpy(ui.dbg_name, ui.sv_name, sizeof ui.dbg_name);
+    ui.dbg_nlen = ui.sv_len, ui.dbg_ncur = ui.sv_cur, ui.dbg_nsym = ui.sv_sym;
+    ui.dbg_ok |= DBG_NAME;
+    ui.dbg_own = (uint8_t)own;
+}
+static void ui_dbg_open(void)
+{
+    ui_cd_stop();                                   /* (OCT- + GLO's reset countdown) */
+    ui.cmb_btn = NB;
+    if (ui.dbg_ok & DBG_OCT)
+        sy_app_octave((int32_t)ui.dbg_oct - sy_app_oct());
+    if (ui.dbg_ok & DBG_SCN)
+        lpp.scn = ui.dbg_scn;
+    if (ui.dbg_ok & DBG_TAP) {
+        ui.tt_n = ui.dbg_ttn;
+        memcpy(ui.tt, ui.dbg_tt, sizeof ui.tt);
+        if (ui.bpm != ui.dbg_bpm) {
+            ui.bpm = ui.dbg_bpm;
+            sy_set_tempo(ui.bpm, ui.tsb, UI_TSN_VAL[ui.tsn]);
+        }
+    }
+    if ((ui.dbg_ok & DBG_NAME) && ui_sec() == SEC_SAVE) {
+        memcpy(ui.sv_name, ui.dbg_name, sizeof ui.sv_name);
+        ui.sv_len = ui.dbg_nlen, ui.sv_cur = ui.dbg_ncur, ui.sv_sym = ui.dbg_nsym;
+    }
+    ui.dbg_ok = 0;
+    ui.toast[0] = 0;
+    ui.bt_chord |= (uint16_t)((1u << B_OCTDN) | (1u << B_GLO));   /* (their releases do nothing, GLO's layer is no tap) */
+    if (ui.mod)
+        ui_mod_close();
+    if (ui.lay)
+        ui_lay_close();
+    ui_win_close();
+    ui_pl_close();
+    if (ui_sec() != SEC_DEBUG)
+        ui_go(ui_first_page(SEC_DEBUG));
+    ui.dirty = D_ALL;
+}
+static void ui_dbg_tick(void)                       /* every millisecond, after the buttons */
+{
+    uint32_t m = ui_dbg_down(0), up = ~m & 15u;
+    if (up & DBG_O)
+        ui.dbg_ok &= (uint8_t)~(DBG_OCT | DBG_SCN);
+    if (up & DBG_K0)
+        ui.dbg_ok &= (uint8_t)~DBG_TAP;
+    if ((ui.dbg_ok & DBG_NAME) && (up & ui.dbg_own))
+        ui.dbg_ok &= (uint8_t)~DBG_NAME;
+    if (m != 15u) {
+        ui.dbg_st = 0;
+        return;
+    }
+    if (!ui.dbg_st) {
+        ui.dbg_st = 1;
+        ui.dbg_t = fm1_ms;
+    } else if (ui.dbg_st == 1u && fm1_ms - ui.dbg_t >= UI_DBG_MS) {
+        ui.dbg_st = 2;
+        ui_dbg_open();
+    }
+    if (ui.dbg_st == 2u) {                          /* (the two keys' notes, again while it is held: a full ring may have kept one) */
+        sy_app_key_off(0);
+        sy_app_key_off(26);
+    }
+}
+
 static void ui_press(uint32_t b)
 {
     ui_safe_end();
@@ -3163,6 +3256,7 @@ static void ui_press(uint32_t b)
             ui.sv_sym ^= 1u;
             ui.dirty |= D_DISP | D_HEAD | D_FOOT;
         } else {
+            ui_dbg_name(DBG_O);                     /* (V0.875: OCT- is a corner: the name kept for the opening) */
             ui_save_del();
         }
         return;
@@ -3207,9 +3301,13 @@ static void ui_press(uint32_t b)
         if (b == B_OCTDN && ui_sec() == SEC_BROWSE)
             return;                                 /* (the browser: OCT- held deletes; its tap, at its release) */
         if (ui_sec() == SEC_SEQ && UI_PG[ui.page].graph == G_LCLIPS && !ui.lay && !ui.mod) {   /* (V0.87.1: CLIPS: OCT-, */
-            ui_loop_turn(UI_LSCN, b == B_OCTUP ? 1 : -1, 0u);                                  /* OCT+ step the scenes; the */
-            return;                                                                            /* keys launch, no octave) */
+            if (b == B_OCTDN)                                                                  /* OCT+ step the scenes; the */
+                ui.dbg_ok |= DBG_SCN, ui.dbg_scn = lpp.scn;                                    /* keys launch, no octave) */
+            ui_loop_turn(UI_LSCN, b == B_OCTUP ? 1 : -1, 0u);
+            return;
         }
+        if (b == B_OCTDN)                           /* (V0.875: OCT- is a corner: the octave it leaves, for the opening) */
+            ui.dbg_ok |= DBG_OCT, ui.dbg_oct = (int8_t)sy_app_oct();
         sy_app_octave(b == B_OCTUP ? 1 : -1);
         sp_fix(t + 9, sy_app_oct(), 0u, 1);
         ui_toast(t);
@@ -3241,7 +3339,7 @@ static void ui_hold(uint32_t b)
     if (b == B_REC && !ui.mod)
         ui_mod_open(B_REC, ui.mod_pick, 0);
     else if (b == B_HOME && !ui.mod)
-        ui_cd_arm(B_HOME);                          /* (the help map; on HOME 5 s: the DEBUG menu) */
+        ui_cd_arm(B_HOME);                          /* (the help map, as long as it is held) */
     else if (ui_btn_fam(b) < FAM_N && !ui.mod && !ui.lay) {   /* a menu button: its layer (V0.87: EDIT's and ENV's none */
         if (b == B_GLO)                                       /* for now, OK1; a reset is the button + OCT-, U2) */
             ui_lay_open(LAY_PERF, b);
@@ -3401,7 +3499,7 @@ static void ui_tap_tempo(void)
         ui_toast("MIDI'S CLOCK SETS THE TEMPO");
         return;
     }
-    if (ui.tt_n && fm1_ms - ui.tt[ui.tt_n - 1u] > 2000u)
+    if (ui.tt_n && fm1_ms - ui.tt[ui.tt_n - 1u] > UI_TAP_LIVE_MS)
         ui.tt_n = 0;
     if (ui.tt_n == 4u) {
         for (i = 0; i < 3u; i++)
@@ -3410,6 +3508,7 @@ static void ui_tap_tempo(void)
     }
     ui.tt[ui.tt_n++] = fm1_ms;
     n = ui.tt_n;
+    ui.dirty |= D_DISP;                             /* (V0.875: PERFORM's taps) */
     if (n < 3u) {
         ui_toast(n == 1u ? "TAP: AGAIN, IN TIME" : "TAP: ONCE MORE");
         return;
@@ -3492,7 +3591,8 @@ static uint32_t sy_ui_key_vel(void) { return ui.kvel ? ui.kvel : 100u; }
 static int sy_ui_keys_plain(void)
 {
     return !ui.lay && !ui.mod && ui_sec() != SEC_SAVE && !ui_grid_keys() && !ui_clips_keys() &&
-           ui.scr_st == SCR_ON && !ui.scr_eat && !(fm1_in.buttons & (1u << panel.btn[B_SCL]));
+           ui.scr_st == SCR_ON && !ui.scr_eat && !(fm1_in.buttons & ((1u << panel.btn[B_SCL]) | (1u << panel.btn[B_OCTDN])));
+                                                    /* (V0.875: OCT- held: DEBUG's corner keys are held off by sy_ui_key) */
 }
 
 /* the keys in REC's MOD layer: a white key picks its source, no key plays; 1 = taken (no note). (ENV's layer:
@@ -3501,9 +3601,19 @@ static int sy_ui_key(uint32_t k)
 {
     if (ui_scr_touch())                             /* (V0.86, F34: the screen dark or waking: no note) */
         return 1;
-    if (ui_sec() == SEC_SAVE)                       /* (SAVE's screen: the keys type) */
+    if (k == 0u || k == 26u) {                      /* (V0.875, item 25: a corner key landing with OCT- and another corner down: no note, */
+        uint32_t m = ui_dbg_down(1);                /* nothing else) */
+        if ((m & DBG_O) && (m & (DBG_G | (k ? DBG_K0 : DBG_K1))))
+            return 1;
+    }
+    if (ui_sec() == SEC_SAVE) {                     /* (SAVE's screen: the keys type) */
+        if (k == 0u || k == 26u)
+            ui_dbg_name(k ? DBG_K1 : DBG_K0);
         return ui_save_key(k);
+    }
     if (ui.lay == LAY_PERF && k == 0u && (ui.bt_down & (1u << B_GLO))) {   /* (V0.87.1: GLO held: F3 taps the tempo, no note; latched, it plays) */
+        ui.dbg_ok |= DBG_TAP, ui.dbg_ttn = ui.tt_n, ui.dbg_bpm = ui.bpm;   /* (V0.875: the taps as they were, for DEBUG's opening) */
+        memcpy(ui.dbg_tt, ui.tt, sizeof ui.tt);
         ui_tap_tempo();
         return 1;
     }
@@ -3585,6 +3695,7 @@ static void sy_ui_ms(void)
     }
     ui_scr_ms();
     ui_buttons();
+    ui_dbg_tick();                                  /* (V0.875, item 25: DEBUG's four corners) */
     if (ui.cd_btn != NB)
         ui_cd_tick();
     for (k = 0; k < 4u; k++)
@@ -3655,6 +3766,14 @@ static void sy_ui_ms(void)
         memset(ui.ks_seen, 0, sizeof ui.ks_seen);
     }
     ui_pl_ms();
+    if (ui.lay == LAY_PERF) {                       /* (V0.875, item 28: PERFORM's last tap's dot: its flash over, the run over) */
+        static uint8_t tph;
+        uint32_t age = ui.tt_n ? fm1_ms - ui.tt[ui.tt_n - 1u] : 0xFFFFu, ph = age < UI_TAP_FLASH_MS ? 2u : age <= UI_TAP_LIVE_MS ? 1u : 0u;
+        if (ph != tph) {
+            tph = (uint8_t)ph;
+            ui.dirty |= D_DISP;
+        }
+    }
     {                                               /* (V0.87.1: a test loaded or ended, another: HOME and the top line say so) */
         static uint8_t tpa;
         if (tpa != (uint8_t)sy_tp_active()) {

@@ -894,6 +894,15 @@ static void sy_key_up(uint32_t k, uint32_t *now)        /* a key let go: the not
     else
         *now |= 1u << k;                     /* (the ring full: the release again next time) */
 }
+/* V0.875 (item 25): key k's note ended now, the key still down (DEBUG's four corners: F3 and G5 are no notes there); its
+ * release later finds nothing. Called by the main loop while OCT- is held, when TIMER5 does not read the keys
+ * (sy_ui_keys_plain); a full ring keeps the note until the key is let go, or the UI's next try */
+static void sy_app_key_off(uint32_t k)
+{
+    uint32_t keep = 0;
+    if (k < SY_NKEY)
+        sy_key_up(k, &keep);
+}
 static void sy_key_down(uint32_t k, int32_t n, uint32_t v)
 {
     if (sy_ev_push(&sy_ev_key, SY_EV_KEY, n >= 0 && n <= 127 ? (uint32_t)n : 0xFFu, k | 0x80u)) {

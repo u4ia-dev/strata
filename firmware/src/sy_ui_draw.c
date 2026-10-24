@@ -2119,7 +2119,26 @@ static void ui_p_perf(void)
         lk_text_c(X[i], 166.0f, T10B, N[i], sk.lab, sk.ground, 20, 0);
         ui_H(i, X[i] - 5.0f, 24.0f);
     }
-    lk_text_c(120.0f, 184.0f, T9, "THE LOWEST KEY, F3: TAP TEMPO", sk.lab, sk.ground, 20, 0);   /* (V0.87.1) */
+    {                                               /* (V0.875, item 28) tap tempo: each tap a dot (the last flashes), the tempo as it settles */
+        uint32_t n = ui.tt_n, age = n ? fm1_ms - ui.tt[n - 1u] : 0xFFFFu;
+        int live = n && age <= UI_TAP_LIVE_MS;
+        char t[16];
+        lk_text_c(120.0f, 182.0f, T9, !live ? "THE LOWEST KEY, F3: TAP TEMPO" : n < 3u ? "TAP ON: THREE SET THE TEMPO" : "KEEP TAPPING: IT SETTLES",
+                  sk.lab, sk.ground, 20, 0);
+        for (i = 0; i < 4u; i++) {
+            float cx = 34.0f + 17.0f * (float)i;
+            if (live && i < n)
+                lk_disc(cx, 207.0f, i + 1u == n && age < UI_TAP_FLASH_MS ? 6.5f : 4.5f,
+                        i + 1u == n && age < UI_TAP_FLASH_MS ? sk.hot : sk.ink);
+            else
+                lk_ring(cx, 207.0f, 4.5f, 1.0f, sk.line);
+        }
+        if (live && n < 3u)
+            sp_put(sp_fix(sp_put(sp_fix(t, (int32_t)n, 0u, 0), " OF "), 3, 0u, 0), "");
+        else
+            sp_put(sp_fix(t, ui.bpm, 0u, 0), " BPM");
+        lk_text(112.0f, 199.0f, T14B, t, live && n >= 3u ? sk.hot : live ? sk.ink : sk.lab, sk.ground, 0, 17);
+    }
 }
 
 /* MACROS (FX held): MACRO 1-4 as dials, the chain's modules (F3 .. F4 bypass them or take them back) */
@@ -2309,9 +2328,9 @@ static int ui_cd_view(uint32_t *n, float *frac, char *title, const char **sub, c
             sp_fix(sp_put(title, "DELETE USER "), sy_app_slot() + 1, 0u, 0);
             *sub2 = "SAVE + OCT- STRAIGHT AFTER PUTS IT BACK";
             *label = "BROWSER";
-        } else {
-            sp_put(title, "DEBUG");
-            *sub = "KEEP HOLDING HOME";
+        } else {                                    /* (V0.875: HOME held is the help map; its countdown none) */
+            sp_put(title, "HELP");
+            *sub = "LET GO TO CLOSE";
             *label = "HOME";
         }
     } else {
@@ -2343,8 +2362,8 @@ static void ui_p_countdown(void)
 }
 
 /* HOME held (V0.86, B17): the help map of the screen shown: what SELECT, ALGORITHM, PRESETS and the knobs do here,
- * every button once and twice; on HOME, held on, DEBUG at 5 s (the bar at the bottom filling toward it; V0.87.1: HOME
- * only) */
+ * every button once and twice, how DEBUG opens (V0.875: OCT- + F3 + G5 + GLO; HOME held is this map on every page, as
+ * long as it is held, no countdown) */
 static void ui_p_help(void)
 {
     static const char *const TW[12] = {
@@ -2353,10 +2372,9 @@ static void ui_p_help(void)
         "SEQ \xD7" "2 PROJECTS", "SAVE \xD7" "2 BROWSER", "REC \xD7" "2 TAKE", "+OCT- 5 S: RESET"};
     static const char *const LB[5] = {"SELECT", "ALGORITHM", "PRESETS", "KNOBS", ""};
     uint8_t secs[NFXC];
-    uint32_t n, i, sec = ui_sec(), held = fm1_ms - ui.bt_t[B_HOME];
+    uint32_t n, i, sec = ui_sec();
     char t[160], v[40], f[96], *e;                  /* (t: eight modules' names, 13 characters each at most) */
-    float w = ui_cd_debug() ? 224.0f * sy_clampf((float)held / (float)UI_LONG_MS, 0.0f, 1.0f) : 0.0f;
-    lk_banner("HELP", ui_cd_debug() ? "HOLD ON: DEBUG AT 5 S" : "LET GO TO CLOSE");
+    lk_banner("HELP", "LET GO TO CLOSE");
     sp_put(sp_put(sp_put(t, sec == SEC_MACRO ? "HOME" : ui_sec_name(sec)), " > "), UI_PG[ui.page].name);
     lk_text(8.0f, 24.0f, T12B, lk_fit(f, sizeof f, t, T12B, 20, 224.0f), sk.ink, sk.ground, 20, 11);
     for (i = 0; i < 5u; i++) {
@@ -2399,10 +2417,7 @@ static void ui_p_help(void)
     for (i = 0; i < 12u; i++)
         lk_text(i & 1u ? 124.0f : 8.0f, 129.0f + 11.0f * (float)(i / 2u), T9, TW[i], sk.ink, sk.ground, 20, 0);
     lk_text(8.0f, 198.0f, T9, "A LIST OR QUESTION: ITS OPENER \xD7" "2", sk.lab, sk.ground, 20, 0);   /* (V0.87.1) */
-    if (ui_cd_debug())
-        lk_frame(8.5f, 212.5f, 223.0f, 7.0f, 1.0f, sk.line);
-    if (w > 1.0f)
-        lk_box(10.0f, 214.0f, 8.0f + sy_minf(w, 222.0f), 218.0f, sk.hot);
+    lk_text(8.0f, 212.0f, T9, "DEBUG: OCT- + F3 + G5 + GLO HELD", sk.lab, sk.ground, 20, 0);   /* (V0.875: the four corners) */
 }
 
 /* SETTINGS > POWER (V0.86, F31, F34): the battery (its bars, the stock firmware's levels; the raw reading), SHOW
@@ -3373,8 +3388,8 @@ static void sy_ui_frame(void)
         was_view = (uint8_t)v;
         ui.dirty |= D_DISP;
     }
-    if (v == V_CD || (v == V_HELP && ui_cd_debug())) {   /* a countdown: its ring as it empties, its seconds (the help */
-        if (fm1_ms - cd_t >= (v == V_HELP ? 100u : 40u)) {   /* map's bar) */
+    if (v == V_CD) {                                /* a countdown: its ring as it empties, its seconds */
+        if (fm1_ms - cd_t >= 40u) {
             cd_t = fm1_ms;
             ui.dirty |= D_LIVE;
         }
@@ -3503,8 +3518,6 @@ static void sy_ui_frame(void)
         ui.dirty &= (uint8_t)~D_LIVE;
         if (v == V_CD) {
             ui_win(76, 56, 89, 89, 0);              /* (the ring and its seconds) */
-        } else if (v == V_HELP) {
-            ui_win(8, 212, 225, 9, 0);              /* (the help map's bar) */
         } else if (g == G_HOME) {
             if (bloom)
                 ui_win(sy_floori(UI_BX - UI_BLOOM_R) - 1, sy_floori(UI_BY - UI_BLOOM_R) - 1, sy_floori(2.0f * UI_BLOOM_R) + 3,

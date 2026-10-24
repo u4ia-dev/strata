@@ -27,12 +27,15 @@ enum { PR_GROUND, PR_INK, PR_LAB, PR_MID, PR_LINE, PR_HOT, PR_N };
 static const struct { char name[8]; uint32_t c[PR_N]; } SY_PAL[SY_NPAL] = {   /* RGB888: LAB (the labels' text), MID
                                                                                  * and LINE INK over GROUND at ~76 %,
                                                                                  * ~47 % and ~14 % */
-    {"STRATA", {0x0B0B0B, 0xF4F1EA, 0xBAB7B1, 0x7A766E, 0x2C2A27, 0xFF4D2E}},
+    {"STRATA", {0x000000, 0xF4F1EA, 0xD5D2CB, 0xA09C94, 0x403E3A, 0xFF4D2E}},   /* (V0.875, item 26: a black ground, the site's ink
+                                                                                 * and vermilion; the labels over it 13.9 : 1,
+                                                                                 * MID 7.5, LINE 2.0: HI-CON's 13.6, 7.4, 2.0) */
     {"CLASSIC", {0x101820, 0xE8E8E8, 0xB4B6B8, 0x767A7E, 0x2E353C, 0xF2A900}},
     {"ICE", {0x0A1420, 0xDDF1FF, 0xAABCCB, 0x6D7C89, 0x27333F, 0x5CC8FF}},
     {"VIOLET", {0x140C1E, 0xEDE3FF, 0xB7ADC6, 0x7A7188, 0x322A3D, 0xB57CFF}},
     {"PAPER", {0xEFEBE3, 0x151515, 0x4B4A47, 0x857F75, 0xD3CDC2, 0xE2401F}},
-    {"NIGHT", {0x000000, 0x8A8A8A, 0x7A7A7A, 0x414141, 0x1C1C1C, 0xC2410C}},   /* (dim: LAB 88 %, LINE 20 %) */
+    {"AMBER", {0x000000, 0xFFB000, 0xE2A200, 0xA87400, 0x3E2A00, 0xFFF2D0}},   /* (V0.875, item 27: amber phosphor, bright; NIGHT's place, so
+                                                                                 * a saved NIGHT loads as it; the hot a pale glow) */
     {"HI-CON", {0x000000, 0xFFFFFF, 0xD0D0D0, 0x999999, 0x404040, 0xFFD400}},  /* (LAB 82 %, MID 60 %, LINE 25 %) */
     {"MONO", {0x000000, 0xFFFFFF, 0xC2C2C2, 0x787878, 0x242424, 0xFFFFFF}},    /* (the accent is the ink) */
     {"MOSS", {0x0C110C, 0xE4EDD8, 0xB0B8A7, 0x72786C, 0x2A3029, 0xB8E04A}},    /* (V0.67's four) */
