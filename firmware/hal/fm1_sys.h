@@ -9,6 +9,7 @@
  *   fm1_wdt_feed()       in the main loop
  *   fm1_reboot()         chip reset through P33 (P3_PR_PWR bit 4)
  *   fm1_enter_uboot()    "usb_update_mode" at 0x01C7FD80 + chip reset
+ *   fm1_enter_uboot_wdt() the same mailbox, then the watchdog's reset instead of P33's (Strata V0.87.1)
  *   fm1_enter_update(p)  112-byte UPDATA_PARM record at 0x01C7FD88 + core reset
  *                        (the SPL then runs the staged update loader)
  *   fm1_core_reset()     PWR_CON core reset
@@ -179,6 +180,26 @@ static void fm1_enter_uboot(void)
     for (i = 0; i < 16u; i++)
         FM1_BOOT_STATE[i] = (uint8_t)k[i];
     fm1_p33_or(FM1_P3_PR_PWR, 0x10);
+    for (;;)
+        ;
+}
+
+/* Strata V0.87.1 (item 12, way c; needs a hardware test): the same mailbox as fm1_enter_uboot, then the watchdog's
+ * own reset, armed at its shortest documented timeout (0xA, ~1 s) and not fed, instead of the P33 reset. The FM-1
+ * Transporter saw the ROM take its USB key after a watchdog reset; whether the ROM reads the mailbox after one is
+ * unverified (if not: a plain restart). Writes nothing but RAM and the watchdog's register */
+FM1_INLINE void fm1_enter_uboot_wdt(void)
+{
+    static const char k[16] = "usb_update_mode";
+    uint32_t i;
+    __asm__ volatile("cli");
+    FM1_RESET_PREP();
+    if (!(*(volatile uint32_t *)0x1EEE240u & 1u))       /* drop CPU0 write limits, as fm1_enter_uboot */
+        *(volatile uint32_t *)0x1EEE240u = 0xE7u;
+    *(volatile uint32_t *)0x1EEE348u = 0;
+    for (i = 0; i < 16u; i++)
+        FM1_BOOT_STATE[i] = (uint8_t)k[i];
+    fm1_wdt_arm(0x0A);
     for (;;)
         ;
 }

@@ -4,7 +4,9 @@
 /* STRATA's serial console on the CDC-ACM function (FELUCCA_CDC=1): read-only diagnostics, in the main loop
  * (cdc_task; usb_poll moves the bytes). Nothing here writes memory or flash; `uboot yes` does what the SysEx soft key
  * does. `status` and `bench` are what a hardware test reports (docs/FLASHING.md): the web flasher's DEVICE REPORT
- * reads them over Web Serial. */
+ * reads them over Web Serial. V0.87.1: `uboot yes a|b|c` picks the way into the USB boot (sy_main.c sy_uboot), and
+ * `tproj` loads, stops and follows the test projects (sy_testproj.c: into RAM, the flash not written, auto-save off
+ * while one is loaded); one line a reply */
 #define CON_LINE 64u
 
 static struct {
@@ -214,6 +216,7 @@ static void con_status(void)
     con_ks("sound", sy_patch.name);
     con_kv("user_slot", sy_slot);
     con_kv("master_q12", sy_master_q12);
+    con_kv("master_adc", sy_master_adc);         /* (V0.87.1: the pot's last reading, before the dead band) */
     con_kv("safe_start", sy_boot_safe);
     con_kv("bootguard_failed", (int32_t)bootguard.failed);
     con_kv("usb_resets", (int32_t)usb.resets);
@@ -229,6 +232,11 @@ static void con_status(void)
     con_kv("uart_rx_drops", (int32_t)um.drops);
 #endif
     con_kv("flash", flash_ok);
+    {                                            /* (V0.87.1: the test project playing, 1 .. SY_TP_N, 0 none) */
+        uint32_t k = (uint32_t)sy_tp_active();
+        con_kv("tproj", (int32_t)k);
+        con_kv("tproj_ms", k ? (int32_t)sy_tp_ms(k - 1u) : 0);
+    }
 }
 
 /* BENCH's figures (SETTINGS > BENCH), and RUN's loop counts (their instructions: build/strata.dis) */
@@ -369,10 +377,56 @@ static void con_params(void)                            /* the sound playing: ev
     }
 }
 
+/* V0.87.1: the test projects (sy_testproj.c), a line each: `tproj N` (1 .. SY_TP_N) loads and starts N, "tproj N NAME
+ * ok", or "tproj N busy" when it can't (a load in flight); `tproj stop`, "tproj stop ok"; `tproj` alone, "tproj K NAME
+ * MS" while K is loaded (MS its running time), else "tproj none" */
+static void con_tproj(const char *p)
+{
+    int ok;
+    uint32_t n, k;
+    if (con_word(&p, "stop")) {
+        sy_tp_stop();
+        con_puts("tproj stop ok\r\n");
+        return;
+    }
+    n = con_num(&p, &ok);
+    while (*p == ' ')
+        p++;
+    if (!ok && !*p) {
+        k = (uint32_t)sy_tp_active();
+        if (!k || k > SY_TP_N) {
+            con_puts("tproj none\r\n");
+            return;
+        }
+        con_puts("tproj ");
+        con_dec((int32_t)k);
+        con_putc(' ');
+        con_puts(sy_tp_name(k - 1u));
+        con_putc(' ');
+        con_dec((int32_t)sy_tp_ms(k - 1u));
+        con_puts("\r\n");
+        return;
+    }
+    if (!ok || *p || n < 1u || n > SY_TP_N) {
+        con_puts("usage: tproj [1..4|stop]\r\n");
+        return;
+    }
+    con_puts("tproj ");
+    con_dec((int32_t)n);
+    con_putc(' ');
+    if (sy_tp_load(n - 1u)) {
+        con_puts(sy_tp_name(n - 1u));
+        con_puts(" ok\r\n");
+    } else {
+        con_puts("busy\r\n");
+    }
+}
+
 static void con_exec(const char *p)
 {
     if (con_word(&p, "help") || con_word(&p, "?"))
-        con_puts("status  bench [run]  inp  crash  params  memr ADDR [LEN]  flr OFF [LEN]  uboot yes\r\n");
+        con_puts("status  bench [run]  inp  crash  params  memr ADDR [LEN]  flr OFF [LEN]  tproj [1..4|stop]  "
+                 "uboot yes [a|b|c]\r\n");
     else if (con_word(&p, "status"))
         con_status();
     else if (con_word(&p, "bench")) {
@@ -393,12 +447,32 @@ static void con_exec(const char *p)
         con_memr(p);
     else if (con_word(&p, "flr"))
         con_flr(p);
-    else if (con_word(&p, "uboot")) {
+    else if (con_word(&p, "tproj"))
+        con_tproj(p);
+    else if (con_word(&p, "uboot")) {                  /* (V0.87.1: way a, b or c, sy_main.c sy_uboot; none: b) */
+        uint32_t way = 0;
         if (con_word(&p, "yes")) {
-            con_puts("entering UBOOT\r\n");
+            if (con_word(&p, "a"))
+                way = 'a';
+            else if (con_word(&p, "b"))
+                way = 'b';
+            else if (con_word(&p, "c"))
+                way = 'c';
+            while (*p == ' ')
+                p++;
+            if (*p)
+                way = 0;
+            else if (!way)
+                way = SY_UBOOT_WAY;
+        }
+        if (way) {
+            con_puts("entering UBOOT ");
+            con_putc((char)way);
+            con_puts("\r\n");
+            sy_uboot_way = (uint8_t)way;
             usb.uboot_req = 1;                         /* main loop: same path as the SysEx key */
         } else {
-            con_puts("type 'uboot yes'\r\n");
+            con_puts("type 'uboot yes' (or 'uboot yes a|b|c')\r\n");
         }
     } else if (*p)
         con_puts("? (help)\r\n");
