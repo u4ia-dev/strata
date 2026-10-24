@@ -29,6 +29,7 @@ import re
 import shutil
 import struct
 import sys
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +39,17 @@ import fm1pkg_make  # noqa: E402
 
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
 
+
+
+def brand(page, root):
+    """Strata's logo (assets/logo, tools/gen_logo.py) into a page: <!--LOGO--> the logo inline (class "logo",
+    decorative), <!--FAVICON--> the icon as a data: URI (no file beside the page needed)"""
+    d = root / "assets" / "logo"
+    logo = re.sub(r"<title>.*?</title>", "", (d / "logo.svg").read_text(encoding="utf-8").strip())
+    logo = logo.replace('role="img" aria-label="Strata"', 'class="logo" aria-hidden="true" focusable="false"', 1)
+    fav = (d / "favicon.svg").read_text(encoding="utf-8").strip()
+    icon = '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,' + urllib.parse.quote(fav, safe=" =:/") + '">'
+    return page.replace("<!--LOGO-->", logo).replace("<!--FAVICON-->", icon)
 
 def strip_module(src):
     src = re.sub(r"^export\s+", "", src, flags=re.M)
@@ -149,7 +161,7 @@ def main(pkg="build/strata.fwsc", out="build/flasher"):
     lib = "\n".join(strip_module((SRC / "web" / f).read_text(encoding="utf-8")) for f in ("fm1pkg.js", "fm1ota.js"))
     meta = {"version": strata_version(), "product": product, "pkg": "strata.fwsc", "size": len(raw),
             "sha256": hashlib.sha256(raw).hexdigest()}
-    html = html.replace("/*LIB*/", lib).replace("/*META*/", json.dumps(meta))
+    html = brand(html.replace("/*LIB*/", lib).replace("/*META*/", json.dumps(meta)), SRC)
     if out.exists():
         shutil.rmtree(out)
     (out / "LICENSES").mkdir(parents=True)

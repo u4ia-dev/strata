@@ -24,6 +24,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 FLASHER = ROOT / "build" / "flasher"
+sys.path.insert(0, str(HERE))
+from make_flasher import brand  # noqa: E402  (the logo and the favicon into a page)
 INTERNAL = ("serve.py", "__pycache__", "test.html", "usb_check.html", "FLASHING.md", "index.html")
 BOOK_INSTALL = "book/manual/install.html"
 
@@ -59,6 +61,7 @@ def public_flasher(raw, repo):
             raise SystemExit(f"site: the flasher's {a[:50]!r} is not there once: update make_site.py")
         t = t.replace(a, b)
     for left in ("INTERNAL-->", "INTERNAL*/", "LOCAL-->", "PUBLIC:", ":PUBLIC", "@REPO@", 'id="s3"', "FLASHING.md, section",
+                 "<!--LOGO-->", "<!--FAVICON-->",
                  "test.html", "usb_check", "on this computer only"):
         if left in t:
             raise SystemExit(f"site: {left!r} left in the public flasher")
@@ -80,6 +83,7 @@ def info_page(repo, version, sha):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strata for FM-1 · Info</title>
+<!--FAVICON-->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
 <style>
   :root {{ --bg: #0b0b0b; --card: #131312; --line: #2c2a27; --ink: #f4f1ea; --mute: #bab7b1; --hot: #ff4d2e;
@@ -89,7 +93,8 @@ def info_page(repo, version, sha):
          padding: 28px max(16px, env(safe-area-inset-left, 0px)) 64px max(16px, env(safe-area-inset-right, 0px)); }}
   #fx {{ position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }}
   main {{ max-width: 760px; margin: 0 auto; display: grid; gap: 18px; }}
-  h1 {{ margin: 0; font-size: 32px; letter-spacing: .18em; }}
+  h1 {{ margin: 0; font-size: 32px; letter-spacing: .18em; display: flex; align-items: center; gap: 16px; }}
+  h1 .logo {{ width: 64px; height: 64px; flex: none; }}
   h2 {{ margin: 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }}
   p {{ margin: 0; }} .mute {{ color: var(--mute); }}
   section {{ background: var(--card); border: 1px solid var(--line); padding: 16px 18px; display: grid; gap: 10px; }}
@@ -108,7 +113,7 @@ def info_page(repo, version, sha):
 <canvas id="fx" aria-hidden="true"></canvas><script src="fx.js" defer></script>
 <main>
   <nav class="site" aria-label="Site">{nav(repo, "Info")}</nav>
-  <h1>STRATA</h1>
+  <h1><!--LOGO-->STRATA</h1>
   <p class="mute">Strata turns the M-VAVE FM-1 into a complete pocket instrument: a deep wavetable synth, an 8-track
     looper and a drum machine. Free software, built on Felucca. Package {html.escape(version)}, SHA-256
     <code>{html.escape(sha[:16])}…</code></p>
@@ -185,7 +190,8 @@ def main():
     ver = re.search(r'"version":\s*"([^"]*)"', raw)  # (the facts make_flasher.py inlined)
     version = ver.group(1) if ver else "?"
     sha = hashlib.sha256((FLASHER / "strata.fwsc").read_bytes()).hexdigest()
-    (out / "info.html").write_text(info_page(repo, version, sha), encoding="utf-8", newline="\n")
+    (out / "info.html").write_text(brand(info_page(repo, version, sha), ROOT), encoding="utf-8", newline="\n")
+    shutil.copytree(ROOT / "assets" / "logo", out / "logo")   # (the logo's files, for anyone linking to them)
     (out / "flash").mkdir()
     (out / "flash" / "index.html").write_text(REDIRECT, encoding="utf-8", newline="\n")
     (out / ".nojekyll").write_text("", encoding="utf-8")
