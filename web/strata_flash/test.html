@@ -4,8 +4,11 @@
      by itself, what needs the panel is a guided step the page checks. It plays notes and sends controllers and
      program changes over USB MIDI (channel 1, no SysEx), reads the console's read-only commands (status, bench, inp,
      crash, memr: the RAM addresses of this very app, make_flasher.py's META), and listens to the FM-1's USB audio.
-     It writes nothing to the FM-1's flash and sends nothing that updates or restarts it. Served beside the flasher
-     (make_flasher.py, serve.py): http://127.0.0.1:8000/test.html -->
+     It writes nothing to the FM-1's flash and sends nothing that updates it. V0.87.1 adds the four test projects
+     (`tproj N`, recorded from the FM-1's USB audio and posted to serve.py, build/hwtest/) and three buttons for the
+     backup-mode test (`uboot yes a|b|c`, item 12), each pressed by hand and asked first: with them the FM-1 leaves
+     for backup mode and needs a power cycle. Served beside the flasher (make_flasher.py, serve.py):
+     http://127.0.0.1:8000/test.html -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -70,7 +73,9 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
   <p>Runs the tests of <code>FLASHING.md</code> section 4 that the computer can do by itself, and guides the ones that
     need the panel, checking the result where it can. It plays notes and sends controllers and program changes over USB
     MIDI, reads Strata's console, and can listen to the FM-1's USB audio. <b>It writes nothing to the FM-1's flash</b>
-    and sends no update or backup-mode command.</p>
+    and sends no update. Two parts act on the FM-1 only when you press them: the test projects (section 3: they load
+    a built-in project and play it) and the backup-mode buttons (section 7: the FM-1 leaves for backup mode and needs
+    a power cycle).</p>
   <p id="facts" class="state"></p>
 
   <section>
@@ -119,8 +124,31 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
       <tbody></tbody></table></div>
   </section>
 
+  <section id="tp-sec">
+    <h2><span class="n">3</span>The test projects (V0.87.1)</h2>
+    <p>Each loads a built-in project on the FM-1 (<code>tproj N</code>), plays it for 60 to 90 s while this page records
+      the FM-1's USB audio, then saves the sound and the run's figures in <code>build/hwtest/</code> for the analysis
+      (<code>tools/hw_audio_check.py</code>). Nothing of yours is touched: the projects are built in and read-only, and
+      auto-save is off while one is loaded. <b>Hands off the FM-1 and the volume while one runs.</b> Needs the console
+      connected and the FM-1's USB audio input (the device named "Strata for FM-1"; the browser asks to use the
+      microphone once). Open the page through <code>serve.py</code> so it can save; without it each recording is offered
+      as a download.</p>
+    <div class="row" id="tp-btns">
+      <button data-tp="1" disabled>TEST 1 VOICES</button>
+      <button data-tp="2" disabled>TEST 2 FX</button>
+      <button data-tp="3" disabled>TEST 3 DRUMS</button>
+      <button data-tp="4" disabled>TEST 4 LOOPER</button>
+      <button id="tp-all" class="primary" disabled>Run all four</button>
+      <button id="tp-stop" disabled>Stop</button>
+    </div>
+    <p id="s-tp" class="state"></p>
+    <div class="scroll"><table id="t-tp"><thead><tr><th>Test</th><th>Result</th><th>Detail</th></tr></thead>
+      <tbody></tbody></table></div>
+    <div id="tp-dl" class="row"></div>
+  </section>
+
   <section>
-    <h2><span class="n">3</span>Guided steps</h2>
+    <h2><span class="n">4</span>Guided steps</h2>
     <p>Each step says what to do on the panel; the page watches the FM-1 and ticks what it saw. Mark a step when it is
       done, or say it did not work.</p>
 
@@ -174,13 +202,20 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
 
     <div class="step" id="g-draw">
       <h3>D. The keys and the screen while it draws (items 15 and 19)</h3>
-      <p>First DEBUG (HOME held 5 s): BENCH, and turn <b>KNOB 2</b>: it clears the peaks. Then press
-        Start and for 25 s flick through pages (SELECT, ALGORITHM, the family buttons) and turn knobs on graph pages (an
+      <p>V0.87.1: <b>1.</b> Go to HOME's first page (HOME, if you are elsewhere). <b>2.</b> Hold <b>HOME</b> for 5 s: the
+        bar fills and <b>DEBUG</b> opens (held on any other page it only shows the help map). It opens on <b>BENCH</b>.
+        <b>3.</b> Turn <b>KNOB 2</b> (PEAKS): "THE PEAKS CLEARED". <b>4.</b> Leave DEBUG (HOME once) and press Start
+        here. For 25 s flick through pages (SELECT, ALGORITHM, the family buttons) and turn knobs on graph pages (an
         envelope, an LFO, the EQ, the FX FILTER, the chain view) while the page holds a chord. The page sends nothing
-        to the console meanwhile, so it does not slow the FM-1's main loop.</p>
+        to the console meanwhile, so it does not slow the FM-1's main loop. Afterwards it reads BENCH's longest key
+        wait and frame.</p>
+      <p>Two buttons say different things: <b>It felt slow</b> (the panel lagged: say where in the note) and
+        <b>I could not do the steps</b> (DEBUG or BENCH did not open as described: say what the screen showed). A
+        report line for either carries the button's own words.</p>
       <div class="row">
         <button data-start="draw" disabled>Start</button>
-        <button data-fail="draw" disabled>It felt slow</button>
+        <button data-fail="draw" data-msg="the tester pressed 'It felt slow': the panel lagged while flicking through pages" disabled>It felt slow</button>
+        <button data-fail="draw" data-msg="the tester pressed 'I could not do the steps': DEBUG or BENCH did not open as the page says" data-key="draw-steps" disabled>I could not do the steps</button>
         <span class="state" data-status="draw"></span>
       </div>
     </div>
@@ -198,7 +233,7 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
   </section>
 
   <section>
-    <h2><span class="n">4</span>Listen and look</h2>
+    <h2><span class="n">5</span>Listen and look</h2>
     <p>What only ears and eyes can judge. Mark each and add a note where something was odd.</p>
     <div class="row"><button id="play-all" disabled>Play each starter sound</button>
       <span class="state" id="s-play"></span></div>
@@ -206,8 +241,36 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
       <tbody></tbody></table></div>
   </section>
 
+  <section id="bk-sec">
+    <h2><span class="n">7</span>Backup mode, three ways (V0.87.1, item 12)</h2>
+    <p>V0.87's way (OCT- + OCT+ held, or the SysEx soft key) left a black screen and an unknown USB device. Three ways
+      are on trial; each writes nothing. Try one, power-cycle, then another. <b>Each press makes the FM-1 leave for backup
+      mode: its console drops, its audio and MIDI go away, and only a power cycle brings it back.</b></p>
+    <ul>
+      <li>Way A: as V0.87 (the P33 reset, nothing else).</li>
+      <li>Way B: the watchdog stopped, the USB detached for about 100 ms, then the P33 reset.</li>
+      <li>Way C: as B, then a watchdog reset instead.</li>
+    </ul>
+    <ol>
+      <li>Before pressing, look at Windows (Device Manager, Ports and Universal Serial Bus devices, or This PC) and
+        write down what shows for the FM-1:
+        <input type="text" id="bk-before" placeholder="e.g. Strata for FM-1 under Ports (COM5)"></li>
+      <li>Press one button (it asks first). The console should drop within a second or two if it works.</li>
+      <li>Look at Windows again: a disk <b>WL82 UBOOT1.00</b> (the backup-mode disk) is the good result; "Unknown USB
+        device (Device Descriptor Request Failed)" is the bad one. Write it down:
+        <input type="text" id="bk-after" placeholder="what Windows shows now, and the FM-1's screen"></li>
+      <li><b>Power-cycle the FM-1</b> (off, wait, on) to come back, and connect the console again.</li>
+    </ol>
+    <div class="row">
+      <button data-bk="a" disabled>Backup mode: way A</button>
+      <button data-bk="b" disabled>Backup mode: way B</button>
+      <button data-bk="c" disabled>Backup mode: way C</button>
+      <span id="s-bk" class="state"></span>
+    </div>
+  </section>
+
   <section>
-    <h2><span class="n">5</span>The report</h2>
+    <h2><span class="n">8</span>The report</h2>
     <p>Copy it into the conversation when you are done (or save it as a file).</p>
     <div class="row">
       <button id="copy" class="primary">Copy the report</button>
@@ -239,11 +302,13 @@ const norm = (p, v) => Math.fround(Math.fround(v - p.lo) / Math.fround(p.hi - p.
 const FIXED = ["FX FILTER", "BITCRUSH", "TREMOLO", "RING MOD", "TAPE"];               // the modules V0.6 left stuck
 const HI = P.filter((p) => p.id >= 256 && SMOOTH(p));                                // .. their values, from id 256 up
 const CUT = find("FILTER", "CUTOFF");
-const ALLOWED = /^(|status|bench|bench run|inp|crash|memr 0x[0-9A-F]{8} \d{1,3})$/;    // read-only, nothing else
+const ALLOWED = /^(|status|bench|bench run|inp|crash|memr 0x[0-9A-F]{8} \d{1,3}|tproj|tproj [1-4]|tproj stop|uboot yes [abc])$/;
+// (read-only, plus V0.87.1's: the test projects, and backup mode by one of its three ways, pressed by hand)
+const TOKEN = "__STRATA_TOKEN__";                                                       // (serve.py puts this run's token here)
 $("facts").textContent = `For ${META.version} (${META.product}), package SHA-256 ${META.sha256.slice(0, 16)}…`;
 
 // ------------------------------------------------------------------------------------------------- the report
-const R = { started: new Date().toISOString(), device: [], auto: [], load: [], guided: {}, look: {}, log: [] };
+const R = { started: new Date().toISOString(), device: [], auto: [], load: [], guided: {}, look: {}, log: [], tp: [], backup: [] };
 function log(t) { R.log.push(`${stamp()}  ${t}`); report(); }
 function report() {
   const L = [];
@@ -258,6 +323,11 @@ function report() {
     for (const r of R.load) L.push(`${r.sound.padEnd(16)} ${String(r.notes).padStart(2)}: ${r.voices} v, ${r.cpu} %, ` +
       `guard ${r.guard}, shed +${r.shed}, late +${r.late}, half_max ${r.half_max} us, gaps ${r.gaps}`);
   }
+  L.push("", "== test projects (recorded from the FM-1's USB audio; saved where, then the figures)");
+  for (const t of R.tp) L.push(`${t.result.toUpperCase().padEnd(5)} TEST ${t.n} ${t.name}: ${t.detail}`);
+  L.push("", "== backup mode (V0.87.1, item 12)");
+  for (const b of R.backup) L.push(`way ${b.way.toUpperCase()} pressed at ${b.at}: Windows before: ${b.before || "(not written)"}; ` +
+    `the console ${b.console}; Windows after: ${b.after || "(not written)"}`);
   L.push("", "== guided");
   for (const [k, g] of Object.entries(R.guided)) L.push(`${g.result.toUpperCase().padEnd(5)} ${k}: ${g.detail}`);
   L.push("", "== listen and look");
@@ -454,14 +524,17 @@ function guided(key, result, detail) {
 }
 
 // -------------------------------------------------------------------------------------------- connect, gating
-let busy = false, stopAsked = false;
+let busy = false, stopAsked = false, tpState = null;
 function gate() {
   const ready = $("ready").checked, m = !!output(), c = con.alive;
   $("c-midi").disabled = !ready || busy;
   $("c-con").disabled = !ready || busy || !navigator.serial;
   $("c-audio").disabled = !ready || busy || audio.on;
   $("auto").disabled = busy || !m || !c;
-  $("stop").disabled = !busy;
+  $("stop").disabled = !busy || !!tpState;
+  for (const b of document.querySelectorAll("[data-tp],#tp-all")) b.disabled = busy || !c;
+  $("tp-stop").disabled = !tpState;
+  for (const b of document.querySelectorAll("[data-bk]")) b.disabled = busy || !c;
   $("play-all").disabled = busy || !m;
   for (const b of document.querySelectorAll("[data-start]")) {
     const k = b.dataset.start, need = k === "panel" ? c : k === "boot" ? c : m && c;
@@ -815,7 +888,7 @@ for (const b of document.querySelectorAll("[data-done]")) b.addEventListener("cl
 for (const b of document.querySelectorAll("[data-fail]")) b.addEventListener("click", () => {
   const k = b.dataset.fail;
   if (running[k]) running[k].now = true;
-  R.guided[`${k} (said)`] = { result: "fail", detail: "the tester: it did not work" };
+  R.guided[`${b.dataset.key || k} (said)`] = { result: "fail", detail: b.dataset.msg || "the tester: it did not work" };
   report();
 });
 for (const b of document.querySelectorAll("[data-yn]")) b.addEventListener("click", () => {
@@ -823,6 +896,219 @@ for (const b of document.querySelectorAll("[data-yn]")) b.addEventListener("clic
   for (const o of document.querySelectorAll(`[data-yn="${b.dataset.yn}"]`)) o.classList.toggle("primary", o === b);
   report();
 });
+
+// ------------------------------------------------------------------------------- the test projects (V0.87.1, item 11)
+// `tproj N` loads and starts a built-in project (it replies `tproj N NAME ok`, or `tproj N busy`); `tproj` alone says
+// `tproj K NAME ms` while it runs and `tproj none` after. The FM-1's USB audio is recorded the whole while (getUserMedia
+// on the device named "Strata for FM-1", no echo cancellation, no noise suppression, no auto gain), saved as a 16-bit
+// WAV at the rate the browser reports with a JSON of the run's figures, and posted to serve.py (build/hwtest/).
+const TP_NAMES = ["VOICES", "FX", "DRUMS", "LOOPER"];
+const TP_LIMIT_S = 150, TP_POLL_MS = 2000, TP_TAIL_MS = 1500;
+const REC = `class Rec extends AudioWorkletProcessor {
+  constructor() {
+    super(); this.l = new Float32Array(4096); this.r = new Float32Array(4096); this.n = 0;
+    this.port.onmessage = () => {                                                     // (flush: the part chunk, then the end)
+      this.port.postMessage({ l: this.l.slice(0, this.n), r: this.r.slice(0, this.n), last: true }); this.n = 0;
+    };
+  }
+  process(ins) {
+    const ch = ins[0], N = 128;
+    for (let i = 0; i < N; i++) {
+      this.l[this.n] = ch && ch[0] ? ch[0][i] : 0;
+      this.r[this.n] = ch && ch.length ? (ch[1] || ch[0])[i] : 0;
+      if (++this.n === 4096) { this.port.postMessage({ l: this.l, r: this.r }, [this.l.buffer, this.r.buffer]); this.l = new Float32Array(4096); this.r = new Float32Array(4096); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("rec", Rec);`;
+let node_onlast = null;
+async function findFm1Input() {                                                       // the input named "Strata for FM-1"
+  let devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
+  if (!devs.some((d) => d.label)) {                                                   // (names come once it is allowed)
+    const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+    tmp.getTracks().forEach((t) => t.stop());
+    devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
+  }
+  const d = devs.find((x) => /Strata for FM-1/i.test(x.label));
+  if (!d) throw new Error(`no audio input named "Strata for FM-1" (seen: ${devs.map((x) => x.label || "?").join("; ") || "none"})`);
+  return d;
+}
+async function recStart(dev) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: dev.deviceId }, channelCount: { ideal: 2 },
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const track = stream.getAudioTracks()[0], settings = track.getSettings ? track.getSettings() : {};
+  let ctx;
+  try { ctx = settings.sampleRate ? new AudioContext({ sampleRate: settings.sampleRate, latencyHint: "playback" }) : new AudioContext({ latencyHint: "playback" }); }
+  catch (_) { ctx = new AudioContext(); }
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([REC], { type: "text/javascript" })));
+  const node = new AudioWorkletNode(ctx, "rec", { numberOfInputs: 1, numberOfOutputs: 0 });
+  const rec = { ctx, stream, node, settings, l: [], r: [], frames: 0, rate: ctx.sampleRate };
+  node.port.onmessage = (e) => { rec.l.push(e.data.l); rec.r.push(e.data.r); rec.frames += e.data.l.length; if (e.data.last && node_onlast) node_onlast(); };
+  ctx.createMediaStreamSource(stream).connect(node);
+  await ctx.resume();
+  rec.t0 = performance.now();
+  rec.at = () => Math.round(((performance.now() - rec.t0) / 1000) * rec.rate);                // (about, in frames)
+  return rec;
+}
+async function recStop(rec) {
+  const flushed = new Promise((res) => {
+    node_onlast = res;
+    rec.node.port.postMessage("flush");
+    setTimeout(res, 1000);
+  });
+  rec.wall = rec.at();                                                                // (the wall clock's frames, for the drift)
+  await flushed;
+  rec.stream.getTracks().forEach((t) => t.stop());
+  try { await rec.ctx.close(); } catch (_) {}
+  const n = rec.frames, L = new Float32Array(n), Rr = new Float32Array(n);
+  let o = 0;
+  for (let i = 0; i < rec.l.length; i++) { L.set(rec.l[i], o); Rr.set(rec.r[i], o); o += rec.l[i].length; }
+  return { L, R: Rr, rate: rec.rate, settings: rec.settings, wall: rec.wall };
+}
+function encodeWav(L, Rr, rate) {                                                     // 16-bit stereo PCM
+  const n = L.length, buf = new ArrayBuffer(44 + n * 4), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + n * 4, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 2, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 4, true);
+  v.setUint16(32, 4, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 4, true);
+  const q = (x) => Math.max(-32768, Math.min(32767, Math.round(x * 32768)));
+  for (let i = 0; i < n; i++) { v.setInt16(44 + 4 * i, q(L[i]), true); v.setInt16(46 + 4 * i, q(Rr[i]), true); }
+  return new Blob([buf], { type: "audio/wav" });
+}
+function quick(L, Rr) {                                                               // a first look: peak, clipped, longest zero run
+  let pk = 0, clip = 0, zr = 0, zmax = 0;
+  for (let i = 0; i < L.length; i++) {
+    const a = Math.max(Math.abs(L[i]), Math.abs(Rr[i]));
+    if (a > pk) pk = a;
+    if (a >= 0.9999) clip++;
+    if (a === 0) { zr++; if (zr > zmax) zmax = zr; } else zr = 0;
+  }
+  return { peak: pk, clipped: clip, zero_run_max: zmax };
+}
+const kvText = (t) => { const m = {}; for (const ln of t.split(/\r?\n/)) { const k = ln.match(/^([a-z_0-9]+) (.*)$/); if (k) m[k[1]] = k[2].trim(); } return m; };
+async function post(path, body, type) {
+  const r = await fetch(path, { method: "POST", headers: { "X-Strata-Token": TOKEN, "Content-Type": type }, body });
+  if (!r.ok) throw new Error(`${path}: ${r.status} ${(await r.text()).slice(0, 80)}`);
+  return r.json();
+}
+let tpRunDir = null;
+function tpRow(n, name, result, detail) {
+  R.tp.push({ n, name, result, detail });
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>TEST ${n} ${esc(name)}</td><td>${chip(result)}</td><td class="detail">${esc(detail)}</td>`;
+  $("t-tp").tBodies[0].append(tr);
+  report();
+}
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `download ${name}`;
+  $("tp-dl").append(a);
+}
+async function runTproj(n, stop) {
+  const name = TP_NAMES[n - 1], conLog = [];
+  const T = (line, ms) => con.cmd(line, ms).then((t) => { conLog.push({ t: +((Date.now() - T0) / 1000).toFixed(2), cmd: line, reply: t.trim() }); return t; });
+  const fig = { page: "test.html", version: META.version, test: n, name, started: new Date().toISOString(), console: conLog };
+  $("s-tp").textContent = `TEST ${n} ${name}: reading status and bench`;
+  const st0 = await T("status"), b0 = await T("bench");
+  fig.status_before = kvText(st0); fig.bench_before = kvText(b0);
+  fig.tproj_lines_before = st0.split(/\r?\n/).filter((l) => /^tproj/.test(l));
+  const dev = await findFm1Input();
+  fig.device = dev.label;
+  $("s-tp").textContent = `TEST ${n} ${name}: recording "${dev.label}"`;
+  const rec = await recStart(dev);
+  try {
+    const sendAt = rec.at(), tStart = Date.now();
+    const reply = await T(`tproj ${n}`, 8000);
+    fig.sent_at_frame = sendAt;
+    if (new RegExp(`^tproj ${n} busy\\s*$`, "m").test(reply)) throw new Error(`the FM-1 says busy: "tproj ${n} busy" (a load in flight? try again in a moment)`);
+    const ok = reply.match(new RegExp(`^tproj ${n} (.+?) ok\\s*$`, "m"));
+    if (!ok) throw new Error(`unexpected reply to tproj ${n}: "${reply.trim().slice(0, 80)}"`);
+    fig.replied_name = ok[1]; fig.replied_after_ms = Date.now() - tStart;
+    log(`tproj ${n}: ${ok[1]} started`);
+    let lastMs = 0, polls = 0, none = false, timedOut = false;
+    while (!none) {
+      if (stop.now) { await T("tproj stop"); fig.stopped_by_tester = true; break; }
+      if ((Date.now() - tStart) * FAST / 1000 > TP_LIMIT_S) { await T("tproj stop"); timedOut = true; break; }
+      await sleep(TP_POLL_MS);
+      const t = await T("tproj"); polls++;
+      const m = t.match(/^tproj (\d+) (.+) (\d+)\s*$/m);
+      if (m) { lastMs = Number(m[3]); $("s-tp").textContent = `TEST ${n} ${name}: running, ${(lastMs / 1000).toFixed(0)} s`; if (Number(m[1]) !== n) fig.other_loaded = m[1]; }
+      else if (/^tproj none\s*$/m.test(t)) none = true;
+    }
+    fig.none_at_frame = rec.at(); fig.polls = polls; fig.tproj_ms_last = lastMs; fig.timed_out = timedOut;
+    await sleep(TP_TAIL_MS);
+    const out = await recStop(rec);
+    $("s-tp").textContent = `TEST ${n} ${name}: reading status and bench, saving`;
+    const st1 = await T("status"), b1 = await T("bench");
+    fig.status_after = kvText(st1); fig.bench_after = kvText(b1);
+    fig.tproj_lines_after = st1.split(/\r?\n/).filter((l) => /^tproj/.test(l));
+    const d = {};
+    for (const k of ["uac_underruns", "uac_overruns", "uac_missed", "uac_stalls", "halves_late", "voices_shed"])
+      d[k] = num(fig.status_after, k) - num(fig.status_before, k);
+    fig.deltas = d;
+    fig.rate = out.rate; fig.channels = 2; fig.wall_frames = out.wall; fig.frames = out.L.length; fig.duration_s = +(out.L.length / out.rate).toFixed(3);
+    fig.track_settings = out.settings; fig.fm1_rate_hz = num(fig.status_after, "uac_rate_hz"); fig.fm1_uac_hz = num(fig.status_after, "uac_hz");
+    fig.quick = quick(out.L, out.R);
+    fig.finished = new Date().toISOString(); fig.wall_ms = Date.now() - tStart;
+    const wav = encodeWav(out.L, out.R, out.rate);
+    let where = "";
+    try {
+      if (!tpRunDir) tpRunDir = (await post("api/hwtest/new", "", "text/plain")).run;
+      const w = await post(`api/hwtest/${tpRunDir}/tp${n}.wav`, wav, "audio/wav");
+      await post(`api/hwtest/${tpRunDir}/tp${n}.json`, JSON.stringify(fig, null, 1), "application/json");
+      where = `saved ${w.path || tpRunDir + "/tp" + n + ".wav"}`;
+    } catch (e) {
+      download(wav, `tp${n}.wav`); download(new Blob([JSON.stringify(fig, null, 1)], { type: "application/json" }), `tp${n}.json`);
+      where = `NOT saved by serve.py (${e.message}): offered as downloads below`;
+    }
+    const q = fig.quick, gaps = d.uac_underruns + d.uac_overruns + d.uac_missed + d.uac_stalls + d.halves_late;
+    const res = timedOut || fig.stopped_by_tester ? "warn" : q.clipped || gaps ? "warn" : "ok";
+    tpRow(n, name, res, `${fig.duration_s} s at ${out.rate} Hz, the FM-1's clock ${(lastMs / 1000).toFixed(0)} s${timedOut ? " (TIME LIMIT: stopped)" : ""}` +
+      `${fig.stopped_by_tester ? " (stopped by you)" : ""}; peak ${q.peak.toFixed(3)}, ${q.clipped} clipped, longest silence ${q.zero_run_max} frames; ` +
+      `uac under/over/missed/stalls +${d.uac_underruns}/+${d.uac_overruns}/+${d.uac_missed}/+${d.uac_stalls}, late halves +${d.halves_late}, shed +${d.voices_shed}; ${where}`);
+  } catch (e) {
+    try { await recStop(rec); } catch (_) {}
+    throw e;
+  }
+}
+async function tpRunAll(list) {
+  const stop = { now: false };
+  tpState = stop; busy = true; gate();
+  if (list.length > 1) tpRunDir = null;
+  $("tp-dl").innerHTML = "";
+  try {
+    for (const n of list) {
+      if (stop.now) break;
+      try { await runTproj(n, stop); }
+      catch (e) { tpRow(n, TP_NAMES[n - 1], "fail", e.message); log(`tproj ${n}: ${e.message}`); if (list.length > 1) break; }
+      if (list.length > 1 && n !== list[list.length - 1]) await sleep(3000);
+    }
+    $("s-tp").textContent = stop.now ? "stopped" : "done";
+  } finally { tpState = null; busy = false; gate(); }
+}
+for (const b of document.querySelectorAll("[data-tp]")) b.addEventListener("click", () => tpRunAll([Number(b.dataset.tp)]));
+$("tp-all").addEventListener("click", () => tpRunAll([1, 2, 3, 4]));
+$("tp-stop").addEventListener("click", () => { if (tpState) tpState.now = true; });
+
+// ----------------------------------------------------------------------------- backup mode, three ways (item 12)
+for (const b of document.querySelectorAll("[data-bk]")) b.addEventListener("click", async () => {
+  const way = b.dataset.bk;
+  if (!confirm(`Backup mode, way ${way.toUpperCase()}: the FM-1 leaves for backup mode and only a power cycle brings it back. Press OK to send "uboot yes ${way}".`)) return;
+  const rec = { way, at: new Date().toISOString(), before: $("bk-before").value.trim(), after: "", console: "was still answering after 6 s" };
+  R.backup.push(rec);
+  log(`backup mode: way ${way.toUpperCase()} pressed (Windows before: ${rec.before || "not written"})`);
+  const t0 = Date.now();
+  $("s-bk").textContent = `way ${way.toUpperCase()} sent: watching the console`;
+  con.cmd(`uboot yes ${way}`, 3000).catch(() => {});                                    // (it may never answer: it is leaving)
+  const gone = await waitFor(async () => !con.alive, 6000, 100);
+  rec.console = gone ? `dropped after ${((Date.now() - t0) * FAST / 1000).toFixed(1)} s` : "was still answering after 6 s";
+  log(`backup mode: way ${way.toUpperCase()}: the console ${rec.console}`);
+  $("s-bk").textContent = `way ${way.toUpperCase()}: console ${rec.console}. Look at Windows, write it below, then power-cycle the FM-1`;
+  $("bk-after").value = "";
+  report();
+});
+$("bk-after").addEventListener("input", () => { const r = R.backup[R.backup.length - 1]; if (r) { r.after = $("bk-after").value.trim(); report(); } });
 
 // --------------------------------------------------------------------------------------------- listen and look
 const LOOK = [
@@ -840,18 +1126,19 @@ const LOOK = [
   ["themes", "V0.67: SETTINGS > SCREEN, the twelve themes (MOSS, DUSK, SAND and NEON new): each one's labels clear on the panel"],
   ["chords", "V0.75: SCL > CHORD by the knobs: FREE (every key TYPE's chord: MAJ .. 13) and KEY (one-finger chords in SCALE's key, SHAPE TRIAD .. POWER) sound right; the chord's name on the screen matches; AUTO voicing moves smoothly; SPREAD's OPEN, WIDE, 2 OCT; SCL + OCT+ on, SCL + OCT- off"],
   ["perform", "V0.75: SCL > CHORD > STRUM: the gap, DIRECTION, HUMAN and TAPER sound natural; the ARP's STYLE PATTERN and HARP in time; no stuck notes when you let go or switch"],
-  ["chordmidi", "V0.7: BASS under the chord; SCL > MIDI: USB OUT ON sends the chords on channel 1 and the bass on 2 (a DAW or a MIDI monitor); MIDI IN ROOTS makes chords from incoming notes"],
   ["arp", "V0.75: a tap of ARP opens its menu; hold a chord and ARP + OCT+: it arpeggiates at once; MODE's thirteen orders and OCTAVES 1-4 sound as named; RATE's dotted and triplet values in time; LATCH plays on after you let go; ARP + OCT-: the chord held as it is, no stuck notes"],
-  ["grammar", "V0.75: every menu button the same way: a tap its menu, again its next page, twice its next section, + OCT+ / OCT- on and off (HOME: the sounds; LFO: points), held 5 s a countdown then its section reset (SAVE + OCT- undoes); SELECT the section, ALGORITHM the page; a knob's value never covered by a flag"],
+  ["grammar", "V0.75, V0.87.1: every menu button the same way: a tap its menu, again its next page, twice its next section, + OCT+ / OCT- on and off (HOME: the sounds; LFO: points), held 5 s a countdown then its section reset (SAVE + OCT- undoes); HOME is the exception: held on HOME 5 s opens DEBUG, held anywhere else it shows the help map for as long as it is held, no countdown; SELECT the section, ALGORITHM the page; a knob's value never covered by a flag"],
+  ["confirm", "V0.87.1: every list or question is confirmed by the button that opened it, twice: wavetables' list (EDIT twice, then EDIT twice), drum kits and drum presets (EDIT twice, EDIT twice), projects (SEQ twice, SEQ twice), a track's TYPE question (KNOB 1 on CLIPS, SEQ twice); presets stay with SAVE (SAVE twice); a single tap of that button, or any other button, cancels; the on-screen hints and the help map say the same"],
+  ["wipe", "V0.87.1: WIPE is in DEBUG (hold HOME 5 s on HOME; KNOB 1 on WIPE asks), confirmed with HOME twice; SETTINGS no longer has it; the presets and projects stay"],
   ["arpsteps", "V0.75: ARP > STEPS and RATCHET: TIE holds the note on, REST is silent, each step's LEVEL and OCTAVE, RATCHET's 2-4 hits, CHANCE, SLIDE gliding with VOICE's GLIDE in a mono mode; GROOVE's GATE and SWING by ear; the marker over the steps follows what you hear"],
-  ["clock", "V0.75: PLAY on: the arpeggio steps on its beat. GLOBAL > CLOCK IN MIDI with a DAW sending clock: BPM follows the DAW; its play and stop start and stop PLAY; the arpeggio stays on the DAW's beat over a few minutes; INTERNAL again: the panel's BPM"],
+  ["clock", "V0.75, V0.87.1: PLAY on: the arpeggio steps on its beat. GLO held + the lowest key (F3) three or more times taps the tempo: BPM follows, F3 makes no note, GLO + PLAY is PLAY's own action again. GLOBAL > CLOCK IN MIDI with a DAW sending clock: BPM follows the DAW; its play and stop start and stop PLAY; the arpeggio stays on the DAW's beat over a few minutes; INTERNAL again: the panel's BPM"],
   ["take", "V0.8 looper: SEQ (CLIPS), track 1, scene A; REC stopped: a bar of count-in clicks, then play a few notes and chords for a bar or two; REC: it loops, rounded to whole bars, in time; no stuck notes; PLAY stops it"],
   ["dub", "V0.8 looper: REC again on the clip playing: overdub (what you add plays back from the next pass, never doubled); REC ends it; SEQ held, UN (the last black key): the pass taken back, again: back; turn FILTER > TONE's CUTOFF while it overdubs: the next pass moves it, stopped the knob's own"],
-  ["tracks", "V0.8 looper: SEQ + OCT+ the next track; record on tracks 2 and 3 too; SEQ held (the launch pad): white keys 1-8 launch the tracks' clips at the bar, 9-16 the scenes, black 1-8 MUTE; MIXER's VOLUME and PAN by ear; a track TYPE MIDI on a DAW or synth over USB (its CHANNEL), with MIDI IN on a channel"],
-  ["project", "V0.8 looper: SONG (A, B, C with repeats, ON, PLAY) plays its scenes in turn; stop, wait 5 s in silence, switch off and on: the clips, tracks, chords and SONG come back; PROJECT 2 LOAD: empty, back to 1: all there"],
-  ["core2", "V0.8: CORE 2 (DEBUG, HOME held 5 s > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
+  ["tracks", "V0.8 looper, V0.87.1: SEQ, CLIPS: KNOB 4 picks the track (T1 to T8), OCT+ / OCT- step through the clips (scenes A to H), KNOB 2 sets the track's ON / MUTE / SOLO, SEQ + OCT+ a new clip (SEQ + OCT- asks DELETE?, again deletes); record on tracks 2 and 3 too; SEQ held (the launch pad): white keys 1-8 launch the tracks' clips at the bar, 9-16 the scenes, black 1-8 MUTE; MIXER's VOLUME and PAN by ear; a track TYPE MIDI on a DAW or synth over USB (its CHANNEL), with MIDI IN on a channel"],
+  ["project", "V0.8 looper, V0.87.1: SONG (A, B, C with repeats, ON, PLAY) plays its scenes in turn; stop, wait 5 s in silence, switch off and on: the clips, tracks, chords and SONG come back; SEQ twice: the projects' list, PROJECT 2 picked with PRESETS, loaded with SEQ twice (SAVE no longer loads here): empty, back to 1: all there"],
+  ["core2", "V0.8: CORE 2 (on HOME, hold HOME 5 s: DEBUG > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
   ["midiout", "V0.81: a track SYNTH+MIDI on channel 1, the FM-1 on a computer with no MIDI app open: play for a minute, then open a MIDI monitor and play a note: older notes may come first, then All Notes Off (CC 123) on channel 1, then yours; nothing left sounding"],
-  ["drums", "V0.85 drums: TRACK's TYPE DRUMS on track 1; the white keys 1-8 play KICK .. WT 2, 9-16 the same accented (louder), the first black key DUCK (silent); EDIT: KIT's pages, each drum's TUNE, DECAY, TONE and its own by ear; HAT CL cuts a ringing HAT OP"],
+  ["drums", "V0.85 drums, V0.87.1: TRACK's TYPE DRUMS on track 1 (KNOB 1 on CLIPS, SEQ twice to confirm); the white keys 1-8 play KICK .. WT 2, 9-16 the same accented (louder), the first black key DUCK (silent); EDIT: KIT's pages, each drum's TUNE, DECAY, TONE and its own by ear (EDIT twice: the drum presets or the kits, confirmed with EDIT twice); HAT CL cuts a ringing HAT OP"],
   ["grid", "V0.85 grid: SEQ's CLIP on the drum track: GRID; black keys pick the row, white keys put steps in and out (stopped: heard as they go in); PLAY: the beat in time, the LEDs following; HIT: a step's CHANCE (it plays sometimes) and RATCHET (2-4 quick hits); TYPE SYNTH and back: the beat as it was"],
   ["duck", "V0.85 duck: a synth track playing a held chord with the drum track's DUCK row on the beats: the chord dips on each and comes back (KIT > DUCK: AMOUNT, ATTACK, RELEASE, SHAPE by ear: PUMP the classic pumping); the drums themselves never dip"],
   ["bloom", "V0.67: HOME's bloom: a bud in silence; a note swirls it into spiral arms that settle into a sunflower in about a second; it opens with the level and closes after the release; nothing moves in silence"],
