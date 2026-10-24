@@ -10,10 +10,17 @@ V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulat
 
 **V0.875, in short** (V0.87.1's changes were never public on their own; V0.875 adds items 1 to 5 below):
 1. **DEBUG opens by four corners**: OCT− + F3 (the lowest key) + G5 (the highest) + GLO, held together for 250 ms, on
-   any page. A key that lands with OCT− and another corner down is held off (no note); one that landed before is cut
-   off; the octave, the CLIPS scene, a tap's taps and NAME IT's characters those presses changed are taken back, and
-   GLO's layer, windows and the reset countdown close. HOME held 5 s no longer opens DEBUG: HOME held is the help map
-   on every page.
+   any page. **Held off:** F3 or G5 landing while OCT− is down makes no note and does nothing else (on every page and
+   layer: no tap, no launch, no step, no character); the key's release does nothing either. A corner pressed before
+   that plays or acts as it always does until the fourth lands. **Taken back at the opening** (what the corners that
+   landed first did): the octave, the CLIPS scene, MIDI LEARN's CC and NAME IT's character OCT− changed; GLO + F3's
+   taps and the tempo; the drum GRID's step F3 or G5 put in, and the one-bar clip it made; F3 on CLIPS: the launch, and
+   the PLAY it started; a held F3 or G5 note or hit: cut off, taken out of the take or overdub being recorded and out
+   of TAKE's memory; LATCH: the key's root ends and the chord it replaced comes back. GLO's layer, windows and the
+   reset countdown close. **Limits:** a keys' action inside a layer (MACROS' bypass, the launch pad, SCL's root, a MOD
+   source) is not taken back; a CLIPS launch the bar has already played is launched back from the clip's start; a
+   MIDI-in note of the same pitch on the same track held at that moment is cut with the key's. HOME held 5 s no longer
+   opens DEBUG: HOME held is the help map on every page.
 2. **STRATA is darker**: a black ground, the site's warm ink and vermilion (labels 13.9 : 1, as HI-CON's 13.6).
 3. **AMBER replaces NIGHT** (amber phosphor on black, a pale glow for the accent); a saved NIGHT loads as AMBER.
 4. **PERFORM shows the tap tempo**: a dot for each tap (the last flashes), "n OF 3", then the BPM in the accent as it

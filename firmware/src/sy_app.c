@@ -903,6 +903,10 @@ static void sy_app_key_off(uint32_t k)
     if (k < SY_NKEY)
         sy_key_up(k, &keep);
 }
+/* .. the key ring's write index, and whether the audio side has drained every event up to it (DEBUG's four corners: LATCH
+ * comes back once the key-off it ended for has been drained) */
+static uint32_t sy_app_key_w(void) { return sy_ev_key.w; }
+static int sy_app_key_seen(uint32_t w) { return (int32_t)(sy_ev_key.r - w) >= 0; }
 static void sy_key_down(uint32_t k, int32_t n, uint32_t v)
 {
     if (sy_ev_push(&sy_ev_key, SY_EV_KEY, n >= 0 && n <= 127 ? (uint32_t)n : 0xFFu, k | 0x80u)) {

@@ -41,8 +41,13 @@ the transport runs. <kbd>ARP</kbd> is lit while the arpeggiator is on.
 
 On any page, hold <kbd>OCT−</kbd>, F3 (the lowest key), G5 (the highest key) and <kbd>GLO</kbd> together for a
 quarter of a second. The four buttons are far apart on purpose, so DEBUG never opens by accident. While <kbd>OCT−</kbd> is
-down, F3 and G5 make no sound and do nothing; a key pressed before it is cut off, and the step, note or tap it made is
-taken back. (<kbd>HOME</kbd> held shows the help map only.) <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
+down, F3 and G5 make no note and do nothing else (their release does nothing either). Anything you pressed before the
+fourth button landed does its usual job until then, and DEBUG takes it back when it opens: the octave and CLIPS scene
+<kbd>OCT−</kbd> stepped, MIDI LEARN's CC it took away, NAME IT's characters, a tap-tempo run, a drum-grid step (and the
+one-bar clip it made), a CLIPS launch (and the PLAY it started), a held note or hit (cut off, and taken out of what you
+were recording), and a latched chord F3 or G5 replaced (it comes back). Two limits: what a key did inside a layer (a
+MACROS bypass, the launch pad, SCL's root, a MOD source) stays, and a CLIPS launch that has already played is launched
+back from the start of the clip. (<kbd>HOME</kbd> held shows the help map only.) <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
 test Strata:
 
 - **BENCH**: what the FM-1 measures (audio, CPU, screen, keys, tables, flash, stacks). RUN times the processor.

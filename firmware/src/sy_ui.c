@@ -59,6 +59,8 @@ static int sy_app_clock_lost(void);                 /* .. it stopped coming (1 o
 static void sy_app_keys_hand(void);                 /* .. the keys held over to the chords (they just took the keys) */
 static void sy_app_key_off(uint32_t k);             /* .. (V0.875) key k's note ended now (DEBUG's four corners) */
 static uint32_t sy_ui_key_vel(void);                /* (below) */
+static uint32_t sy_app_key_w(void);                 /* .. (V0.875) the key ring's write index, */
+static int sy_app_key_seen(uint32_t w);             /* .. and whether the audio side has drained up to it */
 static void sy_app_sound_step(int32_t s);           /* .. PRESETS: the starter sounds */
 static const char *sy_app_sound_bank(uint32_t *i, uint32_t *n);   /* .. the sound playing: its bank, number, count */
 static int32_t sy_app_load(void);                   /* .. the audio's load in %, -1 unknown */
@@ -585,9 +587,13 @@ static struct {
     uint32_t dbg_tt[4];
     char dbg_name[17];
     uint8_t dbg_ml[ML_N];                           /* .. (V0.875) MIDI LEARN's CCs before OCT- took one away */
-    uint8_t dbg_gr[2];                              /* .. the grid step F3's, G5's landing put in: its row, */
-    uint16_t dbg_gs[2];                             /* .. its step */
-    uint8_t dbg_pend, dbg_lt;                       /* .. F3 on CLIPS, its launch waiting for the key's release; LATCH ended at the opening (track + 1) */
+    uint8_t dbg_gr[2], dbg_gt[2], dbg_gc[2];        /* .. the grid step F3's, G5's landing put in: its row, track, scene, */
+    uint16_t dbg_gs[2];                             /* .. its step, */
+    uint8_t dbg_ge;                                 /* .. (bit: the step made the clip, it was empty), */
+    uint8_t dbg_cp, dbg_cn, dbg_cr;                 /* .. F3 on CLIPS: track 1's clip playing and launched before it, the transport it started */
+    uint8_t dbg_lt, dbg_lr, dbg_lhn, dbg_lht;       /* .. LATCH ended at the opening (tracks, bits), the chord to put back (bits); the latched chord resting: */
+    ch_held_t dbg_lh[CH_MAXN];                      /* .. its roots, its count, its track; */
+    uint32_t dbg_lw;                                /* .. the key ring's write index after the key-off */
 } ui;
 #define UI_PL_CLOSE_MS 5000u                        /* PRESETS' list: gone this long after its last detent or press (V0.87, B3: 5 s) */
 #define UI_BOOT_MS 2000u                            /* (P4: the splash 2 s; fm1_ms counts from just after it is drawn) */
@@ -2527,6 +2533,8 @@ static int ui_clips_keys(void);                     /* sy_ui_loop.c (V0.86, S5):
 static int ui_clips_key(uint32_t k);                /* .. a key there (a clip, a scene) */
 static int ui_grid_key(uint32_t k);                 /* .. a key there (a step, a row) */
 static void ui_l_unkey(uint32_t k);                 /* .. (V0.875) key k's note, held, taken out of what it recorded */
+static void ui_dbg_unclip(void);                    /* .. F3's launch on CLIPS taken back */
+static void ui_d_ungrid(void);                      /* sy_ui_drum.c: the grid steps F3, G5 put in taken out */
 static void ui_l_follow(void);                      /* sy_ui_loop.c: the page as the selected track's TYPE wants it */
 static void lp_select(uint32_t t);
 static char *ui_l_trk(char *b, uint32_t t);
@@ -3165,14 +3173,16 @@ static int32_t ui_ks_enc(uint32_t r, uint32_t c)
  * together, from any page (HOME held is the help map only). Each corner has an action of its own alone, so the ones
  * that landed are taken back when the fourth does (each record goes when its corner is let go: a completed tap stays):
  *   - OCT-: the octave and the CLIPS scene it stepped, MIDI LEARN's CC it took away, NAME IT's characters;
- *   - F3 under GLO: the tap's taps and the tempo; F3 or G5 on the drum GRID or HIT: the step it put in; the keys' NAME IT
- *     characters; the key's note, held: cut off (sy_app_key_off), taken out of the clip recording (TAKE's memory too),
- *     LATCH ended (the chord it left, F3 or G5, goes: the setting stays);
- *   - F3 on CLIPS: its launch waits for its release (so there is nothing to take back); the opening drops it.
+ *   - F3 under GLO: the tap's taps and the tempo; F3 or G5 on the drum GRID or HIT: the step it put in, and the clip it
+ *     made (ui_d_ungrid); the keys' NAME IT characters;
+ *   - F3 on CLIPS: its launch (at the press, as the other clip keys') and the PLAY it started (ui_dbg_unclip);
+ *   - the key's note, held: taken out of the clip recording (TAKE's memory too), cut off (ui_dbg_cut), LATCH ended with it
+ *     and set again once the audio side drained the key-off and saw it (ui_dbg_tick); the latched chord the key replaced
+ *     (ui_dbg_shadow kept it resting) put back with it.
  * F3 and G5 landing while OCT- is down are held off (no note, no action); one landing first plays, or acts, till the
  * chord is whole. The layers GLO opened, the windows and OCT-'s and GLO's countdown close */
 #define UI_DBG_MS 250u
-enum { DBG_OCT = 1, DBG_SCN = 2, DBG_TAP = 4, DBG_NAME = 8, DBG_ML = 16, DBG_GR0 = 32, DBG_GR1 = 64 };   /* dbg_ok: what the corners did that is taken back */
+enum { DBG_OCT = 1, DBG_SCN = 2, DBG_TAP = 4, DBG_NAME = 8, DBG_ML = 16, DBG_GR0 = 32, DBG_GR1 = 64, DBG_CLP = 128 };   /* dbg_ok: what the corners did that is taken back */
 enum { DBG_O = 1, DBG_G = 2, DBG_K0 = 4, DBG_K1 = 8 };         /* the corners: OCT-, GLO, F3, G5 */
 static uint32_t ui_dbg_down(int live)               /* the corners down (live: the panel's own state, else as the UI has seen it) */
 {
@@ -3189,6 +3199,58 @@ static void ui_dbg_name(uint32_t own)               /* NAME IT's text, kept befo
     ui.dbg_nlen = ui.sv_len, ui.dbg_ncur = ui.sv_cur, ui.dbg_nsym = ui.sv_sym;
     ui.dbg_ok |= DBG_NAME;
     ui.dbg_own = (uint8_t)own;
+}
+/* the selected track's latched chord, resting (every root let go), kept as it was: a corner key pressed after it replaces
+ * it (sy_chord.c sy_chord_key: LATCH, a press with none held starts a new chord), and the opening puts it back. The audio
+ * interrupt held off while it is read; not while a corner key is down (what it replaced is what was kept). Called every
+ * millisecond (ui_dbg_tick) and by sy_main.c's redraw gaps */
+static void ui_dbg_shadow(void)
+{
+    uint32_t t = lpp.sel % LP_NTRK, f, i, any = 0;
+    if (ui.dbg_lt)                                  /* (LATCH ended by the opening: what it kept is to go back) */
+        return;
+    if (!ch_d[t].latch) {
+        ui.dbg_lhn = 0;
+        return;
+    }
+    f = LP_LOCK();
+    if (!(fm1_in.notes & (1u | 1u << 26))) {
+        for (i = 0; i < ch_s[t].nheld; i++)
+            any |= ch_s[t].held[i].down;
+        if (!ch_s[t].nheld) {
+            ui.dbg_lhn = 0;
+        } else if (!any) {
+            memcpy(ui.dbg_lh, ch_s[t].held, sizeof ui.dbg_lh);
+            ui.dbg_lhn = ch_s[t].nheld, ui.dbg_lht = (uint8_t)t;
+        }
+    }
+    LP_UNLOCK(f);
+}
+static void sy_ui_dbg_idle(void) { ui_dbg_shadow(); }   /* (sy_main.c's redraw gaps) */
+/* corner key k's note ended now (it is held), its LATCH off with it. The key-off goes in the ring first, then LATCH is
+ * cleared, the interrupts held off between (the drain sees both: the key-up is no latched one); LATCH comes back in
+ * ui_dbg_tick once the audio side has drained the key-off and seen LATCH off. The latched chord a corner key replaced
+ * (only corner keys held now: the opening's own) is marked to go back with it */
+static void ui_dbg_cut(uint32_t k)
+{
+    uint32_t t, f, i, c = 1;
+    if (!sy_app_held(k))
+        return;
+    t = lpx.keytrk[k] % LP_NTRK;
+    f = LP_LOCK();
+    sy_app_key_off(k);
+    if (!sy_app_held(k)) {                          /* (in the ring: a full one tries again next millisecond) */
+        ui.dbg_lw = sy_app_key_w();
+        if (ch_d[t].latch && !((ui.dbg_lt >> t) & 1u)) {
+            for (i = 0; i < ch_s[t].nheld; i++)
+                c &= ch_s[t].held[i].id == 0u || ch_s[t].held[i].id == 26u;
+            if (c && ch_s[t].nheld && ui.dbg_lhn && ui.dbg_lht == t)
+                ui.dbg_lr |= (uint8_t)(1u << t);
+            ch_d[t].latch = 0;
+            ui.dbg_lt |= (uint8_t)(1u << t);
+        }
+    }
+    LP_UNLOCK(f);
 }
 static void ui_dbg_open(void)
 {
@@ -3214,21 +3276,17 @@ static void ui_dbg_open(void)
     if (ui.dbg_ok & DBG_ML)
         for (i = 0; i < ML_N; i++)
             ml_cc[i] = ui.dbg_ml[i];                /* (the ids stayed: the CC makes the entry count again) */
-    for (i = 0; i < 2u; i++)
-        if ((ui.dbg_ok & (DBG_GR0 << i)) && lp_cur_clip()->len && lp_grid_at(lp_cur_clip(), ui.dbg_gr[i], ui.dbg_gs[i]) != LP_END)
-            (void)lp_grid_toggle(ui.dbg_gr[i], ui.dbg_gs[i], sy_ui_key_vel());   /* (a step a corner put in: out again) */
+    if (ui.dbg_ok & (DBG_GR0 | DBG_GR1))
+        ui_d_ungrid();                              /* (the steps a corner put in: out again, a clip it made gone) */
+    if (ui.dbg_ok & DBG_CLP)
+        ui_dbg_unclip();                            /* (F3's launch on CLIPS: the clip playing as it was) */
     ui.ghold = 0;
-    ui.dbg_pend = 0;
-    for (i = 0; i < 2u; i++) {                      /* (a corner key's note, held: what it recorded, its LATCH, the note) */
-        uint32_t k = i ? 26u : 0u, t = lpx.keytrk[k] % LP_NTRK;
+    for (i = 0; i < 2u; i++) {                      /* (a corner key's note, held: what it recorded, the note, its LATCH) */
+        uint32_t k = i ? 26u : 0u;
         if (!sy_app_held(k))
             continue;
         ui_l_unkey(k);
-        if (ch_d[t].latch && !ui.dbg_lt) {          /* (ended: what it holds goes with the key; on again once the audio side saw it) */
-            ch_d[t].latch = 0;
-            ui.dbg_lt = (uint8_t)(t + 1u);
-        }
-        sy_app_key_off(k);
+        ui_dbg_cut(k);
     }
     ui.dbg_ok = 0;
     ui.toast[0] = 0;
@@ -3249,17 +3307,25 @@ static void ui_dbg_tick(void)                       /* every millisecond, after 
     if (up & DBG_O)
         ui.dbg_ok &= (uint8_t)~(DBG_OCT | DBG_SCN | DBG_ML);
     if (up & DBG_K0)
-        ui.dbg_ok &= (uint8_t)~(DBG_TAP | DBG_GR0);
+        ui.dbg_ok &= (uint8_t)~(DBG_TAP | DBG_GR0 | DBG_CLP);
     if (up & DBG_K1)
         ui.dbg_ok &= (uint8_t)~DBG_GR1;
-    if (ui.dbg_pend && !(fm1_in.notes & 1u)) {      /* (F3 on CLIPS, let go before the chord was whole: its launch now) */
-        ui.dbg_pend = 0;
-        if (ui_clips_keys())
-            (void)ui_clips_key(0u);
-    }
-    if (ui.dbg_lt && !ch_s[ui.dbg_lt - 1u].latch) { /* (the audio side saw LATCH off: on again, as it was set) */
-        ch_d[ui.dbg_lt - 1u].latch = 1;
-        ui.dbg_lt = 0;
+    ui_dbg_shadow();
+    if (ui.dbg_lt) {                                /* (LATCH ended: on again, with the chord a corner key replaced, once the audio */
+        uint32_t t;                                 /* side has drained the key-off and seen it off) */
+        for (t = 0; t < LP_NTRK; t++)
+            if (((ui.dbg_lt >> t) & 1u) && !ch_s[t].latch && sy_app_key_seen(ui.dbg_lw)) {
+                uint32_t f = LP_LOCK();
+                if ((ui.dbg_lr >> t) & 1u) {
+                    memcpy(ch_s[t].held, ui.dbg_lh, sizeof ui.dbg_lh);
+                    ch_s[t].nheld = ui.dbg_lhn;
+                    ch_d[t].gen++;                  /* (the chord voiced again: sy_chord.c ch_block1) */
+                }
+                ch_d[t].latch = 1;
+                LP_UNLOCK(f);
+                ui.dbg_lt &= (uint8_t)~(1u << t);
+                ui.dbg_lr &= (uint8_t)~(1u << t);
+            }
     }
     if ((ui.dbg_ok & DBG_NAME) && (up & ui.dbg_own))
         ui.dbg_ok &= (uint8_t)~DBG_NAME;
@@ -3275,8 +3341,8 @@ static void ui_dbg_tick(void)                       /* every millisecond, after 
         ui_dbg_open();
     }
     if (ui.dbg_st == 2u) {                          /* (the two keys' notes, again while it is held: a full ring may have kept one) */
-        sy_app_key_off(0);
-        sy_app_key_off(26);
+        ui_dbg_cut(0);
+        ui_dbg_cut(26);
     }
 }
 
@@ -3680,8 +3746,12 @@ static int sy_ui_key(uint32_t k)
     if (ui_grid_keys())                             /* the drum grid (V0.85): white keys its steps, black its rows */
         return ui_grid_key(k);
     if (ui_clips_keys()) {                          /* CLIPS (V0.86): white keys the clips, black the scenes */
-        if (k == 0u) {                              /* (V0.875: F3's launch waits for its release: DEBUG's corner) */
-            ui.dbg_pend = 1;
+        if (k == 0u && !(ui.dbg_ok & DBG_CLP)) {    /* (V0.875: F3 launches at its press, as the others; DEBUG's opening takes it back) */
+            ui.dbg_ok |= DBG_CLP;
+            ui.dbg_cp = lps[0].play, ui.dbg_cn = lps[0].next;
+            ui.dbg_cr = ui.run;
+            (void)ui_clips_key(k);
+            ui.dbg_cr = (uint8_t)(!ui.dbg_cr && ui.run);
             return 1;
         }
         return ui_clips_key(k);

@@ -713,6 +713,27 @@ static int ui_clips_leds(uint32_t k)
     return 1;
 }
 
+/* V0.875 (item 25): F3's launch on CLIPS taken back at DEBUG's opening: the transport it started stopped, track 1's clip
+ * as it was: its launch waiting is cleared; one that came (the bar, or LAUNCH NOW) is launched back (the clip that played,
+ * from its start: the place it had is gone), or stopped, if it played none */
+static void ui_dbg_unclip(void)
+{
+    uint32_t fl;
+    if (ui.dbg_cr) {
+        ui.run = 0;
+        ui.run_t = fm1_ms;
+        sy_app_run(0);
+        ui.dbg_cr = 0;
+    }
+    fl = LP_LOCK();
+    if (lps[0].play == ui.dbg_cp)
+        lps[0].next = ui.dbg_cn;
+    else
+        lps[0].next = ui.dbg_cp < LP_NSCN ? ui.dbg_cp : LP_STOP;
+    LP_UNLOCK(fl);
+    lpx.seq++;
+}
+
 /* V0.875 (item 25): panel key k's note or hit, still held, taken back out of what it was recorded into: the clip recording
  * (its event out of the clip and the pass lists, the open note forgotten) and TAKE's memory. DEBUG's opening, for F3 and
  * G5 landing alone first. The main loop's, the audio interrupt held a moment (LP_LOCK) */

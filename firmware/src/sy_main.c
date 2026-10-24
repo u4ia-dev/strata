@@ -344,7 +344,9 @@ static void sy_lcd_idle(void)
         return;
     last = fm1_ms;
     sy_midi_take();
-    if (!sy_keys_isr && sy_ui_keys_idle()) {     /* (without TIMER5's keys: read them here; V0.875: OCT- held too, its keys that way) */
+    sy_keys_isr = (uint8_t)(SY_KEYS_ISR && sy_ui_keys_plain());   /* (V0.875: TIMER5 leaves the keys the moment OCT- or a layer asks, */
+    sy_ui_dbg_idle();                            /* not at the next millisecond pass after a redraw (DEBUG's corner keys); the latched chord kept */
+    if (!sy_keys_isr && sy_ui_keys_idle()) {     /* (without TIMER5's keys: read them here; OCT- held too, its keys that way) */
         sy_keys_read();
         sy_keys();
     }

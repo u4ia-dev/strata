@@ -3144,17 +3144,31 @@ const secOf = (x) => x.web_test_page_section();
   const ORD = ["OCT-", "F3", "GLO"];
   const grid = (t) => [t.web_test_grid(5, 0, 0, 0), t.web_test_grid(5, 0, 15, 0)];
   const out = [];
-  for (const o of ORD) {                        // the drum GRID: a step F3 put in goes out again
+  for (const o of ORD) {                        // the drum GRID: a step F3 put in goes out again, and the empty clip it made goes with it
     const t = await fresh();
     t.web_test_lp_trk(7, 0, 2); t.web_test_lp(0, 7);
     goPage(t, 51, "GRID"); play(t, 0.05);
-    const g0 = grid(t), r = land(t, o, () => grid(t)), g1 = grid(t);
-    out.push([o, g0.join(), r.m.join(), g1.join(), r.sec === SEC.DEBUG]);
+    const cl = () => [t.web_test_lp_clip(7, 0, 0, -1), t.web_test_lp_trk(7, 10, -1), t.web_test_lp_trk(7, 11, -1)];
+    const g0 = grid(t), c0 = cl(), r = land(t, o, () => grid(t).concat(cl())), g1 = grid(t), c1 = cl();
+    out.push([o, g0.join(), r.m.slice(0, 2).join(), g1.join(), r.sec === SEC.DEBUG, c0.join(), r.m.slice(2).join(), c1.join()]);
   }
-  check(`the drum GRID, each order (steps 1,16 before / just before the fourth / after): ${out.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out.every((x) => x[4])}`,
-        out.every((x) => x[1] === "0,0" && x[3] === "0,0" && x[4]) && out[0][2] === "0,0" && out[1][2] === "1,0" && out[2][2] === "1,0");
+  check(`the drum GRID, each order (steps 1,16 before / just before the fourth / after): ${out.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; the empty clip's length, playing, launched (before / just before the fourth / after): ${out.map((x) => `${x[5]} / ${x[6]} / ${x[7]}`).join("; ")}; DEBUG ${out.every((x) => x[4])}`,
+        out.every((x) => x[1] === "0,0" && x[3] === "0,0" && x[4] && x[5] === "0,255,255" && x[7] === "0,255,255") &&
+        out[0][2] === "0,0" && out[1][2] === "1,0" && out[2][2] === "1,0" && out[0][6] === "0,255,255" && out[1][6] === "384,0,255" && out[2][6] === "384,0,255");
+  const outg = [];
+  for (const o of ORD) {                        // .. a clip that already had a hit keeps its length and its hit (step 4, row 0)
+    const t = await fresh();
+    t.web_test_lp_trk(7, 0, 2); t.web_test_lp(0, 7);
+    goPage(t, 51, "GRID"); play(t, 0.05);
+    t.web_test_grid(0, 0, 3, 100);
+    const cl = () => [t.web_test_lp_clip(7, 0, 0, -1), t.web_test_lp_clip(7, 0, 2, -1), t.web_test_grid(5, 0, 3, 0)];
+    const c0 = cl(), r = land(t, o, () => grid(t)), c1 = cl();
+    outg.push([o, c0.join(), r.m.join(), c1.join(), r.sec === SEC.DEBUG]);
+  }
+  check(`.. a clip with a hit already (length, notes, step 4 before / after): ${outg.map((x) => `${x[0]} ${x[1]} / ${x[3]}`).join("; ")}; the step F3 put in is out again (steps 1,16 just before: ${outg.map((x) => x[2]).join(" ")}); DEBUG ${outg.every((x) => x[4])}`,
+        outg.every((x) => x[1] === x[3] && x[1] === "384,1,1" && x[4]));
   const out2 = [];
-  for (const o of ORD) {                        // CLIPS: F3 launches T1's clip at its release only: the four never do
+  for (const o of ORD) {                        // CLIPS: F3 launches T1's clip at its press, like the other clips' keys; the four take it back
     const t = await fresh();
     goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
     t.web_test_lp_put(0, 0, 0, 96, 60, 100); t.web_test_lp_put(0, 1, 0, 96, 60, 100);
@@ -3163,34 +3177,66 @@ const secOf = (x) => x.web_test_page_section();
     out2.push([o, l0.join(), r.m.join(), l1.join(), r.sec === SEC.DEBUG, cstr(t, t.web_test_toast())]);
   }
   check(`CLIPS, each order (T1's playing, launched, running, PLAY before / just before the fourth / after): ${out2.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out2.every((x) => x[4])}`,
-        out2.every((x) => x[1] === "255,255,0,0" && x[2] === "255,255,0,0" && x[3] === "255,255,0,0" && x[4] && x[5] === ""));
-  {                                             // .. F3 alone on CLIPS still launches: at its release
+        out2.every((x) => x[1] === "255,255,0,0" && x[3] === "255,255,0,0" && x[4] && x[5] === "") && out2[0][2] === "255,255,0,0" &&
+        out2[1][2] === "0,255,1,1" && out2[2][2] === "0,255,1,1");
+  {                                             // .. F3 alone on CLIPS launches at its press, as the other keys do
     const t = await fresh();
     goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
-    t.web_test_lp_put(0, 0, 0, 96, 60, 100);
-    t.web_keys(1 << 0); play(t, 0.3);
-    const held = [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1)];
+    t.web_test_lp_put(0, 0, 0, 96, 60, 100); t.web_test_lp_put(1, 0, 0, 96, 60, 100);
+    t.web_keys(1 << 2); play(t, 0.05); t.web_keys(0); play(t, 0.3);          // (T2's clip: the transport runs)
+    const sn = () => [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1), t.web_test_run()];
+    t.web_keys(1 << 0); play(t, 0.05);
+    const held = sn();
+    play(t, 0.3);
+    const held3 = sn();
     t.web_keys(0); play(t, 0.3);
-    const rel = [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1), t.web_test_run()];
-    check(`CLIPS: F3 held 0.3 s launches nothing yet (${held}); let go it launches T1's clip (playing ${rel[0]}, launched ${rel[1]}, PLAY ${rel[2]})`,
-          held.join() === "255,255" && (rel[0] === 0 || rel[1] === 0) && rel[2] === 1);
+    const rel = sn();
+    check(`CLIPS: F3 pressed launches T1's clip at once (0.05 s: playing ${held[0]}, launched ${held[1]}), held 0.3 s the same (${held3[1]}), let go it stays (${rel[1]}, PLAY ${rel[2]})`,
+          held[0] === 255 && held[1] === 0 && held3[1] === 0 && rel[1] === 0 && rel[2] === 1);
+    const t2 = await fresh();                   // .. and a second key's launch at the press is as soon (a clip on T2: the same)
+    goPage(t2, SEC.SEQ, "CLIPS"); play(t2, 0.1);
+    t2.web_test_lp_put(1, 0, 0, 96, 60, 100);
+    t2.web_keys(1 << 2); play(t2, 0.05);
+    const k2 = t2.web_test_lp_trk(1, 11, -1);
+    t2.web_keys(0);
+    check(`.. the same as the next key's (T2's launched ${k2} at 0.05 s)`, k2 === 0 || t2.web_test_lp_trk(1, 10, -1) === 0);
   }
+  const out2b = [];
+  for (const mode of [0, 2]) {                  // .. the transport already running (T2's clip playing), LAUNCH at the bar / NOW: what the four took back
+    for (const o of ORD) {
+      const t = await fresh();
+      goPage(t, SEC.SEQ, "CLIPS"); play(t, 0.1);
+      t.web_test_lp(6, mode);
+      t.web_test_lp_put(0, 0, 0, 96, 60, 100); t.web_test_lp_put(1, 0, 0, 96, 60, 100);
+      t.web_keys(1 << 2); play(t, 0.05); t.web_keys(0); play(t, 0.3);
+      const l = () => [t.web_test_lp_trk(0, 10, -1), t.web_test_lp_trk(0, 11, -1), t.web_test_lp_trk(1, 10, -1), t.web_test_run()];
+      const l0 = l(), r = land(t, o, l), l1 = l();
+      out2b.push([mode ? "NOW" : "BAR", o, l0.join(), r.m.join(), l1.join(), r.sec === SEC.DEBUG]);
+    }
+  }
+  check(`CLIPS with T2 playing (T1 playing, launched, T2 playing, PLAY before / just before the fourth / after): ${out2b.map((x) => `${x[0]} ${x[1]} ${x[2]} / ${x[3]} / ${x[4]}`).join("; ")}; DEBUG ${out2b.every((x) => x[5])}`,
+        out2b.every((x) => x[2] === "255,255,0,1" && x[4] === "255,255,0,1" && x[5]) &&
+        out2b.filter((x) => x[1] === "OCT-").every((x) => x[3] === "255,255,0,1") &&
+        out2b.filter((x) => x[1] !== "OCT-" && x[0] === "BAR").every((x) => x[3] === "255,0,0,1") &&
+        out2b.filter((x) => x[1] !== "OCT-" && x[0] === "NOW").every((x) => x[3] === "0,255,0,1"));
   const out3 = [];
-  for (const o of ORD) {                        // LATCH: the chord latched before; F3 under OCT- is held off, else it replaced the chord: ended, LATCH stays on
-    const t = await fresh();
-    t.web_test_chd(19, 1); play(t, 0.05);
-    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.3);
-    const v0 = t.web_test_voices(), r = land(t, o, () => t.web_test_voices());
-    play(t, 2.0);
-    const v1 = t.web_test_voices(), on = t.web_test_chd(19, -1), held = t.web_test_chord(4);
-    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.4);
-    const v2 = t.web_test_voices();
-    t.web_test_chd(19, 0); play(t, 0.3);
-    out3.push([o, v0, r.m, v1, on, held, v2, r.sec === SEC.DEBUG, t.web_test_voices()]);
+  for (const keys of [[7], [7, 9]]) {           // LATCH: the chord latched before; F3 under OCT- is held off, else it replaced the chord: ended, the chord back, LATCH on
+    for (const o of ORD) {
+      const t = await fresh();
+      t.web_test_chd(19, 1); play(t, 0.05);
+      t.web_keys(keys.reduce((m, k) => m | (1 << k), 0)); play(t, 0.2); t.web_keys(0); play(t, 0.3);
+      const v0 = t.web_test_voices(), h0 = t.web_test_chord(4), r = land(t, o, () => t.web_test_voices());
+      play(t, 2.0);
+      const v1 = t.web_test_voices(), on = t.web_test_chd(19, -1), held = t.web_test_chord(4);
+      t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.4);
+      const v2 = t.web_test_voices(), h2 = t.web_test_chord(4);
+      t.web_test_chd(19, 0); play(t, 0.3);
+      out3.push([`${keys.length} ${o}`, v0, r.m, v1, on, held, v2, r.sec === SEC.DEBUG, t.web_test_voices(), h0, h2]);
+    }
   }
-  check(`LATCH, each order (voices latched / just before the fourth / 2 s after, LATCH, roots held, a key after): ${out3.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}, ${x[4]}, ${x[5]}, ${x[6]}`).join("; ")}; DEBUG ${out3.every((x) => x[7])}; LATCH off: ${out3.map((x) => x[8])} voices`,
-        out3.every((x) => x[1] === 1 && x[4] === 1 && x[6] === 1 && x[7] && x[8] === 0) && out3[0][3] === 1 && out3[0][2] === 1 &&
-        out3[1][3] === 0 && out3[1][5] === 0 && out3[2][3] === 0 && out3[2][5] === 0 && out3[1][2] >= 2 && out3[2][2] >= 2);
+  check(`LATCH, a chord of 1 or 2 roots, each order (voices latched / just before the fourth / 2 s after, LATCH, roots held, a key after): ${out3.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}, ${x[4]}, ${x[5]}, ${x[6]}`).join("; ")}; DEBUG ${out3.every((x) => x[7])}; LATCH off: ${out3.map((x) => x[8])} voices`,
+        out3.every((x, i) => x[1] === x[9] && x[1] === 1 + (i >= 3) && x[3] === x[1] && x[5] === x[9] && x[4] === 1 && x[6] === 1 && x[10] === 1 && x[7] && x[8] === 0) &&
+        out3.every((x, i) => i % 3 === 0 ? x[2] === x[1] : x[2] >= 2));
   const out4 = [];
   for (const o of ORD) {                        // recording: a note F3 or G5 played before the chord was whole is taken out of the take and TAKE's memory
     const t = await fresh();
@@ -3203,6 +3249,35 @@ const secOf = (x) => x.web_test_page_section();
   }
   check(`recording, each order (state, events free, this pass's, TAKE's notes: before / just before the fourth / after): ${out4.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out4.every((x) => x[4])}`,
         out4.every((x) => x[1].startsWith("3,") && x[3] === x[1] && x[4] && x[5] === 0) && out4[0][2] === out4[0][1] && out4[1][2] !== out4[1][1] && out4[2][2] !== out4[2][1]);
+  const out5 = [];
+  for (const o of ORD) {                        // an overdub (LR_DUB) on a clip playing: the note taken out of the clip's notes too
+    const t = await fresh();
+    t.web_test_lp(3, 0);
+    t.web_test_lp_put(0, 0, 0, 96, 60, 100);
+    t.web_buttons(1 << B.PLAY); play(t, 0.03); t.web_buttons(0); play(t, 0.4);
+    tap(t, B.REC);
+    for (let i = 0; i < 200 && t.web_test_lp(10, -1) !== 4; i++) play(t, 0.05);   // (it waits for the bar: LR_DUB)
+    t.web_keys(1 << 7); play(t, 0.2); t.web_keys(0); play(t, 0.2);
+    const st = () => [t.web_test_lp(10, -1), t.web_test_lp(12, -1), t.web_test_lp(18, -1), t.web_test_lp(21, -1), t.web_test_lp_clip(0, 0, 2, -1)];
+    const b0 = st(), r = land(t, o, st), b1 = st();
+    out5.push([o, b0.join(), r.m.join(), b1.join(), r.sec === SEC.DEBUG, t.web_test_voices()]);
+  }
+  check(`overdub, each order (state, events free, this pass's, TAKE's notes, the clip's notes: before / just before the fourth / after): ${out5.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out5.every((x) => x[4])}`,
+        out5.every((x) => x[1].startsWith("4,") && x[3] === x[1] && x[4] && x[5] === 0) && out5[0][2] === out5[0][1] &&
+        out5[1][2] !== out5[1][1] && out5[2][2] !== out5[2][1]);
+  const out6 = [];
+  for (const o of ORD) {                        // a drum track: the hit F3 or G5 played into the take goes out of it, with TAKE's
+    const t = await fresh();
+    t.web_test_lp_trk(0, 0, 2); t.web_test_lp(3, 0);
+    tap(t, B.REC); play(t, 0.3);
+    t.web_keys(1 << 4); play(t, 0.2); t.web_keys(0); play(t, 0.2);
+    const st = () => [t.web_test_lp(10, -1), t.web_test_lp(12, -1), t.web_test_lp(18, -1), t.web_test_lp(21, -1)];
+    const b0 = st(), r = land(t, o, st), b1 = st();
+    out6.push([o, b0.join(), r.m.join(), b1.join(), r.sec === SEC.DEBUG]);
+  }
+  check(`a drum track's take, each order (state, events free, this pass's, TAKE's: before / just before the fourth / after): ${out6.map((x) => `${x[0]} ${x[1]} / ${x[2]} / ${x[3]}`).join("; ")}; DEBUG ${out6.every((x) => x[4])}`,
+        out6.every((x) => x[1].startsWith("3,") && x[3] === x[1] && x[4]) && out6[0][2] === out6[0][1] &&
+        out6[1][2] !== out6[1][1] && out6[2][2] !== out6[2][1]);
 }
 {                                               // .. MIDI LEARN: OCT- takes the picked parameter's CC away; the four corners put it back
   const t = await fresh();

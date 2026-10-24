@@ -160,6 +160,11 @@ static int ui_grid_key(uint32_t k)
         ui.dirty = D_ALL;
         return 1;
     }
+    {
+        uint32_t i = k ? 1u : 0u;                   /* (V0.875: F3 or G5 is a DEBUG corner: the clip it may make kept, for the opening) */
+        ui.dbg_gt[i] = (uint8_t)(lpp.sel % LP_NTRK), ui.dbg_gc[i] = (uint8_t)(lpp.scn % LP_NSCN);
+        ui.dbg_ge = (uint8_t)((ui.dbg_ge & ~(1u << i)) | (!lp_cur_clip()->len ? 1u << i : 0u));
+    }
     r = lp_grid_toggle(ui_d_row(), st, sy_ui_key_vel());
     if (r < 0) {
         ui_toast(lp_cur_rec() && lpr.st == LR_TAKE ? "THE TAKE SETS THIS CLIP" : st >= ui_d_steps() ? "PAST THE CLIP'S END"
@@ -170,7 +175,7 @@ static int ui_grid_key(uint32_t k)
     if (r) {                                        /* (put in: held, the knobs its own) */
         ui.ghold = 1, ui.ghold_k = (uint8_t)k;
         ui.ghold_new = 1, ui.ghold_turn = 0;
-        if (k == 0u || k == 26u) {                  /* (V0.875: F3 or G5 is a DEBUG corner: the step kept for the opening, to take out) */
+        if (k == 0u || k == 26u) {                  /* (V0.875: the step kept for the opening, to take out) */
             uint32_t i = k ? 1u : 0u;
             ui.dbg_ok |= (uint8_t)(DBG_GR0 << i);
             ui.dbg_gr[i] = (uint8_t)ui_d_row();
@@ -184,6 +189,33 @@ static int ui_grid_key(uint32_t k)
     ui_toast(m);
     ui.dirty = D_ALL;
     return 1;
+}
+/* V0.875 (item 25): the steps F3 and G5 put in (ui.dbg_g*) taken out, in the clip each went into (the selection may have
+ * moved since); a clip a step made (it was empty) with nothing left in it cleared again: its length, and the launch that
+ * came with it (lp_clip_clear) */
+static void ui_d_ungrid(void)
+{
+    uint32_t i, k, fl;
+    for (i = 0; i < 2u; i++) {
+        lp_clip_t *c = &lpp.clip[ui.dbg_gt[i] % LP_NTRK][ui.dbg_gc[i] % LP_NSCN];
+        if (!(ui.dbg_ok & (DBG_GR0 << i)) || !c->len)
+            continue;
+        fl = LP_LOCK();
+        while ((k = lp_grid_at(c, ui.dbg_gr[i], ui.dbg_gs[i])) != LP_END) {
+            lp_unlink(c, k);
+            lp_forget(k);
+            lp_release(k);
+        }
+        lps[ui.dbg_gt[i] % LP_NTRK].resync = 1;
+        LP_UNLOCK(fl);
+    }
+    for (i = 0; i < 2u; i++)
+        if (((ui.dbg_ge >> i) & 1u) && (ui.dbg_ok & (DBG_GR0 << i)) &&
+            lpp.clip[ui.dbg_gt[i] % LP_NTRK][ui.dbg_gc[i] % LP_NSCN].len &&
+            lpp.clip[ui.dbg_gt[i] % LP_NTRK][ui.dbg_gc[i] % LP_NSCN].head == LP_END)
+            lp_clip_clear(ui.dbg_gt[i], ui.dbg_gc[i]);
+    ui.dbg_ge = 0;
+    lpx.seq++;
 }
 /* .. the step held let go (or its page gone): a hit that was there, no knob turned, taken out (a tap's toggle) */
 static void ui_grid_ms(void)
