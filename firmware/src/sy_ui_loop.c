@@ -470,10 +470,13 @@ static void ui_p_q(void)
         uint32_t want = ui.lt_want ? (uint32_t)(ui.lt_want - 1) & 3u : ui_l_type3(tr);
         sp_put(sp_put(sp_put(sp_fix(sp_put(t, "T"), (int32_t)tr + 1, 0u, 0), ": "), LT_TYPE3[want]), "?");
         sp_put(sp_put(n, "ANYTHING ELSE: STAYS "), LT_TYPE3[ui_l_type3(tr)]);
-        l1 = "SAVE: CHANGE IT", l2 = n, l3 = "ITS CLIPS STAY EITHER WAY";
+        l1 = "SEQ TWICE: CHANGE IT", l2 = n, l3 = "ITS CLIPS STAY EITHER WAY";
     } else if (ui.qk == Q_WIPE) {
         sp_put(t, "WIPE?");
-        l1 = "SAVE: EVERY SETTING BACK", l2 = "ANYTHING ELSE: KEEP THEM", l3 = "PRESETS AND PROJECTS STAY";
+        l1 = "HOME TWICE: EVERY SETTING BACK", l2 = "ONCE, OR ANOTHER BUTTON: KEEP THEM", l3 = "PRESETS AND PROJECTS STAY";
+    } else if (ui.qk == Q_TEST) {
+        sp_put(sp_put(sp_put(sp_fix(sp_put(t, "TEST "), (int32_t)ui.tp_k + 1, 0u, 0), ": "), sy_tp_name(ui.tp_k)), "?");
+        l1 = "HOME TWICE: LOAD IT AND START IT", l2 = "ONCE, OR ANOTHER BUTTON: NO", l3 = "NOTHING OF YOURS IS CHANGED";
     } else {
         uint32_t c = (uint32_t)(ui.qv ? ui.qv - 1u : 0u), b = lp_clip_bars(c / LP_NSCN, c % LP_NSCN);
         sp_put(t, "DELETE?");
@@ -935,16 +938,15 @@ static void ui_l_head(const char *word, int ptag)
 #define UI_LRH 13.0f
 static void ui_p_lclips(void)
 {
-    static const int32_t IDS[3] = {UI_LTYPE, UI_LSCN, -1};
     uint32_t t, s, sel = lpp.sel % LP_NTRK, cs = lpp.scn % LP_NSCN, blink = (fm1_ms / 250u) & 1u;
     char n[4];
-    ui_l_head(0, 1);
+    ui_l_head(0, 0);                                /* (V0.87.1: no P tag: PRESETS is the sound's again) */
     lk_box(UI_LX0 - 26.0f, UI_LY0 + UI_LRH * (float)sel, UI_LX0 + UI_LCW * (float)LP_NSCN,
            UI_LY0 + UI_LRH * (float)(sel + 1u), sk.line);   /* (the track selected's row lit) */
     for (s = 0; s < LP_NSCN; s++) {                 /* (the scenes' letters: the one picked bold) */
         char l[2] = {ui_l_scn(s), 0};
         lk_text_c(UI_LX0 + UI_LCW * ((float)s + 0.5f), 48.0f, s == cs ? T9B : T9, l,
-                  s == cs ? ui_ink(ui_hot(1)) : sk.lab, sk.ground, 0, 0);
+                  s == cs ? sk.ink : sk.lab, sk.ground, 0, 0);
     }
     for (t = 0; t < LP_NTRK; t++) {
         float y = UI_LY0 + UI_LRH * (float)t;
@@ -980,12 +982,29 @@ static void ui_p_lclips(void)
             if (nx)                                 /* (launched: from the next bar) */
                 lk_frame(x0 - 1.5f, y0 - 1.5f, x1 - x0 + 3.0f, y1 - y0 + 3.0f, 1.0f, sk.hot);
             if (t == sel && s == cs)
-                lk_frame(x + 0.5f, y + 0.5f, UI_LCW - 1.0f, UI_LRH - 1.0f, 1.0f, ui_hot(1) ? sk.hot : sk.ink);
+                lk_frame(x + 0.5f, y + 0.5f, UI_LCW - 1.0f, UI_LRH - 1.0f, 1.0f, sk.ink);
         }
     }
-    ui_l_row(0u, IDS);
-    lk_text(182.0f, 176.0f, T9, "THE KEYS", sk.lab, sk.ground, 20, 0);   /* (S5: what the keys do here) */
-    lk_text(182.0f, 188.0f, T10B, "LAUNCH", sk.ink, sk.ground, 0, 0);
+    {                                               /* (V0.87.1: TYPE, MUTE / SOLO, and KNOB 4's track: KNOB 3 has none; */
+        static const float CX[3] = {26.0f, 104.0f, 182.0f};   /* OCT- and OCT+ step the scenes) */
+        static const int32_t IDS[3] = {UI_LTYPE, UI_LMS, UI_LTRK};
+        char v[40], f[40];
+        for (t = 0; t < 3u; t++) {
+            const char *nm;
+            if (IDS[t] == UI_LTRK) {
+                nm = "TRACK";
+                sp_fix(sp_put(v, "T"), (int32_t)sel + 1, 0u, 0);
+            } else {
+                nm = ui_loop_nv((uint32_t)IDS[t], v);
+            }
+            lk_text(CX[t], 176.0f, T9, nm, sk.lab, sk.ground, 20, 0);
+            lk_text(CX[t], 188.0f, T10B, lk_fit(f, sizeof f, v, T10B, 0, t < 2u ? 74.0f : 50.0f), ui_ink(ui_hot(t == 2u ? 3u : t)),
+                    sk.ground, 0, 0);
+            ui_H(t == 2u ? 3u : t, CX[t] - 18.0f, 185.0f);
+        }
+        lk_text(8.0f, 205.0f, T9, "KEYS: LAUNCH \xB7 OCT-, OCT+: SCENE", sk.lab, sk.ground, 20, 0);
+        pg.figs = 0xFu;
+    }
 }
 
 /* MIXER: a strip a track (its PAN over a fader of VOLUME; M, S under), the one selected framed */

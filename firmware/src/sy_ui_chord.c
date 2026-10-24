@@ -425,7 +425,7 @@ static void ui_arp_chip(void)
     lk_chip(230.0f - lk_tw(T10B, s, 20) - 10.0f, 24.0f, s, chd.perf && chd.style % PF_N == PF_ARP);
 }
 /* the steps: OCTAVE a tick over each (on the 0 line), LEVEL a bar (RATCHET's hits side by side; CHANCE under 100 %:
- * hollow), TIE the note before held on across it, REST a dash at the foot, SLIDE a slope up into the next; past
+ * hollow there; V0.87.1: on STEPS a fader's cap on a rail in each step, up at 100 %, down at 0), TIE the note before held on across it, REST a dash at the foot, SLIDE a slope up into the next; past
  * LENGTH in LINE; the step picked framed, the one playing marked over it, the beats ticked under. rat: RATCHET's page
  * (the hits, CHANCE's meter under each and SLIDE in INK; the levels and octaves in MID) */
 static void ui_steps_lanes(int rat)
@@ -442,12 +442,14 @@ static void ui_steps_lanes(int rat)
         uint16_t lvc = rat ? soft : sel && ui_hot(2) ? sk.hot : ink, hitc = rat && sel && ui_hot(1) ? sk.hot : ink;
         y = YO - 5.0f * ((float)sy_clampi(chd.oct[i], 0, 4) - 2.0f);
         lk_box(xl + 1.0f, y - 1.5f, xr - 1.0f, y + 1.5f, rat ? soft : sel && ui_hot(3) ? sk.hot : ink);
+        if (!rat && chd.st[i] == AS_PLAY)           /* (V0.87.1: CHANCE's fader: its rail, the bar over it) */
+            lk_seg(0.5f * (xl + xr), YB - HB, 0.5f * (xl + xr), YB, 1.0f, live ? sk.mid : sk.line);
         if (chd.st[i] == AS_PLAY) {
             uint32_t r = (uint32_t)sy_clampi(chd.rat[i], 1, 4);
             float hw = (bw - (float)(r - 1u)) / (float)r;
             for (h = 0; h < r; h++) {               /* (each hit: a bar of its own) */
                 float ha = xl + (hw + 1.0f) * (float)h;
-                if (chd.chn[i] < 100u)
+                if (rat && chd.chn[i] < 100u)
                     lk_frame(ha + 0.5f, top + 0.5f, hw - 1.0f, YB - top - 1.0f, 1.0f, rat ? hitc : lvc);
                 else
                     lk_box(ha, top, ha + hw, YB, rat ? hitc : lvc);
@@ -456,6 +458,11 @@ static void ui_steps_lanes(int rat)
                 lk_seg(xr - 1.0f, top + 1.0f, xr + 5.0f, top - 5.0f, 1.5f,
                        !rat ? soft : sel && ui_hot(3) ? sk.hot : ink);
             held = top;
+            if (!rat) {                             /* (V0.87.1: CHANCE a fader's cap, up at 100 %, down at 0: a gap of */
+                float cy = YB - HB * (float)sy_clampi(chd.chn[i], 0, 100) / 100.0f;   /* ground round it keeps it clear of the bar) */
+                lk_box(xl - 1.0f, cy - 3.0f, xr + 1.0f, cy + 3.0f, sk.ground);
+                lk_box(xl, cy - 2.0f, xr, cy + 2.0f, live ? ink : sk.line);
+            }
         } else if (chd.st[i] == AS_TIE && held > 0.0f) {
             lk_box(x0 - 2.0f, held, xr, YB, soft);  /* (the note before, on across this step) */
         } else {
