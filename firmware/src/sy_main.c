@@ -168,15 +168,36 @@ static uint32_t sy_spare_hit(void)               /* the spare words not as paint
 
 /* ------------------------------------------------------------------------------------------- MASTER --- */
 /* the pot, read before the audio starts (the first block at its level), then smoothed a frame at a time; Felucca's
- * curve: the pot's square (1023: 4088 of 4096) */
-static int32_t sy_master_knob = 512 * 16;
+ * curve: the pot's square (1023: 4088 of 4096).
+ * V0.87.1 (item 13): a dead band after the smoothing, so the ADC's noise no longer moves the gain every frame: the
+ * gain's knob (sy_master_held) moves only once the smoothed one is more than SY_MASTER_BAND from it, and then trails it
+ * by the band, in 1/16 steps (a turn moves it as smoothly as before). Held within [band, top - band], and that range
+ * (less the smoothing's own 7/16 shortfall) spread over the whole 0 .. 1023: both ends reachable, each with a band */
+#define SY_MASTER_TOP (1023 * 16)
+#define SY_MASTER_BAND 40                        /* 2.5 steps of the ADC, in 1/16 (needs a hardware test: `status`'s
+                                                  * master_adc and master_q12, the pot left alone) */
+#define SY_MASTER_EDGE (SY_MASTER_BAND + 8)      /* (+ the smoothing's shortfall: its /8 stops 7/16 short) */
+static int32_t sy_master_knob = 512 * 16, sy_master_held = 512 * 16, sy_master_adc = -1;
 static int32_t sy_master_of(uint32_t k10) { return (int32_t)((k10 * k10) >> 8); }
+static int32_t sy_master_band(int32_t k)         /* the smoothed knob (1/16) to the gain's 0 .. 1023 */
+{
+    int32_t h = sy_master_held;
+    if (k > h + SY_MASTER_BAND)
+        h = k - SY_MASTER_BAND;
+    else if (k < h - SY_MASTER_BAND)
+        h = k + SY_MASTER_BAND;
+    h = h < SY_MASTER_BAND ? SY_MASTER_BAND : h > SY_MASTER_TOP - SY_MASTER_BAND ? SY_MASTER_TOP - SY_MASTER_BAND : h;
+    sy_master_held = h;
+    h = (h - SY_MASTER_EDGE) * 1023 / (SY_MASTER_TOP - 2 * SY_MASTER_EDGE);
+    return h < 0 ? 0 : h > 1023 ? 1023 : h;
+}
 static void sy_master_poll(void)
 {
     int32_t a = fm1_adc_read(FM1_ADC_MASTER);
     if (a >= 0) {
+        sy_master_adc = a;
         sy_master_knob += (a * 16 - sy_master_knob) / 8;
-        sy_master_q12 = sy_master_of((uint32_t)(sy_master_knob / 16));
+        sy_master_q12 = sy_master_of((uint32_t)sy_master_band(sy_master_knob));
     }
 }
 /* V0.86 (F31): the battery's divider on the ADC's channel 3, a frame at a time, smoothed (sy_ui.c ui_batt: its bars);
@@ -195,8 +216,9 @@ static void sy_master_boot(void)
     for (i = 0; i < 3u; i++) {
         int32_t a = fm1_adc_read(FM1_ADC_MASTER);
         if (a >= 0) {
-            sy_master_knob = a * 16;
-            sy_master_q12 = sy_master_now = sy_master_of((uint32_t)a);
+            sy_master_adc = a;
+            sy_master_knob = sy_master_held = a * 16;
+            sy_master_q12 = sy_master_now = sy_master_of((uint32_t)sy_master_band(sy_master_knob));
             return;
         }
     }
@@ -334,19 +356,42 @@ static void sy_lcd_idle(void)
  * show SAFE START (on 2026-10-22 it did) */
 #define UBOOT_MARK 0x55424F54u                   /* "UBOT" */
 static uint32_t uboot_mark __attribute__((section(".noinit")));
+/* V0.87.1 (item 12; needs a hardware test): V0.87's way into it left a black screen and "unknown USB device" on
+ * Windows, even after a replug, while stock V15's (the same mailbox and P33 reset, no USB detach) reaches it on a
+ * Linux host. Three ways, none writing anything but the mailbox in RAM: 'a' as V0.87 (USB detached 30 ms, the
+ * watchdog left armed across the reset); 'b' USB detached (controller off, D+ pull-up off) for 100 ms, the watchdog
+ * still armed through the wait (~8 s left: a stall there still restarts), stopped only after the cli, then the P33
+ * reset; 'c' as b, then the watchdog's reset (~1 s) instead of P33's. Each of b's and c's resets tried ~3 s, then the
+ * other (hal/fm1_sys.h fm1_enter_uboot_way): never a black screen for ever. The keys and the SysEx soft key take
+ * SY_UBOOT_WAY; the console's `uboot yes a|b|c` picks one. The test decides; then all take the winner, here (the boot
+ * guard too, once it is proven) */
+#ifndef SY_UBOOT_WAY
+#define SY_UBOOT_WAY 'b'
+#endif
+static uint8_t sy_uboot_way = SY_UBOOT_WAY;      /* the next entry's (sy_console.c sets it with its request) */
+static void sy_uboot_reset(uint32_t way)         /* USB detached: the wait (the watchdog armed), then the reset */
+{
+    fm1_delay_ms(way == 'a' ? 30u : 100u);
+    if (way == 'a')
+        fm1_enter_uboot();
+    fm1_enter_uboot_way(way == 'c');
+}
 static void sy_uboot(const char *why)            /* the chip's USB boot, RAM as it is (debug, a flash backup) */
 {
+    char w[8] = "WAY ?";
+    uint32_t way = sy_uboot_way == 'a' || sy_uboot_way == 'c' ? sy_uboot_way : 'b';
+    w[4] = (char)(way - 'a' + 'A');
     fm1_audio_stop();
     lcd_fill(0, 0, 240, 240, sk.ground);
     draw_text_line(0, 100, 240, &AF_M, why, sk.ink, sk.ground, 1);
     draw_text_line(0, 126, 240, &AF_XS, "THE CHIP'S USB BOOT: FOR FLASH TOOLS", sk.mid, sk.ground, 1);
     draw_text_line(0, 140, 240, &AF_XS, "POWER OFF AND ON TO LEAVE IT", sk.mid, sk.ground, 1);
+    draw_text_line(0, 160, 240, &AF_XS, w, sk.mid, sk.ground, 1);   /* (V0.87.1: which way, for the test) */
     fm1_delay_ms(20);
     usb_detach();
-    fm1_delay_ms(30);
     bootguard.pending = 0;                       /* (meant: no failed boot) */
     uboot_mark = UBOOT_MARK;
-    fm1_enter_uboot();
+    sy_uboot_reset(way);
 }
 
 /* OCT- + OCT+ held 5 s: UBOOT, its countdown (sy_ui_draw.c: a ring that empties) from 2 s; letting go of either stops
@@ -528,7 +573,7 @@ static void fm1_main(void)
             sy_update();
         }
 #endif
-        if (usb.uboot_req)                       /* SysEx F0 22 24 35 7D F7, or the console's `uboot yes` */
+        if (usb.uboot_req)                       /* SysEx F0 22 24 35 7D F7, or the console's `uboot yes [a|b|c]` */
             sy_uboot("UBOOT (USB)");
 #if FELUCCA_CDC
         cdc_task();
@@ -602,7 +647,8 @@ void fm1_cstart(void)
     if (bootguard.failed >= 2u) {                /* two boots in a row died in their first 30 s */
         bootguard.failed = 0;
         bootguard.pending = 0;
-        fm1_enter_uboot();
+        fm1_enter_uboot();                       /* (V0.87's, the watchdog armed: the last resort stays as it was
+                                                  * until the hardware test proves a way; then it takes SY_UBOOT_WAY) */
     }
     fm1_irq_init();
     for (d = _bss_start; d < _bss_end; d++)
