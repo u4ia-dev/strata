@@ -8,7 +8,7 @@ letting go of OCT− stops it.
 
 | Button | Once | Twice | Held | + OCT+ | + OCT− | + OCT− 5 s |
 | --- | --- | --- | --- | --- | --- | --- |
-| <kbd>HOME</kbd> | HOME: SOUND, MIX 1-4, MIX 5-8 | SETTINGS | help map; on HOME, 5 s: DEBUG | next sound | previous sound | |
+| <kbd>HOME</kbd> | HOME: SOUND, MIX 1-4, MIX 5-8 | SETTINGS | help map | next sound | previous sound | |
 | <kbd>EDIT</kbd> | OSC A, OSC B, SUB, NOISE, FILTER, MATRIX (drum track: DRUM, KIT) | wavetable list (drum track: drum presets; from KIT or HOME: kits); twice again: load the one chosen | | module shown on | module shown off | module reset |
 | <kbd>ENV</kbd> | ENV 1, ENV 2 | assign window: envelope or macro onto a knob | | | | envelope reset |
 | <kbd>LFO</kbd> | LFO 1, LFO 2 | assign window: LFO onto a knob | MOMENTARY | add a point | delete the point | LFO reset |
@@ -41,6 +41,7 @@ button, says no.
 | <kbd>GLO</kbd> held + F3 (lowest key) ×3 | tap tempo (F3 does not sound) |
 | <kbd>OCT−</kbd> / <kbd>OCT+</kbd> | keys' octave, −3 to +3 |
 | <kbd>OCT−</kbd> + <kbd>OCT+</kbd> 5 s | backup mode (USB BOOT) |
+| <kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held together | DEBUG, from any page |
 | <kbd>HOME</kbd> held at power-on | start without the last sound |
 
 | Control | Does |
@@ -86,7 +87,7 @@ button, says no.
 | <kbd>OCT−</kbd> / <kbd>OCT+</kbd> | scene A to H |
 | <kbd>PRESETS</kbd> | the track's sound (drum track: its drums) |
 
-| DEBUG (<kbd>HOME</kbd> held 5 s, on HOME) | Does |
+| DEBUG (<kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held together) | Does |
 | --- | --- |
 | BENCH, KEY SCAN, CORE 2 | measurements |
 | TESTS | KNOB 1 picks a test project, <kbd>HOME</kbd> twice loads it; KNOB 2 stops it |

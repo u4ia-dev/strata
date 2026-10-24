@@ -9,7 +9,7 @@ themselves a few seconds after you stop playing.
 
 | Page | Setting | What it does |
 | --- | --- | --- |
-| SCREEN | COLOR | Twelve themes: STRATA, CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO, MOSS, DUSK, SAND, NEON |
+| SCREEN | COLOR | Twelve themes: STRATA, CLASSIC, ICE, VIOLET, PAPER, AMBER, HI-CON, MONO, MOSS, DUSK, SAND, NEON |
 | | HELP | Show a hint when a module opens (on) |
 | | LIGHTS | LED brightness: OFF, LOW, MED, HIGH |
 | PANEL | ACCEL | Knobs faster when turned quickly (on) |
@@ -39,8 +39,9 @@ the transport runs. <kbd>ARP</kbd> is lit while the arpeggiator is on.
 
 ## DEBUG
 
-On the HOME page, hold <kbd>HOME</kbd> for 5 seconds (past the help map). On any other page the same hold only
-shows the help map. <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
+On any page, hold <kbd>OCT−</kbd>, F3 (the lowest key), G5 (the highest key) and <kbd>GLO</kbd> together for a
+quarter of a second. The four buttons are far apart on purpose, so DEBUG never opens by accident, and the notes and
+changes those presses started are taken back. (<kbd>HOME</kbd> held shows the help map only.) <kbd>HOME</kbd> leaves DEBUG. ALGORITHM steps its pages. They diagnose the hardware, and reset or
 test Strata:
 
 - **BENCH**: what the FM-1 measures (audio, CPU, screen, keys, tables, flash, stacks). RUN times the processor.
@@ -61,7 +62,7 @@ key, button or knob that closes while you watch turns vermilion.
 Four built-in projects load and play by themselves, to put one part of Strata under load: use them to hear how a build
 copes, or to record the audio.
 
-1. Hold <kbd>HOME</kbd> on the HOME page for 5 seconds. Turn ALGORITHM to TESTS.
+1. Open DEBUG (<kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held together). Turn ALGORITHM to TESTS.
 2. Turn KNOB 1 to choose a test. A moment later the screen asks, for example "TEST 2: FX?".
 3. Press <kbd>HOME</kbd> twice. The test loads and starts. Once, or another button, cancels.
 4. Turn KNOB 2 to stop it early. It also stops by itself after 60 to 90 seconds.

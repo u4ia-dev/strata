@@ -19,8 +19,9 @@ a backup tool on a computer.
 **1. Put the FM-1 in backup mode**, in any of these ways:
 
 - **From Strata or Felucca**: hold <kbd>OCT−</kbd> and <kbd>OCT+</kbd> for 5 seconds (a countdown shows from 2 s).
-  With Strata V0.87 the computer may show an *unknown USB device* instead; then switch the FM-1 off and on and use
-  one of the last two ways. Strata V0.87.1 enters backup mode a different way (unconfirmed on hardware).
+  Strata V0.87 sometimes left the computer showing an *unknown USB device*; V0.875 detaches the USB first and works
+  (tested on one FM-1). If yours still shows an unknown device, switch the FM-1 off and on and use one of the last two
+  ways.
 - **From the official firmware (V15)**: send the USB-MIDI message `F0 22 24 35 7D F7` with any program that sends
   SysEx.
 - **The [FM-1 Transporter](https://github.com/kurogedelic/FM-1-transporter)**, a Seeed XIAO RP2040 wired to the FM-1's
@@ -71,8 +72,8 @@ If no updater can reach the FM-1, put it in **backup mode**, where the chip itse
 USB:
 
 - **<kbd>OCT−</kbd> and <kbd>OCT+</kbd> held for 5 seconds** on Strata or Felucca, or **the SysEx message**
-  `F0 22 24 35 7D F7` on the FM-1's USB MIDI port (as on the official firmware). With Strata V0.87 the computer may
-  show an unknown USB device instead of the disk.
+  `F0 22 24 35 7D F7` on the FM-1's USB MIDI port (as on the official firmware). Strata V0.87 sometimes left an
+  unknown USB device instead of the disk; V0.875 works (tested on one FM-1).
 - **The FM-1 Transporter** or **a Flipper Zero** with flipper-fm1-recovery, which work at power-on whatever the
   firmware does. Use one of them if the FM-1 doesn't appear as a disk on the computer.
 

@@ -1,16 +1,29 @@
 # Strata controls
 
-Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: **V0.87.1** (a local build from the V0.87 hardware test: the changes below, "V0.87.1"), on **V0.87 steps 1 and 2** (the
+Everything the panel does in Strata, the wavetable firmware for the M-VAVE FM-1. Status: **V0.875** (a pre-release: V0.87.1's changes from the V0.87 hardware test, below, and V0.875's), on **V0.87 steps 1 and 2** (the
 changes below, "V0.87"; step 2 the drums: "The drums' models, presets and kits"), on V0.86 step 2, the drum editor (DRUM and KIT, each drum's DRIVE, EQ and SHAPE, COMP, eight factory kits), on step 1's interface (one layout on
 every screen, the pages regrouped, HOME's three pages, PRESETS' list, SEQ in two groups with SPEED and TOOLS, the
 buttons once and twice, the help map, SETTINGS > POWER), on V0.85's drums, V0.8's looper, V0.75's ARP,
 V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulator**; V0.5 ran on an FM-1 on
-2026-10-17, V0.6 and V0.65 since, V0.7 to V0.87.1 **need a hardware test**. How it is built:
+2026-10-17, V0.6 and V0.65 since, V0.7 to V0.875 **need a hardware test**. How it is built:
 [ARCHITECTURE.md](ARCHITECTURE.md) §14, §17. How it is tested: [TESTING.md](TESTING.md) §6.3.
 
+**V0.875, in short** (V0.87.1's changes were never public on their own; V0.875 adds items 1 to 5 below):
+1. **DEBUG opens by four corners**: OCT− + F3 (the lowest key) + G5 (the highest) + GLO, held together for 250 ms, on
+   any page. A key that lands with OCT− and another corner down is held off (no note); one that landed before is cut
+   off; the octave, the CLIPS scene, a tap's taps and NAME IT's characters those presses changed are taken back, and
+   GLO's layer, windows and the reset countdown close. HOME held 5 s no longer opens DEBUG: HOME held is the help map
+   on every page.
+2. **STRATA is darker**: a black ground, the site's warm ink and vermilion (labels 13.9 : 1, as HI-CON's 13.6).
+3. **AMBER replaces NIGHT** (amber phosphor on black, a pale glow for the accent); a saved NIGHT loads as AMBER.
+4. **PERFORM shows the tap tempo**: a dot for each tap (the last flashes), "n OF 3", then the BPM in the accent as it
+   settles; taps more than 2 s apart start again.
+5. Backup mode from Strata (OCT− + OCT+ held 5 s, the SysEx soft key) took way b on an FM-1 and works (**verified on
+   hardware**, one unit).
+
 **V0.87.1, in short** (changes from the V0.87 hardware test; **verified in emulator**, **needs hardware test**):
-- **DEBUG opens from HOME only**: HOME held 5 s on HOME. On any other page, holding HOME shows the help map for as long
-  as it is held, with no countdown. **WIPE moved into DEBUG** (out of SETTINGS); HOME twice answers its question.
+- **HOME held is the help map on every page** (V0.875: DEBUG is the four corners, above), as long as it is held, with
+  no countdown. **WIPE moved into DEBUG** (out of SETTINGS); HOME twice answers its question.
 - **A list or question is answered yes by the button that opened it, twice**: EDIT twice for the wavetables' list, the
   kits and the drum presets; SEQ twice for the projects' list and the track TYPE question; HOME twice for WIPE and the
   test projects. Once, or any other button, says no. (SAVE still owns the presets' list, the SAVE window and the
@@ -24,13 +37,13 @@ V0.7's chords, V0.67's legible screens and V0.6's FX chain, **verified in emulat
   The drum **GRID**'s row names are short (KICK, SNARE, CLAP, HAT C, HAT O, CYM, WT 1, WT 2, DUCK).
 - **DEBUG > TESTS**: four built-in test projects (below). **TEST · NOT SAVED** shows while one is loaded.
 - **KEY SCAN** names KNOB 1's lines (PA5:9, PA5:10) instead of flagging them. The splash is the logo.
-- Backup mode (OCT− + OCT+ held 5 s, the SysEx soft key, `uboot yes`) has three ways, a, b and c ([FLASHING.md](FLASHING.md)).
+- Backup mode (OCT− + OCT+ held 5 s, the SysEx soft key, `uboot yes`) has three ways, a, b and c; the keys and the soft key use b ([FLASHING.md](FLASHING.md)).
 
 **V0.87 (step 1), in short** (the tables below say it in full):
 - Resets: **a menu button + OCT− held 5 s** resets what it shows (EDIT, ENV, LFO, FX, GLO, SCL, ARP, SEQ); a countdown
   shows from 2 s ("LET GO OF OCT- TO STOP"); OCT− let go before 2 s is the button + OCT−'s own tap. A button held 5 s
   alone no longer resets; SAVE held 5 s no longer saves.
-- HOME twice: the SETTINGS; HOME held 5 s on HOME: the **DEBUG** menu (V0.87.1: BENCH, KEY SCAN, CORE 2, TESTS, WIPE).
+- HOME twice: the SETTINGS; the four corners: the **DEBUG** menu (V0.87.1: BENCH, KEY SCAN, CORE 2, TESTS, WIPE).
   SETTINGS: SCREEN, PANEL, MIDI, POWER (V0.87.1: WIPE is in DEBUG: every setting back to the firmware's; the presets and
   projects stay; asked first).
 - EDIT twice: the **wavetables' list** of the oscillator shown (SELECT the category, PRESETS the table, V0.87.1: EDIT
@@ -116,7 +129,7 @@ Buttons). SELECT picks the module, ALGORITHM steps its pages, in every menu; bot
 | SEQ (SELECT: LOOP, CLIP, TRACK) | TRACK | RECORD: QUANTIZE · CHANNEL · MIDI IN; CLICK: CLICK · LEVEL · COUNT-IN · LAUNCH |
 | SEQ twice | the projects | a list as the presets' (PRESETS picks, V0.87.1: SEQ twice loads; V0.87, S2) |
 | HOME twice | SETTINGS | SCREEN: COLOR · HELP · LIGHTS; PANEL: ACCEL · HOLD; MIDI: CHANNEL · LEARN · CLEAR · PROGRAM; POWER: SHOW BATTERY · SCREEN OFF AFTER |
-| HOME held 5 s (on HOME) | DEBUG | BENCH: RUN · PEAKS; KEY SCAN; CORE 2: ON · TEST · LOAD; TESTS: TEST · STOP; WIPE (V0.87.1) |
+| OCT− + F3 + G5 + GLO held (V0.875) | DEBUG | BENCH: RUN · PEAKS; KEY SCAN; CORE 2: ON · TEST · LOAD; TESTS: TEST · STOP; WIPE (V0.87.1) |
 
 V0.86 regrouped the pages so that a page's knobs belong together (G1-G8 in the plan): OSC's UNISON (UNISON, UNI MODE,
 DETUNE, BLEND) and SPREAD (WIDTH, WT SPRD, PHASE, RAND), SUB's and NOISE's OUTPUT (LEVEL, PAN, ROUTE), the delay's
@@ -206,14 +219,14 @@ own):
   twice count from what was shown before the first press (V0.87: ENV and LFO open the assign window over it).
 - **Held**: its layer while held (The layers, below). HOME held: the help map.
 - **+ OCT− held 5 s** (V0.87, U2): what it shows back to its starting values: a countdown from 2 s ("LET GO OF OCT- TO
-  STOP"); a sound's section can be undone (SAVE + OCT−); SCL's and the ARP's settings cannot. HOME held 5 s: DEBUG.
+  STOP"); a sound's section can be undone (SAVE + OCT−); SCL's and the ARP's settings cannot. The four corners: DEBUG.
 - **+ OCT+ / + OCT−**: on / off (add / take out, next / back) for what the menu is about, from any page (the page stays,
   LFO's: its POINTS).
 - **HELP** on (SETTINGS > SCREEN): a menu opened from another says what twice does there, for a moment ("AGAIN: ENV 2").
 
 | Button | Once (another menu / its own) | Twice | Held | + OCT− held 5 s | + OCT+ | + OCT− |
 | --- | --- | --- | --- | --- | --- | --- |
-| HOME | the page left / SOUND | the SETTINGS; a tap: back | the help map; on HOME 5 s: DEBUG (V0.87.1: elsewhere the map only) | | the next sound | the sound before |
+| HOME | the page left / SOUND | the SETTINGS; a tap: back | the help map, on every page (V0.875) | | the next sound | the sound before |
 | EDIT | the page left / OSC A > WAVE (a drum track: DRUM > MODEL) | the wavetables' list of the oscillator shown (a drum track: on DRUM the drum presets, on KIT or HOME the kits); V0.87.1: EDIT twice again loads the one picked | | the section shown reset | the source or filter shown on | off |
 | ENV | the page left / ENV 1 > ADSR | the assign window (an envelope or a macro onto a knob of the page before) | | the envelope shown reset | | |
 | LFO | the page left / LFO 1 > POINTS | the assign window (an LFO onto a knob of the page before) | MOMENTARY | the LFO shown reset (its points too) | a point added (left of the one picked; halfway) | the point picked deleted (not the ends) |
@@ -228,9 +241,8 @@ own):
 | OCT− / OCT+ | the keys' octave (the browser: OCT−'s at its release) | | the browser: OCT− 3 s deletes the user preset playing | | | |
 
 **The help map** (V0.86, B17): HOME held shows, for the screen you are on, what SELECT, ALGORITHM, PRESETS and the four
-knobs do there, and every button's twice (V0.87.1: and "a list or question: its opener x2"). On HOME, held on, the bar
-along the bottom fills and DEBUG opens at 5 s (V0.87); on any other page (V0.87.1) the map stays as long as HOME is
-held, with no bar, and its banner says "LET GO TO CLOSE". Let go before: nothing changes.
+knobs do there, and every button's twice (V0.87.1: and "a list or question: its opener x2"). On every page (V0.875;
+V0.87 opened DEBUG at 5 s on HOME), the map stays as long as HOME is held, with no bar, and it names DEBUG's corners, and its banner says "LET GO TO CLOSE". Let go before: nothing changes.
 
 **Confirming a list or a question** (V0.87.1): press twice the button that opened it. A window opened by a knob is
 confirmed by its page's menu button twice. One tap of that button, or any other button, says no ("KEPT").
@@ -260,10 +272,11 @@ full flash backup can be read or written. Any program that can send SysEx to the
 stops playing and waits; switching it off and on returns to Strata. Nothing is written by the message itself. The same
 mode is reached by holding OCT− and OCT+ for 5 s (a countdown from 2 s). V0.87.1: both ways take way b (the USB
 detached for 100 ms, then the reset); the footer shows "WAY B". On the V0.87 test the keys and the soft key left
-a black screen and an unknown USB device until a power cycle (**needs hardware test**: [FLASHING.md](FLASHING.md)).
+a black screen and an unknown USB device until a power cycle; with way b they worked on the owner's FM-1 (**verified on
+hardware**, one unit: [FLASHING.md](FLASHING.md)).
 
 **Developer features kept in the build.** The USB serial console (a CDC port: the device report, BENCH's
-figures, the event log), the DEBUG menu (HOME held 5 s on HOME: BENCH, KEY SCAN, CORE 2, TESTS, WIPE) and CORE 2 (the second core, off by
+figures, the event log), the DEBUG menu (the four corners: BENCH, KEY SCAN, CORE 2, TESTS, WIPE) and CORE 2 (the second core, off by
 default; ON starts it at the next power-on, TEST runs a 30 s load) stay in every Strata build, release builds too.
 CORE 2's figures on the FM-1 are not measured yet (**needs a hardware test**).
 
@@ -621,11 +634,11 @@ breathing, recording or a latched layer.
   below). V0.75: MIDI clock, start, continue and stop with GLOBAL's CLOCK IN MIDI (The ARP, above). Not yet: a knob's
   CC out.
 
-## SETTINGS (HOME twice) and DEBUG (HOME held 5 s on HOME)
+## SETTINGS (HOME twice) and DEBUG (the four corners)
 
 | Page | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
 | --- | --- | --- | --- | --- |
-| SCREEN | COLOR: STRATA (default), CLASSIC, ICE, VIOLET, PAPER, NIGHT, HI-CON, MONO, MOSS, DUSK, SAND, NEON (V0.67's four) | HELP: a section's hint at the bottom as it opens (on by default) | LIGHTS: the LEDs, OFF, LOW, MED, HIGH (V0.87) | |
+| SCREEN | COLOR: STRATA (default, V0.875: a black ground), CLASSIC, ICE, VIOLET, PAPER, AMBER (V0.875: NIGHT's place), HI-CON, MONO, MOSS, DUSK, SAND, NEON (V0.67's four) | HELP: a section's hint at the bottom as it opens (on by default) | LIGHTS: the LEDs, OFF, LOW, MED, HIGH (V0.87) | |
 | PANEL | ACCEL: the knobs' speed sensitivity | HOLD: 300, 400, 500 or 600 ms before a held button's layer | | |
 | MIDI | CHANNEL: ANY or 1–16 | LEARN | CLEAR: the learned CCs | PROGRAM: program changes taken |
 | DEBUG > BENCH | RUN: two loops timed, a moment's silence (on the FM-1) | PEAKS: CLEAR | | |

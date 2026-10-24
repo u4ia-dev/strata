@@ -1,8 +1,9 @@
 # Flashing Strata for a hardware test
 
-> **V0.87.1 is a local build, not a public one.** It is installed only through the local test flasher (`build/flasher`,
-> `serve.py`) on the owner's computer, never published. The public releases stay at V0.87 until a public version is
-> decided. Section 1 says what V0.87.1 is; section 4's items 59 to 66 are its test; the test page's new sections are
+> **V0.875 is a public pre-release** (V0.87.1's changes, which were never public on their own, and V0.875's: DEBUG
+> opens by four corners, OCT− + F3 + G5 + GLO held together, from any page; HOME held is the help map only; STRATA is
+> darker; AMBER replaces NIGHT; PERFORM shows the tap tempo; backup mode from Strata worked on one FM-1). The hardware
+> test below is internal. Section 1 says what V0.87.1 is; section 4's items 59 to 66 are its test; the test page's new sections are
 > described in section 4 ("The V0.87.1 test page").
 
 This is the procedure for putting Strata's **hardware test build** (`V0.87 UI`: V0.87's controls and windows on V0.86's interface and drum editor, on the STRATA UI of V0.67, SCL's chords, the ARP, the 8-track looper with V0.81's fixes,
@@ -36,7 +37,7 @@ update entry, the UBOOT entries.
 
 **New in V0.87.1** (a local build from the V0.87 test; [CONTROLS.md](CONTROLS.md) "V0.87.1, in short"; package
 `build/strata.fwsc`, 610,073 bytes, identity `FM-1_900`; [BUDGET.md](BUDGET.md) §20):
-- The panel: DEBUG opens from HOME only (elsewhere HOME held is the help map for as long as it is held), WIPE moved into
+- The panel: DEBUG opens by four corners (V0.875; HOME held is the help map on every page, for as long as it is held), WIPE moved into
   DEBUG (HOME twice), a list or question answered by the button that opened it twice (EDIT: the wavetables, kits and
   drum presets; SEQ: the projects and the track TYPE; HOME: WIPE and the test projects), the CLIPS page (OCT−, OCT+ the
   scene, KNOB 2 PLAYS / MUTE / SOLO, KNOB 4 the track, PRESETS the list), tap tempo on GLO held + F3, the POLARITY dial
@@ -223,9 +224,9 @@ after a replug; a **power cycle** brought Strata back; **the Flipper Zero route 
 thing and reaches backup mode on a Linux host, so something Strata sets survives the reset; the reset leaves the
 watchdog armed and does no USB detach.) The older line, "backup mode that no computer has read ends by itself after
 about 13 s", is now **in doubt**: strata-review suspects it was the watchdog (left armed across the reset), not a
-timeout of the chip's own. **Unverified**, pending the V0.87.1 test (items 59 to 66 below, the test page's section 7).
+timeout of the chip's own. **V0.875: way B (the keys and the soft key) worked on the owner's FM-1; so did A and C** (verified on hardware, one unit); way B stays the default.
 
-**Backup mode from Strata, V0.87.1** (**needs hardware test**; writes nothing). Three ways, picked by the console's
+**Backup mode from Strata, V0.87.1** (verified on one FM-1: ways A, B and C all worked; writes nothing). Three ways, picked by the console's
 `uboot yes a|b|c` (the keys and the SysEx soft key take `b`; the footer says "WAY B"):
 
 | Way | What it does |
@@ -426,7 +427,7 @@ New in V0.8 LOOPER (the test page's "Listen and look" has them as rows "take", "
 
 CORE 2 (V0.8 BENCH; the test page's row "core2"):
 
-30. **CORE 2.** HOME held 5 s (V0.87: DEBUG), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
+30. **CORE 2.** DEBUG (V0.875: OCT− + F3 + G5 + GLO held together), ALGORITHM to CORE 2: STATE OFF. KNOB 1 right (ON, "ON AFTER A RESTART"),
     wait 5 s in silence (the settings' write), switch off and on. CORE 2 again: STATE **ANSWERING** (else NO ANSWER:
     OFF, which is an answer too: this unit runs on one core). Hold a chord, or PLAY a pattern, and turn KNOB 2 (TEST):
     30 s, listening for clicks; then DONE. Note CORE 1, CORE 0, SLOWED, WAIT, JOBS (and BAD) and STACK, or read the
@@ -528,7 +529,7 @@ New in V0.86 step 2, the drum editor ([CONTROLS.md](CONTROLS.md) "The drums"; no
     alone until it times out and restarts (about a minute): Strata starts normally, **no STRATA CRASH screen, no SAFE
     START** (V0.86 showed one). Photo either way.
 55. **V0.87: the splash and the theme.** Pick a theme other than STRATA, power-cycle: the splash in that theme. Then
-    WIPE (V0.87.1: DEBUG, HOME held 5 s on HOME, ALGORITHM to WIPE, KNOB 1, HOME twice): STRATA again, LIGHTS HIGH, your
+    WIPE (V0.87.1: DEBUG by the four corners, ALGORITHM to WIPE, KNOB 1, HOME twice): STRATA again, LIGHTS HIGH, your
     presets and projects still there.
 56. **V0.87: the new controls.** EDIT twice (the wavetables' list: SELECT the category; V0.87.1: EDIT twice loads); LFO twice on
     a WAVE page (the assign window: a source onto WT POS, ALGORITHM, AMOUNT and POLARITY, by ear); SAVE once (the SAVE
@@ -552,7 +553,7 @@ test** throughout):
 
 59. **The test projects** (the page's section 3, or by hand). The page's four buttons (or "Run all four") load each with
     `tproj N`, record the FM-1's USB audio while it plays (60 to 90 s; hands off the FM-1 and the volume), poll `tproj` for its
-    running time and stop it if it overruns. By hand: HOME held 5 s on HOME, ALGORITHM to TESTS, KNOB 1 a test, HOME
+    running time and stop it if it overruns. By hand: DEBUG by the four corners, ALGORITHM to TESTS, KNOB 1 a test, HOME
     twice. Note: the question's wording; "TEST · NOT SAVED" on every page's top line, the name on HOME; the test
     stopping by itself; KNOB 2 stopping it early. Then load a project: the test ends, **the sound from before the test is
     back** (a sound chosen during the test is replaced: choose one and see), your project, tempo and CLOCK IN as they
@@ -569,8 +570,8 @@ test** throughout):
     try.** The keys (OCT− + OCT+ 5 s) and the soft key take way B: try them after B's result. Also: left alone in
     backup mode, does it return to Strata by itself (and after how long)? That answers whether the old ~13 s was the
     watchdog.
-63. **The panel changes** (V0.87.1): HOME held 5 s on HOME opens DEBUG, on any other page only the help map for as long as
-    held; WIPE in DEBUG (HOME twice; once keeps); EDIT twice then EDIT twice again loads (tables, kits, drum presets);
+63. **The panel changes** (V0.87.1; V0.875): OCT− + F3 + G5 + GLO held together opens DEBUG from any page (no note left sounding, no tap or
+    octave step kept), HOME held is only the help map, for as long as held; WIPE in DEBUG (HOME twice; once keeps); EDIT twice then EDIT twice again loads (tables, kits, drum presets);
     SEQ twice then SEQ twice loads a project; CLIPS' KNOB 1 then SEQ twice for a track's TYPE; CLIPS' OCT−, OCT+,
     KNOB 2 and KNOB 4, PRESETS; GLO held + F3 taps the tempo (F3 silent); the POLARITY dial up at rest, both
     polarities; ARP STEPS' CHANCE faders; TAPE moving with sound; the drum GRID's labels clear of the grid.
@@ -592,7 +593,7 @@ test** throughout):
 - **7, Backup mode, three ways**: buttons for ways A, B and C (`uboot yes a|b|c`), each asking first, with a box for
   what Windows shows before and after; power-cycle after each.
 - The chord-MIDI row is gone (the setting went in V0.87); the guided "draw" row was fixed. The menus are V0.87's (SETTINGS
-  by HOME twice; BENCH, KEY SCAN and CORE 2 in DEBUG, HOME held 5 s on HOME).
+  by HOME twice; BENCH, KEY SCAN and CORE 2 in DEBUG, the four corners).
 
 **`tools/hw_audio_check.py RUN_DIR [--ref build/tproj]`** (stdlib plus numpy; `--selftest`): for each `tpN.wav` in a run
 folder, peak and RMS, clipped runs, clicks a minute (second-difference discontinuities against a robust local threshold),

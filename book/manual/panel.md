@@ -49,7 +49,7 @@ A module that is switched off says so on its pages ("OSC B IS OFF · EDIT + OCT+
    cancel. Sound changes can be undone afterwards with <kbd>SAVE</kbd> + <kbd>OCT−</kbd>.
 
 **Help**: hold <kbd>HOME</kbd> to see what every control does on the current screen. The map stays for as long as you hold
-the button. On the HOME page, keep holding for 5 seconds to open DEBUG (a bar fills along the bottom).
+the button, on every page. DEBUG has its own four-corner press: see [DEBUG](settings.md#debug).
 
 ## Layers
 

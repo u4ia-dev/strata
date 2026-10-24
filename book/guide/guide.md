@@ -80,7 +80,7 @@ last change.
 <a class="more" href="../manual/midi.md">Manual: MIDI and USB</a></div>
 <div class="card"><h3>Settings</h3>
 <p>Themes, LED brightness, knob feel, MIDI, power saving.</p>
-<ul><li><kbd>HOME</kbd> twice: SETTINGS</li><li><kbd>HOME</kbd> held: help map; on HOME, 5 s: DEBUG</li><li>DEBUG &gt; WIPE: settings back to default</li><li>DEBUG &gt; TESTS: test projects</li></ul>
+<ul><li><kbd>HOME</kbd> twice: SETTINGS</li><li><kbd>HOME</kbd> held: help map</li><li><kbd>OCT−</kbd> + F3 + G5 + <kbd>GLO</kbd> held: DEBUG</li><li>DEBUG &gt; WIPE: settings back to default</li><li>DEBUG &gt; TESTS: test projects</li></ul>
 <a class="more" href="../manual/settings.md">Manual: Settings, LEDs and DEBUG</a></div>
 <div class="card"><h3>Installing</h3>
 <p>Install from the web page, back up first, and go back at any time.</p>

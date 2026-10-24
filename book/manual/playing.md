@@ -15,7 +15,8 @@ Or hold <kbd>SCL</kbd> and press a key to make it the root.
 stops it. Turn LATCH on (GROOVE page) to keep it playing after you let go.
 
 **Bend and glide**: hold <kbd>GLO</kbd> for PERFORM (<kbd>GLO</kbd> twice keeps it open). **Tap the tempo**: hold
-<kbd>GLO</kbd> and tap F3, the lowest key, three or more times (F3 makes no sound while you tap).
+<kbd>GLO</kbd> and tap F3, the lowest key, three or more times (F3 makes no sound while you tap). PERFORM shows a dot for each tap, then the tempo in red once
+it settles. With PERFORM latched (<kbd>GLO</kbd> twice), F3 plays as a note.
 
 ## SCALE
 
@@ -91,6 +92,7 @@ start when you press a key. The ARP button is lit while the ARP is on.
 ## PERFORM, MACROS, MOMENTARY
 
 ![PERFORM](../images/Perform-2x.png)
+![PERFORM while tapping the tempo](../images/PerformTap-2x.png)
 
 | Layer | Hold | What the knobs do |
 | --- | --- | --- |
