@@ -14,7 +14,8 @@ build was never public).
   that back: the octave and CLIPS scene <kbd>OCT−</kbd> stepped, MIDI LEARN's CC it took away, NAME IT's characters, a
   tap-tempo run, a drum step and the one-bar clip it made, a CLIPS launch and the PLAY it started, a held note or hit
   (cut off and taken out of what you were recording), and a latched chord that F3 or G5 replaced (it comes back). What a
-  key did inside a layer (a MACROS bypass, the launch pad, SCL's root, a MOD source) is not taken back. <kbd>HOME</kbd>
+  key did inside a layer (a MACROS bypass, the launch pad, SCL's root, a MOD source) is not taken back, and a CLIPS launch the bar
+  already played starts again from the clip's start. <kbd>HOME</kbd>
   held shows the help map on every page, with no countdown, and no longer opens DEBUG.
 - WIPE moved from SETTINGS into DEBUG. Press <kbd>HOME</kbd> twice to confirm.
 - A list or question is confirmed by pressing twice the button that opened it: <kbd>EDIT</kbd> for the wavetable, kit and

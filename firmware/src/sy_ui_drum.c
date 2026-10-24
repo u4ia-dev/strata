@@ -160,7 +160,7 @@ static int ui_grid_key(uint32_t k)
         ui.dirty = D_ALL;
         return 1;
     }
-    {
+    if (k == 0u || k == 26u) {
         uint32_t i = k ? 1u : 0u;                   /* (V0.875: F3 or G5 is a DEBUG corner: the clip it may make kept, for the opening) */
         ui.dbg_gt[i] = (uint8_t)(lpp.sel % LP_NTRK), ui.dbg_gc[i] = (uint8_t)(lpp.scn % LP_NSCN);
         ui.dbg_ge = (uint8_t)((ui.dbg_ge & ~(1u << i)) | (!lp_cur_clip()->len ? 1u << i : 0u));
