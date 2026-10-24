@@ -209,6 +209,10 @@ def check_file(wav, ref_dir, k, out):
     ref = None
     if ref_dir:
         rw = Path(ref_dir) / wav.name
+        if not rw.is_file():                                  # (the renders' own names: tproj1_voices.wav ..)
+            for alt in sorted(Path(ref_dir).glob("tproj" + n[2:] + "_*.wav")):
+                rw = alt
+                break
         if rw.is_file():
             rx, rrate = read_wav(rw)
             ref = stats(rx, rrate, k)

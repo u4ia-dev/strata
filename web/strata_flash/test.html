@@ -192,8 +192,8 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
 
     <div class="step" id="g-panel">
       <h3>C. The encoders and keys (item 5)</h3>
-      <p>Press Start, then turn each of the seven encoders both ways, slowly and quickly, and press every key once (on
-        a page where the keys play), then Done.</p>
+      <p>Press Start, then turn each of the seven encoders both ways, slowly and quickly, and press every one of the 27
+        <b>white and black note keys</b> once (the page counts those; the buttons are not counted), then Done.</p>
       <div class="row">
         <button data-start="panel" disabled>Start</button>
         <button data-done="panel" disabled>Done</button>
@@ -203,9 +203,10 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
 
     <div class="step" id="g-draw">
       <h3>D. The keys and the screen while it draws (items 15 and 19)</h3>
-      <p>V0.87.1: <b>1.</b> Go to HOME's first page (HOME, if you are elsewhere). <b>2.</b> Hold <b>HOME</b> for 5 s: the
-        bar fills and <b>DEBUG</b> opens (held on any other page it only shows the help map). It opens on <b>BENCH</b>.
-        <b>3.</b> Turn <b>KNOB 2</b> (PEAKS): "THE PEAKS CLEARED". <b>4.</b> Leave DEBUG (HOME once) and press Start
+      <p>V0.875: <b>1.</b> Any page will do. <b>2.</b> Hold the <b>four corners</b> together: <b>OCT-</b>, the leftmost
+        key (<b>F3</b>), the rightmost key and <b>GLO</b>, all four at once, until <b>DEBUG</b> opens (HOME held only shows
+        the help map; the two keys sound nothing). It opens on <b>BENCH</b>.
+        <b>3.</b> Turn <b>KNOB 2</b> (PEAKS): "THE PEAKS CLEARED". <b>4.</b> Leave DEBUG (HOME) and press Start
         here. For 25 s flick through pages (SELECT, ALGORITHM, the family buttons) and turn knobs on graph pages (an
         envelope, an LFO, the EQ, the FX FILTER, the chain view) while the page holds a chord. The page sends nothing
         to the console meanwhile, so it does not slow the FM-1's main loop. Afterwards it reads BENCH's longest key
@@ -216,7 +217,7 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
       <div class="row">
         <button data-start="draw" disabled>Start</button>
         <button data-fail="draw" data-msg="the tester pressed 'It felt slow': the panel lagged while flicking through pages" disabled>It felt slow</button>
-        <button data-fail="draw" data-msg="the tester pressed 'I could not do the steps': DEBUG or BENCH did not open as the page says" data-key="draw-steps" disabled>I could not do the steps</button>
+        <button data-fail="draw" data-msg="the tester pressed 'I could not do the steps': DEBUG or BENCH did not open by the four corners (OCT- + leftmost key + rightmost key + GLO held together) as the page says" data-key="draw-steps" disabled>I could not do the steps</button>
         <span class="state" data-status="draw"></span>
       </div>
     </div>
@@ -420,17 +421,28 @@ const con = {
   },
   async memr(addr, n) {                                                                // RAM or the app's bytes
     const out = new Uint8Array(n);
-    for (let off = 0; off < n; off += 256) {
-      const len = Math.min(256, n - off), a = addr + off;
-      let got = null;
-      for (let tries = 0; tries < 3 && !got; tries++) {
-        const t = await this.cmd(`memr 0x${a.toString(16).toUpperCase().padStart(8, "0")} ${len}`);
-        const bytes = [];
-        for (const m of t.matchAll(/^([0-9A-F]{8}):((?: [0-9A-F]{2})+)/gm))
-          for (const h of m[2].trim().split(" ")) bytes.push(parseInt(h, 16));
-        if (bytes.length === len) got = bytes;                                         // (a reply cut short: again)
+    // (V0.875, B1: "no answer to memr .. 256" ended the chain step. The console drops the rest of a reply, its prompt
+    // too, when its 2 KiB ring stays full for 20 ms (sy_console.c con_putc), and 256 bytes are ~930 characters. So:
+    // 64 bytes a command (~240 characters), a timeout or a short reply is waited out and asked again, 4 tries)
+    for (let off = 0; off < n; off += 64) {
+      const len = Math.min(64, n - off), a = addr + off;
+      let got = null, why = "a short reply";
+      for (let tries = 0; tries < 4 && !got; tries++) {
+        try {
+          const t = await this.cmd(`memr 0x${a.toString(16).toUpperCase().padStart(8, "0")} ${len}`);
+          const bytes = [];
+          for (const m of t.matchAll(/^([0-9A-F]{8}):((?: [0-9A-F]{2})+)/gm))
+            for (const h of m[2].trim().split(" ")) bytes.push(parseInt(h, 16));
+          if (bytes.length === len) got = bytes;                                       // (a reply cut short: again)
+        } catch (e) {
+          why = e.message;
+          if (!this.alive) throw e;
+          await sleep(700);                                                            // (let a late reply end, then a clean prompt)
+          try { await this.cmd("", 2000); } catch (_) {}
+        }
+        if (!got && tries) log(`console: memr ${a.toString(16)} ${len} again (${why})`);
       }
-      if (!got) throw new Error(`memr ${a.toString(16)} ${len}: a short reply`);
+      if (!got) throw new Error(`memr ${a.toString(16)} ${len}: ${why}`);
       out.set(got, off);
     }
     return out;
@@ -840,7 +852,8 @@ const GUIDED = {
     const quiet = enc.map((x, i) => (x[0] < 8 ? i + 1 : 0)).filter(Boolean), lost = enc.reduce((s, x) => s + (x[1] || 0), 0);
     return [enc.length === 7 && !quiet.length && !lost && keys >= 27 ? "ok" : "warn",
       `encoders (moves/lost): ${enc.map((x) => x[0] + "/" + x[1]).join(" ")}${quiet.length ? "; few moves on " + quiet.join(", ") : ""}; ` +
-      `${lost} transitions lost; ${keys} key presses (27 keys)`];
+      `${lost} transitions lost; ${keys} note-key presses (of the 27 note keys; the console counts these, not the 14 buttons)` +
+      `${keys === 0 ? ": none counted, so no note key was pressed in this window (or the scan did not see them: say which)" : ""}`];
   },
   // D: the keys' longest wait and a frame's drawing, with nothing sent to the console meanwhile
   async draw(stop) {
@@ -1128,16 +1141,16 @@ const LOOK = [
   ["chords", "V0.75: SCL > CHORD by the knobs: FREE (every key TYPE's chord: MAJ .. 13) and KEY (one-finger chords in SCALE's key, SHAPE TRIAD .. POWER) sound right; the chord's name on the screen matches; AUTO voicing moves smoothly; SPREAD's OPEN, WIDE, 2 OCT; SCL + OCT+ on, SCL + OCT- off"],
   ["perform", "V0.75: SCL > CHORD > STRUM: the gap, DIRECTION, HUMAN and TAPER sound natural; the ARP's STYLE PATTERN and HARP in time; no stuck notes when you let go or switch"],
   ["arp", "V0.75: a tap of ARP opens its menu; hold a chord and ARP + OCT+: it arpeggiates at once; MODE's thirteen orders and OCTAVES 1-4 sound as named; RATE's dotted and triplet values in time; LATCH plays on after you let go; ARP + OCT-: the chord held as it is, no stuck notes"],
-  ["grammar", "V0.75, V0.87.1: every menu button the same way: a tap its menu, again its next page, twice its next section, + OCT+ / OCT- on and off (HOME: the sounds; LFO: points), held 5 s a countdown then its section reset (SAVE + OCT- undoes); HOME is the exception: held on HOME 5 s opens DEBUG, held anywhere else it shows the help map for as long as it is held, no countdown; SELECT the section, ALGORITHM the page; a knob's value never covered by a flag"],
+  ["grammar", "V0.75, V0.87.1: every menu button the same way: a tap its menu, again its next page, twice its next section, + OCT+ / OCT- on and off (HOME: the sounds; LFO: points), held 5 s a countdown then its section reset (SAVE + OCT- undoes); HOME is the exception: HOME held, anywhere, shows the help map for as long as it is held, no countdown (V0.875: DEBUG opens by OCT- + the leftmost key + the rightmost key + GLO held together, from any page, no notes left sounding); SELECT the section, ALGORITHM the page; a knob's value never covered by a flag"],
   ["confirm", "V0.87.1: every list or question is confirmed by the button that opened it, twice: wavetables' list (EDIT twice, then EDIT twice), drum kits and drum presets (EDIT twice, EDIT twice), projects (SEQ twice, SEQ twice), a track's TYPE question (KNOB 1 on CLIPS, SEQ twice); presets stay with SAVE (SAVE twice); a single tap of that button, or any other button, cancels; the on-screen hints and the help map say the same"],
-  ["wipe", "V0.87.1: WIPE is in DEBUG (hold HOME 5 s on HOME; KNOB 1 on WIPE asks), confirmed with HOME twice; SETTINGS no longer has it; the presets and projects stay"],
+  ["wipe", "V0.87.1: WIPE is in DEBUG (open DEBUG by the four corners: OCT- + leftmost key + rightmost key + GLO held; KNOB 1 on WIPE asks), confirmed with HOME twice; SETTINGS no longer has it; the presets and projects stay"],
   ["arpsteps", "V0.75: ARP > STEPS and RATCHET: TIE holds the note on, REST is silent, each step's LEVEL and OCTAVE, RATCHET's 2-4 hits, CHANCE, SLIDE gliding with VOICE's GLIDE in a mono mode; GROOVE's GATE and SWING by ear; the marker over the steps follows what you hear"],
   ["clock", "V0.75, V0.87.1: PLAY on: the arpeggio steps on its beat. GLO held + the lowest key (F3) three or more times taps the tempo: BPM follows, F3 makes no note, GLO + PLAY is PLAY's own action again. GLOBAL > CLOCK IN MIDI with a DAW sending clock: BPM follows the DAW; its play and stop start and stop PLAY; the arpeggio stays on the DAW's beat over a few minutes; INTERNAL again: the panel's BPM"],
   ["take", "V0.8 looper: SEQ (CLIPS), track 1, scene A; REC stopped: a bar of count-in clicks, then play a few notes and chords for a bar or two; REC: it loops, rounded to whole bars, in time; no stuck notes; PLAY stops it"],
   ["dub", "V0.8 looper: REC again on the clip playing: overdub (what you add plays back from the next pass, never doubled); REC ends it; SEQ held, UN (the last black key): the pass taken back, again: back; turn FILTER > TONE's CUTOFF while it overdubs: the next pass moves it, stopped the knob's own"],
   ["tracks", "V0.8 looper, V0.87.1: SEQ, CLIPS: KNOB 4 picks the track (T1 to T8), OCT+ / OCT- step through the clips (scenes A to H), KNOB 2 sets the track's ON / MUTE / SOLO, SEQ + OCT+ a new clip (SEQ + OCT- asks DELETE?, again deletes); record on tracks 2 and 3 too; SEQ held (the launch pad): white keys 1-8 launch the tracks' clips at the bar, 9-16 the scenes, black 1-8 MUTE; MIXER's VOLUME and PAN by ear; a track TYPE MIDI on a DAW or synth over USB (its CHANNEL), with MIDI IN on a channel"],
   ["project", "V0.8 looper, V0.87.1: SONG (A, B, C with repeats, ON, PLAY) plays its scenes in turn; stop, wait 5 s in silence, switch off and on: the clips, tracks, chords and SONG come back; SEQ twice: the projects' list, PROJECT 2 picked with PRESETS, loaded with SEQ twice (SAVE no longer loads here): empty, back to 1: all there"],
-  ["core2", "V0.8: CORE 2 (on HOME, hold HOME 5 s: DEBUG > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
+  ["core2", "V0.8: CORE 2 (DEBUG by the four corners, OCT- + leftmost key + rightmost key + GLO held: DEBUG > CORE 2): ON, wait 5 s, switch off and on: STATE ANSWERING; hold a chord (or PLAY a pattern) and TEST: 30 s with no clicks, then DONE, 0 BAD; the device report has the c2_ figures. Off again the same way: STATE OFF"],
   ["midiout", "V0.81: a track SYNTH+MIDI on channel 1, the FM-1 on a computer with no MIDI app open: play for a minute, then open a MIDI monitor and play a note: older notes may come first, then All Notes Off (CC 123) on channel 1, then yours; nothing left sounding"],
   ["drums", "V0.85 drums, V0.87.1: TRACK's TYPE DRUMS on track 1 (KNOB 1 on CLIPS, SEQ twice to confirm); the white keys 1-8 play KICK .. WT 2, 9-16 the same accented (louder), the first black key DUCK (silent); EDIT: KIT's pages, each drum's TUNE, DECAY, TONE and its own by ear (EDIT twice: the drum presets or the kits, confirmed with EDIT twice); HAT CL cuts a ringing HAT OP"],
   ["grid", "V0.85 grid: SEQ's CLIP on the drum track: GRID; black keys pick the row, white keys put steps in and out (stopped: heard as they go in); PLAY: the beat in time, the LEDs following; HIT: a step's CHANCE (it plays sometimes) and RATCHET (2-4 quick hits); TYPE SYNTH and back: the beat as it was"],
