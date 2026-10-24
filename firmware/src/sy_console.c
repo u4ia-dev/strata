@@ -208,12 +208,14 @@ static void con_status(void)
     con_puts(")\r\n");
     con_kv("uptime_ms", (int32_t)fm1_ms);
     con_kv("cpu_pct", sy_app_load());
+    con_kv("load_total_pct", sy_app_load_total());  /* (V0.87.1: the guard's, interrupts in) */
     con_kv("half_us", (int32_t)sy_bench.half_us);
     con_kv("half_max_us", (int32_t)sy_bench.half_max_us);
     con_kv("halves_late", (int32_t)sy_bench.late);
     con_kv("guard_level", sy_g.level);
     con_kv("guard_fx_lo", sy_g.fx_lo);
     con_kv("voices_shed", (int32_t)sy_g.shed);
+    con_kv("voices_traded", (int32_t)sy_adm.traded);   /* (V0.87.1: notes that took others' unison voices) */
     con_kv("voices", (int32_t)n);
     con_ks("sound", sy_patch.name);
     con_kv("user_slot", sy_slot);

@@ -1044,7 +1044,7 @@ async function runTproj(n, stop) {
     fig.status_after = kvText(st1); fig.bench_after = kvText(b1);
     fig.tproj_lines_after = st1.split(/\r?\n/).filter((l) => /^tproj/.test(l));
     const d = {};
-    for (const k of ["uac_underruns", "uac_overruns", "uac_missed", "uac_stalls", "halves_late", "voices_shed"])
+    for (const k of ["uac_underruns", "uac_overruns", "uac_missed", "uac_stalls", "halves_late", "voices_shed", "voices_traded"])
       d[k] = num(fig.status_after, k) - num(fig.status_before, k);
     fig.deltas = d;
     fig.rate = out.rate; fig.channels = 2; fig.wall_frames = out.wall; fig.frames = out.L.length; fig.duration_s = +(out.L.length / out.rate).toFixed(3);
