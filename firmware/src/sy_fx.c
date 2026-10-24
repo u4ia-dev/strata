@@ -20,8 +20,8 @@
  * diffusers, PRE-DELAY up to 50 ms, WIDTH, LOW CUT. OTT: three bands split by complementary crossovers (low =
  * LP(x), the rest = x - low: the bands sum back to x exactly) at 88 Hz and 2.5 kHz, each compressed down above
  * -12 dB (DOWNWARD: to ~30:1) and up below -40 dB (UPWARD: to 3:1, at most +24 dB), a peak follower whose
- * times scale with TIME, the gains once a block, ramped; LOW MID HIGH set each band's level. EQ: a low shelf, a
- * peak and a high shelf, +-18 dB each, on trapezoidal state-variable filters (fx_eq).
+ * times scale with TIME (V0.875: on a peak hold), the gains once a block, ramped; LOW MID HIGH set each band's level.
+ * EQ: a low shelf, a peak and a high shelf, +-18 dB each, on trapezoidal state-variable filters (fx_eq).
  * FLANGER: one tap a side on an 11.6 ms line swept by a sine (RATE, or a note value with SYNC FIXED; the right side
  * SPREAD of half a cycle later), from DELAY (0.3 .. 5 ms) up by DEPTH (to 5 ms more), FEEDBACK either way (negative:
  * hollow), MIX (50 %: the deepest notches). PHASER: 2 .. 12 first-order all-pass stages swept around CENTER (DEPTH: to
@@ -85,6 +85,7 @@ typedef struct {                          /* CHORUS */
 typedef struct {                          /* OTT */
     float s[2][2][2];                     /* the crossovers' SVF states [crossover][channel][ic1 ic2] */
     float env[3], g[3];                   /* each band's follower and its gain at the end of the last block */
+    float hold[3];                        /* V0.875: .. the peak hold it reads */
     float upg;                            /* V0.87.1: UPWARD's share the guard leaves (fx_lo: to 0, back to 1, slewed) */
 } fx_ott_t;
 typedef struct {                          /* EQ */
@@ -703,11 +704,13 @@ static void fx_reverb(float *l, float *r, uint32_t fi)
 }
 
 /* -------------------------------------------------------------------------------------------- OTT --- */
+#define FX_OTT_N 4u                        /* V0.875: the followers' peak hold takes a step every 4 samples */
+_Static_assert(SY_BLK % FX_OTT_N == 0u && FX_OTT_N == 4u, "fx_ott: a block is whole steps of four samples");
 static void fx_ott(float *l, float *r, uint32_t fi)
 {
     uint32_t o = FXI_OFF(fi);
     fx_ott_t *st = &fx.ott[fx_nth(fi)];
-    float m0, *ch[2] = {l, r}, bands[3][2][SY_BLK], c1[4], c2[4], g1[3], pk[3] = {0.0f, 0.0f, 0.0f};
+    float m0, *ch[2] = {l, r}, bands[3][2][SY_BLK], c1[4], c2[4], g1[3];
     uint32_t i, c, b;
     float up, down = mod_get(sy_goff, SP_OT_DOWN + o);
     float tm = sy_exp2f(4.0f * mod_get(sy_goff, SP_OT_TIME + o) - 2.0f);          /* x0.25 .. x4 */
@@ -734,23 +737,37 @@ static void fx_ott(float *l, float *r, uint32_t fi)
     for (c = 0; c < 2u; c++)
         flt_svf_lp(bands[1][c], st->s[1][c], c2, c2);
     for (c = 0; c < 2u; c++)
-        for (i = 0; i < SY_BLK; i++) {
-            float x2 = bands[2][c][i] - bands[1][c][i];
-            bands[2][c][i] = x2;
-            pk[0] = sy_maxf(pk[0], sy_absf(bands[0][c][i]));
-            pk[1] = sy_maxf(pk[1], sy_absf(bands[1][c][i]));
-            pk[2] = sy_maxf(pk[2], sy_absf(x2));
-        }
+        for (i = 0; i < SY_BLK; i++)
+            bands[2][c][i] -= bands[1][c][i];
     for (b = 0; b < 3u; b++) {                          /* followers, the gains in dB once a block */
         static const float ATK[3] = {0.20f, 0.35f, 0.50f}, REL[3] = {0.010f, 0.025f, 0.050f};
-        float e = st->env[b], ldb, gdb = 0.0f;
-        e += (pk[b] - e) * sy_minf(1.0f, (pk[b] > e ? ATK[b] : REL[b]) / tm);
+        const float *xl = bands[b][0], *xr = bands[b][1];
+        float e = st->env[b], h = st->hold[b], pk = 0.0f, ldb, gdb = 0.0f, kr = sy_minf(1.0f, REL[b] / tm);
+        /* V0.875: the block's peak through a hold that falls at REL (a step every 4 samples: -ln(1 - REL) / 8 to
+         * its third term). V0.87.1 took the block's own peak: a band's cycle against the 32-sample blocks made it
+         * jitter block to block (a crest in one block, none in the next), and the gain that followed it buzzed at
+         * the block rate, 1.38 kHz and its sidebands: the crackle the V0.87.1 test heard on OTT GROWL (C3 held, 1 to
+         * 2 kHz between its harmonics: -35 dB of the note, -45 dB now; OTT alone on C4 -44 dB, -55 dB). The
+         * follower, its times and a note's onset as before (the same peaks, web/emu/strata_clip.c); the level 0.3
+         * to 0.9 dB under V0.87.1's (the hold keeps a crest's level between crests) */
+        kr *= (1.0f + kr * (0.5f + kr * 0.33333f)) * (FX_OTT_N / (float)SY_BLK);
+        for (i = 0; i < SY_BLK; i += FX_OTT_N) {
+            float p = sy_maxf(sy_maxf(sy_absf(xl[i]), sy_absf(xr[i])),
+                              sy_maxf(sy_absf(xl[i + 1u]), sy_absf(xr[i + 1u])));
+            p = sy_maxf(p, sy_maxf(sy_maxf(sy_absf(xl[i + 2u]), sy_absf(xr[i + 2u])),
+                                   sy_maxf(sy_absf(xl[i + 3u]), sy_absf(xr[i + 3u]))));
+            h = p > h ? p : h + (p - h) * kr;
+            pk = sy_maxf(pk, h);
+        }
+        st->hold[b] = h;
+        e += (pk - e) * sy_minf(1.0f, (pk > e ? ATK[b] : REL[b]) / tm);
         st->env[b] = e;
         ldb = 6.0206f * sy_log2f(sy_maxf(e, 1e-6f));
         if (ldb > -12.0f)
             gdb = -(ldb + 12.0f) * (1.0f - 1.0f / (1.0f + 29.0f * down));
-        else if (ldb < -40.0f && ldb > -90.0f)
-            gdb = sy_minf((-40.0f - ldb) * (1.0f - 1.0f / (1.0f + 2.0f * up)), 24.0f);
+        else if (ldb < -40.0f)                          /* (V0.875: under -90 dB down to 0 by -100, not at once) */
+            gdb = sy_minf(sy_minf((-40.0f - ldb) * (1.0f - 1.0f / (1.0f + 2.0f * up)), 24.0f),
+                          sy_maxf(0.0f, (ldb + 100.0f) * 2.4f));
         g1[b] = sy_exp2f(gdb * 0.1660964f) * lv[b];
     }
     {
@@ -770,8 +787,10 @@ static void fx_ott(float *l, float *r, uint32_t fi)
         }
         sy_copyf(st->g, g1, 3u);
     }
-    for (b = 0; b < 3u; b++)
+    for (b = 0; b < 3u; b++) {
         SY_FLUSH(st->env[b]);
+        SY_FLUSH(st->hold[b]);
+    }
     for (b = 0; b < 2u; b++)
         for (c = 0; c < 2u; c++) {
             SY_FLUSH(st->s[b][c][0]);

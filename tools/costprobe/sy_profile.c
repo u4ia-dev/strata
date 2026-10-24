@@ -18,14 +18,20 @@ extern void __gcov_dump(void);
 typedef struct {
     const char *name;
     uint8_t voices;
-    int16_t kv[24][2];                     /* parameter, value pairs (-1 ends) */
+    int16_t kv[40][2];                     /* parameter, value pairs (-1 ends) */
     int8_t sound;                          /* V0.81: a starter sound under them (sy_sounds.h; -1 none) */
     uint8_t drums;                         /* V0.85: 1 every lane hit each 64 blocks (~46 ms), 2 and the duck each 32;
                                             * V0.86: 3 as 1, every drum's effects on and the kit's COMP */
     uint8_t xf;                            /* V0.87.1: the guard's fx_lo turned each 17 blocks (its 16-block ramp each
                                             * way): the reverb's lines 5-8 on their way (sy_fx.c fx_rv_xf) */
+    uint8_t chain[8];                      /* V0.875: the chain (instances + 1, each ON) in place of the starter
+                                            * sound's: the effects one at a time and TEST 2's chains (0: as it is) */
 } prof_t;
 
+#define T2_SYN {SP_A_TABLE, 1}, {SP_A_POS, 1000}, {SP_F_ON, 1}, {SP_F_TYPE, FT_LP12}, {SP_F_CUT, 720}, {SP_F_RES, 200}, \
+               {SP_L1_RATE, 472}
+#define T2_SW(k, id) {SP_M1_SRC + 3 * ((k) - 1), SRC_LFO1}, {SP_M1_DST + 3 * ((k) - 1), SP_##id}, \
+                     {SP_M1_AMT + 3 * ((k) - 1), 1000}
 #define FX_ALL {SP_DR_ON, 1}, {SP_CH_ON, 1}, {SP_DL_ON, 1}, {SP_RV_ON, 1}, {SP_OT_ON, 1}, {SP_EQ_ON, 1},   \
                {SP_EQ_LOW, 30}, {SP_EQ_MID, -30}, {SP_EQ_HIGH, 30}
 static const prof_t PROF[] = {
@@ -61,6 +67,40 @@ static const prof_t PROF[] = {
     {"OTT GROWL, 1 note", 1, {{-1, 0}}, 7},
     {"OTT GROWL, 8 notes", 8, {{-1, 0}}, 7},
     {"SUPERSAW, 1 note, the reverb's lines 5-8 always on their way (16 blocks)", 1, {{-1, 0}}, 0, 0, 1},
+    /* V0.875: the effects one at a time over TEST 2's synth (sy_testproj.c: SAW at its end, LP12, six voices), each
+     * at its heaviest setting (PHASER 12 stages, the FX filter's LADDER, the reverb HALL); then TEST 2's three chains
+     * with a knob of each module swept by LFO 1 (the matrix's eight slots), as the test sweeps them */
+    {"TEST 2's synth: 6 voices, SAW, LP12, no effect", 6, {T2_SYN, {-1, 0}}, -1},
+    {"TEST 2's synth + DRIVE", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_DRIVE + 1}},
+    {"TEST 2's synth + CHORUS", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_CHORUS + 1}},
+    {"TEST 2's synth + DELAY", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_DELAY + 1}},
+    {"TEST 2's synth + REVERB (HALL)", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_REVERB + 1}},
+    {"TEST 2's synth + OTT", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_OTT + 1}},
+    {"TEST 2's synth + EQ (three bands off 0 dB)", 6, {T2_SYN, {SP_EQ_LOW, 60}, {SP_EQ_MID, -60}, {SP_EQ_HIGH, 60},
+     {-1, 0}}, -1, 0, 0, {FXI_EQ + 1}},
+    {"TEST 2's synth + FLANGER", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_FLANGER + 1}},
+    {"TEST 2's synth + PHASER (12 stages)", 6, {T2_SYN, {SP_PH_STAGES, 5}, {-1, 0}}, -1, 0, 0, {FXI_PHASER + 1}},
+    {"TEST 2's synth + FILTER (LADDER)", 6, {T2_SYN, {SP_FF_TYPE, FF_LADDER}, {-1, 0}}, -1, 0, 0, {FXI_FFILT + 1}},
+    {"TEST 2's synth + BITCRUSH", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_CRUSH + 1}},
+    {"TEST 2's synth + TREMOLO", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_TREM + 1}},
+    {"TEST 2's synth + RING MOD", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_RING + 1}},
+    {"TEST 2's synth + TAPE", 6, {T2_SYN, {-1, 0}}, -1, 0, 0, {FXI_TAPE + 1}},
+    {"TEST 2's chain 1, a knob each swept", 6,
+     {T2_SYN, {SP_PH_STAGES, 5}, T2_SW(1, DR_AMT), T2_SW(2, CH_DEPTH), T2_SW(3, DL_TIME), T2_SW(4, RV_SIZE),
+      T2_SW(5, OT_DEPTH), T2_SW(6, EQ_MFREQ), T2_SW(7, FL_DELAY), T2_SW(8, PH_CENTER), {-1, 0}}, -1, 0, 0,
+     {FXI_DRIVE + 1, FXI_CHORUS + 1, FXI_DELAY + 1, FXI_REVERB + 1, FXI_OTT + 1, FXI_EQ + 1, FXI_FLANGER + 1,
+      FXI_PHASER + 1}},
+    {"TEST 2's chain 2, a knob each swept", 6,
+     {T2_SYN, {SP_FF_TYPE, FF_LADDER}, T2_SW(1, FF_CUT), T2_SW(2, CR_RATE), T2_SW(3, TR_RATE), T2_SW(4, RG_FREQ),
+      T2_SW(5, TP_WOW), T2_SW(6, DR2_AMT), T2_SW(7, CH2_DEPTH), T2_SW(8, EQ2_MFREQ), {-1, 0}}, -1, 0, 0,
+     {FXI_FFILT + 1, FXI_CRUSH + 1, FXI_TREM + 1, FXI_RING + 1, FXI_TAPE + 1, FXI_DRIVE2 + 1, FXI_CHORUS2 + 1,
+      FXI_EQ2 + 1}},
+    {"TEST 2's chain 3, a knob each swept", 6,
+     {T2_SYN, {SP_PH2_STAGES, 5}, {SP_FF2_TYPE, FF_LADDER}, T2_SW(1, OT2_DEPTH), T2_SW(2, FL2_DELAY),
+      T2_SW(3, PH2_CENTER), T2_SW(4, FF2_CUT), T2_SW(5, CR2_RATE), T2_SW(6, TR2_RATE), T2_SW(7, RG2_FREQ),
+      T2_SW(8, TP2_WOW), {-1, 0}}, -1, 0, 0,
+     {FXI_OTT2 + 1, FXI_FLANGER2 + 1, FXI_PHASER2 + 1, FXI_FFILT2 + 1, FXI_CRUSH2 + 1, FXI_TREM2 + 1, FXI_RING2 + 1,
+      FXI_TAPE2 + 1}},
 };
 #define PROF_N (sizeof PROF / sizeof PROF[0])
 
@@ -88,6 +128,12 @@ int main(int argc, char **argv)
         sy_patch.p[p->kv[i][0]] = sp_clamp((uint32_t)p->kv[i][0], p->kv[i][1]);
     sp_chain_from_old(&sy_patch);                  /* (V0.81: the effects ON as the chain, as the starter sounds have
                                                     * it: before, "every effect" ran none, the chain empty) */
+    if (p->chain[0])                               /* (V0.875: a chain of its own) */
+        for (i = 0; i < NFXC; i++) {
+            sy_patch.p[SP_FXC1 + i] = p->chain[i];
+            if (p->chain[i])
+                sy_patch.p[FXI_ON[p->chain[i] - 1u]] = 1;
+        }
     sp_snap();
     sy_tables_now();
     for (i = 0; i < p->voices; i++)

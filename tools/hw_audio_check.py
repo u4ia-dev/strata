@@ -20,8 +20,9 @@ For each tpN.wav in RUN_DIR (16-bit PCM, at the rate the browser reported, 44.1 
                plus the tail it records); drift is the file's frames against the page's wall clock at the stop (the audio
                clock against the computer's: a few hundred ppm is the browser's latency, percent is a lost or added rate)
 
-With --ref DIR it reads DIR/tpN.wav (what web/emu/strata_tproj.c renders, at 44,118 Hz) and prints, for the same
-statistics, the recording against the render: level and peak difference, the click and gap rates, the spectrum in octave
+With --ref DIR it reads DIR/tpN.wav, or DIR/tprojN_<name>.wav as web/emu/strata_tproj.c names them (its renders, at
+44,118 Hz), and prints, for the same statistics, the recording against the render: level and peak difference, the click
+and gap rates, the spectrum in octave
 bands, and the length of the sound (first to last audible sample). Statistics only, never samples: the two never line
 up to the sample (a different rate, the start's lead, the USB clock).
 
@@ -209,10 +210,9 @@ def check_file(wav, ref_dir, k, out):
     ref = None
     if ref_dir:
         rw = Path(ref_dir) / wav.name
-        if not rw.is_file():                                  # (the renders' own names: tproj1_voices.wav ..)
-            for alt in sorted(Path(ref_dir).glob("tproj" + n[2:] + "_*.wav")):
-                rw = alt
-                break
+        if not rw.is_file():                                    # (V0.875: strata_tproj's own names, tprojN_<name>.wav)
+            alt = sorted(Path(ref_dir).glob(f"tproj{n[2:]}_*.wav")) if n.startswith("tp") else []
+            rw = alt[0] if alt else rw
         if rw.is_file():
             rx, rrate = read_wav(rw)
             ref = stats(rx, rrate, k)
