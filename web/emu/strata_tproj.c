@@ -269,8 +269,10 @@ static int check(const char *self)
     {                                            /* (a restart now, from this image: its own process) */
         char cmd[512];
         FILE *f = fopen("build/tproj/check_nor.bin", "wb");
-        if (!f)
+        if (!f) {
+            printf("check: cannot write build/tproj/check_nor.bin (mkdir -p build/tproj)  FAIL\n");
             return 1;
+        }
         fwrite(nor, 1, sizeof nor, f);
         fclose(f);
         snprintf(cmd, sizeof cmd, "%s restart build/tproj/check_nor.bin", self);

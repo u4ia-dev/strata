@@ -128,8 +128,9 @@ pre { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--l
     <h2><span class="n">3</span>The test projects (V0.87.1)</h2>
     <p>Each loads a built-in project on the FM-1 (<code>tproj N</code>), plays it for 60 to 90 s while this page records
       the FM-1's USB audio, then saves the sound and the run's figures in <code>build/hwtest/</code> for the analysis
-      (<code>tools/hw_audio_check.py</code>). Nothing of yours is touched: the projects are built in and read-only, and
-      auto-save is off while one is loaded. <b>Hands off the FM-1 and the volume while one runs.</b> Needs the console
+      (<code>tools/hw_audio_check.py</code>). Loading one first saves your open project, settings and
+      sound, as loading a project does; nothing from the test is ever saved (auto-save is off while one is loaded), and
+      loading a project, NEW or a restart ends it. <b>Hands off the FM-1 and the volume while one runs.</b> Needs the console
       connected and the FM-1's USB audio input (the device named "Strata for FM-1"; the browser asks to use the
       microphone once). Open the page through <code>serve.py</code> so it can save; without it each recording is offered
       as a download.</p>
